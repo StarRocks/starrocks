@@ -26,13 +26,13 @@ public class VarTracer {
     // Linked: vars recorded within the same millisecond keep the order they were first recorded in.
     private final Map<String, Var<?>> allVars = Maps.newLinkedHashMap();
 
-    public void record(long time, String name, String value) {
+    public synchronized void record(long time, String name, String value) {
         StringVar v = new StringVar(time, name);
         v.update(value);
         allVars.put(name, v);
     }
 
-    public void count(long time, String name, long value) {
+    public synchronized void count(long time, String name, long value) {
         if (allVars.containsKey(name)) {
             allVars.get(name).add(value);
             return;
@@ -42,12 +42,12 @@ public class VarTracer {
         allVars.put(name, v);
     }
 
-    public List<Var<?>> getAllVarsWithOrder() {
+    public synchronized List<Var<?>> getAllVarsWithOrder() {
         return allVars.values().stream().sorted(Comparator.comparingLong(Var::getTimePoint))
                 .collect(Collectors.toList());
     }
 
-    public List<Var<?>> getAllVars() {
+    public synchronized List<Var<?>> getAllVars() {
         return Lists.newArrayList(allVars.values());
     }
 
