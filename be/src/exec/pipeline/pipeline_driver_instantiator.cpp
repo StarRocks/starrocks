@@ -48,7 +48,6 @@ void instantiate_pipeline_drivers(FragmentContext* fragment_ctx, Pipeline* pipel
     VLOG_ROW << "Pipeline " << pipeline->to_readable_string() << " parallel=" << dop
              << " fragment_instance_id=" << print_id(fragment_ctx->fragment_instance_id());
 
-    pipeline->setup_pipeline_profile(state);
     auto& drivers = pipeline->mutable_drivers();
     drivers.reserve(dop);
     for (size_t i = 0; i < dop; ++i) {

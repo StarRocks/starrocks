@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <ctime>
 #include <utility>
 
@@ -46,7 +47,10 @@ public:
         return operators;
     }
     const Drivers& drivers() const;
+    const Drivers& published_drivers() const;
     Drivers& mutable_drivers();
+    bool drivers_ready() const { return _drivers_ready.load(std::memory_order_acquire); }
+    void publish_drivers(RuntimeState* runtime_state);
     void on_driver_finished(RuntimeState* state) override;
     void clear_drivers();
 
@@ -108,6 +112,7 @@ private:
     std::shared_ptr<RuntimeProfile> _runtime_profile = nullptr;
     OpFactories _op_factories;
     Drivers _drivers;
+    std::atomic<bool> _drivers_ready{false};
     std::atomic<size_t> _num_finished_drivers = 0;
 
     EventPtr _pipeline_event;

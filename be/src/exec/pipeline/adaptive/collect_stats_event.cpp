@@ -158,6 +158,7 @@ void CollectStatsSourceInitializeEvent::process(RuntimeState* state) {
         }
     } else {
         for (const auto& pipeline : _pipelines) {
+            pipeline->publish_drivers(state);
             for (const auto& driver : pipeline->drivers()) {
                 _executor->submit(driver.get());
             }

@@ -135,9 +135,12 @@ void PipelineTestBase::_prepare() {
 }
 
 void PipelineTestBase::_execute() {
-    _fragment_ctx->iterate_drivers([state = _fragment_ctx->runtime_state()](const DriverPtr& driver) {
-        CHECK_OK(driver->prepare(state));
-        CHECK_OK(driver->prepare_local_state(state));
+    _fragment_ctx->iterate_pipeline([state = _fragment_ctx->runtime_state()](Pipeline* pipeline) {
+        for (const auto& driver : pipeline->drivers()) {
+            CHECK_OK(driver->prepare(state));
+            CHECK_OK(driver->prepare_local_state(state));
+        }
+        pipeline->publish_drivers(state);
     });
 
     _fragment_ctx->iterate_drivers(

@@ -41,6 +41,7 @@ void Pipeline::on_driver_finished(RuntimeState* state) {
 }
 
 void Pipeline::clear_drivers() {
+    _drivers_ready.store(false, std::memory_order_release);
     _drivers.clear();
 }
 
@@ -48,19 +49,38 @@ const Drivers& Pipeline::drivers() const {
     return _drivers;
 }
 
+const Drivers& Pipeline::published_drivers() const {
+    static const Drivers kEmptyDrivers;
+    if (!_drivers_ready.load(std::memory_order_acquire)) {
+        return kEmptyDrivers;
+    }
+    return _drivers;
+}
+
 Drivers& Pipeline::mutable_drivers() {
     return _drivers;
 }
 
+void Pipeline::publish_drivers(RuntimeState* runtime_state) {
+    if (_drivers_ready.load(std::memory_order_acquire)) {
+        return;
+    }
+    if (runtime_state != nullptr) {
+        setup_pipeline_profile(runtime_state);
+    }
+    _drivers_ready.store(true, std::memory_order_release);
+}
+
 void Pipeline::setup_pipeline_profile(RuntimeState* runtime_state) {
-    runtime_state->runtime_profile()->add_child(runtime_profile(), true, nullptr);
-    // Set pipeline-level counters once here rather than redundantly in every setup_drivers_profile call.
+    // Set pipeline-level counters before attaching to the fragment profile so concurrent
+    // profile readers never observe a partially initialized pipeline profile.
     runtime_profile()->add_info_string("IsGroupExecution", _group->is_group_execution() ? "true" : "false");
     auto* dop_counter =
             ADD_COUNTER_SKIP_MERGE(runtime_profile(), "DegreeOfParallelism", TUnit::UNIT, TCounterMergeType::SKIP_ALL);
     COUNTER_SET(dop_counter, static_cast<int64_t>(source_operator_factory()->degree_of_parallelism()));
     auto* total_dop_counter = ADD_COUNTER(runtime_profile(), "TotalDegreeOfParallelism", TUnit::UNIT);
     COUNTER_SET(total_dop_counter, COUNTER_VALUE(dop_counter));
+    runtime_state->runtime_profile()->add_child(runtime_profile(), true, nullptr);
 }
 
 void Pipeline::setup_drivers_profile(const DriverPtr& driver) {

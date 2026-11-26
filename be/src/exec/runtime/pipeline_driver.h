@@ -409,7 +409,7 @@ public:
     // EventScheduler::add_blocked_driver (source/sink with covered_wakeups() != 0).
     void verify_block_reason_covered();
 
-    bool local_prepare_is_done() const { return _local_prepare_is_done; }
+    bool local_prepare_is_done() const { return _local_prepare_is_done.load(std::memory_order_acquire); }
 
 protected:
     PipelineDriver();
