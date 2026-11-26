@@ -418,7 +418,7 @@ public class AlterJobMgr {
         // Try to parse and analyze the creation sql
         List<StatementBase> statementBaseList = SqlParser.parse(createMvSql, context.getSessionVariable());
         CreateMaterializedViewStatement createStmt = (CreateMaterializedViewStatement) statementBaseList.get(0);
-        Analyzer.analyze(createStmt, context);
+        MaterializedViewAnalyzer.reanalyzeExistingMv(() -> Analyzer.analyze(createStmt, context));
 
         // validate the schema
         List<Column> newColumns = createStmt.getMvColumnItems().stream()
