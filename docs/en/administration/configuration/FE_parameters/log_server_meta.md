@@ -1905,6 +1905,15 @@ This topic introduces the following types of FE configurations:
 - Description: The directory that stores metadata.
 - Introduced in: -
 
+### `metadata_ignore_image_checksum_error`
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to accept a metadata image that fails its checksum check, that is, an image whose content does not match its checksum, or a v2 image without a checksum. By default, an FE refuses such an image when it downloads it from another FE, and does not start when it loads such an image from its own metadata directory. If the value is `TRUE`, the FE accepts or loads the image and writes a warning to **fe.log** instead. Set this item to `TRUE` only to recover from a checksum check that is wrong, and set it back to `FALSE` afterwards: while it is `TRUE`, an image damaged on one FE can be loaded by the other FEs.
+- Introduced in: -
+
 ### `metadata_ignore_unknown_operation_type`
 
 - Default: false

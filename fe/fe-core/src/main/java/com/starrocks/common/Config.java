@@ -3588,9 +3588,9 @@ public class Config extends ConfigBase {
      * Max time a change to a table of an external catalog waits for the other FEs to drop their cached copy of the
      * table, so that a query on any FE sees the change once the statement returns. The statements that wait: on
      * Iceberg, INSERT, INSERT OVERWRITE, DELETE, UPDATE, MERGE, compaction, TRUNCATE, ALTER TABLE and DROP TABLE; on
-     * Hive, INSERT, INSERT OVERWRITE, TRUNCATE, DROP TABLE and ADD PARTITION; on
-     * Paimon, INSERT, INSERT OVERWRITE, TRUNCATE and DROP TABLE. 0 or less disables the wait. Replaces the
-     * per-connector configs, whose names are kept as aliases.
+     * Hive, INSERT, INSERT OVERWRITE, TRUNCATE, DROP TABLE and ADD PARTITION; on Paimon, INSERT, INSERT OVERWRITE,
+     * TRUNCATE and DROP TABLE. 0 or less disables the wait. Replaces the per-connector configs, whose names are kept
+     * as aliases.
      */
     @ConfField(mutable = true, aliases = {"iceberg_commit_invalidate_other_fe_timeout_ms",
             "hive_commit_invalidate_other_fe_timeout_ms", "paimon_commit_invalidate_other_fe_timeout_ms"})
@@ -4561,6 +4561,15 @@ public class Config extends ConfigBase {
      */
     @ConfField
     public static boolean metadata_ignore_unknown_subtype = false;
+
+    /**
+     * Whether to accept a checkpoint image that fails its checksum check (the bytes do not match the checksum,
+     * or a v2 image has none): when it is downloaded from another FE, and when it is loaded at startup.
+     * Each such image is then logged as a warning instead of being refused. Only for recovery, when the check
+     * itself is wrong: while it is true, an image damaged on one FE's disk can reach and be loaded by others.
+     */
+    @ConfField(mutable = true)
+    public static boolean metadata_ignore_image_checksum_error = false;
 
     /**
      * Number of profile infos reserved by `ProfileManager` for recently executed query.
