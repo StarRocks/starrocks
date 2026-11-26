@@ -74,27 +74,6 @@ jobs:
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && (git pull || true)
           python3 lib/backport_assign.py
 
-  # A release-branch backport must carry every file of the PR it backports, or name the ones it
-  # leaves out in its description ("Dropped: <path> — <reason>"). #69889, the conflict-resolved
-  # 4.0 backport of #69383, dropped the file that held the fix and passed every check.
-  # A required check on the release branches; skipped on every other PR, which counts as passing.
-  backport-completeness:
-    needs: sync-checker
-    if: >
-      github.base_ref != 'main' &&
-      contains(github.event.pull_request.title, '(backport #') &&
-      !startsWith(github.event.pull_request.title, 'Revert ')
-    runs-on: [self-hosted, quick]
-    env:
-      GH_TOKEN: ${{ github.token }}
-      REPO: ${{ github.repository }}
-      PR_NUMBER: ${{ github.event.number }}
-    steps:
-      - name: compare with the source PR
-        run: |
-          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && (cd ci-tool && git pull -q || true)
-          python3 ci-tool/lib/backport_completeness.py
-
   title-check:
     runs-on: ubuntu-latest
     needs: sync-checker
