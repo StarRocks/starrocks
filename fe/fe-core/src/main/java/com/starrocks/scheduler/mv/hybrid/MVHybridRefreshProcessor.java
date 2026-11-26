@@ -150,6 +150,12 @@ public final class MVHybridRefreshProcessor extends MVRefreshProcessor {
         return getCurrentProcessor().generateNextTaskRunIfNeeded();
     }
 
+    // An incremental refresh confirms freshness its own way, see MVIVMRefreshProcessor#confirmFreshness.
+    @Override
+    public void confirmFreshness() {
+        getCurrentProcessor().confirmFreshness();
+    }
+
     @Override
     public boolean hasNextBatchRun() {
         return getCurrentProcessor().hasNextBatchRun();
