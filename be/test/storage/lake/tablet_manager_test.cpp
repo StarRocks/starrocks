@@ -124,14 +124,15 @@ public:
     }
 };
 
-// Serves |path| from an in-memory copy standing in for the disk cache, or from |remote| when a read bypasses it.
-class CachedVlogFileSystem final : public MemoryFileSystem {
+// Serves |path| from an in-memory copy standing in for the disk cache, or from |remote| when a read bypasses the
+// cache or the copy has been dropped.
+class LocalCacheFileSystem final : public MemoryFileSystem {
 public:
-    CachedVlogFileSystem(std::string path, FileSystem* remote) : path(std::move(path)), _remote(remote) {}
+    LocalCacheFileSystem(std::string path, FileSystem* remote) : path(std::move(path)), _remote(remote) {}
 
     StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const RandomAccessFileOptions& opts,
                                                                        const std::string& filename) override {
-        if (opts.skip_disk_cache) {
+        if (opts.skip_disk_cache || !MemoryFileSystem::path_exists(filename).ok()) {
             ++remote_reads;
             return _remote->new_random_access_file(opts, filename);
         }
@@ -139,23 +140,55 @@ public:
         return MemoryFileSystem::new_random_access_file(opts, filename);
     }
 
+    Status drop_local_cache(const std::string& filename, int64_t offset, int64_t size) override {
+        dropped.push_back(filename);
+        return MemoryFileSystem::delete_file(filename);
+    }
+
     const std::string path;
     int cached_reads = 0;
     int remote_reads = 0;
+    std::vector<std::string> dropped;
 
 private:
     FileSystem* _remote;
 };
 
-std::shared_ptr<CachedVlogFileSystem> g_cached_vlog_fs;
+std::shared_ptr<LocalCacheFileSystem> g_local_cache_fs;
 
-bool matches_cached_vlog(std::string_view uri) {
-    return g_cached_vlog_fs != nullptr && uri == g_cached_vlog_fs->path;
+bool matches_local_cache(std::string_view uri) {
+    return g_local_cache_fs != nullptr && uri == g_local_cache_fs->path;
 }
 
-StatusOr<std::shared_ptr<FileSystem>> create_cached_vlog(std::string_view) {
-    return std::static_pointer_cast<FileSystem>(g_cached_vlog_fs);
+StatusOr<std::shared_ptr<FileSystem>> create_local_cache(std::string_view) {
+    return std::static_pointer_cast<FileSystem>(g_local_cache_fs);
 }
+
+// Routes the path of |cache_fs| to |cache_fs| and every other path to the local filesystem while in scope.
+class ScopedLocalCacheFileSystem {
+public:
+    explicit ScopedLocalCacheFileSystem(std::shared_ptr<LocalCacheFileSystem> cache_fs)
+            : _previous_registry(&fs::default_file_system_provider_registry()) {
+        CHECK_OK(_registry.register_provider({.id = "local-cache",
+                                              .priority = -1,
+                                              .match_shared = matches_local_cache,
+                                              .create_shared = create_local_cache}));
+        CHECK_OK(_registry.register_provider(fs::new_posix_file_system_provider()));
+        g_local_cache_fs = std::move(cache_fs);
+        fs::install_default_file_system_provider_registry(_registry.freeze());
+    }
+
+    ~ScopedLocalCacheFileSystem() {
+        StorageEngine::instance()->wait_storage_cleanup_tasks();
+        fs::install_default_file_system_provider_registry(*_previous_registry);
+        g_local_cache_fs.reset();
+    }
+
+private:
+    const fs::FrozenFileSystemProviderRegistry* _previous_registry;
+    // Owns the installed frozen registry, so it must outlive the installation.
+    fs::FileSystemProviderRegistry _registry;
+};
 
 struct SegmentSchemaCacheTestData {
     std::shared_ptr<FileSystem> fs;
@@ -931,7 +964,7 @@ TEST_F(LakeTabletManagerTest, txn_vlog_group_reads_go_through_the_disk_cache) {
     const int64_t version = 2;
     ASSERT_OK(_tablet_manager->put_txn_vlog_group({first, second}, version));
     const auto path = _tablet_manager->txn_vlog_group_location(tablet_id, version);
-    auto cache_fs = std::make_shared<CachedVlogFileSystem>(path, FileSystem::Default());
+    auto cache_fs = std::make_shared<LocalCacheFileSystem>(path, FileSystem::Default());
     ASSERT_OK(cache_fs->create_dir_recursive(_location_provider->txn_log_root_location(tablet_id)));
     {
         ASSIGN_OR_ABORT(auto remote_file, FileSystem::Default()->new_random_access_file(path));
@@ -941,20 +974,7 @@ TEST_F(LakeTabletManagerTest, txn_vlog_group_reads_go_through_the_disk_cache) {
         ASSERT_OK(cached_file->close());
     }
 
-    fs::FileSystemProviderRegistry registry;
-    ASSERT_OK(registry.register_provider({.id = "cached-vlog",
-                                          .priority = -1,
-                                          .match_shared = matches_cached_vlog,
-                                          .create_shared = create_cached_vlog}));
-    ASSERT_OK(registry.register_provider(fs::new_posix_file_system_provider()));
-    const auto* previous_registry = &fs::default_file_system_provider_registry();
-    DeferOp restore_registry([&] {
-        StorageEngine::instance()->wait_storage_cleanup_tasks();
-        fs::install_default_file_system_provider_registry(*previous_registry);
-        g_cached_vlog_fs.reset();
-    });
-    g_cached_vlog_fs = cache_fs;
-    fs::install_default_file_system_provider_registry(registry.freeze());
+    ScopedLocalCacheFileSystem local_cache_scope(cache_fs);
 
     // Replay finds no legacy file and reads the group.
     std::string read_path;
@@ -3037,6 +3057,48 @@ TEST_F(LakeTabletManagerTest, bundle_readers_reread_corrupted_page) {
             }
         }
     }
+}
+
+// A tablet's metadata in a bundle is read out of the whole bundle file, so when it carries an unexpected gtid, the
+// stale bytes are in the cached copy of the bundle. The lookup must drop that copy for the retry to read the
+// object in remote storage, here written again after this node cached the earlier write.
+TEST_F(LakeTabletManagerTest, bundle_gtid_mismatch_drops_bundle_cache) {
+    constexpr int64_t kOldGtid = 100;
+    constexpr int64_t kNewGtid = 200;
+    const int64_t version = 2;
+    auto metadata = lake::generate_simple_tablet_metadata(DUP_KEYS, 1);
+    const int64_t tablet_id = metadata->id();
+    metadata->set_version(version);
+    auto write_bundle = [&](int64_t gtid) {
+        metadata->set_gtid(gtid);
+        std::map<int64_t, TabletMetadataPB> metadatas{{tablet_id, *metadata}};
+        return _tablet_manager->put_bundle_tablet_metadata(metadatas);
+    };
+
+    const auto bundle_path = _tablet_manager->bundle_tablet_metadata_location(tablet_id, version);
+    ASSERT_OK(write_bundle(kOldGtid));
+    ASSIGN_OR_ABORT(auto file, FileSystem::Default()->new_random_access_file(bundle_path));
+    ASSIGN_OR_ABORT(auto stale_content, file->read_all());
+    ASSERT_OK(write_bundle(kNewGtid));
+
+    auto cache_fs = std::make_shared<LocalCacheFileSystem>(bundle_path, FileSystem::Default());
+    ASSERT_OK(cache_fs->create_dir_recursive(_location_provider->metadata_root_location(tablet_id)));
+    ASSERT_OK(cache_fs->append_file(bundle_path, stale_content));
+    ScopedLocalCacheFileSystem local_cache_scope(cache_fs);
+
+    // The cached copy carries the earlier gtid: the lookup drops it and reports the metadata as not found.
+    auto res = _tablet_manager->get_tablet_metadata(tablet_id, version, /*fill_cache=*/true, kNewGtid);
+    EXPECT_TRUE(res.status().is_not_found()) << res.status();
+    EXPECT_EQ(std::vector<std::string>{bundle_path}, cache_fs->dropped);
+    EXPECT_EQ(1, cache_fs->cached_reads);
+    EXPECT_EQ(0, cache_fs->remote_reads);
+
+    // The retry reads the bundle in remote storage.
+    res = _tablet_manager->get_tablet_metadata(tablet_id, version, /*fill_cache=*/true, kNewGtid);
+    ASSERT_OK(res.status());
+    EXPECT_EQ(kNewGtid, res.value()->gtid());
+    EXPECT_EQ(1, cache_fs->cached_reads);
+    EXPECT_EQ(1, cache_fs->remote_reads);
 }
 
 namespace {

@@ -1444,13 +1444,14 @@ StatusOr<TabletMetadataPtr> TabletManager::get_single_tablet_metadata_impl(int64
     }
 
     if (expected_gtid > 0 && metadata->gtid() > 0 && expected_gtid != metadata->gtid()) {
-        auto drop_status = drop_local_cache(tablet_path);
+        // The stale bytes came from the bundle file, not from the per-tablet file named by |tablet_path|.
+        auto drop_status = drop_local_cache(path);
         if (!drop_status.ok()) {
-            LOG(WARNING) << "clear dirty cache for " << tablet_path << " failed, "
+            LOG(WARNING) << "clear dirty cache for " << path << " failed, "
                          << "error: " << drop_status;
             return drop_status;
         }
-        LOG(INFO) << "clear dirty cache for " << tablet_path;
+        LOG(INFO) << "clear dirty cache for " << path;
         return Status::NotFound("Not found expected tablet metadata");
     }
 
