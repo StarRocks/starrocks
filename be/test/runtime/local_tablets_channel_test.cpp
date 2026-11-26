@@ -17,22 +17,9 @@
 #include <fmt/format.h>
 #include <gtest/gtest.h>
 
-<<<<<<< HEAD:be/test/runtime/local_tablets_channel_test.cpp
-=======
-#include <atomic>
-#include <chrono>
-#include <future>
 #include <map>
 #include <set>
-#include <string>
 
-#include "base/brpc/reusable_closure.h"
-#include "base/failpoint/fail_point.h"
-#include "base/testutil/assert.h"
-#include "base/testutil/id_generator.h"
-#include "base/testutil/sync_point.h"
-#include "base/utility/defer_op.h"
->>>>>>> 2ec38dc ([BugFix] Persist the txns of every tablet before a tablets channel acknowledges the close (#84413)):be/test/data_workflows/load/tablet_writer/local_tablets_channel_test.cpp
 #include "column/chunk.h"
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
@@ -46,16 +33,14 @@
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 #include "storage/tablet_schema.h"
-<<<<<<< HEAD:be/test/runtime/local_tablets_channel_test.cpp
+#include "storage/txn_manager.h"
 #include "testutil/assert.h"
 #include "testutil/id_generator.h"
 #include "testutil/sync_point.h"
+#include "util/defer_op.h"
 #include "util/failpoint/fail_point.h"
 #include "util/reusable_closure.h"
 #include "util/runtime_profile.h"
-=======
-#include "storage/txn_manager.h"
->>>>>>> 2ec38dc ([BugFix] Persist the txns of every tablet before a tablets channel acknowledges the close (#84413)):be/test/data_workflows/load/tablet_writer/local_tablets_channel_test.cpp
 
 namespace starrocks {
 
