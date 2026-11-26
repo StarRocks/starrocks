@@ -523,6 +523,13 @@ public final class AggregatedMaterializedViewRewriter extends MaterializedViewRe
     private boolean isRollupAggregate(List<ScalarOperator> mvGroupingKeys,
                                       List<ScalarOperator> queryGroupingKeys,
                                       ScalarOperator queryRangePredicate) {
+        // A query without GROUP BY returns one row even when no MV row matches its filter. A non-rollup rewrite
+        // drops the aggregation and returns the matching MV rows, which is no row at all when the filter pins the
+        // MV grouping keys to a value that the MV does not have (WHERE k = <missing value>), so keep the
+        // aggregation over the MV scan.
+        if (queryGroupingKeys.isEmpty() && !mvGroupingKeys.isEmpty()) {
+            return true;
+        }
         MaterializedView mv = mvRewriteContext.getMaterializationContext().getMv();
         if (mv.getRefreshScheme().isSync() && mv.getDefaultDistributionInfo() instanceof RandomDistributionInfo) {
             return true;
