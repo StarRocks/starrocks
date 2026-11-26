@@ -166,6 +166,7 @@ import static com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter.DEFAULT
 
 public class MaterializedViewAnalyzer {
     private static final Logger LOG = LogManager.getLogger(MaterializedViewAnalyzer.class);
+    private static final ThreadLocal<Boolean> REANALYZING_EXISTING_MV = ThreadLocal.withInitial(() -> false);
 
     private static final Set<JDBCTable.ProtocolType> SUPPORTED_JDBC_PARTITION_TYPE =
             ImmutableSet.of(JDBCTable.ProtocolType.MYSQL, JDBCTable.ProtocolType.MARIADB);
@@ -187,6 +188,17 @@ public class MaterializedViewAnalyzer {
 
     public static void analyze(StatementBase stmt, ConnectContext session) {
         new MaterializedViewAnalyzerVisitor().visit(stmt, session);
+    }
+
+    /** Runs {@code analysis} as the re-analysis of an existing mv's reconstructed DDL (ALTER ... ACTIVE). */
+    public static void reanalyzeExistingMv(Runnable analysis) {
+        boolean previous = REANALYZING_EXISTING_MV.get();
+        REANALYZING_EXISTING_MV.set(true);
+        try {
+            analysis.run();
+        } finally {
+            REANALYZING_EXISTING_MV.set(previous);
+        }
     }
 
     public static Set<BaseTableInfo> getBaseTableInfos(QueryStatement queryStatement) {
@@ -724,16 +736,11 @@ public class MaterializedViewAnalyzer {
                             && colName.equals(columnNames.get(i))) {
                         continue;
                     }
-<<<<<<< HEAD
-                    FeNameFormat.checkColumnName(colName);
-=======
-                    FeNameFormat.checkVirtualColumnNameNotUsed(colName);
                     // An existing mv's DDL lists the names it was created with, including generated ones such as
                     // count(*) that the shared-nothing column name format rejects.
                     if (!REANALYZING_EXISTING_MV.get()) {
                         FeNameFormat.checkColumnName(colName);
                     }
->>>>>>> b96a971 ([BugFix] Let ALTER MATERIALIZED VIEW ACTIVE keep an MV's generated column names in shared-nothing (#84412))
                 }
             }
             List<Column> mvColumns = Lists.newArrayList();
