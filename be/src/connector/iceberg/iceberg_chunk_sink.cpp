@@ -37,10 +37,11 @@ namespace starrocks::connector {
 IcebergChunkSink::IcebergChunkSink(std::vector<std::string> partition_columns, std::vector<std::string> transform_exprs,
                                    std::vector<std::unique_ptr<ColumnEvaluator>>&& partition_column_evaluators,
                                    std::unique_ptr<PartitionChunkWriterFactory> partition_chunk_writer_factory,
-                                   RuntimeState* state)
+                                   RuntimeState* state, bool count_loaded_rows)
         : PartitionedConnectorChunkSink(std::move(partition_columns), std::move(partition_column_evaluators),
                                         std::move(partition_chunk_writer_factory), state, true),
-          _transform_exprs(std::move(transform_exprs)) {}
+          _transform_exprs(std::move(transform_exprs)),
+          _count_loaded_rows(count_loaded_rows) {}
 
 IcebergChunkSinkProvider::IcebergChunkSinkProvider(std::shared_ptr<IcebergChunkSinkContext> ctx)
         : _ctx(std::move(ctx)) {}
@@ -48,7 +49,9 @@ IcebergChunkSinkProvider::IcebergChunkSinkProvider(std::shared_ptr<IcebergChunkS
 void IcebergChunkSink::callback_on_commit(const CommitResult& result) {
     push_rollback_action(result.file_result.rollback_action);
     if (result.file_result.io_status.ok()) {
-        _state->update_num_rows_load_sink(result.file_result.file_statistics.record_count);
+        if (_count_loaded_rows) {
+            _state->update_num_rows_load_sink(result.file_result.file_statistics.record_count);
+        }
 
         TIcebergColumnStats iceberg_column_stats;
         if (result.file_result.file_statistics.column_sizes.has_value()) {
@@ -139,9 +142,9 @@ StatusOr<std::unique_ptr<ConnectorSink>> IcebergChunkSinkProvider::create_sink(i
                 std::make_unique<BufferPartitionChunkWriterFactory>(partition_chunk_writer_ctx);
     }
 
-    auto sink = std::make_unique<connector::IcebergChunkSink>(partition_columns, transform_exprs,
-                                                              std::move(partition_evaluators),
-                                                              std::move(partition_chunk_writer_factory), runtime_state);
+    auto sink = std::make_unique<connector::IcebergChunkSink>(
+            partition_columns, transform_exprs, std::move(partition_evaluators),
+            std::move(partition_chunk_writer_factory), runtime_state, ctx->count_loaded_rows);
     return sink;
 }
 

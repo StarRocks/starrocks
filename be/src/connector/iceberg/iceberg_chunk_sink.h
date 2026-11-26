@@ -32,7 +32,8 @@ class IcebergChunkSink : public PartitionedConnectorChunkSink {
 public:
     IcebergChunkSink(std::vector<std::string> partition_columns, std::vector<std::string> transform_exprs,
                      std::vector<std::unique_ptr<ColumnEvaluator>>&& partition_column_evaluators,
-                     std::unique_ptr<PartitionChunkWriterFactory> partition_chunk_writer_factory, RuntimeState* state);
+                     std::unique_ptr<PartitionChunkWriterFactory> partition_chunk_writer_factory, RuntimeState* state,
+                     bool count_loaded_rows = true);
 
     ~IcebergChunkSink() override = default;
 
@@ -44,6 +45,7 @@ public:
 
 private:
     std::vector<std::string> _transform_exprs;
+    bool _count_loaded_rows;
 };
 
 struct IcebergChunkSinkContext : public ConnectorSinkContext {
@@ -76,6 +78,21 @@ struct IcebergChunkSinkContext : public ConnectorSinkContext {
     // Optional tag inserted into file name prefix to distinguish writers.
     // Empty by default (standalone INSERT). Set to "data" for RowDelta composite sinks.
     std::string writer_tag;
+<<<<<<< HEAD
+=======
+    // Parquet Modular Encryption for Iceberg encrypted tables. BE generates the
+    // per-file DEK at write time; FE only signals that encryption is enabled and
+    // which algorithm to use.
+    bool encryption_enabled = false;
+    std::string encryption_algorithm; // "AES_GCM_V1" or "AES_GCM_CTR_V1"
+    // Bytes: 16, 24 or 32. 0 means FE supplied no length, which is rejected rather than defaulted;
+    // see ParquetWriterOptions::encryption_dek_length.
+    int encryption_dek_length = 0;
+
+    // Whether committed data rows are added to the loaded-row count. RowDelta composite sinks set it
+    // to false because the composite sink counts each statement row once.
+    bool count_loaded_rows = true;
+>>>>>>> 0f69df6 ([BugFix] Count Iceberg UPDATE and MERGE affected rows once (#82217))
 };
 
 class IcebergChunkSinkProvider : public ConnectorSinkProvider {

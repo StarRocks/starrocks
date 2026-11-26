@@ -227,6 +227,8 @@ TEST_F(IcebergRowDeltaSinkTest, op_code_routing) {
     EXPECT_EQ(delete_mock->total_rows, 2);
     // UPDATE(2) and INSERT(3) go to data sink => 2 rows
     EXPECT_EQ(data_mock->total_rows, 2);
+    // DELETE, UPDATE and INSERT each count once; NO_OP does not count.
+    EXPECT_EQ(_runtime_state->num_rows_load_sink(), 3);
 
     // Verify delete chunk content: rows 1 and 2 (DELETE and UPDATE).
     // filter_chunk_by_rows preserves all columns and slot_ids, so sub-sinks receive
@@ -268,6 +270,8 @@ TEST_F(IcebergRowDeltaSinkTest, update_without_routing_column_forwards_to_both_s
 
     EXPECT_EQ(delete_mock->total_rows, 2);
     EXPECT_EQ(data_mock->total_rows, 2);
+    // Each updated row counts once, although it reaches both sub-sinks.
+    EXPECT_EQ(_runtime_state->num_rows_load_sink(), 2);
     ASSERT_EQ(delete_mock->received_chunks.size(), 1u);
     ASSERT_EQ(data_mock->received_chunks.size(), 1u);
     EXPECT_EQ(delete_mock->received_chunks[0].get(), chunk.get());

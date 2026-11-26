@@ -1123,6 +1123,9 @@ TEST_F(IcebergTableSinkTest, decompose_to_pipeline_row_delta) {
     // per slot) so IcebergDeleteSinkProvider's strict 1:1 DCHECK holds, and
     // its column_slot_map covers every non-op_code slot (here _file, _pos, c1).
     EXPECT_EQ(row_delta_ctx->delete_sink_ctx->writer_tag, "delete");
+    // The composite sink counts loaded rows, so neither sub-sink does.
+    EXPECT_FALSE(row_delta_ctx->delete_sink_ctx->count_loaded_rows);
+    EXPECT_FALSE(row_delta_ctx->data_sink_ctx->count_loaded_rows);
     EXPECT_EQ(row_delta_ctx->delete_sink_ctx->output_exprs.size(), 4);
     EXPECT_EQ(row_delta_ctx->delete_sink_ctx->column_slot_map.size(), 3);
     EXPECT_TRUE(row_delta_ctx->delete_sink_ctx->column_slot_map.count("_file") == 1);

@@ -458,6 +458,7 @@ Status IcebergTableSinkPipelineBuilder::create_row_delta_sink_context(
     // --- Create delete sub-context ---
     auto delete_sink_ctx = std::make_shared<connector::IcebergDeleteSinkContext>();
     delete_sink_ctx->writer_tag = "delete";
+    delete_sink_ctx->count_loaded_rows = false;
     delete_sink_ctx->path = t_iceberg_sink.data_location;
     delete_sink_ctx->cloud_configuration = t_iceberg_sink.cloud_configuration;
     // Row-delta sinks carry distinct codecs for data vs delete files; fall back to
@@ -508,6 +509,7 @@ Status IcebergTableSinkPipelineBuilder::create_row_delta_sink_context(
     // --- Create data sub-context ---
     auto data_sink_ctx = std::make_shared<connector::IcebergChunkSinkContext>();
     data_sink_ctx->writer_tag = "data";
+    data_sink_ctx->count_loaded_rows = false;
     data_sink_ctx->path = t_iceberg_sink.__isset.data_location && !t_iceberg_sink.data_location.empty()
                                   ? t_iceberg_sink.data_location
                                   : t_iceberg_sink.location + connector::IcebergUtils::DATA_DIRECTORY;
