@@ -122,6 +122,11 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
                     Config.refresh_dictionary_cache_thread_num, Integer.MAX_VALUE, "refresh-dictionary-cache-pool",
                     true);
 
+    // A probe calls the nodes one by one and can wait a long time on a node that does not answer. On its own
+    // pool, probes never hold up a refresh.
+    private final ExecutorService probeExecutor =
+            ThreadPoolManager.newDaemonFixedThreadPool(1, Integer.MAX_VALUE, "dictionary-node-probe-pool", true);
+
     public DictionaryMgr() {
     }
 
@@ -190,7 +195,7 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
             for (Long dictionaryId : pendingNodeProbes) {
                 Dictionary dictionary = dictionariesMapById.get(dictionaryId);
                 try {
-                    executor.submit(() -> probeNodeVersions(dictionary));
+                    probeExecutor.submit(() -> probeNodeVersions(dictionary));
                     runningNodeProbes.add(dictionaryId);
                 } catch (RejectedExecutionException e) {
                     // The next pass asks again.

@@ -1584,6 +1584,61 @@ public class DictionaryMgrEditLogTest {
         Assertions.assertFalse(masterDictionaryMgr.getUnfinishedRefreshTasks().contains(id));
     }
 
+    @Test
+    public void testNodeProbeDoesNotHoldUpARefresh() throws Exception {
+        int oldThreadNum = Config.refresh_dictionary_cache_thread_num;
+        Config.refresh_dictionary_cache_thread_num = 1;
+        try {
+            masterDictionaryMgr = new DictionaryMgr();
+        } finally {
+            Config.refresh_dictionary_cache_thread_num = oldThreadNum;
+        }
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public boolean isLeader() {
+                return true;
+            }
+        };
+        CountDownLatch probeStarted = new CountDownLatch(1);
+        CountDownLatch releaseProbe = new CountDownLatch(1);
+        new MockUp<DictionaryMgr>() {
+            @Mock
+            public Map<TNetworkAddress, Long> getAvailableNodeStartTimes() {
+                return new HashMap<>(Map.of(NODE_A, 100L, NODE_B, 100L, NODE_C, 100L));
+            }
+
+            // A node that does not answer.
+            @Mock
+            void probeNodeVersions(Dictionary dictionary) {
+                probeStarted.countDown();
+                try {
+                    releaseProbe.await(30, TimeUnit.SECONDS);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            }
+        };
+        CountDownLatch refreshStarted = new CountDownLatch(1);
+        new MockUp<DictionaryMgr.RefreshDictionaryCacheWorker>() {
+            @Mock
+            public void run() {
+                refreshStarted.countDown();
+            }
+        };
+        try {
+            createFinishedDictionary("probed_dict", 5L);
+            masterDictionaryMgr.scheduleTasks();
+            Assertions.assertTrue(probeStarted.await(10, TimeUnit.SECONDS));
+
+            // The refresh pool has one thread, and the probe still runs.
+            createRefreshingDictionary("refreshed_dict", false);
+            masterDictionaryMgr.scheduleTasks();
+            Assertions.assertTrue(refreshStarted.await(10, TimeUnit.SECONDS));
+        } finally {
+            releaseProbe.countDown();
+        }
+    }
+
     private static void replayNextModifyLogs(DictionaryMgr follower, int count) throws Exception {
         for (int i = 0; i < count; i++) {
             follower.replayModifyDictionaryMgr((UpdateDictionaryMgrLog) UtFrameUtils.PseudoJournalReplayer
