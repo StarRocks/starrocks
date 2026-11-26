@@ -1632,7 +1632,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ：Int
 - 単位：ミリ秒
 - 変更可能：Yes
-- 説明：Iceberg、Hive、Paimon カタログのテーブルに対する変更（INSERT、INSERT OVERWRITE、DELETE、UPDATE、MERGE、コンパクションなどのコミット、および TRUNCATE TABLE、ALTER TABLE、DROP TABLE）が、他の FE がそのテーブルのキャッシュを破棄するのを待つ最大時間です。これにより、ステートメントが返った後はどの FE でクエリしても変更が見えます。時間内に応答しない FE はバックグラウンド更新に任されます。ローリングアップグレード中は、以前のバージョンの FE はテーブルを更新する（そのためステートメントが最大でこの時間待つことがあります）か、バックグラウンド更新までキャッシュを保持します。0 以下に設定すると待機しません。このパラメータは Alias に記載されたコネクタごとのパラメータを置き換えるもので、それらの旧名で設定しても有効です。
+- 説明：外部カタログのテーブルに対する変更が、他の FE がそのテーブルのキャッシュを破棄するのを待つ最大時間です。これにより、ステートメントが返った後はどの FE でクエリしても変更が見えます。待機するステートメントは、Iceberg テーブルでは INSERT、INSERT OVERWRITE、DELETE、UPDATE、MERGE、コンパクション、TRUNCATE TABLE、ALTER TABLE、DROP TABLE、Hive テーブルでは INSERT、INSERT OVERWRITE、TRUNCATE TABLE、Paimon テーブルでは INSERT、INSERT OVERWRITE、TRUNCATE TABLE、DROP TABLE です。時間内に応答しない FE はバックグラウンド更新に任されます。ローリングアップグレード中は、以前のバージョンの FE はテーブルを更新する（そのためステートメントが最大でこの時間待つことがあります）か、バックグラウンド更新までキャッシュを保持します。0 以下に設定すると待機しません。このパラメータは Alias に記載されたコネクタごとのパラメータを置き換えるもので、それらの旧名で設定しても有効です。
 - 導入時期：-
 
 ### `refresh_other_fe_rpc_executor_thread_num`

@@ -1649,7 +1649,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Int
 - 单位: 毫秒
 - 是否可变: Yes
-- 描述: Iceberg、Hive 或 Paimon catalog 中的表发生变更（INSERT、INSERT OVERWRITE、DELETE、UPDATE、MERGE 或 compaction 等提交，以及 TRUNCATE TABLE、ALTER TABLE 或 DROP TABLE）后，语句返回前等待其他 FE 删除该表缓存的最长时间，使语句返回后在任意 FE 上查询都能看到这次变更。在该时间内没有响应的 FE 由后台刷新更新。滚动升级期间，旧版本的 FE 或者改为刷新该表（因此一条语句最多可能等待这么久），或者保留缓存直到后台刷新。设置为 0 或更小的值表示不等待。该参数取代了别名中列出的各连接器参数，用这些旧名设置仍然生效。
+- 描述: 外部 catalog 中的表发生变更后，语句返回前等待其他 FE 删除该表缓存的最长时间，使语句返回后在任意 FE 上查询都能看到这次变更。会等待的语句：Iceberg 表为 INSERT、INSERT OVERWRITE、DELETE、UPDATE、MERGE、compaction、TRUNCATE TABLE、ALTER TABLE 和 DROP TABLE；Hive 表为 INSERT、INSERT OVERWRITE 和 TRUNCATE TABLE；Paimon 表为 INSERT、INSERT OVERWRITE、TRUNCATE TABLE 和 DROP TABLE。在该时间内没有响应的 FE 由后台刷新更新。滚动升级期间，旧版本的 FE 或者改为刷新该表（因此一条语句最多可能等待这么久），或者保留缓存直到后台刷新。设置为 0 或更小的值表示不等待。该参数取代了别名中列出的各连接器参数，用这些旧名设置仍然生效。
 - 引入版本: -
 
 ### `refresh_other_fe_rpc_executor_thread_num`
