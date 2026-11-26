@@ -16,11 +16,7 @@
 
 #include <algorithm>
 #include <cmath>
-<<<<<<< HEAD
-=======
 #include <cstring>
-#include <initializer_list>
->>>>>>> 7bdd7f8cf0c... [BugFix][RB-591] Clear approx_top_k counters on reset so pass-through stays linear (#66241)
 #include <memory>
 #include <optional>
 #include <random>
