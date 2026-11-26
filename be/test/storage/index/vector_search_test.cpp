@@ -1618,7 +1618,33 @@ TEST_F(EvaluatePredTreeBitmapTest, fragmented_candidate_bridges_short_gaps) {
                                                               nullptr, candidate));
     EXPECT_TRUE(expect_eq == got_eq);
 
-    auto eq_expr = c2_eq_expr(3);
+    // `c2 = 3` as an expression predicate, the form a pushed-down LIKE or function call takes: it selects the same
+    // rows as `eq`, but its tree is not bridged.
+    RuntimeState state;
+    state.init_instance_mem_tracker();
+    ObjectPool pool;
+    TDescriptorTableBuilder table_builder;
+    TTupleDescriptorBuilder tuple_builder;
+    TSlotDescriptorBuilder slot_builder;
+    tuple_builder.add_slot(slot_builder.type(TYPE_INT).column_name("c2").column_pos(0).nullable(false).build());
+    tuple_builder.build(&table_builder);
+    DescriptorTbl* tbl = nullptr;
+    ASSERT_OK(DescriptorTbl::create(&state, &pool, table_builder.desc_tbl(), &tbl, /*chunk_size=*/4096));
+    SlotDescriptor* slot = tbl->get_tuple_descriptor(0)->slots()[0];
+    TExpr t_expr;
+    t_expr.nodes.emplace_back(ExprsTestHelper::create_binary_pred_node(TPrimitiveType::INT, TExprOpcode::EQ));
+    t_expr.nodes.emplace_back(ExprsTestHelper::create_slot_expr_node_t<TYPE_INT>(0, slot->id(), false));
+    t_expr.nodes.emplace_back(ExprsTestHelper::create_literal<TYPE_INT, int32_t>(3, false));
+    std::vector<ExprContext*> ctxs;
+    ASSERT_OK(ExprFactory::create_expr_trees(&pool, std::vector<TExpr>{t_expr}, &ctxs, &state));
+    ASSERT_OK(ExprExecutor::prepare(ctxs, &state));
+    ASSERT_OK(ExprExecutor::open(ctxs, &state));
+    ASSIGN_OR_ABORT(ColumnExprPredicate * raw_eq_expr,
+                    ColumnExprPredicate::make_column_expr_predicate(get_type_info(TYPE_INT), /*column_id=*/2, &state,
+                                                                    ctxs[0], slot));
+    std::unique_ptr<ColumnPredicate> eq_expr(raw_eq_expr);
+    ASSERT_TRUE(eq_expr->is_expr_predicate());
+
     ASSIGN_OR_ABORT(auto got_expr, evaluate_pred_tree_to_bitmap(single_node_tree(eq_expr.get()), _schema, _iters_by_cid,
                                                                 nullptr, candidate));
     EXPECT_TRUE(expect_eq == got_expr);
