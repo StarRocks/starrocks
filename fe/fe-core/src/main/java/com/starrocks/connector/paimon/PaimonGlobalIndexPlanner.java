@@ -28,6 +28,7 @@ import org.apache.paimon.index.GlobalIndexMeta;
 import org.apache.paimon.io.DataFileMeta;
 import org.apache.paimon.manifest.IndexManifestEntry;
 import org.apache.paimon.schema.TableSchema;
+import org.apache.paimon.table.FallbackReadFileStoreTable;
 import org.apache.paimon.table.FileStoreTable;
 import org.apache.paimon.table.source.DataSplit;
 import org.apache.paimon.table.source.ScanMode;
@@ -64,7 +65,9 @@ public final class PaimonGlobalIndexPlanner {
 
     public static PaimonGlobalIndexRequest request(FileStoreTable table, long snapshotId, ScalarOperator predicate,
                                                   Map<Integer, String> columnNames) {
-        if (snapshotId < 0 || predicate == null || predicate.getColumnRefs().isEmpty() || !eligible(table.schema())
+        // Fallback scans can read multiple branches and do not apply an external row-ID bitmap.
+        if (table instanceof FallbackReadFileStoreTable || snapshotId < 0 || predicate == null
+                || predicate.getColumnRefs().isEmpty() || !eligible(table.schema())
                 || !"main".equals(org.apache.paimon.CoreOptions.branch(table.options()))) {
             return null;
         }
