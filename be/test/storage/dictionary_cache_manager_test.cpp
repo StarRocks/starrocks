@@ -21,9 +21,11 @@
 #include <fstream>
 
 #include "base/testutil/assert.h"
+#include "base/utility/defer_op.h"
 #include "column/chunk_factory.h"
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
+#include "common/config_exec_flow_fwd.h"
 #include "compute_env/compute_env.h"
 #include "compute_env/dictionary_cache/chunk_util.h"
 #include "exec/dictionary_cache_writer.h"
@@ -510,6 +512,64 @@ TEST_F(DictionaryCacheManagerTest, test_sink_drivers_share_failed_nodes) {
     DictionaryCacheWriter standalone(t_sink, nullptr, nullptr);
     ASSERT_FALSE(standalone._is_node_failed(0));
     ASSERT_FALSE(standalone._mark_node_failed(0, Status::InternalError("node 0 down")));
+}
+
+// NOLINTNEXTLINE
+TEST_F(DictionaryCacheManagerTest, test_writer_goes_on_without_unreachable_nodes) {
+    const int32_t timeout_ms = config::dictionary_cache_refresh_timeout_ms;
+    config::dictionary_cache_refresh_timeout_ms = 5000;
+    DeferOp reset_timeout([&]() { config::dictionary_cache_refresh_timeout_ms = timeout_ms; });
+
+    TDictionaryCacheSink t_sink;
+    t_sink.nodes.resize(2);
+    // No stub can be created for port 70000. Nothing listens on port 1, so the RPC to node 1 fails.
+    t_sink.nodes[0].__set_hostname("127.0.0.1");
+    t_sink.nodes[0].__set_port(70000);
+    t_sink.nodes[1].__set_hostname("127.0.0.1");
+    t_sink.nodes[1].__set_port(1);
+    t_sink.__set_skip_failed_nodes(true);
+
+    std::vector<RefCountClosure<PProcessDictionaryCacheResult>*> closures;
+    for (size_t i = 0; i < t_sink.nodes.size(); i++) {
+        closures.push_back(new RefCountClosure<PProcessDictionaryCacheResult>());
+        closures.back()->ref();
+    }
+    DeferOp release_closures([&]() {
+        for (auto* closure : closures) {
+            if (closure->unref()) {
+                delete closure;
+            }
+        }
+    });
+    ChunkPB pchunk;
+    POlapTableSchemaParam pschema;
+
+    // Without skip_failed_nodes, a node without a stub fails the refresh.
+    TDictionaryCacheSink strict_sink = t_sink;
+    strict_sink.__set_skip_failed_nodes(false);
+    DictionaryCacheWriter strict_writer(strict_sink, nullptr, nullptr);
+    std::vector<bool> strict_sent(t_sink.nodes.size(), false);
+    ASSERT_FALSE(strict_writer._send_request(&pchunk, &pschema, closures, strict_sent).ok());
+    ASSERT_FALSE(strict_sent[0]);
+    ASSERT_FALSE(strict_sent[1]);
+
+    DictionaryCacheWriter writer(t_sink, nullptr, nullptr);
+    std::vector<bool> sent(t_sink.nodes.size(), false);
+    ASSERT_OK(writer._send_request(&pchunk, &pschema, closures, sent));
+    ASSERT_FALSE(sent[0]);
+    ASSERT_TRUE(sent[1]);
+    ASSERT_TRUE(writer._is_node_failed(0));
+    ASSERT_FALSE(writer._is_node_failed(1));
+
+    // Node 1 was the last node left, so its failed RPC fails the refresh.
+    ASSERT_FALSE(writer._wait_response(closures, sent).ok());
+    ASSERT_TRUE(writer._is_node_failed(1));
+
+    std::vector<bool> none_sent(t_sink.nodes.size(), false);
+    auto st = writer._send_request(&pchunk, &pschema, closures, none_sent);
+    ASSERT_FALSE(st.ok());
+    ASSERT_EQ("refreshing dictionary cache failed on every node", st.message());
+    ASSERT_OK(writer._wait_response(closures, none_sent));
 }
 
 } // namespace starrocks
