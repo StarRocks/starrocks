@@ -932,4 +932,38 @@ public class IcebergManifestCacheStatsTest extends TableTestBase {
             Assertions.assertEquals(2, cached.size(), "plan " + i + " left an incomplete cache entry");
         }
     }
+
+    // RB-1509: upgrading to V3 gives the manifests the table already has a first_row_id, in the manifest list,
+    // without rewriting them. Files cached from such a manifest before that have no row ids and must not be
+    // reused afterwards, or StarRocks reads _row_id as NULL for the rows written before the upgrade.
+    @Test
+    public void testCachedFilesGetRowIdsAfterUpgradeToV3() throws IOException {
+        Schema schema = new Schema(Types.NestedField.optional(1, "id", Types.IntegerType.get()));
+        Table table = create(schema, PartitionSpec.unpartitioned(), "t_upgrade", 2);
+        table.newAppend().appendFile(DataFiles.builder(PartitionSpec.unpartitioned())
+                .withPath("/path/to/data-v2.parquet").withFileSizeInBytes(10).withRecordCount(10).build()).commit();
+        CachingIcebergCatalog catalog = newCatalog(Map.of());
+        // cold, then warm: the manifest's files are in the cache, without row ids
+        for (int i = 0; i < 2; i++) {
+            Assertions.assertNull(planTasks(catalog, table, Expressions.alwaysTrue()).get(0).file().firstRowId());
+        }
+
+        table.updateProperties().set("format-version", "3").commit();
+        // the first V3 commit assigns first_row_id to the existing manifest
+        table.newAppend().appendFile(DataFiles.builder(PartitionSpec.unpartitioned())
+                .withPath("/path/to/data-v3.parquet").withFileSizeInBytes(10).withRecordCount(5).build()).commit();
+
+        Map<String, Long> expected = new HashMap<>();
+        try (CloseableIterable<FileScanTask> tasks = table.newScan().planFiles()) {
+            tasks.forEach(task -> expected.put(task.file().location(), task.file().firstRowId()));
+        }
+        Assertions.assertNotNull(expected.get("/path/to/data-v2.parquet"));
+        // cold for the upgraded manifest, then warm
+        for (int i = 0; i < 2; i++) {
+            Map<String, Long> actual = new HashMap<>();
+            planTasks(catalog, table, Expressions.alwaysTrue())
+                    .forEach(task -> actual.put(task.file().location(), task.file().firstRowId()));
+            Assertions.assertEquals(expected, actual);
+        }
+    }
 }

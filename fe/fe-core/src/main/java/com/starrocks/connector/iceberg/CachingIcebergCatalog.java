@@ -108,7 +108,7 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     private final com.github.benmanes.caffeine.cache.Cache<String, Set<DataFile>> dataFileCache;
     private final com.github.benmanes.caffeine.cache.Cache<String, Set<DeleteFile>> deleteFileCache;
     private final DeleteFileIndexCache deleteFileIndexCache;
-    private final Map<IcebergTableName, Set<String>> metaFileCacheMap = new ConcurrentHashMap<>(); // table -> metadata file paths
+    private final Map<IcebergTableName, Set<String>> metaFileCacheMap = new ConcurrentHashMap<>(); // table -> cache keys
     private final Map<IcebergTableName, Long> tableLatestAccessTime = new ConcurrentHashMap<>();
     private final Map<IcebergTableName, Long> tableLatestRefreshTime = new ConcurrentHashMap<>();
     // Per-table lock strings: avoids catalog-wide serialization during concurrent refresh of different tables.
@@ -634,7 +634,7 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         List<ManifestFile> manifestFiles = updatedTable.currentSnapshot().dataManifests(updatedTable.io()).stream()
                 .filter(f -> updatedTableMetadata.snapshot(f.snapshotId()) != null)
                 .filter(f -> updatedTableMetadata.snapshot(f.snapshotId()).timestampMillis() > latestRefreshTime)
-                .filter(f -> dataFileCache.getIfPresent(f.path()) == null)
+                .filter(f -> dataFileCache.getIfPresent(StarRocksIcebergTableScan.manifestEntriesCacheKey(f)) == null)
                 .filter(f -> f.hasAddedFiles() || f.hasExistingFiles())
                 .filter(f -> f.length() >= icebergProperties.getRefreshIcebergManifestMinLength())
                 .collect(Collectors.toList());
@@ -756,7 +756,7 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     // Returns the cached data files of this manifest whose locations are in `locations`, or null unless the
     // manifest is cached completely (its live file count is known and matches the cached entry).
     public Map<String, DataFile> findCachedDataFiles(ManifestFile manifest, Set<String> locations) {
-        Set<DataFile> files = dataFileCache.getIfPresent(manifest.path());
+        Set<DataFile> files = dataFileCache.getIfPresent(StarRocksIcebergTableScan.manifestEntriesCacheKey(manifest));
         Integer added = manifest.addedFilesCount();
         Integer existing = manifest.existingFilesCount();
         if (files == null || added == null || existing == null || files.size() != added + existing) {
