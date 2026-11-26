@@ -436,6 +436,66 @@ public class ExecuteExceptionHandlerTest extends PlanTestBase {
         return finisher;
     }
 
+    private static boolean waitForNewVersion(Dictionary dictionary, long plannedVersion, boolean isLeader,
+                                             long timeoutMs) throws InterruptedException {
+        return ExecuteExceptionHandler.waitForNewDictionaryVersion(dictionary, plannedVersion, isLeader, timeoutMs,
+                () -> false);
+    }
+
+    @Test
+    public void testKilledQueryStopsWaitingForTheDictionaryVersion() throws Exception {
+        // The refresh never commits, so only the KILL can end the wait before the timeout.
+        new MockUp<DictionaryMgr>() {
+            @Mock
+            public Dictionary tryGetDictionaryById(long dictionaryId, long timeoutMs) {
+                return newCommittingDictionary(98100);
+            }
+        };
+        long oldWaitMs = Config.dictionary_version_retry_wait_ms;
+        Config.dictionary_version_retry_wait_ms = 10000;
+        StmtExecutor oldExecutor = connectContext.getExecutor();
+        try {
+            String sql = "select * from t0";
+            StatementBase statementBase = SqlParser.parse(sql, connectContext.getSessionVariable()).get(0);
+            ExecPlan execPlan = getExecPlan(sql);
+            ExecuteExceptionHandler.RetryContext retryContext =
+                    new ExecuteExceptionHandler.RetryContext(0, execPlan, connectContext, statementBase);
+            // KILL QUERY goes through kill(false, ...), which only cancels the statement executor.
+            connectContext.setExecutor(new StmtExecutor(connectContext, statementBase));
+            Thread killer = new Thread(() -> {
+                try {
+                    Thread.sleep(100);
+                } catch (InterruptedException ignored) {
+                    Thread.currentThread().interrupt();
+                }
+                connectContext.kill(false, "kill query");
+            });
+            killer.start();
+            StarRocksException error = new StarRocksException(VERSION_NOT_FOUND_MESSAGE);
+            long start = System.currentTimeMillis();
+            StarRocksException thrown = Assertions.assertThrows(StarRocksException.class,
+                    () -> ExecuteExceptionHandler.handle(error, retryContext));
+            long elapsed = System.currentTimeMillis() - start;
+            killer.join();
+            Assertions.assertSame(error, thrown);
+            Assertions.assertTrue(elapsed >= 100, "waited " + elapsed + " ms");
+            Assertions.assertTrue(elapsed < 2000, "waited " + elapsed + " ms");
+            Assertions.assertEquals(retryContext.getExecPlan(), execPlan);
+        } finally {
+            connectContext.setExecutor(oldExecutor);
+            Config.dictionary_version_retry_wait_ms = oldWaitMs;
+        }
+    }
+
+    @Test
+    public void testWaitForNewDictionaryVersionEndsWhenCancelled() throws Exception {
+        Dictionary dictionary = newCommittingDictionary(98100);
+        long start = System.currentTimeMillis();
+        Assertions.assertFalse(
+                ExecuteExceptionHandler.waitForNewDictionaryVersion(dictionary, 98100, true, 10000, () -> true));
+        Assertions.assertTrue(System.currentTimeMillis() - start < 1000);
+    }
+
     @Test
     public void testRetryWaitsForTheDictionaryInTheError() throws Exception {
         Dictionary dictionary = newCommittingDictionary(98100);
@@ -543,7 +603,7 @@ public class ExecuteExceptionHandlerTest extends PlanTestBase {
         Dictionary dictionary = newCommittingDictionary(98100);
         Thread finisher = finishLater(dictionary, 98101);
         long start = System.currentTimeMillis();
-        Assertions.assertTrue(ExecuteExceptionHandler.waitForNewDictionaryVersion(dictionary, 98100, true, 10000));
+        Assertions.assertTrue(waitForNewVersion(dictionary, 98100, true, 10000));
         finisher.join();
         Assertions.assertTrue(System.currentTimeMillis() - start < 2000);
         Assertions.assertEquals(98101, dictionary.getLastSuccessVersion());
@@ -553,7 +613,7 @@ public class ExecuteExceptionHandlerTest extends PlanTestBase {
     public void testWaitForNewDictionaryVersionIsBounded() throws Exception {
         Dictionary dictionary = newCommittingDictionary(98100);
         long start = System.currentTimeMillis();
-        Assertions.assertFalse(ExecuteExceptionHandler.waitForNewDictionaryVersion(dictionary, 98100, true, 100));
+        Assertions.assertFalse(waitForNewVersion(dictionary, 98100, true, 100));
         Assertions.assertTrue(System.currentTimeMillis() - start >= 100);
         Assertions.assertTrue(dictionary.isRefreshing());
     }
@@ -562,16 +622,16 @@ public class ExecuteExceptionHandlerTest extends PlanTestBase {
     public void testWaitForNewDictionaryVersionSkipsWhenNotNeeded() throws Exception {
         long start = System.currentTimeMillis();
         // The FE already plans with a newer version than the failed query.
-        Assertions.assertTrue(ExecuteExceptionHandler.waitForNewDictionaryVersion(
+        Assertions.assertTrue(waitForNewVersion(
                 newCommittingDictionary(98101), 98100, true, 10000));
-        Assertions.assertTrue(ExecuteExceptionHandler.waitForNewDictionaryVersion(
+        Assertions.assertTrue(waitForNewVersion(
                 newCommittingDictionary(98101), 98100, false, 10000));
         // The FE does not know the dictionary, so the new plan reports that.
-        Assertions.assertTrue(ExecuteExceptionHandler.waitForNewDictionaryVersion(null, 98100, true, 10000));
+        Assertions.assertTrue(waitForNewVersion(null, 98100, true, 10000));
         // The leader sees that no refresh runs, so no newer version can come.
         Dictionary idle = newCommittingDictionary(98100);
         idle.setCancelled();
-        Assertions.assertFalse(ExecuteExceptionHandler.waitForNewDictionaryVersion(idle, 98100, true, 10000));
+        Assertions.assertFalse(waitForNewVersion(idle, 98100, true, 10000));
         Assertions.assertTrue(System.currentTimeMillis() - start < 1000);
     }
 
@@ -582,7 +642,7 @@ public class ExecuteExceptionHandlerTest extends PlanTestBase {
         dictionary.setFinished(System.currentTimeMillis(), 98100);
         Thread finisher = finishLater(dictionary, 98101);
         long start = System.currentTimeMillis();
-        Assertions.assertTrue(ExecuteExceptionHandler.waitForNewDictionaryVersion(dictionary, 98100, false, 10000));
+        Assertions.assertTrue(waitForNewVersion(dictionary, 98100, false, 10000));
         long elapsed = System.currentTimeMillis() - start;
         finisher.join();
         Assertions.assertTrue(elapsed >= 100, "waited " + elapsed + " ms");
@@ -597,7 +657,7 @@ public class ExecuteExceptionHandlerTest extends PlanTestBase {
         for (Dictionary dictionary : List.of(finished, newLoadingDictionary(98100))) {
             long start = System.currentTimeMillis();
             Assertions.assertFalse(
-                    ExecuteExceptionHandler.waitForNewDictionaryVersion(dictionary, 98100, false, 10000));
+                    waitForNewVersion(dictionary, 98100, false, 10000));
             long elapsed = System.currentTimeMillis() - start;
             Assertions.assertTrue(elapsed >= ExecuteExceptionHandler.DICTIONARY_REPLAY_GRACE_MS,
                     "waited " + elapsed + " ms");
@@ -618,7 +678,7 @@ public class ExecuteExceptionHandlerTest extends PlanTestBase {
         // No CN switches before COMMITTING, so the error means that the CN has no copy.
         Dictionary dictionary = newLoadingDictionary(98100);
         long start = System.currentTimeMillis();
-        Assertions.assertFalse(ExecuteExceptionHandler.waitForNewDictionaryVersion(dictionary, 98100, true, 10000));
+        Assertions.assertFalse(waitForNewVersion(dictionary, 98100, true, 10000));
         Assertions.assertTrue(System.currentTimeMillis() - start < 1000);
         Assertions.assertTrue(dictionary.isRefreshing());
     }
@@ -639,7 +699,7 @@ public class ExecuteExceptionHandlerTest extends PlanTestBase {
         });
         replayer.start();
         long start = System.currentTimeMillis();
-        Assertions.assertTrue(ExecuteExceptionHandler.waitForNewDictionaryVersion(dictionary, 98100, false, 10000));
+        Assertions.assertTrue(waitForNewVersion(dictionary, 98100, false, 10000));
         long elapsed = System.currentTimeMillis() - start;
         replayer.join();
         Assertions.assertTrue(elapsed >= ExecuteExceptionHandler.DICTIONARY_REPLAY_GRACE_MS + 300,
@@ -652,7 +712,7 @@ public class ExecuteExceptionHandlerTest extends PlanTestBase {
         // The follower replayed COMMITTING, so the commit can still run past the grace.
         Dictionary dictionary = newCommittingDictionary(98100);
         long start = System.currentTimeMillis();
-        Assertions.assertFalse(ExecuteExceptionHandler.waitForNewDictionaryVersion(dictionary, 98100, false, 1000));
+        Assertions.assertFalse(waitForNewVersion(dictionary, 98100, false, 1000));
         Assertions.assertTrue(System.currentTimeMillis() - start >= 1000);
     }
 }

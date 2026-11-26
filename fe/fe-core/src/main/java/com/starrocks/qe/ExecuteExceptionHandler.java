@@ -64,6 +64,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.OptionalLong;
 import java.util.Set;
+import java.util.function.BooleanSupplier;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -461,7 +462,8 @@ public class ExecuteExceptionHandler {
                 Dictionary dictionary = GlobalStateMgr.getCurrentState().getDictionaryMgr()
                         .tryGetDictionaryById(dictionaryId, DICTIONARY_LOOKUP_TIMEOUT_MS);
                 versionMoved = waitForNewDictionaryVersion(dictionary, plannedVersion,
-                        GlobalStateMgr.getCurrentState().isLeader(), Config.dictionary_version_retry_wait_ms);
+                        GlobalStateMgr.getCurrentState().isLeader(), Config.dictionary_version_retry_wait_ms,
+                        context.connectContext::isStatementCancelled);
             } catch (InterruptedException ie) {
                 Thread.currentThread().interrupt();
                 throw e;
@@ -471,6 +473,10 @@ public class ExecuteExceptionHandler {
             if (!versionMoved) {
                 throw e;
             }
+        }
+        // KILL only sets a flag and cancels the failed coordinator, so a kill during the wait shows up only here.
+        if (context.connectContext.isStatementCancelled()) {
+            throw e;
         }
         rebuildExecPlan(e, context);
     }
@@ -489,7 +495,8 @@ public class ExecuteExceptionHandler {
     // that the CN has no copy at all, so a wait does not help.
     @VisibleForTesting
     static boolean waitForNewDictionaryVersion(Dictionary dictionary, long plannedVersion, boolean isLeader,
-                                               long timeoutMs) throws InterruptedException {
+                                               long timeoutMs, BooleanSupplier isCancelled)
+            throws InterruptedException {
         if (dictionary == null) {
             return true;
         }
@@ -499,7 +506,7 @@ public class ExecuteExceptionHandler {
         while (true) {
             long now = System.currentTimeMillis();
             boolean committing = dictionary.isCommittingFromVersion(plannedVersion);
-            if (!dictionary.plansWithVersion(plannedVersion)
+            if (!dictionary.plansWithVersion(plannedVersion) || isCancelled.getAsBoolean()
                     || now >= deadline || (!committing && now >= idleDeadline)) {
                 break;
             }
