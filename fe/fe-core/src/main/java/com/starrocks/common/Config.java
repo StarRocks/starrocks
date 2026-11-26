@@ -3585,20 +3585,14 @@ public class Config extends ConfigBase {
     public static int refresh_other_fe_rpc_executor_thread_num = 4;
 
     /**
-     * Max time a commit to an Iceberg table, or a TRUNCATE, ALTER TABLE or DROP TABLE of one, waits for the other
-     * FEs to drop their cached copy of the table, so that a query on any FE sees the change once the statement
-     * returns. 0 or less disables the wait.
+     * Max time a change to a table of an external catalog (Iceberg, Hive or Paimon) waits for the other FEs to drop
+     * their cached copy of the table, so that a query on any FE sees the change once the statement returns: a
+     * commit (INSERT, INSERT OVERWRITE, DELETE, UPDATE, MERGE, compaction), a TRUNCATE, an ALTER TABLE or a DROP
+     * TABLE. 0 or less disables the wait. Replaces the per-connector configs, whose names are kept as aliases.
      */
-    @ConfField(mutable = true)
-    public static int iceberg_commit_invalidate_other_fe_timeout_ms = 3000;
-
-    /**
-     * Max time an INSERT, INSERT OVERWRITE or TRUNCATE on a Hive table waits for the other FEs to drop their
-     * cached copy of the table, so that a query on any FE sees the change once the statement returns.
-     * 0 or less disables the wait.
-     */
-    @ConfField(mutable = true)
-    public static int hive_commit_invalidate_other_fe_timeout_ms = 3000;
+    @ConfField(mutable = true, aliases = {"iceberg_commit_invalidate_other_fe_timeout_ms",
+            "hive_commit_invalidate_other_fe_timeout_ms", "paimon_commit_invalidate_other_fe_timeout_ms"})
+    public static int external_table_commit_invalidate_other_fe_timeout_ms = 3000;
 
     /**
      * Background refresh external table metadata interval in milliseconds.
@@ -3820,14 +3814,6 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static boolean enable_paimon_refresh_manifest_files = false;
-
-    /**
-     * Max time an INSERT, INSERT OVERWRITE, TRUNCATE or DROP TABLE on a Paimon table waits for the other FEs to drop
-     * their cached copy of the table, so that a query on any FE sees the change once the statement returns.
-     * 0 or less disables the wait.
-     */
-    @ConfField(mutable = true)
-    public static int paimon_commit_invalidate_other_fe_timeout_ms = 3000;
 
     /**
      * fe will call es api to get es index shard info every es_state_sync_interval_secs

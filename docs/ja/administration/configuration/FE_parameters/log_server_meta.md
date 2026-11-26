@@ -1625,31 +1625,14 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：Connector の書き込みパスから実行される非同期の "refresh other FE" バックグラウンドジョブをスケジュールする、FE グローバルのディスパッチ実行プール内のスレッド数です。これらのスレッドはバックグラウンド更新タスクを起動するだけで、他の FE に対して更新 RPC を直接送信しません。変更は再起動なしで実行中の FE に反映されます。
 - 導入時期：-
 
-### `paimon_commit_invalidate_other_fe_timeout_ms`
+### `external_table_commit_invalidate_other_fe_timeout_ms`
 
 - デフォルト：3000
+- Alias: `iceberg_commit_invalidate_other_fe_timeout_ms`, `hive_commit_invalidate_other_fe_timeout_ms`, `paimon_commit_invalidate_other_fe_timeout_ms`
 - タイプ：Int
 - 単位：ミリ秒
 - 変更可能：Yes
-- 説明：Paimon テーブルに対する INSERT、INSERT OVERWRITE、TRUNCATE TABLE、DROP TABLE が、他の FE がそのテーブルのキャッシュを破棄するのを待つ最大時間です。これにより、ステートメントが返った後はどの FE でクエリしても変更が見えます。時間内に応答しない FE はバックグラウンド更新に任されます。ローリングアップグレード中は、以前のバージョンの FE はテーブルを更新する（そのためステートメントが最大でこの時間待つことがあります）か、バックグラウンド更新までキャッシュを保持します。0 以下に設定すると待機しません。
-- 導入時期：-
-
-### `iceberg_commit_invalidate_other_fe_timeout_ms`
-
-- デフォルト：3000
-- タイプ：Int
-- 単位：ミリ秒
-- 変更可能：Yes
-- 説明：Iceberg テーブルへのコミット（INSERT、INSERT OVERWRITE、DELETE、UPDATE、MERGE、またはコンパクション）、および Iceberg テーブルに対する TRUNCATE TABLE、ALTER TABLE、DROP TABLE が、他の FE がそのテーブルのキャッシュを破棄するのを待つ最大時間です。これにより、ステートメントが返った後はどの FE でクエリしても変更が見えます。時間内に応答しない FE はバックグラウンド更新に任されます。ローリングアップグレード中は、以前のバージョンの FE がテーブルを更新するため、ステートメントが最大でこの時間待つことがあります。0 以下に設定すると待機しません。
-- 導入時期：-
-
-### `hive_commit_invalidate_other_fe_timeout_ms`
-
-- デフォルト：3000
-- タイプ：Int
-- 単位：ミリ秒
-- 変更可能：Yes
-- 説明：Hive テーブルに対する INSERT、INSERT OVERWRITE、または TRUNCATE が、他の FE がそのテーブルのキャッシュを破棄するのを待つ最大時間です。これにより、ステートメントが返った後はどの FE でクエリしても変更が見えます。時間内に応答しない FE はバックグラウンド更新に任されます。ローリングアップグレード中は、以前のバージョンの FE がテーブルを更新するためステートメントが最大でこの時間待つか、バックグラウンド更新までキャッシュを保持します。0 以下に設定すると待機しません。
+- 説明：Iceberg、Hive、Paimon カタログのテーブルに対する変更（INSERT、INSERT OVERWRITE、DELETE、UPDATE、MERGE、コンパクションなどのコミット、および TRUNCATE TABLE、ALTER TABLE、DROP TABLE）が、他の FE がそのテーブルのキャッシュを破棄するのを待つ最大時間です。これにより、ステートメントが返った後はどの FE でクエリしても変更が見えます。時間内に応答しない FE はバックグラウンド更新に任されます。ローリングアップグレード中は、以前のバージョンの FE はテーブルを更新する（そのためステートメントが最大でこの時間待つことがあります）か、バックグラウンド更新までキャッシュを保持します。0 以下に設定すると待機しません。このパラメータは Alias に記載されたコネクタごとのパラメータを置き換えるもので、それらの旧名で設定しても有効です。
 - 導入時期：-
 
 ### `refresh_other_fe_rpc_executor_thread_num`

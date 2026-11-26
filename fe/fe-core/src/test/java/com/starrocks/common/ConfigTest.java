@@ -104,6 +104,27 @@ public class ConfigTest {
     }
 
     @Test
+    public void testExternalTableInvalidateTimeoutKeepsTheConnectorNames() throws Exception {
+        // The per-connector names this config replaced still set it, and SHOW FRONTEND CONFIG still finds it by them
+        int original = Config.external_table_commit_invalidate_other_fe_timeout_ms;
+        try {
+            int value = 1000;
+            for (String oldName : List.of("iceberg_commit_invalidate_other_fe_timeout_ms",
+                    "hive_commit_invalidate_other_fe_timeout_ms", "paimon_commit_invalidate_other_fe_timeout_ms")) {
+                value++;
+                Config.setMutableConfig(oldName, String.valueOf(value), false, "");
+                Assertions.assertEquals(value, Config.external_table_commit_invalidate_other_fe_timeout_ms, oldName);
+                List<List<String>> configs = Config.getConfigInfo(PatternMatcher.createMysqlPattern(oldName, false));
+                Assertions.assertEquals(1, configs.size(), oldName);
+                Assertions.assertEquals("external_table_commit_invalidate_other_fe_timeout_ms", configs.get(0).get(0));
+                Assertions.assertEquals(String.valueOf(value), configs.get(0).get(2));
+            }
+        } finally {
+            Config.external_table_commit_invalidate_other_fe_timeout_ms = original;
+        }
+    }
+
+    @Test
     public void testMutableConfig() throws Exception {
         // Skip test if persistence is not available (container environments)
         Assumptions.assumeTrue(ConfigBase.isIsPersisted(),

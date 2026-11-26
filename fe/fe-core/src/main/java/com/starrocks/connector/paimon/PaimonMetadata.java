@@ -346,7 +346,7 @@ public class PaimonMetadata implements ConnectorMetadata {
     // dropped table. Make them drop it before the statement returns. Never throws.
     private void invalidateOthersFeTable(String dbName, String tableName) {
         GlobalStateMgr.getCurrentState().invalidateOthersFeTable(new TableName(catalogName, dbName, tableName),
-                Config.paimon_commit_invalidate_other_fe_timeout_ms);
+                Config.external_table_commit_invalidate_other_fe_timeout_ms);
     }
 
     // Sent by the FE that changed the table. The catalog-level caches are keyed by name and dropping them does no

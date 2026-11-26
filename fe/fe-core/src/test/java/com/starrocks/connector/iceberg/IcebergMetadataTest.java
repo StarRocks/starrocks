@@ -1892,7 +1892,7 @@ public class IcebergMetadataTest extends TableTestBase {
                 Lists.newArrayList(appendCommitInfo(mockedNativeTableJ, "ts_month=2022-01")), null);
 
         Assertions.assertEquals(List.of(new TableName(CATALOG_NAME, "iceberg_db", "iceberg_table")), invalidated);
-        Assertions.assertEquals(List.of(Config.iceberg_commit_invalidate_other_fe_timeout_ms), timeouts);
+        Assertions.assertEquals(List.of(Config.external_table_commit_invalidate_other_fe_timeout_ms), timeouts);
         Assertions.assertEquals(List.of(true), committedWhenInvalidated);
     }
 
@@ -1981,7 +1981,7 @@ public class IcebergMetadataTest extends TableTestBase {
     }
 
     private static String invalidationOf(String dbName, String tableName) {
-        return CATALOG_NAME + "." + dbName + "." + tableName + "@" + Config.iceberg_commit_invalidate_other_fe_timeout_ms;
+        return CATALOG_NAME + "." + dbName + "." + tableName + "@" + Config.external_table_commit_invalidate_other_fe_timeout_ms;
     }
 
     @Test

@@ -3301,7 +3301,7 @@ public class IcebergMetadata implements ConnectorMetadata {
     // before the statement returns, so that a read on any FE sees the change. Never throws.
     private void invalidateOthersFeTable(String dbName, String tableName) {
         GlobalStateMgr.getCurrentState().invalidateOthersFeTable(new TableName(catalogName, dbName, tableName),
-                Config.iceberg_commit_invalidate_other_fe_timeout_ms);
+                Config.external_table_commit_invalidate_other_fe_timeout_ms);
     }
 
     private void commitWithCleanup(Runnable commitAction, Runnable cleanupAction,
