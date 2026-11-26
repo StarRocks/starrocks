@@ -716,7 +716,7 @@ public class MaterializedViewAnalyzer {
                 }
                 for (int i = 0; i < colWithComments.size(); ++i) {
                     String colName = colWithComments.get(i).getColName();
-                    // An IVM MV's re-parsed DDL lists the internal columns this analyzer generated
+                    // An IVM MV's column list includes the internal columns this analyzer generated
                     // (__ROW_ID__, __AGG_STATE_*), whose names may hold characters a user-typed name
                     // may not -- e.g. __AGG_STATE_count(*). Exempt only a name identical to the one
                     // generated for that position, so a user-authored name is still checked.
@@ -724,7 +724,16 @@ public class MaterializedViewAnalyzer {
                             && colName.equals(columnNames.get(i))) {
                         continue;
                     }
+<<<<<<< HEAD
                     FeNameFormat.checkColumnName(colName);
+=======
+                    FeNameFormat.checkVirtualColumnNameNotUsed(colName);
+                    // An existing mv's DDL lists the names it was created with, including generated ones such as
+                    // count(*) that the shared-nothing column name format rejects.
+                    if (!REANALYZING_EXISTING_MV.get()) {
+                        FeNameFormat.checkColumnName(colName);
+                    }
+>>>>>>> b96a971 ([BugFix] Let ALTER MATERIALIZED VIEW ACTIVE keep an MV's generated column names in shared-nothing (#84412))
                 }
             }
             List<Column> mvColumns = Lists.newArrayList();
