@@ -615,8 +615,8 @@ TEST_P(LakePartialUpdateTest, test_column_mode_partial_update_streams_source_seg
 
 // Many update files, each touching rows of every source segment. The update rows are partitioned by
 // source segment into a local spill file, so every update file is read once; the result must equal
-// the per-segment re-read path, whether the partition pass flushes once per update file or on every
-// chunk, and the spill file must be gone when the publish is done.
+// the per-segment re-read path, whether the partition pass flushes once at the end, on every chunk
+// or in the middle of an update file, and the spill file must be gone when the publish is done.
 TEST_P(LakePartialUpdateTest, test_column_mode_spills_update_rows) {
     if (GetParam().partial_update_mode != PartialUpdateMode::COLUMN_UPDATE_MODE) {
         GTEST_SKIP() << "Only column mode reads update files while generating DCGs";

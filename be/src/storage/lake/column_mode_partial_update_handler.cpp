@@ -1249,9 +1249,12 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
                 upt_reads_weighted >= upt_rows_matched * static_cast<double>(spill_min_source_segments);
         if (spill_update_rows) {
             auto st = _spill_update_rows(rss_upt_id_to_rowid_pairs, partial_schema);
-            // A local problem (disk full, spill directory not usable, a column the spill cannot
-            // serialize) must not block the publish: the per-segment re-read below needs no local
-            // disk. Corruption is returned as is, since the re-read would index past the same rows.
+            // Whatever stopped the partition pass, short of corruption, falls back: the per-segment
+            // re-read below needs neither the spill nor local disk, so a local problem (disk full,
+            // spill directory not usable, a column the spill cannot serialize) must not block the
+            // publish. An error that is not local, such as a failed read of an update file, falls
+            // back too and the re-read reports it itself if it is still there. Corruption is
+            // returned as is, since the re-read would index past the same rows.
             if (!st.ok() && !st.is_corruption()) {
                 LOG(WARNING) << "Column-mode partial update falls back to reading the update files per source "
                              << "segment, tablet: " << params.tablet->id() << ", txn: " << _txn_id << ": " << st;
