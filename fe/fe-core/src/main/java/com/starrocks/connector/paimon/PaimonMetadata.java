@@ -22,6 +22,7 @@ import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.PaimonView;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -52,6 +53,7 @@ import com.starrocks.connector.statistics.StatisticsUtils;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SimpleExecutor;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.CreateViewStmt;
@@ -335,6 +337,23 @@ public class PaimonMetadata implements ConnectorMetadata {
                     PaimonSinkExtra.PublicationState.COMMITTED);
             invalidateTableAfterDdl(identifier);
         }
+        invalidateOthersFeTable(dbName, tableName);
+    }
+
+    // A Paimon commit or DDL writes no edit log, so the journal wait of a forwarded statement does nothing for it,
+    // and nothing else tells the other FEs: their catalog keeps the table and its partitions (the partition list and
+    // times that materialized view freshness is judged by) until the table is next refreshed, and keeps serving a
+    // dropped table. Make them drop it before the statement returns. Never throws.
+    private void invalidateOthersFeTable(String dbName, String tableName) {
+        GlobalStateMgr.getCurrentState().invalidateOthersFeTable(new TableName(catalogName, dbName, tableName),
+                Config.paimon_commit_invalidate_other_fe_timeout_ms);
+    }
+
+    // Sent by the FE that changed the table. The catalog-level caches are keyed by name and dropping them does no
+    // I/O; what this instance caches belongs to one query.
+    @Override
+    public void invalidateCachedTable(String dbName, String tableName) {
+        invalidateTableAfterDdl(new Identifier(dbName, tableName));
     }
 
     @Override
@@ -441,6 +460,7 @@ public class PaimonMetadata implements ConnectorMetadata {
                     String.format("Paimon dropTable error for %s.%s", dbName, tableName), e);
         }
         invalidateTableAfterDdl(identifier);
+        invalidateOthersFeTable(dbName, tableName);
     }
 
     private void updateAllPartitionInfos(String databaseName, String tableName) {
@@ -1322,7 +1342,11 @@ public class PaimonMetadata implements ConnectorMetadata {
         Table table = tables.get(identifier);
         if (table != null) {
             refreshTable(dbName, table, null, true);
+        } else {
+            // This instance belongs to one query and need not hold the table, but the catalog this FE shares does
+            invalidateTableAfterDdl(identifier);
         }
+        invalidateOthersFeTable(dbName, tableName);
     }
 
     private Map<String, String> buildPartitionMap(KeyPartitionRef partitionRef) {

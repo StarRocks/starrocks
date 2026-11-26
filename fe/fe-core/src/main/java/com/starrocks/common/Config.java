@@ -3757,6 +3757,14 @@ public class Config extends ConfigBase {
     public static boolean enable_paimon_refresh_manifest_files = false;
 
     /**
+     * Max time an INSERT, INSERT OVERWRITE, TRUNCATE or DROP TABLE on a Paimon table waits for the other FEs to drop
+     * their cached copy of the table, so that a query on any FE sees the change once the statement returns.
+     * 0 or less disables the wait.
+     */
+    @ConfField(mutable = true)
+    public static int paimon_commit_invalidate_other_fe_timeout_ms = 3000;
+
+    /**
      * fe will call es api to get es index shard info every es_state_sync_interval_secs
      */
     @ConfField
