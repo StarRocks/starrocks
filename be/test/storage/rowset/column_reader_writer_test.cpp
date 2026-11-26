@@ -1334,9 +1334,8 @@ TEST_F(ColumnReaderWriterTest, read_column_with_compression_dictionary) {
 // (2) every value roundtrips (exercises DDict load on read, the page-0 dict
 // frame, subsequent dict pages, and any no-dict frames under I5).
 TEST_F(ColumnReaderWriterTest, test_zstd_compression_dict_roundtrip) {
-    // Pin the plain variant: enable_binary_plain_delta_offset defaults to true, and this case is
-    // about whether the dictionary is kept, not about which offset trailer the page uses. The
-    // delta-offset variant has its own case (zstd_compression_dict_works_with_delta_offset_encoding).
+    // Pin legacy plain encoding to keep this test focused on the compression dictionary.
+    // zstd_compression_dict_works_with_delta_offset_encoding covers delta offsets.
     const bool saved_delta_offset = config::enable_binary_plain_delta_offset;
     config::enable_binary_plain_delta_offset = false;
     DeferOp restore_delta_offset([&]() { config::enable_binary_plain_delta_offset = saved_delta_offset; });
@@ -1639,9 +1638,8 @@ TEST_F(ColumnReaderWriterTest, zstd_compression_dict_works_with_delta_offset_enc
 // offer, and keeping it would cost a page per column per segment plus the work
 // of loading it on every read.
 TEST_F(ColumnReaderWriterTest, zstd_compression_dict_dropped_when_it_does_not_pay) {
-    // Pin the plain variant: enable_binary_plain_delta_offset defaults to true, and this case is
-    // about whether the dictionary is kept, not about which offset trailer the page uses. The
-    // delta-offset variant has its own case (zstd_compression_dict_works_with_delta_offset_encoding).
+    // Pin legacy plain encoding to keep this test focused on the compression dictionary.
+    // zstd_compression_dict_works_with_delta_offset_encoding covers delta offsets.
     const bool saved_delta_offset = config::enable_binary_plain_delta_offset;
     config::enable_binary_plain_delta_offset = false;
     DeferOp restore_delta_offset([&]() { config::enable_binary_plain_delta_offset = saved_delta_offset; });
@@ -1717,9 +1715,8 @@ TEST_F(ColumnReaderWriterTest, zstd_compression_dict_dropped_when_it_does_not_pa
 // pages bigger. On data with nothing to share, the dictionary has to be dropped at
 // this setting too.
 TEST_F(ColumnReaderWriterTest, zstd_compression_dict_dropped_at_zero_min_gain) {
-    // Pin the plain variant: enable_binary_plain_delta_offset defaults to true, and this case is
-    // about whether the dictionary is kept, not about which offset trailer the page uses. The
-    // delta-offset variant has its own case (zstd_compression_dict_works_with_delta_offset_encoding).
+    // Pin legacy plain encoding to keep this test focused on the compression dictionary.
+    // zstd_compression_dict_works_with_delta_offset_encoding covers delta offsets.
     const bool saved_delta_offset = config::enable_binary_plain_delta_offset;
     config::enable_binary_plain_delta_offset = false;
     DeferOp restore_delta_offset([&]() { config::enable_binary_plain_delta_offset = saved_delta_offset; });
@@ -1784,9 +1781,8 @@ TEST_F(ColumnReaderWriterTest, zstd_compression_dict_dropped_at_zero_min_gain) {
 // The other half of the same rule: on data the dictionary does help, it is kept
 // and the column really does get smaller.
 TEST_F(ColumnReaderWriterTest, zstd_compression_dict_kept_when_it_pays) {
-    // Pin the plain variant: enable_binary_plain_delta_offset defaults to true, and this case is
-    // about whether the dictionary is kept, not about which offset trailer the page uses. The
-    // delta-offset variant has its own case (zstd_compression_dict_works_with_delta_offset_encoding).
+    // Pin legacy plain encoding to keep this test focused on the compression dictionary.
+    // zstd_compression_dict_works_with_delta_offset_encoding covers delta offsets.
     const bool saved_delta_offset = config::enable_binary_plain_delta_offset;
     config::enable_binary_plain_delta_offset = false;
     DeferOp restore_delta_offset([&]() { config::enable_binary_plain_delta_offset = saved_delta_offset; });
