@@ -5536,10 +5536,11 @@ static bool init_seek_range_iterator_schema(const SeekRange& range, Schema* iter
 }
 
 template <typename ResolveFn>
-static auto with_segment_seek_range_iterator(
-        const std::shared_ptr<Segment>& segment, const Schema& iterator_schema, const LakeIOOptions& lake_io_opts,
-        OlapReaderStatistics* stats, bool use_page_cache, const std::atomic<bool>* is_cancelled,
-        ResolveFn&& resolve_fn) -> decltype(std::declval<ResolveFn>()(std::declval<SegmentIterator&>())) {
+static auto with_segment_seek_range_iterator(const std::shared_ptr<Segment>& segment, const Schema& iterator_schema,
+                                             const LakeIOOptions& lake_io_opts, OlapReaderStatistics* stats,
+                                             bool use_page_cache, const std::atomic<bool>* is_cancelled,
+                                             ResolveFn&& resolve_fn)
+        -> decltype(std::declval<ResolveFn>()(std::declval<SegmentIterator&>())) {
     OlapReaderStatistics local_stats;
     if (stats == nullptr) {
         stats = &local_stats;
