@@ -23,6 +23,7 @@ import com.starrocks.connector.jdbc.MockedJDBCMetadata;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.PlannerMetaLocker;
+import com.starrocks.sql.analyzer.QueryAnalyzer;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.utframe.UtFrameUtils;
@@ -69,6 +70,27 @@ public class StatementPlannerExternalTablesLockTest extends ConnectorPlanTestBas
                 allowReturn.await(20, TimeUnit.SECONDS);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
+            }
+            return super.getTable(context, dbName, tblName);
+        }
+    }
+
+    /** Counts the getTable calls made once {@code locked} says the planner lock is taken. */
+    private static class LockRecordingJDBCMetadata extends MockedJDBCMetadata {
+        private final AtomicBoolean locked;
+        private final AtomicInteger getTableCallsUnderLock;
+
+        public LockRecordingJDBCMetadata(Map<String, String> properties, AtomicBoolean locked,
+                                         AtomicInteger getTableCallsUnderLock) {
+            super(properties);
+            this.locked = locked;
+            this.getTableCallsUnderLock = getTableCallsUnderLock;
+        }
+
+        @Override
+        public Table getTable(ConnectContext context, String dbName, String tblName) {
+            if (locked.get()) {
+                getTableCallsUnderLock.incrementAndGet();
             }
             return super.getTable(context, dbName, tblName);
         }
@@ -344,10 +366,85 @@ public class StatementPlannerExternalTablesLockTest extends ConnectorPlanTestBas
                 "with tbl0 as (select * from tbl0) select * from default_catalog.test.t0 join tbl0 on true"));
     }
 
+    /**
+     * In WITH RECURSIVE a CTE is in scope after its anchor, so the self-reference in its recursive member is the
+     * CTE. With a JDBC current database, taking it for a table would send a lookup through the connector for a table
+     * that is not there, although every table the statement reads is internal.
+     */
+    @Test
+    public void testRecursiveCteSelfReferenceIsNotLookedUpInTheCurrentCatalog() throws Exception {
+        assertInJdbcDatabase(() -> {
+            AtomicInteger getTableCalls = new AtomicInteger();
+            registerBlockingJdbcMetadata(new CountDownLatch(1), new CountDownLatch(0), getTableCalls);
+            String sql = "with recursive r as (select v1 from default_catalog.test.t0 "
+                    + "union all select v1 + 1 from r where v1 < 3) select * from r";
+            StatementBase stmt = UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(sql, connectContext);
+            try (PlannerMetaLocker locker = new PlannerMetaLocker(connectContext, stmt)) {
+                Assertions.assertFalse(locker.isEmpty(), "t0 has to be in the lock set");
+                StatementPlanner.analyzeStatement(stmt, connectContext, locker);
+            }
+            Assertions.assertEquals(0, getTableCalls.get(), "the recursive CTE was looked up as a JDBC table");
+        });
+    }
+
+    /**
+     * The pre-pass also walks analyzed statements, such as the INSERT a CTAS carries. There a reference to a recursive
+     * CTE shares the definition's query, so walking into it goes round a cycle. A recursive member with a WITH
+     * RECURSIVE of its own has the walk treat such a reference as a recursive CTE definition.
+     */
+    @Test
+    public void testPrePassOverAnAnalyzedRecursiveCteEnds() throws Exception {
+        String sql = "with recursive r as (select v1 from test.t0 union all "
+                + "(with recursive x as (select 1 as m) select r.v1 + x.m from r, x where r.v1 < 3)) select * from r";
+        StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        Assertions.assertDoesNotThrow(() -> new QueryAnalyzer(connectContext).analyzeExternalTablesOnly(stmt));
+    }
+
+    /**
+     * A recursive CTE's definition is analyzed operand by operand, without the union's own with clause; finding no
+     * self-reference, the analyzer analyzes the whole definition again, with that with clause. Here the union's
+     * tbl0 CTE reads the JDBC table tbl0, which the operands also read, the union's CTE not being in scope for them.
+     * The pre-pass has to walk the union's with clause too, or the analyzer fetches that tbl0 holding t0's lock.
+     */
+    @Test
+    public void testRecursiveCteUnionWithClauseFromExternalTableNotUnderLock() throws Exception {
+        assertInJdbcDatabase(() -> {
+            String sql = "with recursive r as (with tbl0 as (select * from tbl0) "
+                    + "select * from tbl0 union all select * from tbl0) "
+                    + "select * from default_catalog.test.t0 join r on true";
+            AtomicBoolean locked = new AtomicBoolean(false);
+            AtomicInteger getTableCallsUnderLock = new AtomicInteger();
+            registerJdbcMetadata(new LockRecordingJDBCMetadata(jdbcProperties(), locked, getTableCallsUnderLock));
+            StatementBase stmt = UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(sql, connectContext);
+            PlannerMetaLocker locker = new PlannerMetaLocker(connectContext, stmt) {
+                @Override
+                public void lock() {
+                    locked.set(true);
+                }
+
+                @Override
+                public void unlock() {
+                }
+            };
+            Assertions.assertFalse(locker.isEmpty(), "t0 has to be in the lock set");
+            StatementPlanner.analyzeStatement(stmt, connectContext, locker);
+            Assertions.assertTrue(locked.get());
+            Assertions.assertEquals(0, getTableCallsUnderLock.get(), "connector metadata fetched under the lock");
+        });
+    }
+
     /** Replace the metadata of jdbc0 with one that counts getTable and blocks it until {@code allowReturn}. */
     private void registerBlockingJdbcMetadata(CountDownLatch started, CountDownLatch allowReturn,
                                               AtomicInteger getTableCalls) {
+        registerJdbcMetadata(new BlockingJDBCMetadata(jdbcProperties(), started, allowReturn, getTableCalls));
+    }
+
+    private static void registerJdbcMetadata(MockedJDBCMetadata metadata) {
         MockedMetadataMgr metadataMgr = (MockedMetadataMgr) GlobalStateMgr.getCurrentState().getMetadataMgr();
+        metadataMgr.registerMockedMetadata(MockedJDBCMetadata.MOCKED_JDBC_CATALOG_NAME, metadata);
+    }
+
+    private static Map<String, String> jdbcProperties() {
         Map<String, String> props = new HashMap<>();
         props.put(JDBCResource.TYPE, "jdbc");
         props.put(JDBCResource.DRIVER_CLASS, "org.mariadb.jdbc.Driver");
@@ -356,8 +453,7 @@ public class StatementPlannerExternalTablesLockTest extends ConnectorPlanTestBas
         props.put(JDBCResource.PASSWORD, "123456");
         props.put(JDBCResource.CHECK_SUM, "xxxx");
         props.put(JDBCResource.DRIVER_URL, "xxxx");
-        metadataMgr.registerMockedMetadata(MockedJDBCMetadata.MOCKED_JDBC_CATALOG_NAME,
-                new BlockingJDBCMetadata(props, started, allowReturn, getTableCalls));
+        return props;
     }
 
     private interface ThrowingRunnable {
