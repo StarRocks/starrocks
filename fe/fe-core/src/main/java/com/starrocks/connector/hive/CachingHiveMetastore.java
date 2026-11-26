@@ -333,6 +333,11 @@ public class CachingHiveMetastore extends CachingMetastore implements IHiveMetas
         return get(tableCache, DatabaseTableName.of(dbName, tableName));
     }
 
+    // The cached table, or null: never loads it
+    public Table getTableIfPresent(String dbName, String tableName) {
+        return tableCache.getIfPresent(DatabaseTableName.of(dbName, tableName));
+    }
+
     public boolean tableExists(String dbName, String tableName) {
         return metastore.tableExists(dbName, tableName);
     }
