@@ -111,6 +111,7 @@ TEST(ExecutionGroupTest, SubmitRaceConditionTest) {
         pipeline.mutable_drivers().emplace_back(std::make_shared<PipelineDriver>(
                 ops_with_sink, nullptr, nullptr, pipeline.pipeline_event(), &pipeline, nullptr, -1));
     }
+    pipeline.publish_drivers(nullptr);
 
     group.add_pipeline(&pipeline);
     // skip prepare step

@@ -46,10 +46,6 @@ void Pipeline::clear_drivers() {
 }
 
 const Drivers& Pipeline::drivers() const {
-    return _drivers;
-}
-
-const Drivers& Pipeline::published_drivers() const {
     static const Drivers kEmptyDrivers;
     if (!_drivers_ready.load(std::memory_order_acquire)) {
         return kEmptyDrivers;

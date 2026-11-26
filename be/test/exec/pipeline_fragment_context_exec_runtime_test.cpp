@@ -368,8 +368,9 @@ TEST(FragmentContextExecRuntimeTest, ReportExecStateSkipsUnpublishedAdaptivePipe
 
     // Simulate adaptive DOP instantiating drivers for p1 before prepare/prepare_local_state/publish_drivers complete.
     instantiate_test_drivers(&fragment_ctx, &query_runtime_state, p1.get());
-    ASSERT_EQ(2, p1->drivers().size());
-    ASSERT_FALSE(p1->drivers()[0]->local_prepare_is_done());
+    ASSERT_TRUE(p1->drivers().empty());
+    ASSERT_EQ(2, p1->mutable_drivers().size());
+    ASSERT_FALSE(p1->mutable_drivers()[0]->local_prepare_is_done());
 
     // Reporting and driver iteration must skip unpublished p1 without crashing or blocking p0's report.
     fragment_ctx.report_exec_state_if_necessary();
@@ -386,12 +387,13 @@ TEST(FragmentContextExecRuntimeTest, ReportExecStateSkipsUnpublishedAdaptivePipe
     EXPECT_EQ(nullptr, state->runtime_profile()->get_child("Pipeline (id=1)"));
 
     // Once p1 finishes prepare + prepare_local_state and publishes, it becomes visible to reporting and iteration.
-    for (const auto& driver : p1->drivers()) {
+    for (const auto& driver : p1->mutable_drivers()) {
         ASSERT_OK(driver->prepare(state));
         ASSERT_OK(driver->prepare_local_state(state));
     }
     p1->publish_drivers(state);
     EXPECT_TRUE(p1->drivers_ready());
+    EXPECT_EQ(2, p1->drivers().size());
 
     fragment_ctx.report_exec_state_if_necessary();
     EXPECT_EQ(2, recording_executor->report_exec_state_count.load());
@@ -477,7 +479,7 @@ TEST(FragmentContextExecRuntimeTest, ConcurrentAdaptivePublishAndProfileReport) 
         });
 
         instantiate_test_drivers(&fragment_ctx, &query_runtime_state, p1.get());
-        for (const auto& driver : p1->drivers()) {
+        for (const auto& driver : p1->mutable_drivers()) {
             ASSERT_OK(driver->prepare(state));
             ASSERT_OK(driver->prepare_local_state(state));
         }

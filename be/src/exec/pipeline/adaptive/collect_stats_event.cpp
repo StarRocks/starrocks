@@ -72,7 +72,7 @@ void CollectStatsSourceInitializeEvent::process(RuntimeState* state) {
     auto prepare_drivers = [state, &pipelines = _pipelines]() {
         size_t total_driver_size = 0;
         for (const auto& pipeline : pipelines) {
-            for (const auto& driver : pipeline->drivers()) {
+            for (const auto& driver : pipeline->mutable_drivers()) {
                 FAIL_POINT_TRIGGER_RETURN(
                         collect_stats_source_initialize_prepare_failed,
                         Status::InternalError("injected collect_stats_source_initialize_prepare_failed"));
@@ -88,7 +88,7 @@ void CollectStatsSourceInitializeEvent::process(RuntimeState* state) {
         std::vector<DriverPtr> all_drivers;
         all_drivers.reserve(total_driver_size);
         for (const auto& pipeline : pipelines) {
-            for (const auto& driver : pipeline->drivers()) {
+            for (const auto& driver : pipeline->mutable_drivers()) {
                 all_drivers.emplace_back(driver);
             }
         }
@@ -148,10 +148,10 @@ void CollectStatsSourceInitializeEvent::process(RuntimeState* state) {
         for (const auto& pipeline : _pipelines) {
             // The pipeline without driver indicates it has not been instantiated.
             // So we just count down the driver num once to trigger finalization of the pipeline.
-            if (pipeline->drivers().empty()) {
+            if (pipeline->mutable_drivers().empty()) {
                 pipeline->on_driver_finished(state);
             } else {
-                for (int i = 0; i < pipeline->drivers().size(); ++i) {
+                for (size_t i = 0; i < pipeline->mutable_drivers().size(); ++i) {
                     pipeline->on_driver_finished(state);
                 }
             }

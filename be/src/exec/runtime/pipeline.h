@@ -47,7 +47,6 @@ public:
         return operators;
     }
     const Drivers& drivers() const;
-    const Drivers& published_drivers() const;
     Drivers& mutable_drivers();
     bool drivers_ready() const { return _drivers_ready.load(std::memory_order_acquire); }
     void publish_drivers(RuntimeState* runtime_state);
