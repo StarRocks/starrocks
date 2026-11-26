@@ -225,7 +225,8 @@ public class StatisticSQLBuilder {
                         partitionIds.stream().map(String::valueOf).collect(Collectors.joining(", ")) + ")";
         String columnPredicate = CollectionUtils.isEmpty(columns) ? "" :
                 " AND `column_name` in (" +
-                        columns.stream().map(Strings::quote).collect(Collectors.joining(",")) + ")";
+                        storedColumnNames(columns, false).stream().map(Strings::quote)
+                                .collect(Collectors.joining(",")) + ")";
         context.put("predicate", tablePredicate + partitionPredicate + columnPredicate);
 
         return build(context, QUERY_PARTITION_STATISTIC_TEMPLATE);
@@ -277,7 +278,8 @@ public class StatisticSQLBuilder {
             StringBuilder predicateBuilder = new StringBuilder();
             predicateBuilder.append("table_id = ").append(tableId);
             predicateBuilder.append(" and column_name in (")
-                    .append(names.stream().map(c -> "\"" + c + "\"").collect(Collectors.joining(", ")))
+                    .append(storedColumnNames(names, false).stream().map(c -> "\"" + c + "\"")
+                            .collect(Collectors.joining(", ")))
                     .append(")");
             if (partitionIds != null && !partitionIds.isEmpty()) {
                 predicateBuilder.append(" and partition_id in (")
@@ -515,7 +517,8 @@ public class StatisticSQLBuilder {
 
         if (!columnNames.isEmpty()) {
             predicateList.add("column_name in (" + Joiner.on(", ")
-                    .join(columnNames.stream().map(c -> "'" + c + "'").collect(Collectors.toList())) + ")");
+                    .join(storedColumnNames(columnNames, true).stream().map(c -> "'" + c + "'")
+                            .collect(Collectors.toList())) + ")");
         }
 
         context.put("predicate", Joiner.on(" and ").join(predicateList));
@@ -542,7 +545,14 @@ public class StatisticSQLBuilder {
     public static String buildDropHistogramSQL(Long tableId, List<String> columnNames) {
         return "delete from " + StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME + " where table_id = "
                 + tableId + " and column_name in (" + Joiner.on(", ")
-                .join(columnNames.stream().map(c -> "'" + c + "'").collect(Collectors.toList())) + ")";
+                .join(storedColumnNames(columnNames, true).stream().map(c -> "'" + c + "'")
+                        .collect(Collectors.toList())) + ")";
+    }
+
+    // The distinct names as they are stored, see StatisticUtils.toStoredName.
+    private static List<String> storedColumnNames(List<String> names, boolean histogram) {
+        return names.stream().map(name -> StatisticUtils.toStoredName(name, histogram)).distinct()
+                .collect(Collectors.toList());
     }
 
     public static String buildDropHistogramSQL(List<Long> tableIds) {

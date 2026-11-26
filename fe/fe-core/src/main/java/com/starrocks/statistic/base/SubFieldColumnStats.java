@@ -14,9 +14,9 @@
 
 package com.starrocks.statistic.base;
 
+import com.starrocks.common.util.SqlUtils;
 import com.starrocks.statistic.sample.SampleInfo;
 import com.starrocks.type.Type;
-import org.apache.commons.lang.StringEscapeUtils;
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -44,8 +44,13 @@ public class SubFieldColumnStats extends PrimitiveTypeColumnStats {
     }
 
     @Override
+    public String getColumnName() {
+        return String.join(".", names);
+    }
+
+    @Override
     public String getColumnNameStr() {
-        return StringEscapeUtils.escapeSql(String.join(".", names));
+        return SqlUtils.escapeSqlString(getColumnName());
     }
 
     @Override

@@ -24,6 +24,9 @@ public interface ColumnStats {
 
     String getColumnNameStr();
 
+    // The raw, unescaped column name.
+    String getColumnName();
+
     String getQuotedColumnName();
 
     String getCombinedMultiColumnKey();

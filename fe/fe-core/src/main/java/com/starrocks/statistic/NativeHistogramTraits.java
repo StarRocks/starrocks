@@ -168,7 +168,7 @@ final class NativeHistogramTraits extends HistogramCollectTraits {
     List<Expr> buildInsertRow(String columnName, String buckets, String mcvJson) {
         List<Expr> row = new ArrayList<>();
         row.add(new IntLiteral(table.getId(), IntegerType.BIGINT));
-        row.add(new StringLiteral(columnName));
+        row.add(new StringLiteral(StatisticUtils.toStoredHistogramColumnName(columnName)));
         row.add(new IntLiteral(db.getId(), IntegerType.BIGINT));
         row.add(new StringLiteral(db.getOriginName() + "." + table.getName()));
         row.add(buildBucketsLiteral(buckets));
@@ -181,7 +181,7 @@ final class NativeHistogramTraits extends HistogramCollectTraits {
     String buildInsertRowSql(String columnName, String buckets, String mcvJson) {
         List<String> values = new ArrayList<>();
         values.add(String.valueOf(table.getId()));
-        values.add(quoteSqlString(columnName));
+        values.add(quoteSqlString(StatisticUtils.toStoredHistogramColumnName(columnName)));
         values.add(String.valueOf(db.getId()));
         values.add(quoteSqlString(db.getOriginName() + "." + table.getName()));
         values.add(buildBucketsSql(buckets));

@@ -341,4 +341,34 @@ class StatisticUtilsTest extends PlanTestBase {
             starRocksAssert.dropTable("test.varbinary_filter");
         }
     }
+
+    @Test
+    void testToStoredColumnName() {
+        int max = StatisticUtils.COLUMN_NAME_PK_MAX_BYTES;
+        Assertions.assertEquals("c1", StatisticUtils.toStoredColumnName("c1"));
+        Assertions.assertEquals("", StatisticUtils.toStoredColumnName(""));
+
+        String atLimit = "a".repeat(max);
+        Assertions.assertEquals(atLimit, StatisticUtils.toStoredColumnName(atLimit));
+
+        String overLimit = "a".repeat(max + 1);
+        String hashed = StatisticUtils.toStoredColumnName(overLimit);
+        Assertions.assertNotEquals(overLimit, hashed);
+        Assertions.assertEquals(32, hashed.length());
+    }
+
+    @Test
+    void testToStoredHistogramColumnName() {
+        int max = StatisticUtils.HISTOGRAM_COLUMN_NAME_PK_MAX_BYTES;
+        Assertions.assertEquals("c1", StatisticUtils.toStoredHistogramColumnName("c1"));
+        Assertions.assertEquals("", StatisticUtils.toStoredHistogramColumnName(""));
+
+        String atLimit = "a".repeat(max);
+        Assertions.assertEquals(atLimit, StatisticUtils.toStoredHistogramColumnName(atLimit));
+
+        String overLimit = "a".repeat(max + 1);
+        String hashed = StatisticUtils.toStoredHistogramColumnName(overLimit);
+        Assertions.assertNotEquals(overLimit, hashed);
+        Assertions.assertEquals(32, hashed.length());
+    }
 }
