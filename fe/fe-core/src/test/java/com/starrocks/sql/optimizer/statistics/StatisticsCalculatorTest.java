@@ -81,6 +81,7 @@ import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.DateType;
+import com.starrocks.type.FloatType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.StringType;
 import com.starrocks.type.StructField;
@@ -1447,6 +1448,82 @@ public class StatisticsCalculatorTest {
 
         // THEN
         Assertions.assertTrue(innerValStatAfterJoin.getNullsFraction() < outerNullFraction);
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = OuterJoin.class)
+    public void testOuterJoinKeepsPreservedSideStats(OuterJoin outerJoin) {
+        // GIVEN
+        JoinOperator joinType = JoinOperator.RIGHT_OUTER_JOIN;
+        if (outerJoin == OuterJoin.LEFT_OUTER_JOIN) {
+            joinType = JoinOperator.LEFT_OUTER_JOIN;
+        }
+
+        final var leftKey = columnRefFactory.create("left_key", FloatType.DOUBLE, true);
+        final var leftVal = columnRefFactory.create("left_val", IntegerType.INT, true);
+        final var rightKey = columnRefFactory.create("right_key", FloatType.DOUBLE, true);
+        columnRefFactory.updateColumnToRelationIds(leftKey.getId(), 0);
+        columnRefFactory.updateColumnToRelationIds(leftVal.getId(), 0);
+        columnRefFactory.updateColumnToRelationIds(rightKey.getId(), 1);
+
+        final var leftHistogram = new Histogram(
+                Lists.newArrayList(new Bucket(0, 200, 400L, 1L)), Maps.newHashMap());
+        // The join does not touch this histogram. The join estimate (200 rows) caps the NDV of left_val below its
+        // input NDV, and the outer join restores it.
+        final var leftValHistogram = new Histogram(
+                Lists.newArrayList(new Bucket(0, 200, 400L, 1L)), Maps.newHashMap());
+        final var leftGroup = new Group(0);
+        leftGroup.setStatistics(Statistics.builder().setOutputRowCount(400)
+                .addColumnStatistic(leftKey, new ColumnStatistic(0, 200, 0, 8, 200, leftHistogram,
+                        ColumnStatistic.StatisticType.ESTIMATE))
+                .addColumnStatistic(leftVal, new ColumnStatistic(0, 200, 0, 8, 300, leftValHistogram,
+                        ColumnStatistic.StatisticType.ESTIMATE))
+                .build());
+        leftGroup.setLogicalProperty(new LogicalProperty(new ColumnRefSet(Lists.newArrayList(leftKey, leftVal))));
+
+        final var rightHistogram = new Histogram(
+                Lists.newArrayList(new Bucket(0, 100, 100L, 1L)), Maps.newHashMap());
+        final var rightGroup = new Group(1);
+        rightGroup.setStatistics(Statistics.builder().setOutputRowCount(100)
+                .addColumnStatistic(rightKey, new ColumnStatistic(0, 100, 0, 8, 100, rightHistogram,
+                        ColumnStatistic.StatisticType.ESTIMATE))
+                .build());
+        rightGroup.setLogicalProperty(new LogicalProperty(new ColumnRefSet(Lists.newArrayList(rightKey))));
+
+        final var joinPred = new BinaryPredicateOperator(BinaryType.EQ, leftKey, rightKey);
+        final var groupExpr = new GroupExpression(new LogicalJoinOperator(joinType, joinPred),
+                Lists.newArrayList(leftGroup, rightGroup));
+        groupExpr.setGroup(new Group(2));
+        final var exprCtx = new ExpressionContext(groupExpr);
+        final var calc = new StatisticsCalculator(exprCtx, columnRefFactory, optimizerContext);
+
+        // WHEN
+        calc.estimatorStats();
+        final var joinStats = exprCtx.getStatistics();
+
+        // THEN
+        final var leftKeyStat = joinStats.getColumnStatistic(leftKey);
+        final var rightKeyStat = joinStats.getColumnStatistic(rightKey);
+        if (outerJoin == OuterJoin.LEFT_OUTER_JOIN) {
+            Assertions.assertEquals(400, joinStats.getOutputRowCount(), 0.0001);
+            Assertions.assertEquals(200, leftKeyStat.getDistinctValuesCount(), 0.0001);
+            Assertions.assertEquals(0, leftKeyStat.getMinValue(), 0.0001);
+            Assertions.assertEquals(200, leftKeyStat.getMaxValue(), 0.0001);
+            // The preserved NDV is larger than the joined NDV so the joined histogram cannot be used
+            Assertions.assertNull(leftKeyStat.getHistogram());
+            // The restored NDV is larger than the capped one, but the join did not build this histogram, so it stays.
+            final var leftValStat = joinStats.getColumnStatistic(leftVal);
+            Assertions.assertEquals(300, leftValStat.getDistinctValuesCount(), 0.0001);
+            Assertions.assertSame(leftValHistogram, leftValStat.getHistogram());
+        } else {
+            Assertions.assertEquals(200, joinStats.getOutputRowCount(), 0.0001);
+            Assertions.assertEquals(100, rightKeyStat.getDistinctValuesCount(), 0.0001);
+            Assertions.assertEquals(0, rightKeyStat.getMinValue(), 0.0001);
+            Assertions.assertEquals(100, rightKeyStat.getMaxValue(), 0.0001);
+            // restorePreservedKeys discards the histogram of a known preserved key, and restoring the other
+            // preserved columns does not bring it back.
+            Assertions.assertNull(rightKeyStat.getHistogram());
+        }
     }
 
     @Test
