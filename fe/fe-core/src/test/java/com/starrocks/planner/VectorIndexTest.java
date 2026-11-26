@@ -37,6 +37,7 @@ package com.starrocks.planner;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.UUIDUtil;
@@ -59,8 +60,10 @@ import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -1094,6 +1097,13 @@ public class VectorIndexTest extends PlanTestBase {
     @Test
     public void testPartialUpdateKeepingVectorColumnIsAllowed() throws Exception {
         String originalMode = connectContext.getSessionVariable().getPartialUpdateMode();
+        // A column-subset INSERT into partitions that were never written is planned as a plain insert,
+        // not a partial update. Mark the partitions as written so these INSERTs stay partial updates.
+        List<PhysicalPartition> partitions = new ArrayList<>(
+                ((OlapTable) starRocksAssert.getTable("test", "test_pk_vector")).getPhysicalPartitions());
+        List<Long> originalNextVersions = partitions.stream()
+                .map(PhysicalPartition::getNextVersion).collect(Collectors.toList());
+        partitions.forEach(p -> p.setNextVersion(PhysicalPartition.PARTITION_INIT_VERSION + 2));
         try {
             connectContext.getSessionVariable().setPartialUpdateMode("column");
             ExecPlan plan = planDml("insert into test_pk_vector (c0, c1) values (1, [1, 2, 3, 4, 5])");
@@ -1108,6 +1118,9 @@ public class VectorIndexTest extends PlanTestBase {
             assertEquals(TPartialUpdateMode.UNKNOWN_MODE, sinkOf(plan).getPartialUpdateMode());
         } finally {
             connectContext.getSessionVariable().setPartialUpdateMode(originalMode);
+            for (int i = 0; i < partitions.size(); i++) {
+                partitions.get(i).setNextVersion(originalNextVersions.get(i));
+            }
         }
     }
 
