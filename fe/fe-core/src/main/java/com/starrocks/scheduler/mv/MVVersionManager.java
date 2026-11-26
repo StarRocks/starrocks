@@ -28,6 +28,7 @@ import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.connector.PartitionUtil;
+import com.starrocks.connector.partitiontraits.DeltaLakePartitionTraits;
 import com.starrocks.persist.ChangeMaterializedViewRefreshSchemeLog;
 import com.starrocks.scheduler.MvTaskRunContext;
 import com.starrocks.scheduler.TaskRun;
@@ -397,9 +398,17 @@ public class MVVersionManager {
                         snapshotTable.getName(), pctTableSnapshotInfo.getRefreshedPartitionInfos(), mv.getName());
                 continue;
             }
-            partitionNames.put(pctTableSnapshotInfo, PartitionUtil.getPartitionNames(snapshotTable));
+            partitionNames.put(pctTableSnapshotInfo, getLivePartitionNames(snapshotTable));
         }
         return partitionNames;
+    }
+
+    private static List<String> getLivePartitionNames(Table table) {
+        // a tracked Delta table keeps its version under the table name, which no partition listing returns
+        if (DeltaLakePartitionTraits.isTableVersionTracked(table)) {
+            return DeltaLakePartitionTraits.versionTrackingPartitionNames(table);
+        }
+        return PartitionUtil.getPartitionNames(table);
     }
 
     private void updateMetaForExternalTable(MaterializedView.AsyncRefreshContext refreshContext,
