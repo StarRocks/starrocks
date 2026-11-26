@@ -80,6 +80,24 @@ This topic introduces the following types of FE configurations:
 - Description: Duration in seconds for a single process profile collection. When `proc_profile_cpu_enable` or `proc_profile_mem_enable` is set to `true`, AsyncProfiler is started, the collector thread sleeps for this duration, then the profiler is stopped and the profile is written. Larger values increase sample coverage and file size but prolong profiler runtime and delay subsequent collections; smaller values reduce overhead but may produce insufficient samples. Ensure this value aligns with retention settings such as `proc_profile_file_retained_days` and `proc_profile_file_retained_size_bytes`.
 - Introduced in: v3.2.12
 
+### `min_max_stats_collect_interval_sec`
+
+- Default: 60
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: Minimum interval between two min/max statistics collections for the same column. Min/max stats (used to constant-fold `min()`/`max()` and to build compressed group-by keys) are collected on demand via a `[_META_]` MetaScan that reads every segment's zone-map metadata; without throttling a frequently loaded column re-scans on every load, contending on the segment metadata cache the same way global-dictionary re-collection does. Within the interval the min/max optimization is skipped rather than re-collected -- a stale value is never served, so this only affects the optimization, never correctness. Set to `0` to disable throttling.
+- Introduced in: v4.0.17, v4.1.7
+
+### `min_max_stats_collect_max_tablets`
+
+- Default: 100000
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: Maximum number of tablets a table can have for its min/max statistics to be collected. The `[_META_]` MetaScan that collects min/max stats always reads the whole table, so its planning (tablet locations, scan ranges) and execution cost grow with the tablet count. For a table with more tablets than this value, min/max stats are not collected, and the optimizations that depend on them (constant-folding `min()`/`max()`, compressed group-by keys) are skipped for that table; values already cached for the table's current data version are still used. A skip is not cached, so a raised or disabled limit takes effect on the next collection allowed by `min_max_stats_collect_interval_sec`. This only affects the optimizations, never correctness. Set to `0` or a negative value to disable the limit.
+- Introduced in: v4.0.17, v4.1.7
+
 ### `enable_temporary_table_statistic_collect`
 
 - Default: true

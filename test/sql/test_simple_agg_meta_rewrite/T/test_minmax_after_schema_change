@@ -1,4 +1,5 @@
 -- name: test_minmax_after_schema_change @native
+admin set frontend config ("min_max_stats_collect_interval_sec" = "0");
 
 -- Regression for min()/max() constant folding answering with the min/max of a column that
 -- has since been dropped and re-created.

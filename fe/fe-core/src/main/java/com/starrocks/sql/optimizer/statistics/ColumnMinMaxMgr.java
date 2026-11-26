@@ -16,6 +16,7 @@ package com.starrocks.sql.optimizer.statistics;
 
 import com.github.benmanes.caffeine.cache.AsyncCacheLoader;
 import com.github.benmanes.caffeine.cache.AsyncLoadingCache;
+import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
@@ -60,6 +61,12 @@ import java.util.concurrent.Executor;
 import java.util.stream.Collectors;
 
 public class ColumnMinMaxMgr implements IMinMaxStatsMgr, MemoryTrackable {
+    // What the cache holds for a column (key absent = never loaded, or the last load failed or was skipped for a
+    // table over min_max_stats_collect_max_tablets; either is retried once the throttle allows):
+    //  - Optional.empty(): the column can never be collected (missing, unsupported type, aggregated). Kept.
+    //  - a CacheValue with minMax: the column's range as of `version`.
+    //  - a CacheValue without minMax: the scan returned NULL (empty table, all-NULL column), so the column has
+    //    no range as of `version`. It expires like any other entry once the table moves on.
     private record CacheValue(ColumnMinMax minMax, StatsVersion version) {}
 
     private static final Logger LOG = LogManager.getLogger(ColumnMinMaxMgr.class);
@@ -74,28 +81,90 @@ public class ColumnMinMaxMgr implements IMinMaxStatsMgr, MemoryTrackable {
             .executor(ThreadPoolManager.getStatsCacheThread())
             .buildAsync(new CacheLoader());
 
+    // Throttle: last wall-clock millis a MetaScan collection was triggered per column. Bounds how often
+    // min/max is re-collected via a [_META_] MetaScan (which opens every segment's metadata and contends
+    // on the segment metadata cache). Bounded + LRU-evicting so idle columns cannot accumulate.
+    private final Cache<ColumnIdentifier, Long> lastCollectMs = Caffeine.newBuilder()
+            .maximumSize(Config.statistic_dict_columns)
+            .build();
+
     static ColumnMinMaxMgr getInstance() {
         return INSTANCE;
     }
 
     @Override
     public Optional<ColumnMinMax> getStats(ColumnIdentifier identifier, StatsVersion version) {
-        CompletableFuture<Optional<CacheValue>> future = cache.get(identifier);
-        if (future.isDone()) {
+        // Peek without triggering a load, so re-collection is gated by the throttle below. A stale entry
+        // (data version moved past it) is dropped and never served -- serving it would fold min()/max()
+        // to a value that no longer exists -- so throttling only ever costs the optimization (the caller
+        // falls back to normal execution), never correctness.
+        boolean needCollect;
+        CompletableFuture<Optional<CacheValue>> future = cache.getIfPresent(identifier);
+        if (future == null) {
+            needCollect = true;
+        } else if (!future.isDone()) {
+            needCollect = false;
+        } else {
+            needCollect = false;
             try {
                 Optional<CacheValue> cacheValue = future.get();
-                if (cacheValue.isPresent()) {
+                if (cacheValue == null) {
+                    // A load that failed or was skipped by the tablet limit, which the cache is about to drop.
+                    cache.asMap().remove(identifier, future);
+                    needCollect = true;
+                } else if (cacheValue.isPresent()) {
                     CacheValue value = cacheValue.get();
                     if (value.version().getVersion() >= version.getVersion()) {
-                        return Optional.of(value.minMax());
+                        return Optional.ofNullable(value.minMax());
                     }
-                    cache.synchronous().invalidate(identifier);
+                    // Drop only the exact stale future we inspected: a concurrent query may have already
+                    // replaced it with a fresh load, and unconditionally evicting that (while the throttle
+                    // blocks us from reloading) would leave the column with no cached entry for a whole
+                    // interval. asMap().remove(key, value) is a lock-free CAS that no-ops if it moved on.
+                    cache.asMap().remove(identifier, future);
+                    needCollect = true;
                 }
+                // else: cached "never collectible" (e.g. non-numeric column) -- keep it, do not rescan.
             } catch (Exception e) {
                 LOG.warn("Failed to get MinMax for column: {}, version: {}", identifier, version, e);
             }
         }
+        // Trigger a fresh [_META_] MetaScan only when the per-column throttle interval has elapsed;
+        // otherwise skip the optimization for now. Bounds how often segment metadata is re-scanned for a
+        // frequently loaded column.
+        if (needCollect && shouldCollect(identifier)) {
+            cache.get(identifier);
+        }
         return Optional.empty();
+    }
+
+    // The number of tablets the [_META_] scan of genMinMaxSql reads: the base index of every physical
+    // partition (see MetaScanNode#computeRangeLocations). Walks all partitions, so only call it when a
+    // collection is about to run.
+    @VisibleForTesting
+    static long countMetaScanTablets(OlapTable table) {
+        long tabletNum = 0;
+        for (PhysicalPartition partition : table.getPhysicalPartitions()) {
+            tabletNum += partition.getBaseIndex().getTablets().size();
+        }
+        return tabletNum;
+    }
+
+    // True if enough time has elapsed since the last collection trigger for this column (or throttling is
+    // disabled via min_max_stats_collect_interval_sec <= 0). Stamps "now" as the trigger time on success.
+    @VisibleForTesting
+    boolean shouldCollect(ColumnIdentifier identifier) {
+        int intervalSec = Config.min_max_stats_collect_interval_sec;
+        if (intervalSec <= 0) {
+            return true;
+        }
+        long now = System.currentTimeMillis();
+        Long last = lastCollectMs.getIfPresent(identifier);
+        if (last != null && now - last < intervalSec * 1000L) {
+            return false;
+        }
+        lastCollectMs.put(identifier, now);
+        return true;
     }
 
     @Override
@@ -168,27 +237,53 @@ public class ColumnMinMaxMgr implements IMinMaxStatsMgr, MemoryTrackable {
                         return Optional.empty();
                     }
 
+                    // min_max_stats_collect_max_tablets <= 0 disables the limit.
+                    int tabletLimit = Config.min_max_stats_collect_max_tablets;
+                    if (tabletLimit > 0) {
+                        long tabletNum = countMetaScanTablets(olapTable);
+                        if (tabletNum > tabletLimit) {
+                            LOG.info("Skip collecting MinMax for column: {} of table: {}.{}, it has {} tablets, " +
+                                            "more than min_max_stats_collect_max_tablets: {}", column.getName(),
+                                    db.getOriginName(), olapTable.getName(), tabletNum, tabletLimit);
+                            // Not cached, like a failed load: the table is checked again on the next collection
+                            // the throttle allows, so a raised or disabled limit applies without waiting for a load.
+                            return null;
+                        }
+                    }
+
                     long version = olapTable.getPartitions().stream().flatMap(p -> p.getSubPartitions().stream()).map(
                             PhysicalPartition::getVisibleVersionTime).max(Long::compareTo).orElse(0L);
+                    StatsVersion statsVersion = new StatsVersion(version, version);
                     String catalogName = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
-                    String sql = genMinMaxSql(catalogName, db, olapTable, column);
+                    String sql;
+                    try {
+                        sql = genMinMaxSql(catalogName, db, olapTable, column);
+                    } catch (IllegalStateException e) {
+                        // A json field type that genMinMaxSql cannot read, and never will.
+                        return Optional.empty();
+                    }
 
                     ConnectContext context = STMT_EXECUTOR.createConnectContext();
                     context.getSessionVariable().setPipelineDop(1);
                     List<TResultBatch> result = STMT_EXECUTOR.executeDQL(sql, context);
                     if (result.isEmpty()) {
-                        return Optional.empty();
+                        return Optional.of(new CacheValue(null, statsVersion));
                     }
                     Preconditions.checkState(result.size() == 1);
                     ColumnMinMax minMax = toMinMax(result.get(0));
                     if (minMax.minValue() == null || minMax.maxValue() == null) {
-                        return Optional.empty();
+                        // Empty table or all-NULL column: no range now, but there may be one once data arrives,
+                        // so cache that under this version only.
+                        return Optional.of(new CacheValue(null, statsVersion));
                     }
-                    return Optional.of(new CacheValue(minMax, new StatsVersion(version, version)));
+                    return Optional.of(new CacheValue(minMax, statsVersion));
                 } catch (Exception e) {
                     LOG.warn("get MinMax for column: {}, error: {}", key, e.getMessage(), e);
                 }
-                return Optional.empty();
+                // Do not cache a failure (e.g. the scan timed out): a cached empty never expires, so the column
+                // would lose the optimization until DDL or eviction. A null value makes the cache drop the
+                // entry, and a later query retries once the throttle allows.
+                return null;
             }, executor);
         }
 

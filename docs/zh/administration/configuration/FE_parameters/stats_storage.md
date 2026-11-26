@@ -80,6 +80,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 单次进程 profile 收集的持续时间（秒）。当 `proc_profile_cpu_enable` 或 `proc_profile_mem_enable` 设置为 `true` 时，AsyncProfiler 启动，收集器线程休眠此持续时间，然后 profiler 停止并写入 profile。较大的值会增加样本覆盖率和文件大小，但会延长 profiler 运行时并延迟后续收集；较小的值会减少开销，但可能会产生不足的样本。确保此值与 `proc_profile_file_retained_days` 和 `proc_profile_file_retained_size_bytes` 等保留设置对齐。
 - 引入版本: v3.2.12
 
+### `min_max_stats_collect_interval_sec`
+
+- 默认值: 60
+- 类型: Int
+- 单位: 秒
+- 是否可变: Yes
+- 描述: 同一列两次 min/max 统计采集之间的最小间隔。min/max 统计（用于将 `min()`/`max()` 折叠为常量、以及构建压缩 group-by key）通过读取每个 segment zone-map 元数据的 `[_META_]` MetaScan 按需采集；若不节流，频繁导入的列会在每次导入后重扫，和全局字典重采集一样争用 segment 元数据缓存。间隔窗口内跳过 min/max 优化而非重新采集——绝不返回陈旧值，因此只影响优化、不影响正确性。设置为 `0` 可禁用节流。
+- 引入版本: v4.0.17, v4.1.7
+
+### `min_max_stats_collect_max_tablets`
+
+- 默认值: 100000
+- 类型: Int
+- 单位: -
+- 是否可变: Yes
+- 描述: 允许采集 min/max 统计的表的最大 tablet 数。采集 min/max 统计的 `[_META_]` MetaScan 总是扫描整张表，其规划（获取 tablet 位置、构造扫描范围）和执行开销随 tablet 数增长。tablet 数超过该值的表不采集 min/max 统计，依赖它的优化（将 `min()`/`max()` 折叠为常量、压缩 group-by key）对该表跳过；已为该表当前数据版本缓存的值仍会使用。跳过不会被缓存，因此调大或取消该限制后，在 `min_max_stats_collect_interval_sec` 允许的下一次采集时即生效。只影响优化、不影响正确性。设置为 `0` 或负数可取消该限制。
+- 引入版本: v4.0.17, v4.1.7
+
 ### `enable_temporary_table_statistic_collect`
 
 - 默认值: true
