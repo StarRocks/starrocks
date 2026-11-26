@@ -94,6 +94,8 @@ public:
     int64_t sst_output_bytes() const { return _sst_output_bytes; }
 
 protected:
+    int32_t prefetch_blocks_per_segment() const;
+
     // Remote reads of this task are one background flow of the remote I/O scheduler.
     RemoteReadContext remote_read_context() const {
         return RemoteReadContext::for_background(RemoteReadContext::Workload::COMPACTION,
