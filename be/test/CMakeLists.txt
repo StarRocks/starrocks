@@ -124,6 +124,7 @@ set(EXEC_FILES
         ./exec/stream/stream_pipeline_test.cpp
         ./exec/tablet_info_test.cpp
         ./exec/agg_hash_map_test.cpp
+        ./exec/aggregate_spill_selection_test.cpp
         ./exec/compress_serializer_test.cpp
         ./exec/hash_variant_test.cpp
         ./storage/tablet_schema_helper.cpp
@@ -536,17 +537,6 @@ SET_TARGET_PROPERTIES(starrocks_test_objs PROPERTIES COMPILE_FLAGS "-fno-access-
 add_executable(starrocks_test test_main.cpp $<TARGET_OBJECTS:starrocks_test_objs>)
 
 TARGET_LINK_LIBRARIES(starrocks_test ${TEST_LINK_LIBS})
-
-# Keep the aggregate spill selector regression runnable without compiling every
-# source in starrocks_test_objs, while retaining the standard BE test environment.
-add_executable(aggregate_spill_selection_test
-        test_main.cpp
-        exec/aggregate_spill_selection_test.cpp
-        ${TEST_EXTRA_SOURCES})
-set_target_properties(aggregate_spill_selection_test PROPERTIES COMPILE_FLAGS "-fno-access-control")
-target_link_libraries(aggregate_spill_selection_test
-        StarRocksPCH ServiceBE Service SchemaScannerBuiltin ${STARROCKS_TEST_LINK_LIBS})
-STARROCKS_FORCE_LOAD_LIBS(aggregate_spill_selection_test ${EXPR_FORCE_LOAD_LIBS})
 
 
 SET(DW_TEST_FILES
