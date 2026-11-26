@@ -40,6 +40,7 @@ import org.apache.paimon.table.FileStoreTable;
 import org.apache.paimon.table.source.DataSplit;
 import org.apache.paimon.table.source.ScanMode;
 import org.apache.paimon.table.source.Split;
+import org.apache.paimon.types.ArrayType;
 import org.apache.paimon.types.DataField;
 import org.apache.paimon.types.DataTypes;
 import org.apache.paimon.utils.Filter;
@@ -48,12 +49,14 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -141,12 +144,76 @@ class PaimonGlobalIndexMetadataTest {
         for (Range range : ranges) {
             DataFileMeta file = mock(DataFileMeta.class);
             when(file.firstRowId()).thenReturn(range.from);
+            when(file.schemaId()).thenReturn(schema.id());
+            when(file.rowCount()).thenReturn(range.count());
+            when(file.writeCols()).thenReturn(null);
             when(file.nonNullRowIdRange()).thenReturn(range);
             files.add(file);
         }
         DataSplit split = mock(DataSplit.class);
         when(split.dataFiles()).thenReturn(files);
+        when(split.partition()).thenReturn(BinaryRow.EMPTY_ROW);
         splits(List.of(split));
+    }
+
+    private void annRequest() {
+        schema = new TableSchema(1, List.of(DataTypes.FIELD(7, "vec", new ArrayType(false, DataTypes.FLOAT().notNull()))),
+                20, List.of(), List.of(), Map.of("data-evolution.enabled", "true", "row-tracking.enabled", "true"), "");
+        when(table.schema()).thenReturn(schema);
+        when(table.options()).thenReturn(schema.options());
+        when(table.schemaManager().schema(1)).thenReturn(schema);
+        request = PaimonGlobalIndexRequest.createAnn(table.location().toString(), "main", 42, schema.id(),
+                schema.timeMillis(), 7, "vec", "l2", List.of(1F, 2F), 3);
+    }
+
+    private static IndexManifestEntry annIndex(long from, long to, String metric) {
+        byte[] metadata = ("""
+                {"index.dimension":"2","index.type":"diskann","distance.metric":"%s","encoding.type":"rawf32"}
+                """.formatted(metric)).getBytes(StandardCharsets.UTF_8);
+        return index(7, from, to, 100, "lumina", metadata);
+    }
+
+    @Test
+    void testAnnRequestRequiresAnIndexOnTheBoundField() {
+        annRequest();
+        var query = new PaimonAnnQuery("vec", "l2", List.of(1F, 2F), 3);
+        when(handler.scan(snapshot, "lumina")).thenReturn(List.of());
+        assertNull(PaimonGlobalIndexPlanner.annRequest(table, 42, query));
+        when(handler.scan(snapshot, "lumina")).thenReturn(List.of(annIndex(0, 19, "l2")));
+        assertEquals(request.toJson(), PaimonGlobalIndexPlanner.annRequest(table, 42, query).toJson());
+    }
+
+    @Test
+    void testAnnMetadataUsesPhysicalSegmentBoundaries() {
+        annRequest();
+        List<IndexManifestEntry> manifests = List.of(annIndex(256, 511, "l2"), annIndex(0, 255, "l2"));
+        when(handler.scan(snapshot, "lumina")).thenReturn(manifests);
+        setData(List.of(new Range(0, 127), new Range(128, 383), new Range(384, 511)));
+
+        var shards = PaimonGlobalIndexPlanner.metadata(origin, request).getSplits().stream()
+                .map(split -> (PaimonGlobalIndexPlanner.Shard) split).toList();
+        assertEquals(2, shards.size());
+        assertEquals(List.of(new Range(0, 255), new Range(256, 511)),
+                shards.stream().map(shard -> new Range(shard.from(), shard.to())).toList());
+        assertEquals(1, shards.get(1).files().size());
+        var file = shards.get(1).files().get(0);
+        assertEquals("array<float>", file.getField_type());
+        assertEquals(256, file.getRow_range_from());
+        assertEquals("file:/warehouse/orders/index/index-7-256", file.getPath());
+    }
+
+    @Test
+    void testAnnRejectsMissingOrExtraVisibilityAndOverlappingSegments() {
+        annRequest();
+        setData(List.of(new Range(50, 99)));
+        when(handler.scan(snapshot, "lumina")).thenReturn(List.of(annIndex(0, 99, "l2")));
+        rejects("do not exactly cover");
+        when(handler.scan(snapshot, "lumina")).thenReturn(List.of(annIndex(50, 98, "l2")));
+        rejects("do not exactly cover");
+        when(handler.scan(snapshot, "lumina")).thenReturn(List.of(annIndex(50, 80, "l2"), annIndex(80, 99, "l2")));
+        rejects("overlapping");
+        when(handler.scan(snapshot, "lumina")).thenReturn(List.of(annIndex(50, 99, "cosine")));
+        rejects("metadata does not match");
     }
 
     private void rejects(String reason) {

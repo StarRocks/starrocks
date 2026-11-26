@@ -20,6 +20,7 @@ import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.common.tvr.TvrVersionRange;
+import com.starrocks.connector.paimon.PaimonAnnQuery;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
@@ -27,10 +28,12 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.Map;
+import java.util.Objects;
 
 public class LogicalPaimonScanOperator extends LogicalScanOperator {
     private ScanOperatorPredicates predicates = new ScanOperatorPredicates();
     private boolean hasUnknownColumn;
+    private PaimonAnnQuery annQuery;
 
     public LogicalPaimonScanOperator(Table table,
                                      Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
@@ -81,6 +84,20 @@ public class LogicalPaimonScanOperator extends LogicalScanOperator {
         this.predicates = predicates;
     }
 
+    public PaimonAnnQuery getAnnQuery() {
+        return annQuery;
+    }
+
+    @Override
+    public boolean equals(Object other) {
+        return super.equals(other) && Objects.equals(annQuery, ((LogicalPaimonScanOperator) other).annQuery);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(super.hashCode(), annQuery);
+    }
+
     public static class Builder
             extends LogicalScanOperator.Builder<LogicalPaimonScanOperator, LogicalPaimonScanOperator.Builder> {
 
@@ -93,6 +110,13 @@ public class LogicalPaimonScanOperator extends LogicalScanOperator {
         public LogicalPaimonScanOperator.Builder withOperator(LogicalPaimonScanOperator scanOperator) {
             super.withOperator(scanOperator);
             builder.predicates = scanOperator.predicates.clone();
+            builder.hasUnknownColumn = scanOperator.hasUnknownColumn;
+            builder.annQuery = scanOperator.annQuery;
+            return this;
+        }
+
+        public Builder setAnnQuery(PaimonAnnQuery annQuery) {
+            builder.annQuery = annQuery;
             return this;
         }
     }

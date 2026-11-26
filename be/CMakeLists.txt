@@ -231,6 +231,8 @@ option(WITH_TENANN "Build with TENANN" OFF)
 
 option(WITH_PAIMON_CPP "Build with paimon-cpp" ON)
 
+option(PAIMON_ENABLE_LUMINA "Load the optional Lumina plugin in the Paimon C++ shim" OFF)
+
 option(WITH_RELATIVE_SRC_PATH "Build source file with relative path" ON)
 
 if (${WITH_TENANN} STREQUAL "ON")
@@ -256,6 +258,11 @@ endif()
 if (APPLE AND WITH_PAIMON_CPP)
     message(STATUS "Disable paimon-cpp on macOS")
     set(WITH_PAIMON_CPP OFF CACHE BOOL "Build with paimon-cpp" FORCE)
+endif()
+
+if (PAIMON_ENABLE_LUMINA AND (NOT WITH_PAIMON_CPP OR NOT CMAKE_SYSTEM_NAME STREQUAL "Linux"
+        OR NOT CMAKE_BUILD_TARGET_ARCH STREQUAL "x86_64"))
+    message(FATAL_ERROR "PAIMON_ENABLE_LUMINA requires paimon-cpp on Linux x86-64")
 endif()
 
 # Check gcc

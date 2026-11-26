@@ -27,6 +27,7 @@ import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.paimon.PaimonAnnQuery;
 import com.starrocks.connector.paimon.PaimonReaderSelector;
 import com.starrocks.connector.paimon.PaimonReaderSelector.Reader;
 import com.starrocks.connector.paimon.PaimonRemoteFileDesc;
@@ -83,6 +84,7 @@ public class PaimonScanNode extends ScanNode {
     private static final Logger LOG = LogManager.getLogger(PaimonScanNode.class);
     private final AtomicLong partitionIdGen = new AtomicLong(0L);
     private PaimonTable paimonTable;
+    private PaimonAnnQuery annQuery;
     private final HDFSScanNodePredicates scanNodePredicates = new HDFSScanNodePredicates();
     private final List<TScanRangeLocations> scanRangeLocationsList = new ArrayList<>();
     private CloudConfiguration cloudConfiguration = null;
@@ -141,6 +143,10 @@ public class PaimonScanNode extends ScanNode {
         return rowCount * rowSize;
     }
 
+    public void setAnnQuery(PaimonAnnQuery annQuery) {
+        this.annQuery = annQuery;
+    }
+
     public void setupScanRangeLocations(TupleDescriptor tupleDescriptor, ScalarOperator predicate, long limit) {
         List<String> fieldNames =
                 tupleDescriptor.getSlots().stream().map(s -> s.getColumn().getName()).collect(Collectors.toList());
@@ -150,7 +156,7 @@ public class PaimonScanNode extends ScanNode {
                 .setPredicate(predicate)
                 .setFieldNames(fieldNames)
                 .setTableVersionRange(tvrVersionRange)
-                .setLimit(limit), columnNames);
+                .setLimit(limit), columnNames, annQuery);
         List<RemoteFileInfo> fileInfos;
         try (Timer ignored = Tracers.watchScope(EXTERNAL, paimonTable.getCatalogTableName() + ".getPaimonRemoteFileInfos")) {
             fileInfos = GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFiles(paimonTable, params);

@@ -2066,6 +2066,29 @@ build_paimon_cpp() {
     cd $BUILD_DIR
     rm -rf CMakeCache.txt CMakeFiles/
 
+    local enable_lumina="${PAIMON_ENABLE_LUMINA:-OFF}"
+    local lumina_cmake_args=()
+    case "${enable_lumina}" in
+        ON)
+            if [[ "$(uname -s)" != Linux || "$(uname -m)" != x86_64 ]]; then
+                echo "Error: PAIMON_ENABLE_LUMINA requires Linux x86-64" >&2
+                exit 1
+            fi
+            # The SDK's DSOs resolve libc independently of the BE executable.
+            # Reuse the BE's compatibility definitions when linking these optional libraries.
+            local glibc_compat_object="$PWD/starrocks_glibc_compat.o"
+            "${CC}" -std=c11 -O2 -fPIC -fvisibility=hidden -c \
+                "${TP_DIR}/../be/src/common/glibc_compat.c" -o "${glibc_compat_object}"
+            lumina_cmake_args+=('-DCMAKE_INSTALL_RPATH=$ORIGIN'
+                "-DCMAKE_SHARED_LINKER_FLAGS=${LDFLAGS:-} \"${glibc_compat_object}\"")
+            ;;
+        OFF) ;;
+        *)
+            echo "Error: PAIMON_ENABLE_LUMINA must be ON or OFF" >&2
+            exit 1
+            ;;
+    esac
+
     # protobuf required for rocky9
     ${CMAKE_CMD} .. -G "${CMAKE_GENERATOR}" \
         -DCMAKE_BUILD_TYPE=Release \
@@ -2074,7 +2097,7 @@ build_paimon_cpp() {
         -DPAIMON_BUILD_STATIC=OFF \
         -DPAIMON_ENABLE_ORC=ON \
         -DPAIMON_ENABLE_AVRO=ON \
-        -DPAIMON_ENABLE_LUMINA=OFF \
+        -DPAIMON_ENABLE_LUMINA="${enable_lumina}" "${lumina_cmake_args[@]}" \
         -DPAIMON_ENABLE_LUCENE=OFF \
         -DPAIMON_ENABLE_TANTIVY=OFF \
         -DPAIMON_ENABLE_JINDO=OFF \
@@ -2085,6 +2108,11 @@ build_paimon_cpp() {
 
     ${BUILD_SYSTEM} -j$PARALLEL
     ${BUILD_SYSTEM} install
+    if [[ "${enable_lumina}" == "ON" ]]; then
+        local license_dir="${TP_INSTALL_DIR}/paimon-cpp/share/licenses/lumina"
+        mkdir -p "${license_dir}"
+        cp lumina_ep-prefix/src/lumina_ep/{LICENSE,NOTICE}.txt "${license_dir}/"
+    fi
     # be/ resolves paimon strictly from <prefix>/lib (CMAKE_INSTALL_LIBDIR pinned above).
     if [[ ! -f "${TP_INSTALL_DIR}/paimon-cpp/lib/libpaimon.so" ]]; then
         echo "Error: ${TP_INSTALL_DIR}/paimon-cpp/lib/libpaimon.so not found after install; CMAKE_INSTALL_LIBDIR=lib was not honored" >&2

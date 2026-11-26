@@ -170,6 +170,8 @@ Usage: $0 <options>
                         build Backend without the paimon-cpp native reader and its
                         shared libraries (default with paimon-cpp; forced off on macOS,
                         where thirdparty does not build paimon-cpp)
+     PAIMON_ENABLE_LUMINA=ON
+                        package the optional Paimon Lumina ANN runtime on Linux x86-64
      -j                 build Backend parallel
      --output-compile-time 
                         save a list of the compile time for every C++ file in ${ROOT}/compile_times.txt.
@@ -287,6 +289,7 @@ else
 fi
 WITH_PCH=ON
 WITH_PAIMON_CPP=ON
+PAIMON_ENABLE_LUMINA="${PAIMON_ENABLE_LUMINA:-OFF}"
 USE_STAROS=OFF
 BUILD_JAVA_EXT=ON
 OUTPUT_COMPILE_TIME=OFF
@@ -494,6 +497,7 @@ echo "Get params:
     THIN_ARCHIVE                -- $THIN_ARCHIVE
     WITH_STARCACHE              -- $WITH_STARCACHE
     WITH_PAIMON_CPP             -- $WITH_PAIMON_CPP
+    PAIMON_ENABLE_LUMINA        -- $PAIMON_ENABLE_LUMINA
     WITH_PCH                    -- $WITH_PCH
     ENABLE_SHARED_DATA          -- $USE_STAROS
     USE_AVX2                    -- $USE_AVX2
@@ -653,6 +657,7 @@ if [ ${BUILD_BE} -eq 1 ] || [ ${BUILD_FORMAT_LIB} -eq 1 ] ; then
                   -DTHIN_ARCHIVE=${THIN_ARCHIVE}                        \
                   -DWITH_STARCACHE=${WITH_STARCACHE}                    \
                   -DWITH_PAIMON_CPP=${WITH_PAIMON_CPP}                  \
+                  -DPAIMON_ENABLE_LUMINA=${PAIMON_ENABLE_LUMINA}        \
                   -DWITH_PCH=${WITH_PCH}                                \
                   -DUSE_STAROS=${USE_STAROS}                            \
                   -DENABLE_FAULT_INJECTION=${ENABLE_FAULT_INJECTION}    \
@@ -836,7 +841,17 @@ if [ ${BUILD_BE} -eq 1 ]; then
     fi
     if [ "${WITH_PAIMON_CPP}" == "ON" ]; then
         # All paimon-cpp libraries live in be/lib/paimon-cpp-lib
-        paimon_cpp_libs=(${STARROCKS_THIRDPARTY}/installed/paimon-cpp/lib/libpaimon*.so*)
+        paimon_cpp_dir="${STARROCKS_THIRDPARTY}/installed/paimon-cpp"
+        paimon_cpp_libs=()
+        for so in "${paimon_cpp_dir}"/lib/libpaimon*.so*; do
+            if [[ "${PAIMON_ENABLE_LUMINA}" != "ON" && "${so##*/}" == libpaimon_lumina_index.so* ]]; then
+                continue
+            fi
+            paimon_cpp_libs+=("${so}")
+        done
+        if [[ "${PAIMON_ENABLE_LUMINA}" == "ON" ]]; then
+            paimon_cpp_libs+=("${paimon_cpp_dir}/lib/liblumina.so")
+        fi
         if (( ${#paimon_cpp_libs[@]} == 0 )); then
             echo "Error: WITH_PAIMON_CPP=ON but no libpaimon shared libraries found under ${STARROCKS_THIRDPARTY}/installed/paimon-cpp, run thirdparty/build-thirdparty.sh paimon_cpp first"
             exit 1
@@ -844,6 +859,11 @@ if [ ${BUILD_BE} -eq 1 ]; then
         mkdir -p ${STARROCKS_OUTPUT}/be/lib/paimon-cpp-lib
         cp -r -p ${STARROCKS_HOME}/be/output/lib/paimon-cpp-lib/. ${STARROCKS_OUTPUT}/be/lib/paimon-cpp-lib/
         cp -r -p "${paimon_cpp_libs[@]}" ${STARROCKS_OUTPUT}/be/lib/paimon-cpp-lib/
+        if [[ "${PAIMON_ENABLE_LUMINA}" == "ON" ]]; then
+            mkdir -p "${STARROCKS_OUTPUT}/be/lib/paimon-cpp-lib/licenses/lumina"
+            cp -p "${paimon_cpp_dir}"/share/licenses/lumina/{LICENSE,NOTICE}.txt \
+                "${STARROCKS_OUTPUT}/be/lib/paimon-cpp-lib/licenses/lumina/"
+        fi
     fi
     if [[ -f ${STARROCKS_THIRDPARTY}/installed/jemalloc/bin/jeprof ]]; then
         cp -r -p ${STARROCKS_THIRDPARTY}/installed/jemalloc/bin/jeprof ${STARROCKS_OUTPUT}/be/bin

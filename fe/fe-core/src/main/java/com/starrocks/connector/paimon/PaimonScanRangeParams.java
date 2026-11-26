@@ -21,18 +21,29 @@ import java.util.Map;
 /** Identifies final data scan-range planning, excluding optimizer and statistics probes. */
 public final class PaimonScanRangeParams extends GetRemoteFilesParams {
     private final Map<Integer, String> columnNames;
+    private final PaimonAnnQuery annQuery;
 
     public PaimonScanRangeParams(GetRemoteFilesParams.Builder builder) {
         this(builder, Map.of());
     }
 
     public PaimonScanRangeParams(GetRemoteFilesParams.Builder builder, Map<Integer, String> columnNames) {
+        this(builder, columnNames, null);
+    }
+
+    public PaimonScanRangeParams(GetRemoteFilesParams.Builder builder, Map<Integer, String> columnNames,
+                                 PaimonAnnQuery annQuery) {
         super(builder);
         this.columnNames = Map.copyOf(columnNames);
+        this.annQuery = annQuery;
     }
 
     /** Optimizer column-reference ids mapped to the scan's actual table column names. */
     public Map<Integer, String> getColumnNames() {
         return columnNames;
+    }
+
+    public PaimonAnnQuery getAnnQuery() {
+        return annQuery;
     }
 }

@@ -1879,6 +1879,7 @@ public class PlanFragmentBuilder {
             paimonScanNode.setScanOptimizeOption(node.getScanOptimizeOption());
             paimonScanNode.computeStatistics(optExpression.getStatistics());
             paimonScanNode.setTvrVersionRange(node.getTvrVersionRange());
+            paimonScanNode.setAnnQuery(node.getAnnQuery());
             currentExecGroup.add(paimonScanNode, true);
             try {
                 // set predicate

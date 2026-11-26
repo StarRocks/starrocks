@@ -926,6 +926,21 @@ FE 发布 Paimon 原生快照后，数据才对读取可见。空输入的 INSER
    SELECT count(*) FROM <table_name> LIMIT 10;
    ```
 
+### 查询 Paimon 向量索引
+
+在 Linux x86-64 上，使用 `PAIMON_ENABLE_LUMINA=ON` 构建的 BE 可使用已有的 Paimon Lumina 索引执行单表向量 Top-N。构建 BE 前，使用同一选项构建 Paimon C++ 依赖。默认构建关闭该可选运行库。
+
+支持按 `APPROX_L2_DISTANCE` 升序，以及按 `APPROX_COSINE_SIMILARITY` 或 `APPROX_INNER_PRODUCT` 降序。查询使用常量向量和显式 `LIMIT`。表需启用 append-only Data Evolution 和行跟踪，`rawf32` Lumina 索引须覆盖主分支上的单点快照，索引列为非空的 `ARRAY<FLOAT>`，元素也须非空。
+
+```SQL
+SELECT id, APPROX_L2_DISTANCE(embedding, CAST([1, 2, 3, 4] AS ARRAY<FLOAT>)) AS distance
+FROM documents
+ORDER BY distance
+LIMIT 10;
+```
+
+带过滤条件的查询走普通查询路径。`auto` 模式遇到可恢复的分布式索引错误时，回退到同一快照的普通扫描。显式 `distributed` 模式返回错误。查询对候选继续使用原有评分表达式和排序。
+
 ### 查看计划扫描的数据量
 
 `EXPLAIN VERBOSE` 和 `EXPLAIN COSTS` 会为每个 Paimon 扫描节点显示候选文件指标，普通 `EXPLAIN` 不显示该指标块：

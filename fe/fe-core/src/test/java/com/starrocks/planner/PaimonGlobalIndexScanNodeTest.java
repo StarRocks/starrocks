@@ -42,6 +42,8 @@ import mockit.Expectations;
 import mockit.Mocked;
 import mockit.Verifications;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.util.List;
 import java.util.Map;
@@ -108,13 +110,15 @@ class PaimonGlobalIndexScanNodeTest {
                 () -> factory.createTable(context, "paimon", "db", "other", MetadataTableType.PAIMON_GLOBAL_INDEX));
     }
 
-    @Test
-    void testScanRangesCarryRowIdsAndPhysicalFileBytes(@Mocked GlobalStateMgr state,
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void testScanRangesCarryRowIdsAndPhysicalFileBytes(boolean ann, @Mocked GlobalStateMgr state,
             @Mocked CatalogConnector connector, @Mocked MetadataMgr manager) {
-        var binding = request();
+        var binding = ann ? PaimonGlobalIndexRequest.createAnn("file:/orders", "main", 42, 1, 1000,
+                7, "vec", "l2", List.of(1.0f, 2.0f), 10) : request();
         TPaimonGlobalIndexFile file = new TPaimonGlobalIndexFile();
         file.setField_id(7);
-        file.setField_type("int");
+        file.setField_type(ann ? "array<float>" : "int");
         file.setPath("file:/orders/index/index-7");
         file.setFile_size(2048);
         file.setRow_range_from(100);
@@ -147,7 +151,7 @@ class PaimonGlobalIndexScanNodeTest {
         assertEquals(THdfsFileFormat.UNKNOWN, range.getFile_format());
         assertEquals("file:/orders/#global-index/42/0", range.getFull_path());
         var task = range.getPaimon_global_index_scan_range();
-        assertEquals(PaimonGlobalIndexRequest.CURRENT_VERSION, task.getProtocol_version());
+        assertEquals(binding.getVersion(), task.getProtocol_version());
         assertEquals(0, task.getShard_id());
         assertEquals(100, task.getRange_from());
         assertEquals(199, task.getRange_to());

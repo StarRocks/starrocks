@@ -32,6 +32,62 @@ import java.util.Map;
 import java.util.Set;
 
 public class PaimonGlobalIndexRequestTest {
+    private static PaimonGlobalIndexRequest ann(int k) {
+        return PaimonGlobalIndexRequest.createAnn("file:/orders", "main", 42, 3, 1000,
+                7, "vec", "l2", List.of(1.0f, 2.0f, 3.0f, 4.0f), k);
+    }
+
+    @Test
+    public void testAnnRoundTripAndSchemaBinding() {
+        PaimonGlobalIndexRequest request = ann(3);
+        PaimonGlobalIndexRequest parsed = PaimonGlobalIndexRequest.parseTransport(request.toTransportString());
+        Assertions.assertTrue(parsed.isAnn());
+        Assertions.assertEquals(6, parsed.getVersion());
+        Assertions.assertEquals(request.getVector(), parsed.getVector());
+        Assertions.assertEquals(Set.of(7), parsed.getRequiredFieldIds());
+        Assertions.assertFalse(parsed.toJson().contains("predicate"));
+        Assertions.assertFalse(parsed.toJson().contains("indexes"));
+        Assertions.assertThrows(UnsupportedOperationException.class, () -> parsed.getVector().queryVector().add(5f));
+        TableSchema schema = new TableSchema(3L,
+                List.of(new DataField(7, "vec", DataTypes.ARRAY(DataTypes.FLOAT().notNull()).notNull())),
+                7, List.of(), List.of(), Map.of(), null);
+        parsed.validateVector(schema);
+        for (var type : List.of(DataTypes.ARRAY(DataTypes.FLOAT()).notNull(),
+                DataTypes.ARRAY(DataTypes.FLOAT().notNull()), DataTypes.ARRAY(DataTypes.DOUBLE().notNull()).notNull())) {
+            TableSchema unsupported = new TableSchema(3L, List.of(new DataField(7, "vec", type)),
+                    7, List.of(), List.of(), Map.of(), null);
+            Assertions.assertThrows(IllegalArgumentException.class, () -> parsed.validateVector(unsupported));
+        }
+        TableSchema renamed = new TableSchema(3L,
+                List.of(new DataField(7, "renamed", DataTypes.ARRAY(DataTypes.FLOAT().notNull()).notNull())),
+                7, List.of(), List.of(), Map.of(), null);
+        Assertions.assertThrows(IllegalArgumentException.class, () -> parsed.validateVector(renamed));
+    }
+
+    @Test
+    public void testAnnRejectsInvalidEnvelopeAndVector() {
+        for (String json : List.of(
+                ann(3).toJson().replace("unfiltered_top_n", "filtered_top_n"),
+                ann(3).toJson().replace("lumina", "btree"),
+                ann(3).toJson().replace("l2", "invalid"),
+                ann(3).toJson().replace("\"k\":3", "\"k\":0"),
+                ann(3).toJson().replace("\"fieldId\":7", "\"fieldId\":-1"),
+                ann(3).toJson().replace("\"fieldId\":7,", ""),
+                ann(3).toJson().replace("\"k\":3", "\"k\":3.5"),
+                ann(3).toJson().replace("\"queryVector\":[1.0,2.0,3.0,4.0]", "\"queryVector\":[\"1\"]"),
+                ann(3).toJson().replace("\"resultBytesLimit\":1048576", "\"resultBytesLimit\":39"),
+                ann(3).toJson().replace("\"queryVector\":[1.0,2.0,3.0,4.0]", "\"queryVector\":[]"),
+                ann(3).toJson().replace("\"queryVector\":[1.0,2.0,3.0,4.0]", "\"queryVector\":[1e100]"),
+                ann(3).toJson().replace("\"version\":6", "\"version\":5"),
+                ann(3).toJson().replace("\"version\":6", "\"version\":6,\"predicate\":{}"))) {
+            Assertions.assertThrows(IllegalArgumentException.class, () -> PaimonGlobalIndexRequest.parse(json), json);
+        }
+        Assertions.assertThrows(IllegalArgumentException.class, () -> ann(Integer.MAX_VALUE));
+        Assertions.assertThrows(IllegalArgumentException.class, () -> PaimonGlobalIndexRequest.createAnn(
+                "file:/orders", "main", 42, 3, 1000, 7, "vec", "l2",
+                java.util.Collections.nCopies(4097, 1.0f), 1));
+    }
+
     @Test
     public void testSchemaBoundLiteralValidation() {
         TableSchema schema = new TableSchema(3L, List.of(new DataField(7, "k", DataTypes.TINYINT())),
