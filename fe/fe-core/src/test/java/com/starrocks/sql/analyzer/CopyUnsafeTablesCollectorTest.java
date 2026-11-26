@@ -159,6 +159,56 @@ public class CopyUnsafeTablesCollectorTest extends ConnectorPlanTestBase {
     }
 
     /**
+     * In WITH RECURSIVE a CTE defined by a union is in scope after its anchor, as the analyzer has it: a
+     * self-reference in a recursive member is the CTE, not a table of that name, and stays out of the lock set.
+     * The anchor is still before the CTE, so a same-named table read there is locked. Without RECURSIVE the CTE
+     * is in scope only after its whole definition.
+     */
+    @Test
+    public void testARecursiveCteSelfReferenceIsNotLockedAsATable() throws Exception {
+        Assertions.assertEquals(Set.of(tableId("test", "t0")),
+                lockedTableIds("with recursive t1 as (select v1 from test.t0 "
+                        + "union all select v1 + 1 from t1 where v1 < 3) select * from t1"));
+        Assertions.assertEquals(Set.of(tableId("test", "t1")),
+                lockedTableIds("with recursive t1 as (select v4 from t1 "
+                        + "union all select v4 + 1 from t1 where v4 < 3) select * from t1"));
+        Assertions.assertEquals(Set.of(tableId("test", "t0"), tableId("test", "t1")),
+                lockedTableIds("with t1 as (select v1 from test.t0 "
+                        + "union all select v4 from t1) select * from t1"));
+    }
+
+    /**
+     * A recursive CTE's definition is analyzed operand by operand, without the union's own with clause; finding no
+     * self-reference, the analyzer analyzes the whole definition again, with that with clause. Here the operands read
+     * the table t0, the union's t0 CTE not being in scope for them, and that CTE reads t1: both are read, so both are
+     * locked.
+     */
+    @Test
+    public void testARecursiveCteUnionWithClauseIsLocked() throws Exception {
+        Assertions.assertEquals(Set.of(tableId("test", "t0"), tableId("test", "t1")),
+                lockedTableIds("with recursive r as (with t0 as (select v4 as v1 from test.t1) "
+                        + "select v1 from t0 union all select v1 from t0) select * from r"));
+    }
+
+    /**
+     * The lock collection also walks analyzed statements, to check the lock covers what analysis brought in. There a
+     * reference to a recursive CTE shares the definition's query, so walking into it goes round a cycle. A recursive
+     * member with a WITH RECURSIVE of its own has the walk treat such a reference as a recursive CTE definition.
+     */
+    @Test
+    public void testLockCollectionOverAnAnalyzedRecursiveCteEnds() throws Exception {
+        String sql = "with recursive r as (select v1 from test.t0 union all "
+                + "(with recursive x as (select 1 as m) select r.v1 + x.m from r, x where r.v1 < 3)) select * from r";
+        StatementBase parsed = UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(sql, connectContext);
+        StatementBase analyzed = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        try (PlannerMetaLocker locker = new PlannerMetaLocker(connectContext, parsed)) {
+            PlannerMetaLocker all =
+                    Assertions.assertDoesNotThrow(() -> locker.forAllTablesOf(connectContext, analyzed));
+            Assertions.assertFalse(all.isEmpty(), "t0 has to be in the lock set");
+        }
+    }
+
+    /**
      * ENGINE=MYSQL and ENGINE=JDBC from a resource live in an internal database, but nothing writes a published
      * one, so they are no lock target: neither in the lock set nor a vote for holding the lock over the whole
      * planning phase -- alone, joined with a native table, or with an external-catalog table.
