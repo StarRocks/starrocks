@@ -30,10 +30,12 @@ import com.starrocks.connector.metadata.TableMetaConnector;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.apache.avro.Schema;
+import org.apache.avro.SchemaParseException;
 import org.apache.hadoop.hive.metastore.api.FieldSchema;
 import org.apache.hadoop.hive.metastore.api.StorageDescriptor;
 import org.apache.hadoop.hive.metastore.api.Table;
 import org.apache.hudi.common.table.HoodieTableMetaClient;
+import org.apache.hudi.common.table.TableSchemaResolver;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -170,6 +172,27 @@ public class HiveMetastoreApiConverterTest {
         };
         HudiTable hudiTable = HiveMetastoreApiConverter.toHudiTable(table, "hudi_catalog");
         Assertions.assertEquals(catalogName, hudiTable.getCatalogName());
+    }
+
+    @Test
+    public void testToHudiTableSchemaErrorKeepsCause(@Mocked Table table, @Mocked HoodieTableMetaClient metaClient,
+                                                     @Mocked TableSchemaResolver schemaResolver) throws Exception {
+        SchemaParseException cause = new SchemaParseException("Namespace part \"Types$GeoSummary\" is invalid");
+        new Expectations() {
+            {
+                table.getSd().getLocation();
+                result = "hdfs://127.0.0.1/db/table/hudi_table";
+
+                schemaResolver.getTableAvroSchema();
+                result = cause;
+            }
+        };
+
+        StarRocksConnectorException e = Assertions.assertThrows(StarRocksConnectorException.class,
+                () -> HiveMetastoreApiConverter.toHudiTable(table, null));
+        Assertions.assertTrue(e.getMessage().contains("Cannot get hudi table schema"), e.getMessage());
+        Assertions.assertTrue(e.getMessage().contains("Types$GeoSummary"), e.getMessage());
+        Assertions.assertSame(cause, e.getCause());
     }
 
     @Test

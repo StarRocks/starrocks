@@ -116,7 +116,7 @@ public class HudiTableFactory extends ExternalTableFactory {
         try {
             hudiTableSchema = HoodieAvroUtils.createHoodieWriteSchema(schemaUtil.getTableAvroSchema());
         } catch (Exception e) {
-            throw new DdlException("Cannot get hudi table schema.");
+            throw new DdlException("Cannot get hudi table schema: " + e.getMessage(), e);
         }
 
         for (Column column : columns) {
