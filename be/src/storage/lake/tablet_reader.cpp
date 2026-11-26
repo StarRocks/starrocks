@@ -744,6 +744,9 @@ const OlapReaderStatistics& TabletReader::compaction_stats() const {
         _compaction_stats.column_iterator_init_ns += from.column_iterator_init_ns;
         _compaction_stats.io_count_local_disk += from.io_count_local_disk;
         _compaction_stats.io_count_remote += from.io_count_remote;
+        _compaction_stats.remote_prefetch_ranges += from.remote_prefetch_ranges;
+        _compaction_stats.remote_prefetch_blocks += from.remote_prefetch_blocks;
+        _compaction_stats.remote_prefetch_rejected_blocks += from.remote_prefetch_rejected_blocks;
     };
     add_counters(_stats);
     for (const auto& rowset_stats : _parallel_rowset_stats) {

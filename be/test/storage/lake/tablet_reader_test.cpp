@@ -2982,6 +2982,9 @@ TEST_F(LakeTabletReaderSpit, test_parallel_rowset_stats_survive_iterator_reads) 
         auto* stats = static_cast<SegmentReadOptions*>(arg)->stats;
         stats->sample_build_histogram_count++;
         stats->flat_json_hits["parallel-test"]++;
+        stats->remote_prefetch_ranges += 3;
+        stats->remote_prefetch_blocks += 2;
+        stats->remote_prefetch_rejected_blocks += 1;
     });
 
     auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), _tablet_metadata, *_schema);
@@ -3011,6 +3014,10 @@ TEST_F(LakeTabletReaderSpit, test_parallel_rowset_stats_survive_iterator_reads) 
     EXPECT_EQ(reader->stats().raw_rows_read, reader->realtime_stats().raw_rows_read);
     EXPECT_EQ(reader->stats().raw_rows_read, reader->compaction_stats().raw_rows_read);
     EXPECT_EQ(reader->stats().compressed_bytes_read, reader->compaction_stats().compressed_bytes_read);
+    // Compaction reports the prefetch of every rowset reader while the reader is still open.
+    EXPECT_EQ(6, reader->compaction_stats().remote_prefetch_ranges);
+    EXPECT_EQ(4, reader->compaction_stats().remote_prefetch_blocks);
+    EXPECT_EQ(2, reader->compaction_stats().remote_prefetch_rejected_blocks);
     EXPECT_TRUE(reader->compaction_stats().flat_json_hits.empty());
 
     // Profile reporting for a reused reader resets every private accumulator while its old
