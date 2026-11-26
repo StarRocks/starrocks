@@ -78,7 +78,7 @@ public:
     static StatusOr<TabletSchemaSPtr> create(const TabletSchema& ori_schema, int64_t schema_id, int32_t version,
                                              const POlapTableColumnParam& column_param);
     static TabletSchemaSPtr copy(const TabletSchema& tablet_schema);
-    static StatusOr<TabletSchemaSPtr> copy(const TabletSchema& tablet_schema, const std::vector<TabletColumn>& columns);
+    static TabletSchemaSPtr copy(const TabletSchema& tablet_schema, const std::vector<TabletColumn>& columns);
     static TabletSchemaCSPtr copy(const TabletSchema& src_schema, const std::vector<TColumn>& cols);
 
     // Must be consistent with MaterializedIndexMeta.INVALID_SCHEMA_ID defined in
@@ -127,7 +127,7 @@ public:
         }
         return _primary_key_encoding_type;
     }
-    Status append_column(TabletColumn column);
+    void append_column(TabletColumn column);
 
     int32_t schema_version() const { return _schema_version; }
     void set_schema_version(int32_t version) { _schema_version = version; }
@@ -185,7 +185,6 @@ private:
     friend bool operator!=(const TabletSchema& a, const TabletSchema& b);
 
     void _generate_sort_key_idxes();
-    void _append_column(TabletColumn column);
     void _clear_columns();
     Status _build_current_tablet_schema(int64_t schema_id, int32_t version, const POlapTableColumnParam& column_param,
                                         const TabletSchema& ori_tablet_schema);

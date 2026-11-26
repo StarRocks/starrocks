@@ -50,43 +50,7 @@
 
 namespace starrocks {
 
-namespace {
-
-Status validate_geo_column(const TabletColumn& column, bool nested) {
-    const auto type = column.type();
-    const auto* descriptor = column.geo_descriptor();
-    if (type == TYPE_GEOGRAPHY || type == TYPE_GEOMETRY) {
-        if (descriptor == nullptr) {
-            return Status::InvalidArgument("Missing GEO tablet column descriptor");
-        }
-        const auto expected = type == TYPE_GEOGRAPHY ? GEO_LOGICAL_TYPE_GEOGRAPHY : GEO_LOGICAL_TYPE_GEOMETRY;
-        if (descriptor->logical_type != expected) {
-            return Status::InvalidArgument("GEO tablet column descriptor kind does not match the logical type");
-        }
-        if (nested || column.is_key() || column.is_sort_key() || column.subcolumn_count() != 0) {
-            return Status::NotSupported("GEO tablet columns must be scalar value columns");
-        }
-    } else if (descriptor != nullptr) {
-        return Status::InvalidArgument("GEO tablet column descriptor on a non-GEO column");
-    }
-    for (uint32_t i = 0; i < column.subcolumn_count(); ++i) {
-        RETURN_IF_ERROR(validate_geo_column(column.subcolumn(i), true));
-    }
-    return Status::OK();
-}
-
-} // namespace
-
-Status TabletSchema::append_column(TabletColumn column) {
-    RETURN_IF_ERROR(validate_geo_column(column, false));
-    if (column.geo_descriptor() && _sort_key_uids_set.count(column.unique_id()) > 0) {
-        return Status::NotSupported("GEO tablet columns cannot be sort keys");
-    }
-    _append_column(std::move(column));
-    return Status::OK();
-}
-
-void TabletSchema::_append_column(TabletColumn column) {
+void TabletSchema::append_column(TabletColumn column) {
     if (column.is_key()) {
         _num_key_columns++;
     }
@@ -197,11 +161,11 @@ TabletSchemaSPtr TabletSchema::copy(const TabletSchema& tablet_schema) {
     return std::make_shared<TabletSchema>(tablet_schema);
 }
 
-StatusOr<TabletSchemaSPtr> TabletSchema::copy(const TabletSchema& src_schema, const std::vector<TabletColumn>& cols) {
-    auto dst_schema = std::make_shared<TabletSchema>(src_schema);
+TabletSchemaSPtr TabletSchema::copy(const TabletSchema& src_schema, const std::vector<TabletColumn>& cols) {
+    auto dst_schema = std::make_unique<TabletSchema>(src_schema);
     dst_schema->_clear_columns();
     for (const auto& col : cols) {
-        RETURN_IF_ERROR(dst_schema->append_column(col));
+        dst_schema->append_column(TabletColumn(col));
     }
     dst_schema->_generate_sort_key_idxes();
     return dst_schema;
@@ -211,7 +175,7 @@ TabletSchemaCSPtr TabletSchema::copy(const TabletSchema& src_schema, const std::
     auto dst_schema = std::make_unique<TabletSchema>(src_schema);
     dst_schema->_clear_columns();
     for (const auto& col : cols) {
-        dst_schema->_append_column(TabletColumn(col));
+        dst_schema->append_column(TabletColumn(col));
     }
     dst_schema->_generate_sort_key_idxes();
     return dst_schema;

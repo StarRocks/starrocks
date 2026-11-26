@@ -27,7 +27,6 @@ class TabletColumn;
 
 class StorageSchemaHelper {
 public:
-    // GEO columns must have passed in-memory tablet schema admission.
     static Field convert_field(ColumnId id, const TabletColumn& c);
     static SchemaPtr convert_schema(const std::vector<TabletColumn*>& columns,
                                     const std::vector<std::string_view>& col_names);

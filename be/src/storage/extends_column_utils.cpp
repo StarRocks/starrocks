@@ -155,7 +155,7 @@ StatusOr<TabletSchemaCSPtr> extend_schema_by_access_paths(const TabletSchemaCSPt
             column.set_aggregation(StorageAggregateType::STORAGE_AGGREGATE_REPLACE);
         }
 
-        RETURN_IF_ERROR(tmp_schema->append_column(column));
+        tmp_schema->append_column(column);
         VLOG(2) << "extend the access path column: " << path->linear_path();
     }
     return tmp_schema;
