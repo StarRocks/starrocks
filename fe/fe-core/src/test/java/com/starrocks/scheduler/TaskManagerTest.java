@@ -65,11 +65,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
-<<<<<<< HEAD
-=======
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BiConsumer;
->>>>>>> 5fbb6d52184... [BugFix][RB-1547] Cancel periodic MV refresh on task replay (#70061)
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
