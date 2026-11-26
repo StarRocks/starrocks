@@ -1261,7 +1261,7 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitCreatePipeStatement(CreatePipeStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() ->
-                    context.getGlobalStateMgr().getPipeManager().createPipe(stmt)
+                    context.getGlobalStateMgr().getPipeManager().createPipe(context, stmt)
             );
             return null;
         }
