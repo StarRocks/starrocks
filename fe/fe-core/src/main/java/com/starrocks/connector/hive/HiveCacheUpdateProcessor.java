@@ -121,19 +121,22 @@ public class HiveCacheUpdateProcessor implements CacheUpdateProcessor {
     }
 
     /**
-     * As {@link #invalidateTableForRead}, by name, loading nothing: the table location comes from the cached table
-     * when there is one, and the file lists are found by the table name otherwise -- the table entry can expire before
-     * its file lists, there is none without a metastore cache (enable_metastore_cache=false), and a dropped table
-     * can no longer be read from the metastore. Run when the FE that changed the table asks the others to stop
-     * serving the previous copy; in a unified catalog also for the tables of its other connectors.
+     * As {@link #invalidateTableForRead}, by name, loading nothing. Run when the FE that changed the table asks the
+     * others to stop serving the previous copy; in a unified catalog also for the tables of its other connectors.
+     * With a metastore cache the file lists are found through the cached table, its cached partitions and the table
+     * name (the table entry can expire before its file lists). Without one (enable_metastore_cache=false) nothing
+     * locates the table, and a file list is keyed by path, not owned by one table: another table at the same location
+     * may have cached it. So this catalog's file lists are all dropped then; the table location is not read from the
+     * metastore, which fails for a dropped table and can be slow.
      */
     public void invalidateCachedTable(String dbName, String tblName) {
-        String tableLocation = null;
-        if (metastore instanceof CachingHiveMetastore cachingMetastore) {
-            Table table = cachingMetastore.getTableIfPresent(dbName, tblName);
-            tableLocation = table == null ? null : table.getTableLocation();
+        if (!(metastore instanceof CachingHiveMetastore cachingMetastore)) {
+            remoteFileIO.ifPresent(CachingRemoteFileIO::invalidateAll);
+            metastore.invalidateTable(dbName, tblName);
+            return;
         }
-        invalidateTableAndFiles(dbName, tblName, tableLocation);
+        Table table = cachingMetastore.getTableIfPresent(dbName, tblName);
+        invalidateTableAndFiles(dbName, tblName, table == null ? null : table.getTableLocation());
     }
 
     private void invalidateTableAndFiles(String dbName, String tblName, String tableLocation) {

@@ -666,8 +666,8 @@ public class HiveMetadataTest {
     @Test
     public void testInvalidateCachedTableDropsFilesWithoutReadingTheMetastoreWhenItsCacheIsOff() {
         // enable_metastore_cache=false with enable_remote_file_cache=true: no cached table or partition to find the
-        // file lists by. They are found by the table name; the metastore is not read (the table may be dropped, the
-        // metastore slow, or the table one of another connector in a unified catalog)
+        // file lists by, and the metastore is not read (the table may be dropped, the metastore slow, or the table one
+        // of another connector in a unified catalog)
         HiveCacheUpdateProcessor processor = new HiveCacheUpdateProcessor("hive_catalog", metastore,
                 cachingRemoteFileIO, executorForHmsRefresh, false, false);
         RemotePathKey key = scannedFileList(metastore.getTable("db1", "unpartitioned_table"));
@@ -682,6 +682,21 @@ public class HiveMetadataTest {
         processor.invalidateCachedTable("db1", "unpartitioned_table");
 
         Assertions.assertFalse(cachingRemoteFileIO.getPresentRemoteFiles(List.of(key)).containsKey(key));
+    }
+
+    @Test
+    public void testInvalidateCachedTableWithMetastoreCacheOffDropsFileListsCachedForAnotherTable() {
+        // A file list is keyed by path, not owned by a table: with two tables at one location, the list a scan of one
+        // cached is also the other's. Without a metastore cache nothing tells which tables share it, so dropping either
+        // table must not leave it behind
+        HiveCacheUpdateProcessor processor = new HiveCacheUpdateProcessor("hive_catalog", metastore,
+                cachingRemoteFileIO, executorForHmsRefresh, false, false);
+        RemotePathKey cachedForOtherTable = scannedFileList(metastore.getTable("db1", "unpartitioned_table"));
+
+        processor.invalidateCachedTable("db1", "table1");
+
+        Assertions.assertFalse(
+                cachingRemoteFileIO.getPresentRemoteFiles(List.of(cachedForOtherTable)).containsKey(cachedForOtherTable));
     }
 
     @Test
