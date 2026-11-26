@@ -584,14 +584,16 @@ tasks.test {
         showCauses = false // Show underlying causes for exceptions
     }
 
-    // HangingTestWatchdog prints the thread stacks of a hung test JVM to stderr. The test output streams are not
-    // shown above, and the report is written only when a test class finishes, which a hung one never does, so
-    // forward the watchdog's lines (each starts with this prefix) to the build log as they come.
+    // HangingTestWatchdog prints the thread stacks of a hung test JVM to stderr, and ExitTraceHook prints them when
+    // a test JVM is killed by System.exit. The test output streams are not shown above, and the report is written
+    // only when a test class finishes, which a hung or killed one never does, so forward their lines (each starts
+    // with one of these prefixes) to the build log as they come.
     addTestOutputListener(object : TestOutputListener {
         override fun onOutput(testDescriptor: TestDescriptor, outputEvent: TestOutputEvent) {
+            val message = outputEvent.message
             if (outputEvent.destination == TestOutputEvent.Destination.StdErr &&
-                    outputEvent.message.contains("[HangingTestWatchdog]")) {
-                logger.lifecycle(outputEvent.message.trimEnd())
+                    (message.contains("[HangingTestWatchdog]") || message.contains("[ExitTraceHook]"))) {
+                logger.lifecycle(message.trimEnd())
             }
         }
     })
