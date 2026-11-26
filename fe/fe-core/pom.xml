@@ -676,22 +676,12 @@ under the License.
             <artifactId>parquet-common</artifactId>
         </dependency>
 
-<<<<<<< HEAD
-=======
-        <!-- https://mvnrepository.com/artifact/org.apache.orc/orc-core
-             Used by the tablet pre-split meta-tier sampler to read ORC stripe statistics. -->
-        <dependency>
-            <groupId>org.apache.orc</groupId>
-            <artifactId>orc-core</artifactId>
-        </dependency>
-
-        <!-- zstd for the MySQL compressed protocol; must precede paimon-bundle which embeds unrelocated com.github.luben.zstd classes -->
+        <!-- must precede paimon-bundle which embeds unrelocated com.github.luben.zstd classes -->
         <dependency>
             <groupId>com.github.luben</groupId>
             <artifactId>zstd-jni</artifactId>
         </dependency>
 
->>>>>>> bf6f8d8 ([BugFix][CVE] Bump zstd-jni to 1.6.0-1 (CVE-2026-124851) (#84438))
         <dependency>
             <groupId>org.apache.paimon</groupId>
             <artifactId>paimon-bundle</artifactId>
