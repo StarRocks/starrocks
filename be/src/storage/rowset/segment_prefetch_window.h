@@ -41,7 +41,7 @@ struct OlapReaderStatistics;
 // scan range) are warmed, and a page leaves the window once the reader has passed its last row. The page
 // list is produced incrementally, so the window's memory does not grow with the segment.
 //
-// The blocks of all windows of a node are bounded by ReadAheadBudget (lake_scan_read_ahead_max_blocks): a window
+// The blocks of the query windows of a node are bounded by ReadAheadBudget (lake_scan_read_ahead_max_blocks): a window
 // asks for a grant before it warms blocks, and a window that holds its share, or finds the node full, asks for no
 // more until it has given some back. Each warm-up keeps its grant until the reader has passed its pages: the
 // blocks count until they are read, whether queued, in flight or fetched. Beyond that the reads fetch what they reach.
@@ -55,10 +55,11 @@ public:
         int64_t object_offset = 0;
     };
 
-    // `scan_range` (ascending) must outlive the window; the pages before `start_row` are skipped.
+    // `scan_range` (ascending) must outlive the window; the pages before `start_row` are skipped. `budget` bounds the
+    // blocks of all windows that share it; nullptr leaves the window to its own `ahead_blocks` only.
     SegmentPrefetchWindow(std::vector<Column> columns, const SparseRange<>* scan_range, rowid_t start_row,
                           size_t ahead_blocks, double late_read_ahead_ratio, size_t block_size,
-                          OlapReaderStatistics* stats);
+                          OlapReaderStatistics* stats, ReadAheadBudget* budget);
 
     // The reader is about to read the rows from `row` on: forget what it has consumed and top the
     // window up again.
@@ -131,6 +132,7 @@ private:
     // Warmed pages the reader has not passed yet, and their blocks.
     std::vector<InFlight> _inflight;
     size_t _ahead_blocks = 0;
+    ReadAheadBudget* const _budget;
     ReadAheadBudget::Member _member;
     std::vector<std::shared_ptr<io::CacheWarmHandle>> _row_batch;
     // Set when the stream cannot warm the cache at all (e.g. a non-starlet file); the window then

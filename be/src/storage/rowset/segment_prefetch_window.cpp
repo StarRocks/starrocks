@@ -27,13 +27,14 @@ static constexpr int kLateReadAheadMinBatches = 4;
 
 SegmentPrefetchWindow::SegmentPrefetchWindow(std::vector<Column> columns, const SparseRange<>* scan_range,
                                              rowid_t start_row, size_t ahead_blocks, double late_read_ahead_ratio,
-                                             size_t block_size, OlapReaderStatistics* stats)
+                                             size_t block_size, OlapReaderStatistics* stats, ReadAheadBudget* budget)
         : _scan_range(scan_range),
           _ahead_limit(ahead_blocks),
           _late_read_ahead_ratio(late_read_ahead_ratio),
           _block_size(std::max<int64_t>(1, static_cast<int64_t>(block_size))),
           _stats(stats),
-          _member(ReadAheadBudget::instance()->join()) {
+          _budget(budget),
+          _member(budget != nullptr ? budget->join() : ReadAheadBudget::Member()) {
     add_cursors(columns, start_row);
 }
 
@@ -152,18 +153,22 @@ bool SegmentPrefetchWindow::submit(size_t cursor_idx, rowid_t row) {
     // and the rest follows once the reader has released enough blocks.
     const int64_t from_block = std::max(first_block, c.last_block + 1);
     const size_t want = std::min(static_cast<size_t>(last_block - from_block + 1), _ahead_limit - _ahead_blocks);
-    ReadAheadBudget::Grant grant = ReadAheadBudget::instance()->acquire(want, granted_blocks(), _ahead_limit);
-    if (grant.blocks() == 0) {
-        return false;
+    size_t blocks = want;
+    ReadAheadBudget::Grant grant;
+    if (_budget != nullptr) {
+        grant = _budget->acquire(want, granted_blocks(), _ahead_limit);
+        if (grant.blocks() == 0) {
+            return false;
+        }
+        blocks = grant.blocks();
     }
-    const int64_t to_block = from_block + static_cast<int64_t>(grant.blocks()) - 1;
+    const int64_t to_block = from_block + static_cast<int64_t>(blocks) - 1;
     const int64_t warm_begin = std::max(begin, from_block * _block_size);
     const int64_t warm_end = std::min(end, (to_block + 1) * _block_size);
     std::shared_ptr<io::CacheWarmHandle> handle;
     if (!warm(c.column.file, warm_begin - c.column.object_offset, warm_end - warm_begin, false /* urgent */, &handle)) {
         return false;
     }
-    const size_t blocks = grant.blocks();
     c.last_block = to_block;
     _inflight.push_back(InFlight{cursor_idx, begin_row, end_row, blocks, std::move(handle), std::move(grant)});
     _ahead_blocks += blocks;

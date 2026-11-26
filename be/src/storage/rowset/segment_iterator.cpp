@@ -1321,7 +1321,10 @@ void SegmentIterator::_init_prefetch_window(rowid_t start_row) {
     }
     _prefetch_window = std::make_unique<SegmentPrefetchWindow>(
             std::move(columns), &_scan_range, start_row, blocks, config::remote_prefetch_late_read_ahead_ratio,
-            config::starlet_star_cache_block_size_bytes, _opts.stats);
+            config::starlet_star_cache_block_size_bytes, _opts.stats,
+            // Only query scans share the node read-ahead budget; compaction keeps its own window bound.
+            _opts.lake_io_opts.remote_read.workload == RemoteReadContext::Workload::QUERY ? ReadAheadBudget::instance()
+                                                                                          : nullptr);
 #else
     (void)start_row;
 #endif // USE_STAROS

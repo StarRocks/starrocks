@@ -461,17 +461,17 @@ products: [oss, enterprise, cloud, anywhere]
 - 类型：瞬时值
 - 描述：仅存算分离模式。本 BE/CN 上所有查询扫描合计已发出预读、但还没读到的缓存块数，包括每个 Segment 的预读窗口（`remote_prefetch_window_blocks`）和提前开始的 Segment（`lake_scan_read_ahead_segments`）。上限由 `lake_scan_read_ahead_max_blocks` 控制。
 
-## `lake_scan_read_ahead_windows`
-
-- 单位：个
-- 类型：瞬时值
-- 描述：仅存算分离模式。本 BE/CN 上查询扫描中正在预读的 Segment 个数。设置了 `lake_scan_read_ahead_max_blocks` 时，每个 Segment 最多持有该上限除以此数的预读块。
-
 ## `lake_scan_read_ahead_capped_total`
 
 - 单位：次数
 - 类型：累积
 - 描述：仅存算分离模式。本 BE/CN 已持有 `lake_scan_read_ahead_max_blocks` 个预读块，或者 Segment 已用满自己的那一份，查询扫描因此少发预读、或不提前开始下一个 Segment 的次数。该值持续增长说明上限正在压住预读，相应的数据改为读到时再取。
+
+## `lake_scan_read_ahead_windows`
+
+- 单位：个
+- 类型：瞬时值
+- 描述：仅存算分离模式。本 BE/CN 上查询扫描中正在预读的 Segment 个数。设置了 `lake_scan_read_ahead_max_blocks` 时，每个 Segment 最多持有该上限除以此数的预读块。
 
 ## `lake_segment_cache_hit_minute`
 

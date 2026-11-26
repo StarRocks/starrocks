@@ -160,7 +160,7 @@ protected:
                                                        int64_t object_offset = 0, size_t block_size = kBlockSize) {
         return std::make_unique<SegmentPrefetchWindow>(
                 std::vector<SegmentPrefetchWindow::Column>{{_reader, &_stream, object_offset}}, range, start_row,
-                ahead_blocks, late_ratio, block_size, &_stats);
+                ahead_blocks, late_ratio, block_size, &_stats, ReadAheadBudget::instance());
     }
 
     std::shared_ptr<MemoryFileSystem> _fs;
@@ -296,6 +296,33 @@ TEST_F(SegmentPrefetchWindowTest, node_limit_is_shared_equally) {
     first.reset();
     EXPECT_EQ(0, windows.value());
     EXPECT_EQ(0, node.value());
+}
+
+// A window without a budget (compaction) keeps only its own bound: it neither joins the node budget nor takes blocks
+// from it, even while the node is full.
+TEST_F(SegmentPrefetchWindowTest, window_without_budget_stays_out_of_node_limit) {
+    auto& node = StorageMetrics::instance()->lake_scan_read_ahead_blocks;
+    auto& windows = StorageMetrics::instance()->lake_scan_read_ahead_windows;
+    ASSERT_EQ(0, node.value());
+    ASSERT_EQ(0, windows.value());
+    const int64_t old_limit = config::lake_scan_read_ahead_max_blocks;
+    DeferOp restore([&] { config::lake_scan_read_ahead_max_blocks = old_limit; });
+    config::lake_scan_read_ahead_max_blocks = 4;
+
+    SparseRange<> range(0, kRows);
+    auto query = make_window(&range, 0, 8);
+    query->advance(0);
+    EXPECT_EQ(4u, query->ahead_blocks());
+    EXPECT_FALSE(ReadAheadBudget::instance()->has_room());
+
+    SegmentPrefetchWindow compaction({{_reader, &_stream, 0}}, &range, 0, 8, 2.0, kBlockSize, &_stats, nullptr);
+    compaction.advance(0);
+    EXPECT_EQ(8u, compaction.ahead_blocks());
+    EXPECT_EQ(4, node.value());
+    EXPECT_EQ(1, windows.value());
+    query.reset();
+    EXPECT_EQ(0, node.value());
+    EXPECT_EQ(0, windows.value());
 }
 
 // A grant gives its blocks back when released, moved over, or destroyed.
@@ -501,7 +528,7 @@ TEST_F(SegmentPrefetchWindowTest, columns_keep_their_own_object_offsets) {
     // Page 3 of the second column crosses into the next block; the first column's pages all fit in block 0.
     const int64_t crossing = kBigBlock - static_cast<int64_t>(_pages[3].pointer.offset) - 1;
     SegmentPrefetchWindow window({{_reader, &_stream, 0}, {_reader, &_stream, crossing}}, &range, 0, 1024, 2.0,
-                                 kBigBlock, &_stats);
+                                 kBigBlock, &_stats, ReadAheadBudget::instance());
     window.advance(0);
     ASSERT_EQ(3u, _stream.warms.size());
     size_t from_next_block = 0;
