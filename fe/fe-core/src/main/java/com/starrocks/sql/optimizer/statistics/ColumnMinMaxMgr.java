@@ -16,6 +16,7 @@ package com.starrocks.sql.optimizer.statistics;
 
 import com.github.benmanes.caffeine.cache.AsyncCacheLoader;
 import com.github.benmanes.caffeine.cache.AsyncLoadingCache;
+import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
@@ -80,14 +81,31 @@ public class ColumnMinMaxMgr implements IMinMaxStatsMgr, MemoryTrackable {
             .executor(ThreadPoolManager.getStatsCacheThread())
             .buildAsync(new CacheLoader());
 
+    // Throttle: last wall-clock millis a MetaScan collection was triggered per column. Bounds how often
+    // min/max is re-collected via a [_META_] MetaScan (which opens every segment's metadata and contends
+    // on the segment metadata cache). Bounded + LRU-evicting so idle columns cannot accumulate.
+    private final Cache<ColumnIdentifier, Long> lastCollectMs = Caffeine.newBuilder()
+            .maximumSize(Config.statistic_dict_columns)
+            .build();
+
     static ColumnMinMaxMgr getInstance() {
         return INSTANCE;
     }
 
     @Override
     public Optional<ColumnMinMax> getStats(ColumnIdentifier identifier, StatsVersion version) {
-        CompletableFuture<Optional<CacheValue>> future = cache.get(identifier);
-        if (future.isDone()) {
+        // Peek without triggering a load, so re-collection is gated by the throttle below. A stale entry
+        // (data version moved past it) is dropped and never served -- serving it would fold min()/max()
+        // to a value that no longer exists -- so throttling only ever costs the optimization (the caller
+        // falls back to normal execution), never correctness.
+        boolean needCollect;
+        CompletableFuture<Optional<CacheValue>> future = cache.getIfPresent(identifier);
+        if (future == null) {
+            needCollect = true;
+        } else if (!future.isDone()) {
+            needCollect = false;
+        } else {
+            needCollect = false;
             try {
                 Optional<CacheValue> cacheValue = future.get();
                 if (cacheValue == null) {
@@ -99,18 +117,18 @@ public class ColumnMinMaxMgr implements IMinMaxStatsMgr, MemoryTrackable {
                     if (value.version().getVersion() >= version.getVersion()) {
                         return Optional.ofNullable(value.minMax());
                     }
-                    cache.synchronous().invalidate(identifier);
+                    // Drop only the exact stale future we inspected: a concurrent query may have already
+                    // replaced it with a fresh load, and unconditionally evicting that (while the throttle
+                    // blocks us from reloading) would leave the column with no cached entry for a whole
+                    // interval. asMap().remove(key, value) is a lock-free CAS that no-ops if it moved on.
+                    cache.asMap().remove(identifier, future);
+                    needCollect = true;
                 }
-<<<<<<< HEAD
-=======
                 // else: cached "never collectible" (e.g. non-numeric column) -- keep it, do not rescan.
->>>>>>> 081dcfe ([BugFix] Avoid unnecessary whole-table min/max collection (#82909))
             } catch (Exception e) {
                 LOG.warn("Failed to get MinMax for column: {}, version: {}", identifier, version, e);
             }
         }
-<<<<<<< HEAD
-=======
         // Trigger a fresh [_META_] MetaScan only when the per-column throttle interval has elapsed;
         // otherwise skip the optimization for now. Bounds how often segment metadata is re-scanned for a
         // frequently loaded column.
@@ -120,14 +138,14 @@ public class ColumnMinMaxMgr implements IMinMaxStatsMgr, MemoryTrackable {
         return Optional.empty();
     }
 
-    // The number of tablets the [_META_] scan of genMinMaxSql reads: the queryable base index of every
-    // physical partition (see MetaScanNode#computeRangeLocations). Walks all partitions, so only call it when
-    // a collection is about to run.
+    // The number of tablets the [_META_] scan of genMinMaxSql reads: the base index of every physical
+    // partition (see MetaScanNode#computeRangeLocations). Walks all partitions, so only call it when a
+    // collection is about to run.
     @VisibleForTesting
     static long countMetaScanTablets(OlapTable table) {
         long tabletNum = 0;
         for (PhysicalPartition partition : table.getPhysicalPartitions()) {
-            tabletNum += partition.getQueryableBaseIndex().getTablets().size();
+            tabletNum += partition.getBaseIndex().getTablets().size();
         }
         return tabletNum;
     }
@@ -147,32 +165,6 @@ public class ColumnMinMaxMgr implements IMinMaxStatsMgr, MemoryTrackable {
         }
         lastCollectMs.put(identifier, now);
         return true;
-    }
-
-    @Override
-    public Optional<ColumnMinMax> getStatsSync(ColumnIdentifier identifier, StatsVersion version) {
-        if (!REPLAY_MINMAX.isEmpty()) {
-            ColumnMinMax replay = REPLAY_MINMAX.get(identifier);
-            if (replay != null) {
-                return Optional.of(replay);
-            }
-        }
-        try {
-            CompletableFuture<Optional<CacheValue>> future = cache.get(identifier);
-            Optional<CacheValue> cacheValue = future.get();
-            // null: the load failed, or was skipped by the tablet limit, and is not cached.
-            if (cacheValue != null && cacheValue.isPresent()) {
-                CacheValue value = cacheValue.get();
-                if (value.version().getVersion() >= version.getVersion()) {
-                    return Optional.ofNullable(value.minMax());
-                }
-                cache.synchronous().invalidate(identifier);
-            }
-        } catch (Exception e) {
-            LOG.warn("Failed to get MinMax for column: {}, version: {}", identifier, version, e);
-        }
->>>>>>> 081dcfe ([BugFix] Avoid unnecessary whole-table min/max collection (#82909))
-        return Optional.empty();
     }
 
     @Override

@@ -36,8 +36,10 @@ import org.junit.jupiter.api.Test;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -61,6 +63,8 @@ public class ColumnMinMaxMgrTest extends PlanTestBase {
     private ColumnMinMaxMgr mgr;
     private MetaScanMock metaScan;
     private AtomicInteger loads;
+    // The last load started for each column, so a test can wait for it.
+    private Map<ColumnIdentifier, CompletableFuture<?>> lastLoads;
 
     @BeforeAll
     public static void beforeClass() throws Exception {
@@ -88,12 +92,15 @@ public class ColumnMinMaxMgrTest extends PlanTestBase {
         mgr = new ColumnMinMaxMgr();
         metaScan = new MetaScanMock();
         loads = new AtomicInteger();
+        lastLoads = new ConcurrentHashMap<>();
         tabletChecks = new AtomicInteger();
         new MockUp<ColumnMinMaxMgr.CacheLoader>() {
             @Mock
             public CompletableFuture<?> asyncLoad(Invocation invocation, ColumnIdentifier key, Executor executor) {
                 loads.incrementAndGet();
-                return invocation.proceed();
+                CompletableFuture<?> future = invocation.proceed();
+                lastLoads.put(key, future);
+                return future;
             }
         };
         new MockUp<ColumnMinMaxMgr>() {
@@ -158,9 +165,15 @@ public class ColumnMinMaxMgrTest extends PlanTestBase {
         partition.updateVisibleVersion(partition.getVisibleVersion() + 1, next);
     }
 
-    // Waits for the load getStats() has started: getStatsSync() joins the in-flight future of a present key.
+    // Waits for the load getStats() has started, then returns what it left for the version. A null result (a
+    // failed or skipped load) is not cached, so there is nothing to serve; asking getStats() for it would start
+    // another load instead.
     private Optional<IMinMaxStatsMgr.ColumnMinMax> join(ColumnIdentifier id, StatsVersion version) {
-        return mgr.getStatsSync(id, version);
+        CompletableFuture<?> future = lastLoads.get(id);
+        if (future == null || future.join() == null) {
+            return Optional.empty();
+        }
+        return mgr.getStats(id, version);
     }
 
     private long cachedEntries() {
