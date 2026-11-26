@@ -1321,6 +1321,19 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                         ErrorType.INTERNAL_ERROR);
         }
         Statistics joinStats = joinStatsBuilder.build();
+<<<<<<< HEAD
+=======
+        if (joinType.isOuterJoin()) {
+            ColumnRefSet preservedColumns = new ColumnRefSet();
+            if (!joinType.isRightOuterJoin()) {
+                preservedColumns.union(leftStatistics.getUsedColumns());
+            }
+            if (joinType.isRightOuterJoin() || joinType.isFullOuterJoin()) {
+                preservedColumns.union(rightStatistics.getUsedColumns());
+            }
+            joinStats = restorePreservedKeys(joinStats, rawCrossJoinStats, eqOnPredicates, preservedColumns);
+        }
+>>>>>>> 61b066a ([BugFix] Preserve outer join key domains in statistics (#82912))
 
         allJoinPredicate.removeAll(eqOnPredicates);
         Statistics estimateStatistics = estimateStatistics(allJoinPredicate, joinStats);
@@ -1702,6 +1715,117 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         return visitOperator(context.getOp(), context);
     }
 
+<<<<<<< HEAD
+=======
+    private static boolean hasUnknownColumnStatistics(Statistics statistics,
+                                                      List<BinaryPredicateOperator> eqOnPredicates) {
+        return eqOnPredicates.stream().map(PredicateOperator::getChildren).flatMap(Collection::stream)
+                .filter(ScalarOperator::isColumnRef)
+                .map(column -> statistics.getColumnStatistic((ColumnRefOperator) column))
+                .anyMatch(ColumnStatistic::isUnknown);
+    }
+
+    // Unmatched preserved rows retain their original key domain. Restore it after both null-padding passes of a
+    // full outer join, which can otherwise put an input histogram back into the output. The inner-join histogram
+    // does not describe the unmatched rows, and the input histogram does not describe repeated matches, so discard
+    // it for known preserved keys. Statistics borrowed for an unknown key only price this join and remain unknown.
+    private static Statistics restorePreservedKeys(Statistics joinStats, Statistics rawCrossJoinStats,
+                                                   List<BinaryPredicateOperator> eqOnPredicates,
+                                                   ColumnRefSet preservedColumns) {
+        Statistics.Builder builder = null;
+        for (BinaryPredicateOperator predicate : eqOnPredicates) {
+            for (ScalarOperator child : predicate.getChildren()) {
+                if (!(child instanceof ColumnRefOperator column) || !preservedColumns.contains(column)) {
+                    continue;
+                }
+                ColumnStatistic raw = rawCrossJoinStats.getColumnStatistic(column);
+                ColumnStatistic current = joinStats.getColumnStatistic(column);
+                ColumnStatistic restored;
+                if (raw.isUnknown()) {
+                    if (current.isUnknown()) {
+                        continue;
+                    }
+                    restored = raw;
+                } else {
+                    restored = buildFrom(current)
+                            .setMinValue(raw.getMinValue())
+                            .setMaxValue(raw.getMaxValue())
+                            .setMinString(raw.getMinString())
+                            .setMaxString(raw.getMaxString())
+                            .setDistinctValuesCount(raw.getDistinctValuesCount())
+                            .setHistogram(null)
+                            .build();
+                }
+                if (builder == null) {
+                    builder = Statistics.buildFrom(joinStats);
+                }
+                builder.addColumnStatistic(column, restored);
+            }
+        }
+        return builder == null ? joinStats : builder.build();
+    }
+
+    // For an equi-join key whose statistics are unknown on one side only, assume its values are contained in the
+    // known side's domain and borrow the known side's statistics. The estimate L * R / ndv(known) is then never
+    // below the one full statistics would give (L * R / max(ndvL, ndvR)), so a missing statistic cannot make a
+    // many-to-many join look cheap. Keys unknown on both sides are left as they are. When one unknown column is
+    // equated to several known columns, it borrows from the one with the fewest distinct values (the largest
+    // estimate), the lowest column id among equals, so the result does not depend on the predicate order.
+    // A key unknown on both sides gets the containment bound of its equated columns (JoinKeyContainmentBound) as its
+    // number of distinct values, when there is one.
+    private static Statistics borrowKnownSideStatistics(Statistics statistics,
+                                                        List<BinaryPredicateOperator> eqOnPredicates,
+                                                        Map<Integer, Double> ndvBounds) {
+        Map<ColumnRefOperator, ColumnRefOperator> lenders = new HashMap<>();
+        Map<ColumnRefOperator, Double> bounded = new HashMap<>();
+        for (BinaryPredicateOperator predicate : eqOnPredicates) {
+            if (!predicate.getChild(0).isColumnRef() || !predicate.getChild(1).isColumnRef()) {
+                continue;
+            }
+            ColumnRefOperator left = (ColumnRefOperator) predicate.getChild(0);
+            ColumnRefOperator right = (ColumnRefOperator) predicate.getChild(1);
+            ColumnStatistic leftStat = statistics.getColumnStatistic(left);
+            ColumnStatistic rightStat = statistics.getColumnStatistic(right);
+            if (leftStat.isUnknown() && rightStat.isUnknown()) {
+                Double leftBound = ndvBounds.get(left.getId());
+                Double rightBound = ndvBounds.get(right.getId());
+                if (leftBound != null && rightBound != null) {
+                    double bound = Math.min(leftBound, rightBound);
+                    bounded.merge(left, bound, Math::min);
+                    bounded.merge(right, bound, Math::min);
+                }
+                continue;
+            }
+            if (!leftStat.isUnknown() && !rightStat.isUnknown()) {
+                continue;
+            }
+            ColumnRefOperator unknownRef = leftStat.isUnknown() ? left : right;
+            ColumnRefOperator knownRef = leftStat.isUnknown() ? right : left;
+            lenders.merge(unknownRef, knownRef, (a, b) -> {
+                int byNdv = Double.compare(statistics.getColumnStatistic(a).getDistinctValuesCount(),
+                        statistics.getColumnStatistic(b).getDistinctValuesCount());
+                return byNdv < 0 || (byNdv == 0 && a.getId() < b.getId()) ? a : b;
+            });
+        }
+        if (lenders.isEmpty() && bounded.isEmpty()) {
+            return statistics;
+        }
+        Statistics.Builder builder = Statistics.buildFrom(statistics);
+        bounded.forEach((column, bound) -> builder.addColumnStatistic(column,
+                ColumnStatistic.buildFrom(statistics.getColumnStatistic(column))
+                        .setDistinctValuesCount(bound)
+                        .setType(ColumnStatistic.StatisticType.ESTIMATE)
+                        .build()));
+        lenders.forEach((unknownRef, knownRef) -> builder.addColumnStatistic(unknownRef,
+                ColumnStatistic.buildFrom(statistics.getColumnStatistic(knownRef))
+                        .setNullsFraction(0)
+                        .setHistogram(null)
+                        .setType(ColumnStatistic.StatisticType.ESTIMATE)
+                        .build()));
+        return builder.build();
+    }
+
+>>>>>>> 61b066a ([BugFix] Preserve outer join key domains in statistics (#82912))
     public Statistics estimateInnerJoinStatistics(Statistics statistics, List<BinaryPredicateOperator> eqOnPredicates) {
         if (eqOnPredicates.isEmpty()) {
             return statistics;
