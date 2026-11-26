@@ -1429,31 +1429,9 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                 }
 
                 AlterJobMgr alterJobMgr = GlobalStateMgr.getCurrentState().getAlterJobMgr();
-<<<<<<< HEAD
                 // Analyzed in resolveBeforeLock.
                 PreResolvedActivate activate = takePreResolvedActivate(materializedView);
                 AlterJobMgr.AlterMaterializedViewStatusContext statusContext = activate.statusContext();
-                AlterMaterializedViewStatusLog log = new AlterMaterializedViewStatusLog(materializedView.getDbId(),
-                        materializedView.getId(), status, "");
-                // Journal the base tables the activation settled on, so replay can adopt them instead of
-                // re-analyzing the define query under the MV lock, see replayAlterMaterializedViewStatus.
-                log.setBaseTableInfos(Lists.newArrayList(statusContext.baseTableInfos()));
-                // The applier rebuilds the relationship, which resolves every base table again, several times
-                // each; the external ones are answered from what resolveBeforeLock resolved. The applier runs
-                // synchronously on this thread, inside the scope.
-                try (PreResolvedBaseTables.Scope ignored = activate.baseTables().enter()) {
-                    GlobalStateMgr.getCurrentState().getEditLog().logAlterMvStatus(log, wal ->
-                            alterJobMgr.applyAlterMaterializedViewStatus(materializedView, statusContext, false));
-                }
-                // The rebuild relinked the base tables holding this MV's lock only. A DROP of a base table in
-                // another database is not excluded by it, and if it ran before the link it found nothing to
-                // inactivate: recheck once the lock is released, base table lock first, and journal the
-                // inactivation the drop missed.
-                long activatedAtEpoch = materializedView.getStatusSnapshot().epoch();
-                postUnlockActions.add(() -> materializedView.inactivateIfBaseTableDroppedMeanwhile(activatedAtEpoch));
-=======
-                AlterJobMgr.AlterMaterializedViewStatusContext statusContext =
-                        alterJobMgr.prepareAlterMaterializedViewStatus(materializedView, status, "", false);
                 // Rebuild the relationship BEFORE journaling, and journal only once the MV is really
                 // active. fixRelationship() swallows its own failure and just leaves the MV inactive, and
                 // checkIsActiveOnLoadBlocking() reports a clean negative verdict without throwing at all,
@@ -1463,13 +1441,21 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                 // Captured before the rebuild so a failed journal write can restore exactly the state the
                 // statement started from.
                 String inactiveReasonBeforeActivate = materializedView.getInactiveReason();
-                alterJobMgr.rebuildRelationshipForActivate(materializedView, statusContext);
+                // The rebuild resolves every base table again, several times each; the external ones are
+                // answered from what resolveBeforeLock resolved. It runs synchronously on this thread, inside
+                // the scope.
+                try (PreResolvedBaseTables.Scope ignored = activate.baseTables().enter()) {
+                    alterJobMgr.rebuildRelationshipForActivate(materializedView, statusContext);
+                }
                 if (!materializedView.isActive()) {
                     throw new AlterJobException(String.format("Can not active materialized view [%s]: %s",
                             materializedView.getName(), materializedView.getInactiveReason()));
                 }
                 AlterMaterializedViewStatusLog log = new AlterMaterializedViewStatusLog(materializedView.getDbId(),
                         materializedView.getId(), status, "");
+                // Journal the base tables the activation settled on, so replay can adopt them instead of
+                // re-analyzing the define query under the MV lock, see replayAlterMaterializedViewStatus.
+                log.setBaseTableInfos(Lists.newArrayList(statusContext.baseTableInfos()));
                 try {
                     GlobalStateMgr.getCurrentState().getEditLog().logAlterMvStatus(log, wal ->
                             alterJobMgr.resumeTaskForActivate(statusContext, false));
@@ -1482,7 +1468,12 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                     materializedView.setInactiveAndReason(inactiveReasonBeforeActivate);
                     throw t;
                 }
->>>>>>> b8c60df8cac... [BugFix] Journal an MV activation only after it actually succeeded (#62587)
+                // The rebuild relinked the base tables holding this MV's lock only. A DROP of a base table in
+                // another database is not excluded by it, and if it ran before the link it found nothing to
+                // inactivate: recheck once the lock is released, base table lock first, and journal the
+                // inactivation the drop missed.
+                long activatedAtEpoch = materializedView.getStatusSnapshot().epoch();
+                postUnlockActions.add(() -> materializedView.inactivateIfBaseTableDroppedMeanwhile(activatedAtEpoch));
                 // for manual refresh type, do not refresh
                 if (materializedView.getRefreshScheme().getType() != MaterializedViewRefreshType.MANUAL) {
                     GlobalStateMgr.getCurrentState().getLocalMetastore()

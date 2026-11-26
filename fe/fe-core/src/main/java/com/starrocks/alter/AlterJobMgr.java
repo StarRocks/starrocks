@@ -294,7 +294,6 @@ public class AlterJobMgr {
     }
 
     /**
-<<<<<<< HEAD
      * The analysis half of an ACTIVE transition: re-parse and re-analyze the MV's definition and resolve the
      * base tables it names. Every step can reach the connector of an external base table. It does not modify
      * the MV, so the leader runs it before taking the MV write lock (see
@@ -379,7 +378,9 @@ public class AlterJobMgr {
             super(inactiveReason);
             this.inactiveReason = inactiveReason;
         }
-=======
+    }
+
+    /**
      * The fallible half of an ACTIVE transition: install the freshly resolved base tables and rebuild the
      * MV's relationship. This re-analyses partition exprs and re-checks every base table, so it can leave
      * the MV inactive in two different shapes -- by throwing (getBaseTablePartitionColumnMapImpl), or by
@@ -406,7 +407,6 @@ public class AlterJobMgr {
         // resume the mv scheduler
         TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
         taskManager.resumeTask(context.task(), isReplay);
->>>>>>> b8c60df8cac... [BugFix] Journal an MV activation only after it actually succeeded (#62587)
     }
 
     public void applyAlterMaterializedViewStatus(
