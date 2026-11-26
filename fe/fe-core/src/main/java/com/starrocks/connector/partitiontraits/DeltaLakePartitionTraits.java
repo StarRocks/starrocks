@@ -118,8 +118,9 @@ public class DeltaLakePartitionTraits extends DefaultTraits {
         }
         long currentVersion = versionOf(table);
         for (BaseTableInfo baseTableInfo : baseTables) {
-            // a dropped and recreated table has a new Delta table id, so it matches no base table info
-            if (!baseTableInfo.getTableIdentifier().equalsIgnoreCase(table.getTableIdentifier())) {
+            // match catalog and database too: tables in different databases can share the name and Delta table id.
+            // A dropped and recreated table has a new Delta table id, so it matches no base table info
+            if (!baseTableInfo.matchTable(table)) {
                 continue;
             }
             Map<String, MaterializedView.BasePartitionInfo> versionMap =

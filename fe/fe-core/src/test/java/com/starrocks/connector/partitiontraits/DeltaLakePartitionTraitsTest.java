@@ -48,15 +48,20 @@ public class DeltaLakePartitionTraitsTest {
     private static final long COMMIT_TIME = 1_700_000_000_000L;
 
     private static DeltaLakeTable table(String deltaTableId, List<String> partitionColumnNames, long version) {
+        return table(DB, deltaTableId, partitionColumnNames, version);
+    }
+
+    private static DeltaLakeTable table(String db, String deltaTableId, List<String> partitionColumnNames,
+                                        long version) {
         Metadata metadata = Mockito.mock(Metadata.class);
         Mockito.when(metadata.getId()).thenReturn(deltaTableId);
         SnapshotImpl snapshot = Mockito.mock(SnapshotImpl.class);
         Mockito.when(snapshot.getMetadata()).thenReturn(metadata);
         Mockito.when(snapshot.getVersion()).thenReturn(version);
         Mockito.when(snapshot.getTimestamp(Mockito.any())).thenReturn(COMMIT_TIME);
-        return new DeltaLakeTable(1L, CATALOG, DB, TBL,
+        return new DeltaLakeTable(1L, CATALOG, db, TBL,
                 List.of(new Column("col1", IntegerType.INT), new Column("p", StringType.STRING)),
-                partitionColumnNames, snapshot, Mockito.mock(Engine.class), new MetastoreTable(DB, TBL, "", 0L));
+                partitionColumnNames, snapshot, Mockito.mock(Engine.class), new MetastoreTable(db, TBL, "", 0L));
     }
 
     private static DeltaLakeTable table(long version) {
@@ -68,7 +73,7 @@ public class DeltaLakePartitionTraitsTest {
     }
 
     private static BaseTableInfo baseTableInfo(DeltaLakeTable table) {
-        return new BaseTableInfo(CATALOG, DB, TBL, table.getTableIdentifier());
+        return new BaseTableInfo(CATALOG, table.getCatalogDBName(), TBL, table.getTableIdentifier());
     }
 
     private static MaterializedView.AsyncRefreshContext refreshedFrom(DeltaLakeTable table, String... partitionNames) {
@@ -117,6 +122,25 @@ public class DeltaLakePartitionTraitsTest {
         DeltaLakeTable dropped = table(7);
         DeltaLakeTable recreated = table("6f3a2c1e-0000-4000-8000-000000000002", List.of(), 7);
         assertEquals(Set.of(TBL), updatedPartitionNames(recreated, baseTableInfo(dropped), refreshedFrom(dropped, TBL)));
+    }
+
+    @Test
+    public void sameNameAndDeltaIdInAnotherDatabaseIsNotMixedUp() {
+        DeltaLakeTable db1Table = table("db1", TABLE_ID, List.of(), 8);
+        DeltaLakeTable db2Refreshed = table("db2", TABLE_ID, List.of(), 7);
+        MaterializedView.AsyncRefreshContext context = refreshedFrom(db1Table, TBL);
+        refreshedFrom(db2Refreshed, TBL).getBaseTableInfoVisibleVersionMap()
+                .forEach((info, versions) -> context.getBaseTableRefreshInfo(info).putAll(versions));
+
+        DeltaLakeTable db2Current = table("db2", TABLE_ID, List.of(), 8);
+        List<BaseTableInfo> db1First = List.of(baseTableInfo(db1Table), baseTableInfo(db2Current));
+        List<BaseTableInfo> db2First = List.of(baseTableInfo(db2Current), baseTableInfo(db1Table));
+        for (List<BaseTableInfo> baseTables : List.of(db1First, db2First)) {
+            ConnectorPartitionTraits db2Traits = ConnectorPartitionTraits.build(db2Current);
+            assertEquals(Set.of(TBL), db2Traits.getUpdatedPartitionNames(baseTables, context));
+            ConnectorPartitionTraits db1Traits = ConnectorPartitionTraits.build(db1Table);
+            assertEquals(Set.of(), db1Traits.getUpdatedPartitionNames(baseTables, context));
+        }
     }
 
     @Test
