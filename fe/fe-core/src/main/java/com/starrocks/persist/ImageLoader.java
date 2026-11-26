@@ -15,6 +15,7 @@
 package com.starrocks.persist;
 
 import com.google.gson.stream.JsonReader;
+import com.starrocks.common.Config;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
 import org.apache.logging.log4j.LogManager;
@@ -85,11 +86,19 @@ public class ImageLoader {
 
     public void checkCheckSum() throws IOException {
         Path checksumPath = Path.of(imageDir, "v2", Storage.CHECKSUM + "." + imageJournalId);
-        long expectedCheckSum = Long.parseLong(Files.readString(checksumPath));
         long realCheckSum = checkedInputStream.getChecksum().getValue();
-        if (expectedCheckSum != realCheckSum) {
-            throw new IOException(String.format("checksum mismatch! expect %d actual %d",
-                    expectedCheckSum, realCheckSum));
+        try {
+            long expectedCheckSum = Long.parseLong(Files.readString(checksumPath));
+            if (expectedCheckSum != realCheckSum) {
+                throw new IOException(String.format("checksum mismatch! expect %d actual %d",
+                        expectedCheckSum, realCheckSum));
+            }
+        } catch (IOException | NumberFormatException e) {
+            if (!Config.metadata_ignore_image_checksum_error) {
+                throw e;
+            }
+            LOG.warn("image {} fails its checksum check ({}), loaded because metadata_ignore_image_checksum_error "
+                    + "is true", imageFile, e.getMessage());
         }
     }
 }

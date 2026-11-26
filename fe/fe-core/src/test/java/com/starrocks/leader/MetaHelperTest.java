@@ -236,6 +236,39 @@ public class MetaHelperTest {
         Assertions.assertArrayEquals(new String[0], dir.list());
     }
 
+    /**
+     * metadata_ignore_image_checksum_error is for recovery when the check itself is wrong: the image is accepted,
+     * and its checksum file keeps the value the source sent, so the mismatch is still seen at load.
+     */
+    @Test
+    public void testDownloadImageFileAcceptsADamagedImageWhenChecksumErrorsAreIgnored() throws Exception {
+        byte[] damaged = MockImageSource.damaged(MockImageSource.imageBytes());
+        String checksum = MockImageSource.checksum(MockImageSource.imageBytes());
+        File dir = newImageDir();
+        Config.metadata_ignore_image_checksum_error = true;
+        try (MockImageSource source = new MockImageSource(damaged, checksum, 147304, ImageFormatVersion.v2)) {
+            MetaHelper.downloadImageFile(source.imageUrl(), 5000, "147304", dir, ImageFormatVersion.v2);
+        } finally {
+            Config.metadata_ignore_image_checksum_error = false;
+        }
+        Assertions.assertArrayEquals(damaged, Files.readAllBytes(new File(dir, "image.147304").toPath()));
+        Assertions.assertEquals(checksum, Files.readString(new File(dir, "checksum.147304").toPath()));
+    }
+
+    @Test
+    public void testDownloadImageFileAcceptsAV2ImageWithoutAChecksumWhenChecksumErrorsAreIgnored() throws Exception {
+        byte[] image = MockImageSource.imageBytes();
+        File dir = newImageDir();
+        Config.metadata_ignore_image_checksum_error = true;
+        try (MockImageSource source = new MockImageSource(image, null, 147304, ImageFormatVersion.v2)) {
+            MetaHelper.downloadImageFile(source.imageUrl(), 5000, "147304", dir, ImageFormatVersion.v2);
+        } finally {
+            Config.metadata_ignore_image_checksum_error = false;
+        }
+        Assertions.assertArrayEquals(image, Files.readAllBytes(new File(dir, "image.147304").toPath()));
+        Assertions.assertFalse(new File(dir, "checksum.147304").exists());
+    }
+
     private File newImageDir() {
         File dir = new File(testDir, "image/v2");
         Assertions.assertTrue(dir.mkdirs());

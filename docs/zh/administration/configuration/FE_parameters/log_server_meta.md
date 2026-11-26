@@ -1894,6 +1894,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 存储元数据的目录。
 - 引入版本: -
 
+### `metadata_ignore_image_checksum_error`
+
+- 默认值: false
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 是否接受未通过 checksum 校验的元数据 image，即内容与其 checksum 不一致的 image，或者没有 checksum 的 v2 image。默认情况下，FE 从其他 FE 下载到这样的 image 时会拒收，从自身元数据目录加载这样的 image 时无法启动。如果值为 `TRUE`，FE 会接受或加载该 image，并在 **fe.log** 中记录一条警告。仅在 checksum 校验本身出错时用于恢复，恢复后请改回 `FALSE`：该值为 `TRUE` 时，一个 FE 上损坏的 image 可能被其他 FE 加载。
+- 引入版本: -
+
 ### `metadata_ignore_unknown_operation_type`
 
 - 默认值: false

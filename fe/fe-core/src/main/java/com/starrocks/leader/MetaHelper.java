@@ -154,18 +154,24 @@ public class MetaHelper {
         // publishing it would make the caller replace its loadable images with one that cannot be loaded.
         // Every v2 image has a checksum and cannot be loaded without one, so a v2 image without it is refused.
         String actual = String.valueOf(crc.getValue());
-        if (Strings.isNullOrEmpty(checksum) ? imageFormatVersion == ImageFormatVersion.v2
-                : !checksum.trim().equals(actual)) {
-            Files.deleteIfExists(partFile.toPath());
-            throw new IOException(String.format("image checksum mismatch, expected: %s, actual: %s, url: %s",
-                    checksum, actual, urlStr));
+        boolean verified = Strings.isNullOrEmpty(checksum) ? imageFormatVersion != ImageFormatVersion.v2
+                : checksum.trim().equals(actual);
+        if (!verified) {
+            String error = String.format("image checksum mismatch, expected: %s, actual: %s, url: %s",
+                    checksum, actual, urlStr);
+            if (!Config.metadata_ignore_image_checksum_error) {
+                Files.deleteIfExists(partFile.toPath());
+                throw new IOException(error);
+            }
+            LOG.warn("{}, accepted because metadata_ignore_image_checksum_error is true", error);
         }
 
-        // 3. write checksum if exists
+        // 3. write checksum if exists: the verified value, or the one the source sent when the error is ignored,
+        // so that the load-time check still sees the mismatch once the switch is turned off again
         if (!Strings.isNullOrEmpty(checksum)) {
             File checksumFile = Path.of(destDir.getAbsolutePath(), Storage.CHECKSUM + "." + journalId).toFile();
             try (FileOutputStream fos = new FileOutputStream(checksumFile)) {
-                fos.write(actual.getBytes(StandardCharsets.UTF_8));
+                fos.write((verified ? actual : checksum).getBytes(StandardCharsets.UTF_8));
                 fos.getChannel().force(true);
             }
         }
