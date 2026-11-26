@@ -15,6 +15,8 @@
 package com.starrocks.connector.paimon;
 
 import com.starrocks.catalog.PaimonTable;
+import com.starrocks.catalog.TableName;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.DebugUtil;
@@ -25,6 +27,7 @@ import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.thrift.TPaimonCommitInfo;
@@ -34,6 +37,8 @@ import com.starrocks.thrift.TSinkCommitInfo;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TUniqueId;
+import mockit.Mock;
+import mockit.MockUp;
 import org.apache.paimon.Snapshot;
 import org.apache.paimon.catalog.Catalog;
 import org.apache.paimon.catalog.CatalogContext;
@@ -324,6 +329,47 @@ public class PaimonWriteMetadataTest {
             metadata.abortSink(DB, TABLE, null, operation, null);
             assertEquals(COMMITTED, operation.getPublicationState());
         }
+    }
+
+    @Test
+    public void testFinishSinkInvalidatesOtherFesOnceCommitted() throws Exception {
+        // The commit writes no edit log: the other FEs must drop the pre-commit table before the statement returns
+        createTarget();
+        seed(row(1, "one", 10));
+        long before = latestSnapshot().id();
+        List<String> invalidated = new ArrayList<>();
+        List<Long> snapshotWhenAsked = new ArrayList<>();
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public void invalidateOthersFeTable(TableName tableName, int timeoutMs) {
+                invalidated.add(tableName.getCatalog() + "." + tableName.getDb() + "." + tableName.getTbl() + "@"
+                        + timeoutMs);
+                try {
+                    snapshotWhenAsked.add(latestSnapshot().id());
+                } catch (Exception e) {
+                    throw new RuntimeException(e);
+                }
+            }
+        };
+
+        // an empty append publishes nothing: nothing to tell
+        PaimonSinkExtra empty = operation(APPEND, Map.of(), "empty_append");
+        List<TSinkCommitInfo> emptyReports = List.of(report(empty, PRODUCER, List.of()));
+        completeProducerReports(empty, emptyReports);
+        metadata.finishSink(DB, TABLE, emptyReports, null, empty, null);
+        assertEquals(List.of(), invalidated);
+
+        PaimonSinkExtra operation = operation(APPEND, Map.of(), "append");
+        TSinkCommitInfo producer = report(operation, PRODUCER, prepare(row(2, "two", 20)));
+        completeProducerReports(operation, List.of(producer));
+        metadata.finishSink(DB, TABLE, List.of(producer), null, operation, null);
+        // nor does a repeated finish of a committed operation
+        metadata.finishSink(DB, TABLE, List.of(producer), null, operation, null);
+
+        assertEquals(List.of(CATALOG + "." + DB + "." + TABLE + "@" + Config.paimon_commit_invalidate_other_fe_timeout_ms),
+                invalidated);
+        assertEquals(1, snapshotWhenAsked.size());
+        assertTrue(snapshotWhenAsked.get(0) > before, "asked before the commit was published");
     }
 
     @Test
