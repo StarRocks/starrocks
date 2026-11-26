@@ -53,7 +53,6 @@ import org.apache.iceberg.exceptions.NoSuchTableException;
 import org.apache.iceberg.view.View;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.apache.parquet.Strings;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -314,6 +313,61 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         }
     }
 
+<<<<<<< HEAD
+=======
+    // do not cache if it is a REST Catalog that forwards the session's JWT, as the loaded table is per user.
+    private boolean tableCacheAllowed(ConnectContext connectContext) {
+        return icebergProperties.isEnableIcebergTableCache() &&
+                !(delegate instanceof IcebergRESTCatalog restCatalog && restCatalog.forwardsSessionToken(connectContext));
+    }
+
+    private Table recordLoadTime(Table table) {
+        if (table != null) {
+            tableLoadTimes.put(table, System.currentTimeMillis());
+        }
+        return table;
+    }
+
+    @Override
+    public OptionalLong tableLoadedAtMs(ConnectContext connectContext, String dbName, String tableName, Table table,
+                                        long nowMs) {
+        if (connectContext != null && !tableCacheAllowed(connectContext)) {
+            return OptionalLong.of(nowMs);
+        }
+        Long loadedAt = tableLoadTimes.getIfPresent(table);
+        return loadedAt == null ? OptionalLong.empty() : OptionalLong.of(loadedAt);
+    }
+
+    @Override
+    public Set<String> statsColumnsKeptByManifestCache(Table table, Schema schema, Set<String> columnNames) {
+        if (columnNames.isEmpty() || !icebergProperties.isIcebergManifestCacheWithColumnStatistics()) {
+            return Set.of();
+        }
+        Map<Integer, String> namesById = new HashMap<>();
+        for (String name : columnNames) {
+            Types.NestedField field = schema.findField(name);
+            if (field != null) {
+                namesById.put(field.fieldId(), name);
+            }
+        }
+        if (namesById.isEmpty()) {
+            return Set.of();
+        }
+        int limit = Math.max(icebergProperties.getIcebergManifestCacheStatisticsMaxColumns(), 0);
+        Set<String> kept = new HashSet<>();
+        for (Integer id : StarRocksIcebergTableScan.statsColumnIdsKeptByCache(table, schema, limit, namesById.keySet())) {
+            kept.add(namesById.get(id));
+        }
+        return kept;
+    }
+
+    @Override
+    public Table getTableUncached(ConnectContext connectContext, String dbName, String tableName)
+            throws StarRocksConnectorException {
+        return delegate.getTableUncached(connectContext, dbName, tableName);
+    }
+
+>>>>>>> e7c2117 ([BugFix] Use the Iceberg table cache for JWT sessions on REST catalogs that don't forward the token (#84567))
     @Override
     public boolean tableExists(ConnectContext connectContext, String dbName, String tableName)
             throws StarRocksConnectorException {
