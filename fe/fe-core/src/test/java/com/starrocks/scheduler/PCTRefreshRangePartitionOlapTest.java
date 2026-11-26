@@ -508,12 +508,19 @@ public class PCTRefreshRangePartitionOlapTest extends MVTestBase {
                     }
                     // The scope oracle is independent of the type assertion in TaskManagerTest (including in red).
                     executeCapturedRun(fixture, run, confirmedBefore);
-                    Assertions.assertEquals(Set.of("p20240106_20240107"),
-                            run.getStatus().getMvTaskRunExtraMessage().getMvPartitionsToRefresh());
-                    Assertions.assertNull(((PartitionBasedMvRefreshProcessor) run.getProcessor()).getNextTaskRun());
-                    Assertions.assertEquals(oldVersion, versions.get("p1").getVersion());
-                    Assertions.assertEquals(secondOldVersion, versions.get("p2").getVersion());
-                    Assertions.assertEquals(confirmedBefore, mv.getRefreshScheme().getLastFreshnessConfirmedAt());
+                    if (manual) {
+                        // branch-4.0 applies auto_refresh_partitions_limit to automatic refreshes only, so a
+                        // manual refresh starts from the oldest changed partition.
+                        Assertions.assertEquals(Set.of("p20240104_20240105"),
+                                run.getStatus().getMvTaskRunExtraMessage().getMvPartitionsToRefresh());
+                    } else {
+                        Assertions.assertEquals(Set.of("p20240106_20240107"),
+                                run.getStatus().getMvTaskRunExtraMessage().getMvPartitionsToRefresh());
+                        Assertions.assertNull(((PartitionBasedMvRefreshProcessor) run.getProcessor()).getNextTaskRun());
+                        Assertions.assertEquals(oldVersion, versions.get("p1").getVersion());
+                        Assertions.assertEquals(secondOldVersion, versions.get("p2").getVersion());
+                        Assertions.assertEquals(confirmedBefore, mv.getRefreshScheme().getLastFreshnessConfirmedAt());
+                    }
 
                     if (manual) {
                         ExecuteOption range = new ExecuteOption(task);
