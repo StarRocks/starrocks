@@ -552,13 +552,17 @@ public class IcebergRESTCatalog implements IcebergCatalog {
         }
     }
 
+    // The user's auth token is only passed to the REST Catalog when the security mode is JWT, so only then
+    // can the loaded objects differ per user.
+    public boolean forwardsSessionToken(ConnectContext context) {
+        return Security.JWT.name().equalsIgnoreCase(restCatalogProperties.getOrDefault(ICEBERG_CATALOG_SECURITY, "NONE"))
+                && !Strings.isNullOrEmpty(context.getAuthToken());
+    }
+
     private SessionCatalog.SessionContext buildContext(ConnectContext context) {
         String sessionId = format("%s-%s", context.getQualifiedUser(), context.getSessionId());
 
-        // only pass user's auth token to REST Catalog when security mode is JWT
-        boolean isJwtSecurity = Security.JWT.name().equalsIgnoreCase(
-                restCatalogProperties.getOrDefault(ICEBERG_CATALOG_SECURITY, "NONE"));
-        if (!isJwtSecurity || Strings.isNullOrEmpty(context.getAuthToken())) {
+        if (!forwardsSessionToken(context)) {
             return SessionCatalog.SessionContext.createEmpty();
         }
 
