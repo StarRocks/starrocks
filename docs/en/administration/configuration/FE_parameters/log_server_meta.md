@@ -1667,7 +1667,7 @@ This topic introduces the following types of FE configurations:
 - Type: Int
 - Unit: Milliseconds
 - Is mutable: Yes
-- Description: The maximum time an INSERT, INSERT OVERWRITE, or TRUNCATE on a Hive table waits for the other FEs to drop their cached copy of the table, so that a query on any FE sees the change once the statement returns. An FE that does not respond in time is left to the background refresh. During a rolling upgrade, an FE of an earlier version either refreshes the table instead, so a statement can wait up to this long, or keeps its copy until the background refresh. Set it to 0 or less to disable the wait.
+- Description: The maximum time an INSERT, INSERT OVERWRITE, TRUNCATE, DROP TABLE, or ALTER TABLE ADD PARTITION on a Hive table waits for the other FEs to drop their cached copy of the table, so that a query on any FE sees the change once the statement returns. An FE that does not respond in time is left to the background refresh. During a rolling upgrade, an FE of an earlier version either refreshes the table instead, so a statement can wait up to this long, or keeps its copy until the background refresh. Set it to 0 or less to disable the wait.
 - Introduced in: -
 
 ### `refresh_other_fe_rpc_executor_thread_num`
