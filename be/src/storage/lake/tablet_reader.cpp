@@ -1966,7 +1966,7 @@ Status TabletReader::init_delete_predicates(const TabletReaderParams& params, De
 
 bool TabletReader::union_reads_ahead(const TabletReaderParams& params) const {
 #ifndef USE_STAROS
-    // The segment readers read ahead only in StarOS builds (see SegmentIterator::_should_read_ahead()).
+    // The segment readers read ahead only in StarOS builds (see SegmentIterator::_read_ahead_blocks()).
     (void)params;
     return false;
 #else
@@ -1978,8 +1978,8 @@ bool TabletReader::union_reads_ahead(const TabletReaderParams& params) const {
     const bool union_branch =
             !params.sorted_by_keys_per_tablet && (keys_type == PRIMARY_KEYS || keys_type == DUP_KEYS ||
                                                   (keys_type == UNIQUE_KEYS && params.skip_aggregation));
-    // The segment readers read ahead only for an attributed query read that fills the cache (see
-    // SegmentIterator::_should_read_ahead()); starting the others early would only initialize them before their turn.
+    // A segment reader reads ahead with the query window only for an attributed query read that fills the cache (see
+    // SegmentIterator::_read_ahead_blocks()); starting the others early would only initialize them before their turn.
     const auto& io = params.lake_io_opts;
     const bool cache_read_ahead = io.fill_data_cache && !io.skip_disk_cache && !io.cache_file_only &&
                                   io.remote_read.is_set &&
