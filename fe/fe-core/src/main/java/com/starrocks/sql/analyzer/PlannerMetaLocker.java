@@ -38,6 +38,7 @@ import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.MergeIntoStmt;
 import com.starrocks.sql.ast.ParseNode;
+import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.SelectRelation;
@@ -45,6 +46,7 @@ import com.starrocks.sql.ast.SetOperationRelation;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.TableRelation;
+import com.starrocks.sql.ast.UnionRelation;
 import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.ast.ViewRelation;
 import com.starrocks.sql.ast.expression.Expr;
@@ -548,6 +550,8 @@ public class PlannerMetaLocker implements AutoCloseable {
         // The CTE names of the with clauses in scope, innermost first. A table of the same name stays unlocked only
         // where the analyzer would read the CTE instead, never more: that would leave a table it reads unlocked.
         private final Deque<Set<String>> cteNames = new ArrayDeque<>();
+        // Whether the with clause whose CTEs are being walked is WITH RECURSIVE; see visitCTE.
+        private boolean inRecursiveWithClause = false;
         private final List<WalkedView> walkedViews = new ArrayList<>();
         private final List<WalkedSyncMV> walkedSyncMVs = new ArrayList<>();
         // Whether the relations being walked get a policy injected by the analyzer, besides the ones the statement
@@ -614,7 +618,7 @@ public class PlannerMetaLocker implements AutoCloseable {
          */
         private void visitRawDmlClauses(List<CTERelation> cteRelations, List<Relation> relations,
                                         Expr wherePredicate) {
-            withCtes(cteRelations, () -> {
+            withCtes(cteRelations, false, () -> {
                 if (cteRelations != null) {
                     cteRelations.forEach(this::visitIfPresent);
                 }
@@ -675,41 +679,76 @@ public class PlannerMetaLocker implements AutoCloseable {
 
         @Override
         public Void visitSelect(SelectRelation node, Void context) {
-            withCtes(node.getCteRelations(), () -> super.visitSelect(node, context));
+            withCtes(node.getCteRelations(), node.isHasRecursiveCTE(), () -> super.visitSelect(node, context));
             return null;
         }
 
         @Override
         public Void visitSetOp(SetOperationRelation node, Void context) {
-            withCtes(node.getCteRelations(), () -> super.visitSetOp(node, context));
+            withCtes(node.getCteRelations(), node.isHasRecursiveCTE(), () -> super.visitSetOp(node, context));
             return null;
         }
 
-        /** Run {@code body} in a new with-clause scope, which {@link #visitCTE} fills as the CTEs are walked. */
-        private void withCtes(List<CTERelation> cteRelations, Runnable body) {
-            if (cteRelations == null || cteRelations.isEmpty()) {
-                body.run();
-                return;
+        /**
+         * Run {@code body} in a new with-clause scope, which {@link #visitCTE} fills as the CTEs are walked.
+         * {@code recursive}: whether the clause is WITH RECURSIVE.
+         */
+        private void withCtes(List<CTERelation> cteRelations, boolean recursive, Runnable body) {
+            boolean scoped = cteRelations != null && !cteRelations.isEmpty();
+            boolean enclosingRecursive = inRecursiveWithClause;
+            if (scoped) {
+                cteNames.push(new HashSet<>());
             }
-            cteNames.push(new HashSet<>());
+            inRecursiveWithClause = recursive;
             try {
                 body.run();
             } finally {
-                cteNames.pop();
+                inRecursiveWithClause = enclosingRecursive;
+                if (scoped) {
+                    cteNames.pop();
+                }
             }
         }
 
         /**
-         * A CTE's name is in scope only after its own definition, as the analyzer has it: in
-         * {@code WITH t0 AS (SELECT * FROM t0)} the inner {@code t0} is the table.
+         * A CTE's name comes into scope where the analyzer brings it in: after its own definition, so in
+         * {@code WITH t0 AS (SELECT * FROM t0)} the inner {@code t0} is the table, but before the recursive
+         * members of a recursive one, where a self-reference is the CTE.
          */
         @Override
         public Void visitCTE(CTERelation node, Void context) {
-            super.visitCTE(node, context);
-            if (!cteNames.isEmpty() && node.getName() != null) {
-                cteNames.peek().add(node.getName());
+            if (node.isRecursive() && !node.isAnchor()) {
+                // A reference to a recursive CTE, in an analyzed statement: it shares the definition's query, which
+                // contains it. AstTraverser#visitCTE stops here too; walking on would go round the cycle for good.
+                return null;
+            }
+            UnionRelation union = AnalyzerUtils.recursiveCteUnion(node, inRecursiveWithClause);
+            if (union == null) {
+                super.visitCTE(node, context);
+                declareCte(node);
+                return null;
+            }
+            if (union.hasWithClause()) {
+                // The union's own with clause is not in scope for its operands here, but the analyzer reads its
+                // CTEs when it falls back to a CTE that is not recursive. Walk them in a scope of their own.
+                withCtes(union.getCteRelations(), union.isHasRecursiveCTE(),
+                        () -> union.getCteRelations().forEach(cte -> visit(cte, context)));
+            }
+            // The anchor, the first operand, comes before the name; the recursive members after it.
+            List<QueryRelation> operands = union.getRelations();
+            visit(operands.get(0), context);
+            declareCte(node);
+            for (QueryRelation member : operands.subList(1, operands.size())) {
+                visit(member, context);
             }
             return null;
+        }
+
+        /** Bring the name of {@code cte} into scope in the with clause being walked. */
+        private void declareCte(CTERelation cte) {
+            if (!cteNames.isEmpty() && cte.getName() != null) {
+                cteNames.peek().add(cte.getName());
+            }
         }
 
         /** An unqualified name a with clause in scope declares: the analyzer reads the CTE, not a table. */
