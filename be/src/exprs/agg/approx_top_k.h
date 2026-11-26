@@ -62,6 +62,11 @@ struct ApproxTopKState {
         this->k = k;
         this->counter_num = counter_num;
         this->unused_idx = 0;
+        // Start from exactly counter_num empty counters. Without the clear(), every reset appended counter_num
+        // more counters and kept the old ones: convert_to_serialize_format, which resets one state per input row
+        // (the streaming pass-through path), grew the vector to rows * counter_num and serialize_state walked all
+        // of them, so a chunk cost O(rows^2).
+        this->counters.clear();
         this->counters.reserve(counter_num);
         for (size_t i = 0; i < counter_num; i++) {
             this->counters.emplace_back(i);
