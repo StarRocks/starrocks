@@ -347,7 +347,7 @@ public class HiveMetastoreApiConverter {
         try {
             hudiSchema = HoodieAvroUtils.createHoodieWriteSchema(schemaUtil.getTableAvroSchema());
         } catch (Exception e) {
-            throw new StarRocksConnectorException("Cannot get hudi table schema.");
+            throw new StarRocksConnectorException("Cannot get hudi table schema: " + e.getMessage(), e);
         }
 
         List<String> partitionColumnNames = toPartitionColumnNamesForHudiTable(table, hudiTableConfig);
