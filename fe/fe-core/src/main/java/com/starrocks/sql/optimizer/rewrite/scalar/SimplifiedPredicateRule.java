@@ -467,11 +467,15 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
             return call;
         }
 
-        int i1 = call.getFnName().contains("add") ? l1.getInt() : l1.getInt() * -1;
-        int i2 = child.getFnName().contains("add") ? l2.getInt() : l2.getInt() * -1;
-
-        int result = i1 + i2;
-        ConstantOperator interval = ConstantOperator.createInt(Math.abs(result));
+        // the merged amount must fit the INT argument: seconds_add(seconds_add(x, 2000000000), 2000000000) would
+        // otherwise wrap to a negative amount
+        long i1 = call.getFnName().contains("add") ? l1.getInt() : -(long) l1.getInt();
+        long i2 = child.getFnName().contains("add") ? l2.getInt() : -(long) l2.getInt();
+        long result = i1 + i2;
+        if (Math.abs(result) > Integer.MAX_VALUE) {
+            return call;
+        }
+        ConstantOperator interval = ConstantOperator.createInt((int) Math.abs(result));
 
         if (result != 0) {
             String fnName = result < 0 ? unit.get(1) : unit.get(0);
