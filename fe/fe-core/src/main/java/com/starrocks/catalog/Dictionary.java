@@ -355,8 +355,9 @@ public class Dictionary implements Writable {
     }
 
     public synchronized void setCommitting() {
+        // Kept for a new leader that resumes this refresh: if the resumed refresh fails before COMMIT, it rolls back
+        // to the state before the refresh. A refresh that fails in COMMITTING is cancelled, not rolled back.
         this.state = DictionaryState.COMMITTING;
-        this.stateBeforeRefresh = null;
     }
 
     public synchronized void setFinished(long ts, long version) {

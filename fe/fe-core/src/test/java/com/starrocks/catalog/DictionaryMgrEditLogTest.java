@@ -1702,6 +1702,66 @@ public class DictionaryMgrEditLogTest {
     }
 
     @Test
+    public void testNewLeaderRollsBackAnEarlyRefreshResumedAfterCommitting() throws Exception {
+        Map<TNetworkAddress, Long> startTimes = new HashMap<>(Map.of(NODE_A, 100L, NODE_B, 100L, NODE_C, 100L));
+        Set<PProcessDictionaryCacheRequestType> failOnAll = new HashSet<>();
+        mockThreeNodes(Set.of(), failOnAll, startTimes);
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public boolean isLeader() {
+                return true;
+            }
+        };
+        BlockingQueue<DictionaryMgr.RefreshDictionaryCacheWorker> started = new LinkedBlockingQueue<>();
+        new MockUp<DictionaryMgr.RefreshDictionaryCacheWorker>() {
+            @Mock
+            public void run(Invocation invocation) {
+                started.add(invocation.getInvokedInstance());
+            }
+        };
+        Dictionary dictionary = createRefreshingDictionary("failover_committing_dict", false);
+        long id = dictionary.getDictionaryId();
+        DictionaryMgr follower = new DictionaryMgr();
+        follower.replayCreateDictionary((Dictionary) UtFrameUtils.PseudoJournalReplayer
+                .replayNextJournal(OperationType.OP_CREATE_DICTIONARY));
+        long version = masterDictionaryMgr.getAndIncrementTxnIdUnlocked();
+        DictionaryMgr.RefreshDictionaryCacheWorker first =
+                masterDictionaryMgr.new RefreshDictionaryCacheWorker(dictionary, version);
+        first.begin();
+        first.commit();
+        first.finish();
+        // txn id, COMMITTING, FINISHED
+        replayNextModifyLogs(follower, 3);
+
+        // Node B restarted, so the leader starts an early refresh. The leader goes down after it logs COMMITTING.
+        startTimes.put(NODE_B, 200L);
+        masterDictionaryMgr.scheduleTasks();
+        DictionaryMgr.RefreshDictionaryCacheWorker early = started.poll(10, TimeUnit.SECONDS);
+        Assertions.assertTrue(early.isEarlyRefresh());
+        early.begin();
+        early.commit();
+        // REFRESHING, txn id, COMMITTING
+        replayNextModifyLogs(follower, 3);
+        Dictionary newLeaderDictionary = follower.getDictionaryByName("failover_committing_dict");
+        Assertions.assertEquals(Dictionary.DictionaryState.COMMITTING, newLeaderDictionary.getState());
+
+        // The follower becomes the leader and goes on with the refresh, which fails on every node at BEGIN.
+        follower.scheduleTasks();
+        DictionaryMgr.RefreshDictionaryCacheWorker resumed = started.poll(10, TimeUnit.SECONDS);
+        failOnAll.add(PProcessDictionaryCacheRequestType.BEGIN);
+        resumed.begin();
+        resumed.commit();
+        resumed.finish();
+
+        Assertions.assertEquals(Dictionary.DictionaryState.FINISHED, newLeaderDictionary.getState());
+        Assertions.assertEquals(version, newLeaderDictionary.getLastSuccessVersion());
+        Assertions.assertTrue(newLeaderDictionary.getRuntimeErrMsg().contains("all nodes failed"));
+        Assertions.assertTrue(resumed.isEarlyRefresh());
+        Assertions.assertFalse(follower.isEarlyRefreshTask(id));
+        Assertions.assertFalse(follower.getUnfinishedRefreshTasks().contains(id));
+    }
+
+    @Test
     public void testFollowerKeepsTheEarlyRefreshMarkUntilTheRefreshEnds() throws Exception {
         createFinishedDictionary("replay_early_mark_dict", 5L);
         DictionaryMgr follower = new DictionaryMgr();
