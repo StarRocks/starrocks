@@ -545,8 +545,10 @@ public class ConfigBase {
             }
 
             try {
-                appendPersistedProperties(key, field.getAnnotation(ConfField.class), parsedConfigValue.confVal,
-                        userIdentity);
+                // Under the config's own name, which loading reads before any alias: written under the alias it was
+                // set by, the value would be shadowed on restart by that name or by an alias listed earlier
+                appendPersistedProperties(field.getName(), field.getAnnotation(ConfField.class),
+                        parsedConfigValue.confVal, userIdentity);
             } catch (IOException e) {
                 throw new InvalidConfException("Failed to set config '" + key + "'. err: " + e.getMessage());
             }
