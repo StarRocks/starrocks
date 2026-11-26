@@ -112,39 +112,33 @@ public class HiveCacheUpdateProcessor implements CacheUpdateProcessor {
      * Drops everything cached about this table, without any remote I/O: the metastore entries (table, partition
      * names, partitions, statistics) and the file lists of its partitions. A file list is keyed by the location a
      * scan asked for, which is not always under the table location and not always spelled the same way, so the
-     * keys are found three ways: by the table location prefix, by the table the key was loaded for, and by the
-     * locations of the partitions still cached -- in both slash forms. The partitions are read before they are
-     * invalidated.
+     * keys are found four ways: by the table location prefix, by the location and by the name of the table the key
+     * was loaded for, and by the locations of the partitions still cached -- in both slash forms. The partitions are
+     * read before they are invalidated.
      */
     public void invalidateTableForRead(Table table) {
         invalidateTableAndFiles(table.getCatalogDBName(), table.getCatalogTableName(), table.getTableLocation());
     }
 
     /**
-     * As {@link #invalidateTableForRead}, by name. With a metastore cache nothing is loaded: the table location comes
-     * from the cached table, and when the table entry is gone (it can expire before its partitions) the file lists
-     * are still found through the cached partitions. Without one (enable_metastore_cache=false) there is nothing
-     * cached to find the file lists by, so the table location is read from the metastore, as every query of such a
-     * catalog does. Run when the FE that wrote to the table asks the others to stop serving the pre-write copy.
+     * As {@link #invalidateTableForRead}, by name, loading nothing: the table location comes from the cached table
+     * when there is one, and the file lists are found by the table name otherwise -- the table entry can expire before
+     * its file lists, there is none without a metastore cache (enable_metastore_cache=false), and a dropped table
+     * can no longer be read from the metastore. Run when the FE that changed the table asks the others to stop
+     * serving the previous copy; in a unified catalog also for the tables of its other connectors.
      */
     public void invalidateCachedTable(String dbName, String tblName) {
         String tableLocation = null;
         if (metastore instanceof CachingHiveMetastore cachingMetastore) {
             Table table = cachingMetastore.getTableIfPresent(dbName, tblName);
             tableLocation = table == null ? null : table.getTableLocation();
-        } else if (remoteFileIO.isPresent()) {
-            try {
-                tableLocation = metastore.getTable(dbName, tblName).getTableLocation();
-            } catch (Exception e) {
-                LOG.warn("Failed to read the location of {}.{} to drop its cached file lists", dbName, tblName, e);
-            }
         }
         invalidateTableAndFiles(dbName, tblName, tableLocation);
     }
 
     private void invalidateTableAndFiles(String dbName, String tblName, String tableLocation) {
         if (remoteFileIO.isPresent()) {
-            Set<RemotePathKey> keys = new HashSet<>();
+            Set<RemotePathKey> keys = new HashSet<>(remoteFileIO.get().getPresentPathKeysOfTable(dbName, tblName));
             if (!Strings.isNullOrEmpty(tableLocation)) {
                 keys.addAll(remoteFileIO.get().getPresentPathKeyInCache(tableLocation, isRecursive));
                 keys.addAll(remoteFileIO.get().getPresentPathKeysOfTable(tableLocation));

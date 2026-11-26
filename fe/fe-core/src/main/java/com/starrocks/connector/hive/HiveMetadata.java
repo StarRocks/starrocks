@@ -318,9 +318,17 @@ public class HiveMetadata implements ConnectorMetadata {
             }
 
             hmsOps.dropTable(dbName, tableName);
-            // Otherwise the other FEs keep serving the dropped table, and a table re-created under its name
-            invalidateOthersFeTable(hiveTable);
-            StatisticUtils.dropStatisticsAfterDropTable(hiveTable);
+            try {
+                // The metastore drop only clears this FE's metastore cache: a table re-created at the same location
+                // would otherwise be planned with the dropped table's file lists
+                invalidateTableForRead(dbName, hiveTable);
+                // Before the wait below: the statistics are keyed by name, and a table re-created meanwhile must keep
+                // its own
+                StatisticUtils.dropStatisticsAfterDropTable(hiveTable);
+            } finally {
+                // Otherwise the other FEs keep serving the dropped table, and a table re-created under its name
+                invalidateOthersFeTable(hiveTable);
+            }
         }
     }
 
