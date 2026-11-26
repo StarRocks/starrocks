@@ -718,9 +718,20 @@ public class CreateTableAnalyzer {
         } else {
             if (engineName.equalsIgnoreCase(Table.TableType.ELASTICSEARCH.name())) {
                 EsUtil.analyzePartitionDesc(partitionDesc);
-            } else if (engineName.equalsIgnoreCase(Table.TableType.ICEBERG.name())
-                    || engineName.equalsIgnoreCase(Table.TableType.HIVE.name())) {
+            } else if (engineName.equalsIgnoreCase(Table.TableType.ICEBERG.name())) {
                 if (partitionDesc != null) {
+                    if (!(partitionDesc instanceof ListPartitionDesc)) {
+                        throw new SemanticException("Create iceberg table only supports PARTITION BY (column or transform, ...)",
+                                partitionDesc.getPos());
+                    }
+                    ((ListPartitionDesc) partitionDesc).analyzeExternalPartitionColumns(stmt.getColumnDefs(), engineName);
+                }
+            } else if (engineName.equalsIgnoreCase(Table.TableType.HIVE.name())) {
+                if (partitionDesc != null) {
+                    if (!(partitionDesc instanceof ListPartitionDesc)) {
+                        throw new SemanticException("Create hive table only supports PARTITION BY (column, ...)",
+                                partitionDesc.getPos());
+                    }
                     ((ListPartitionDesc) partitionDesc).analyzeExternalPartitionColumns(stmt.getColumnDefs(), engineName);
                 }
             } else {
