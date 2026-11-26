@@ -527,8 +527,8 @@ private:
     // Remote I/O scheduler only: (re)creates the cache read-ahead window of the current scan context, starting at
     // `start_row`.
     void _init_prefetch_window(rowid_t start_row);
-    // Whether this reader reads ahead through SegmentPrefetchWindow at all.
-    bool _should_read_ahead() const;
+    // How many cache blocks this reader reads ahead through SegmentPrefetchWindow; zero for none.
+    int32_t _read_ahead_blocks() const;
     // lake_scan_warm_index: whether the bitmap index lookups ask for the pages they read ahead of the reads.
     bool _should_prefetch_bitmap_index_pages() const;
     void _reset_prefetch_window() {
@@ -1231,20 +1231,24 @@ Status SegmentIterator::start_read_ahead(bool* started) {
     return Status::OK();
 }
 
-bool SegmentIterator::_should_read_ahead() const {
-#ifndef USE_STAROS
-    // Read-ahead goes through the shared-data remote I/O scheduler, which exists only in StarOS builds.
-    return false;
-#else
-    // Only a lake query read that fills the cache, in ascending row order, reads ahead. Loads, background work such as
-    // compaction, and reads nobody attributed read what they need as they go.
-    const auto& remote_read = _opts.lake_io_opts.remote_read;
-    return remote_io_scheduler_enabled() && config::remote_prefetch_window_blocks > 0 && _context != nullptr &&
-           remote_read.is_set && remote_read.workload == RemoteReadContext::Workload::QUERY &&
-           _segment->lake_tablet_manager() != nullptr && _opts.lake_io_opts.fill_data_cache &&
-           !_opts.lake_io_opts.skip_disk_cache && !_opts.lake_io_opts.cache_file_only && !_scan_range.empty() &&
-           (_opts.asc_hint || config::desc_hint_split_range <= 0);
-#endif // USE_STAROS
+int32_t SegmentIterator::_read_ahead_blocks() const {
+#ifdef USE_STAROS
+    const auto& opts = _opts.lake_io_opts;
+    if (!remote_io_scheduler_enabled() || _context == nullptr || !opts.remote_read.is_set ||
+        _segment->lake_tablet_manager() == nullptr || !opts.fill_data_cache || opts.skip_disk_cache ||
+        opts.cache_file_only || _scan_range.empty() || (!_opts.asc_hint && config::desc_hint_split_range > 0)) {
+        return 0;
+    }
+    if (opts.remote_read.workload == RemoteReadContext::Workload::QUERY) {
+        return config::remote_prefetch_window_blocks;
+    }
+    // Late-materialized row batches can submit urgent warms outside the normal window.
+    // Compaction uses only the bounded page window, with the file's original transaction context.
+    if (opts.remote_read.workload == RemoteReadContext::Workload::COMPACTION && !_context->_late_materialize) {
+        return opts.compaction_prefetch_blocks;
+    }
+#endif
+    return 0;
 }
 
 bool SegmentIterator::_should_prefetch_bitmap_index_pages() const {
@@ -1264,7 +1268,8 @@ bool SegmentIterator::_should_prefetch_bitmap_index_pages() const {
 void SegmentIterator::_init_prefetch_window(rowid_t start_row) {
     _reset_prefetch_window();
 #ifdef USE_STAROS
-    if (!_should_read_ahead()) {
+    const int32_t blocks = _read_ahead_blocks();
+    if (blocks <= 0) {
         return;
     }
     // Scalar columns, read from the segment file or from a delta column group file; the others (complex types,
@@ -1315,8 +1320,8 @@ void SegmentIterator::_init_prefetch_window(rowid_t start_row) {
         return;
     }
     _prefetch_window = std::make_unique<SegmentPrefetchWindow>(
-            std::move(columns), &_scan_range, start_row, config::remote_prefetch_window_blocks,
-            config::remote_prefetch_late_read_ahead_ratio, config::starlet_star_cache_block_size_bytes, _opts.stats);
+            std::move(columns), &_scan_range, start_row, blocks, config::remote_prefetch_late_read_ahead_ratio,
+            config::starlet_star_cache_block_size_bytes, _opts.stats);
 #else
     (void)start_row;
 #endif // USE_STAROS
