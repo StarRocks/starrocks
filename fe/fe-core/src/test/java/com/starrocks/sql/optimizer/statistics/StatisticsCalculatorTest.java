@@ -1520,12 +1520,9 @@ public class StatisticsCalculatorTest {
             Assertions.assertEquals(100, rightKeyStat.getDistinctValuesCount(), 0.0001);
             Assertions.assertEquals(0, rightKeyStat.getMinValue(), 0.0001);
             Assertions.assertEquals(100, rightKeyStat.getMaxValue(), 0.0001);
-            // The preserved NDV (100) equals the joined NDV, so the joined histogram is kept.
-            final var buckets = rightKeyStat.getHistogram().getBuckets();
-            Assertions.assertEquals(1, buckets.size());
-            Assertions.assertEquals(0, buckets.get(0).getLower(), 0.0001);
-            Assertions.assertEquals(100, buckets.get(0).getUpper(), 0.0001);
-            Assertions.assertEquals(200L, buckets.get(0).getCount());
+            // restorePreservedKeys discards the histogram of a known preserved key, and restoring the other
+            // preserved columns does not bring it back.
+            Assertions.assertNull(rightKeyStat.getHistogram());
         }
     }
 
