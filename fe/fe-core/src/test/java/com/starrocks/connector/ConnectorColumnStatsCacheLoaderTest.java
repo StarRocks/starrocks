@@ -136,6 +136,36 @@ public class ConnectorColumnStatsCacheLoaderTest {
     }
 
     @Test
+    public void testLoadAllLeavesOutColumnsTheTableDoesNotHave() throws Exception {
+        new MockUp<StatisticExecutor>() {
+            @Mock
+            public List<TStatisticData> queryStatisticSync(ConnectContext context, String tableUUID, Table table,
+                                                           List<String> columnNames) {
+                return ImmutableList.of();
+            }
+        };
+        new MockUp<StatisticsUtils>() {
+            @Mock
+            public Table getTableByUUID(ConnectContext context, String tableUUID) {
+                return connectContext.getGlobalStateMgr().getMetadataMgr().
+                        getTable(connectContext, "hive0", "tpch", "region");
+            }
+        };
+        ConnectorTableColumnKey existing = new ConnectorTableColumnKey("hive0.tpch.region.1234", "r_regionkey");
+        ConnectorTableColumnKey missing = new ConnectorTableColumnKey("hive0.tpch.region.1234", "no_such_column");
+        ConnectorColumnStatsCacheLoader loader = new ConnectorColumnStatsCacheLoader();
+
+        Map<ConnectorTableColumnKey, Optional<ConnectorTableColumnStats>> result =
+                loader.asyncLoadAll(List.of(existing, missing), Runnable::run).get();
+        Map<ConnectorTableColumnKey, Optional<ConnectorTableColumnStats>> onlyMissing =
+                loader.asyncLoadAll(List.of(missing), Runnable::run).get();
+
+        // No entry for the missing column, so trigger-analyze never queues an analyze job for it.
+        Assertions.assertEquals(Map.of(existing, Optional.empty()), result);
+        Assertions.assertTrue(onlyMissing.isEmpty());
+    }
+
+    @Test
     public void testAsyncLoadAll() throws ExecutionException, InterruptedException {
         new MockUp<ConnectorColumnStatsCacheLoader>() {
             @Mock

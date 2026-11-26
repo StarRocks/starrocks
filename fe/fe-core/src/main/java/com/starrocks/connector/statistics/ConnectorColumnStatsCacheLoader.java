@@ -98,14 +98,27 @@ public class ConnectorColumnStatsCacheLoader implements
 
             try {
                 String tableUUID = null;
-                List<String> columns = new ArrayList<>();
                 for (ConnectorTableColumnKey key : keys) {
                     tableUUID = key.tableUUID;
-                    columns.add(key.column);
                 }
 
                 ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
                 statsConnectCtx.setThreadLocalInfo();
+                // A column the table does not have gets no entry at all, not even "no statistics": the entries
+                // are handed to the trigger-analyze manager, which would queue an analyze job for the column,
+                // and that job fails on a column the table does not have.
+                Table table = getTableByUUID(statsConnectCtx, tableUUID);
+                List<String> columns = new ArrayList<>();
+                for (ConnectorTableColumnKey key : keys) {
+                    if (StatisticUtils.findQueryStatisticsColumnType(table, key.column) == null) {
+                        result.remove(key);
+                    } else {
+                        columns.add(key.column);
+                    }
+                }
+                if (columns.isEmpty()) {
+                    return result;
+                }
                 List<TStatisticData> statisticData = queryStatisticsData(statsConnectCtx, tableUUID, columns);
 
                 for (TStatisticData data : statisticData) {
