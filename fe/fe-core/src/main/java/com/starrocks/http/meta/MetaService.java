@@ -278,7 +278,8 @@ public class MetaService {
                 if (Files.exists(Path.of(realDir + "/" + filename))) {
                     LOG.info("image file : {} version: {} already exists, ignore", filename, imageFormatVersion);
                 } else {
-                    MetaHelper.downloadImageFile(url, DOWNLOAD_TIMEOUT_SECOND * 1000, versionStr, dir);
+                    MetaHelper.downloadImageFile(url, DOWNLOAD_TIMEOUT_SECOND * 1000, versionStr, dir,
+                            imageFormatVersion);
                 }
                 writeResponse(request, response);
             } catch (FileNotFoundException e) {

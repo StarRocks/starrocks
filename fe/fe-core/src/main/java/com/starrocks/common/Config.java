@@ -4575,6 +4575,15 @@ public class Config extends ConfigBase {
     public static boolean metadata_ignore_unknown_subtype = false;
 
     /**
+     * Whether to accept a checkpoint image that fails its checksum check (the bytes do not match the checksum,
+     * or a v2 image has none): when it is downloaded from another FE, and when it is loaded at startup.
+     * Each such image is then logged as a warning instead of being refused. Only for recovery, when the check
+     * itself is wrong: while it is true, an image damaged on one FE's disk can reach and be loaded by others.
+     */
+    @ConfField(mutable = true)
+    public static boolean metadata_ignore_image_checksum_error = false;
+
+    /**
      * Number of profile infos reserved by `ProfileManager` for recently executed query.
      * Default value: 500
      */
