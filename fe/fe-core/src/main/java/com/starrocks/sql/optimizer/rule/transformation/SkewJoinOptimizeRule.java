@@ -203,6 +203,9 @@ public class SkewJoinOptimizeRule extends TransformationRule {
             final var rightCol = (ColumnRefOperator) equalConj.getChild(1);
             final var otherColumn = columnOpt.get().equals(leftCol) ? rightCol : leftCol;
             final var nullSafe = equalConj.getBinaryType() == BinaryType.EQ_FOR_NULL;
+            if (skewedPredicates.stream().anyMatch(p -> p.column().equals(columnOpt.get()))) {
+                continue;
+            }
             skewedPredicates.add(new PredicateSkewInfo(columnOpt.get(), otherColumn, skewInfoOpt.get(),
                     nullSafe));
         }
@@ -283,6 +286,8 @@ public class SkewJoinOptimizeRule extends TransformationRule {
                 getEqualsPredicate(leftOutputColumns, rightOutputColumns,
                         Utils.extractConjuncts(oldJoinOperator.getOnPredicate()));
         boolean nullSafe = false;
+        final boolean hasDirectMatch = equalConjs.stream()
+                .anyMatch(conj -> conj.getChildren().contains(oldJoinOperator.getSkewColumn()));
         for (BinaryPredicateOperator equalConj : equalConjs) {
             nullSafe = equalConj.getBinaryType() == BinaryType.EQ_FOR_NULL;
             ScalarOperator child0 = equalConj.getChild(0);
@@ -294,7 +299,7 @@ public class SkewJoinOptimizeRule extends TransformationRule {
             } else if (skewColumn.equals(child1)) {
                 otherSideSkewColumn = child0;
                 break;
-            } else {
+            } else if (!hasDirectMatch) {
                 // find the skew column in the left/right child project map
                 for (int i = 0; i < 2; i++) {
                     if (input.inputAt(i).getOp() instanceof LogicalProjectOperator) {

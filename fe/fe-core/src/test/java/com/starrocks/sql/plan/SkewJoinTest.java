@@ -498,6 +498,105 @@ public class SkewJoinTest extends PlanTestBase {
     }
 
     @Test
+    void testSkewJoinNullSafeNoNullSaltWhenSaltedPredicateHasTooManyNulls() throws Exception {
+        final var oldStatisticsStorage = connectContext.getGlobalStateMgr().getStatisticStorage();
+        final double oldThreshold = connectContext.getSessionVariable().getSkewJoinDataSkewThreshold();
+        final boolean oldEnableStats = connectContext.getSessionVariable().isEnableStatsToOptimizeSkewJoin();
+        final boolean oldEnableRewrite = connectContext.getSessionVariable().isEnableOptimizerSkewJoinOptimizeV1();
+        final long oldMaxOverlap = connectContext.getSessionVariable().getSkewJoinMaxOtherSideOverlapRowCount();
+        try {
+            final var emptyStatisticsStorage = new EmptyStatisticStorage() {
+                @Override
+                public ColumnStatistic getColumnStatistic(Table table, String column) {
+                    if (table.getName().equalsIgnoreCase("t0") && column.equalsIgnoreCase("v1")) {
+                        return ColumnStatistic.builder() //
+                                .setNullsFraction(0.8) //
+                                .build();
+                    }
+                    if (table.getName().equalsIgnoreCase("t1") && column.equalsIgnoreCase("v5")) {
+                        return ColumnStatistic.builder() //
+                                .setNullsFraction(0.0) //
+                                .build();
+                    }
+
+                    return ColumnStatistic.builder() //
+                            .setNullsFraction(0.5) //
+                            .build();
+                }
+            };
+            setTableStatistics(getOlapTable("t0"), 1337);
+            setTableStatistics(getOlapTable("t1"), 1337);
+            connectContext.getGlobalStateMgr().setStatisticStorage(emptyStatisticsStorage);
+            connectContext.getSessionVariable().setSkewJoinDataSkewThreshold(0.1);
+            connectContext.getSessionVariable().setEnableStatsToOptimizeSkewJoin(true);
+            connectContext.getSessionVariable().setEnableOptimizerSkewJoinOptimizeV1(true);
+            connectContext.getSessionVariable().setSkewJoinMaxOtherSideOverlapRowCount(0);
+
+            // With <=> the rewrite salts through the first predicate on t0.v1, whose other side (v4) has too many
+            // NULLs, then join shall not be rewritten even though v5 alone would pass the guard
+            String sql = "select * from t0 left join t1 on t0.v1 <=> t1.v4 and t0.v1 <=> t1.v5";
+            String plan = getFragmentPlan(sql);
+            assertNotContains(plan, "rand_col");
+        } finally {
+            connectContext.getSessionVariable().setSkewJoinDataSkewThreshold(oldThreshold);
+            connectContext.getSessionVariable().setEnableStatsToOptimizeSkewJoin(oldEnableStats);
+            connectContext.getSessionVariable().setEnableOptimizerSkewJoinOptimizeV1(oldEnableRewrite);
+            connectContext.getGlobalStateMgr().setStatisticStorage(oldStatisticsStorage);
+            connectContext.getSessionVariable().setSkewJoinMaxOtherSideOverlapRowCount(oldMaxOverlap);
+        }
+    }
+
+    @Test
+    void testSkewJoinNullSafeSaltsThroughGuardedPredicateWithCastedPredicate() throws Exception {
+        final var oldStatisticsStorage = connectContext.getGlobalStateMgr().getStatisticStorage();
+        final double oldThreshold = connectContext.getSessionVariable().getSkewJoinDataSkewThreshold();
+        final boolean oldEnableStats = connectContext.getSessionVariable().isEnableStatsToOptimizeSkewJoin();
+        final boolean oldEnableRewrite = connectContext.getSessionVariable().isEnableOptimizerSkewJoinOptimizeV1();
+        final long oldMaxOverlap = connectContext.getSessionVariable().getSkewJoinMaxOtherSideOverlapRowCount();
+        try {
+            final var emptyStatisticsStorage = new EmptyStatisticStorage() {
+                @Override
+                public ColumnStatistic getColumnStatistic(Table table, String column) {
+                    if (table.getName().equalsIgnoreCase("test_all_type") && column.equalsIgnoreCase("t1c")) {
+                        return ColumnStatistic.builder() //
+                                .setNullsFraction(0.2) //
+                                .build();
+                    }
+                    if (table.getName().equalsIgnoreCase("test_all_type") && column.equalsIgnoreCase("t1d")) {
+                        return ColumnStatistic.builder() //
+                                .setNullsFraction(0.9) //
+                                .build();
+                    }
+
+                    return ColumnStatistic.builder() //
+                            .setNullsFraction(0.0) //
+                            .build();
+                }
+            };
+            setTableStatistics(getOlapTable("test_all_type"), 1337);
+            connectContext.getGlobalStateMgr().setStatisticStorage(emptyStatisticsStorage);
+            connectContext.getSessionVariable().setSkewJoinDataSkewThreshold(0.1);
+            connectContext.getSessionVariable().setEnableStatsToOptimizeSkewJoin(true);
+            connectContext.getSessionVariable().setEnableOptimizerSkewJoinOptimizeV1(true);
+            connectContext.getSessionVariable().setSkewJoinMaxOtherSideOverlapRowCount(500);
+
+            // The INT <=> BIGINT, predicate is pushed down as a casted column, the rewrite must still salt through
+            // the predicate that holds t1c directly, as that one passed the guard
+            String sql = "select * from test_all_type a left join test_all_type b " +
+                    "on a.t1c <=> b.t1d and a.t1c <=> b.t1c";
+            String plan = getFragmentPlan(sql);
+            assertCContains(plan, "rand_col");
+            assertNotContains(plan, "t1d <=> ");
+        } finally {
+            connectContext.getSessionVariable().setSkewJoinDataSkewThreshold(oldThreshold);
+            connectContext.getSessionVariable().setEnableStatsToOptimizeSkewJoin(oldEnableStats);
+            connectContext.getSessionVariable().setEnableOptimizerSkewJoinOptimizeV1(oldEnableRewrite);
+            connectContext.getGlobalStateMgr().setStatisticStorage(oldStatisticsStorage);
+            connectContext.getSessionVariable().setSkewJoinMaxOtherSideOverlapRowCount(oldMaxOverlap);
+        }
+    }
+
+    @Test
     void testSkewJoinNullSafeNoNullSaltWhenOtherSideStatsUnknown() throws Exception {
         final var oldStatisticsStorage = connectContext.getGlobalStateMgr().getStatisticStorage();
         final double oldThreshold = connectContext.getSessionVariable().getSkewJoinDataSkewThreshold();
