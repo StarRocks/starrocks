@@ -476,12 +476,13 @@ public class LakeTableIndexFastPathJobBaseTest {
         setField(job, "watershedTxnId", 1000L);
         setField(job, "partitionToTablets", twoPartitionsThreeTablets());
         // This leader dispatched tablets 11 and 12, so their nodes need no lookup; 21 has none recorded.
+        Map<Long, Long> dispatchedNodes = Map.of(11L, 1L, 12L, 2L);
         AgentBatchTask batch = new AgentBatchTask();
-        for (long[] tabletAndNode : new long[][] {{11L, 1L}, {12L, 2L}}) {
+        for (Map.Entry<Long, Long> dispatched : dispatchedNodes.entrySet()) {
             AgentTask task = mock(AgentTask.class);
-            when(task.getTabletId()).thenReturn(tabletAndNode[0]);
-            when(task.getSignature()).thenReturn(tabletAndNode[0]);
-            when(task.getBackendId()).thenReturn(tabletAndNode[1]);
+            when(task.getTabletId()).thenReturn(dispatched.getKey());
+            when(task.getSignature()).thenReturn(dispatched.getKey());
+            when(task.getBackendId()).thenReturn(dispatched.getValue());
             batch.addTask(task);
         }
         setField(job, "batchTask", batch);
@@ -497,7 +498,7 @@ public class LakeTableIndexFastPathJobBaseTest {
             assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
             utilsStatic.verify(() -> Utils.abortTxnWithCleanup(
                     argThat(tabletIds -> tabletIds.size() == 3 && tabletIds.containsAll(List.of(11L, 12L, 21L))),
-                    eq(Map.of(11L, 1L, 12L, 2L)),
+                    eq(dispatchedNodes),
                     argThat(txnInfo -> txnInfo.txnId == 1000L && !txnInfo.combinedTxnLog
                             && txnInfo.txnType == TxnTypePB.TXN_NORMAL),
                     any()), times(1));
