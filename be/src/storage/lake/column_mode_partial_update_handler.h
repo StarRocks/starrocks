@@ -132,6 +132,8 @@ private:
         spill::BlockPtr block;
         int64_t offset;
         int64_t length;
+        // crc32c of the record's bytes on disk, checked when the record is read back.
+        uint32_t checksum;
         // The update files the rows came from, in update-file order: the rows of a record are
         // applied run by run, and a later update file overwrites an earlier one.
         std::vector<SpillRun> runs;

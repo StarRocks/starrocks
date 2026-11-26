@@ -28,6 +28,7 @@
 
 #include "base/crypto/aes_util.h"
 #include "base/debug/trace.h"
+#include "base/hash/crc32c.h"
 #include "base/phmap/phmap.h"
 #include "base/testutil/sync_point.h"
 #include "base/time/time.h"
@@ -586,6 +587,7 @@ Status ColumnModePartialUpdateHandler::_spill_update_rows(
         uint64_t seq;
         int64_t offset;
         int64_t length;
+        uint32_t checksum;
         std::vector<SpillRun> runs;
     };
     auto flush = [&]() -> Status {
@@ -655,11 +657,16 @@ Status ColumnModePartialUpdateHandler::_spill_update_rows(
             TEST_SYNC_POINT_CALLBACK("ColumnModePartialUpdateHandler::_spill_update_rows:plain", &plain);
             const uint64_t seq = _spill.num_records++;
             RETURN_IF_ERROR(crypt_spill_record(_spill.key, seq, true, begin, length));
+            // Checksum of the bytes as they go to disk. It stays in memory with the record index,
+            // so bytes that come back different, whoever changed them, are noticed before they are
+            // decoded: a flipped bit in a fixed-length value would otherwise decode fine and end
+            // up in the table.
             pending.push_back(PendingRecord{.rssid = rssid,
                                             .num_rows = static_cast<uint32_t>(chunk.num_rows()),
                                             .seq = seq,
                                             .offset = payload_size,
                                             .length = length,
+                                            .checksum = crc32c::Value(begin, length),
                                             .runs = runs});
             payload_size += length;
             TEST_SYNC_POINT_CALLBACK("ColumnModePartialUpdateHandler::_spill_update_rows:record", &length);
@@ -708,6 +715,7 @@ Status ColumnModePartialUpdateHandler::_spill_update_rows(
                                             .block = block,
                                             .offset = rec.offset,
                                             .length = rec.length,
+                                            .checksum = rec.checksum,
                                             .runs = std::move(rec.runs)});
                 const int64_t index_grown =
                         (inserted ? static_cast<int64_t>(sizeof(decltype(_spill.records)::value_type) +
@@ -912,6 +920,10 @@ Status ColumnModePartialUpdateHandler::_update_source_chunk_from_spill(uint32_t 
     // files stay apart: a later file must overwrite an earlier one.
     ChunkUniquePtr upt_chunk;
     std::vector<uint32_t> source_rowids; // row i of upt_chunk updates this row of the container
+    // `source_rowids` is cleared after every update file and keeps the capacity of the largest one,
+    // so its capacity is charged apart from the rows, for as long as the vector lives.
+    int64_t source_rowids_bytes = 0;
+    DeferOp release_source_rowids([&]() { _tracker->release(source_rowids_bytes); });
     int64_t upt_bytes = 0;
     DeferOp release_upt([&]() { _tracker->release(upt_bytes); });
     uint32_t pending_upt_id = 0;
@@ -989,6 +1001,9 @@ Status ColumnModePartialUpdateHandler::_update_source_chunk_from_spill(uint32_t 
         ASSIGN_OR_RETURN(auto readable, rec.block->get_readable());
         RETURN_IF_ERROR(readable->skip(rec.offset));
         RETURN_IF_ERROR(readable->read_fully(payload.data(), length));
+        TEST_SYNC_POINT_CALLBACK("ColumnModePartialUpdateHandler::_update_source_chunk_from_spill:payload", &payload);
+        RETURN_ERROR_IF_FALSE(crc32c::Value(payload.data(), length) == rec.checksum,
+                              "column-mode partial update spill record checksum mismatch");
         RETURN_IF_ERROR(crypt_spill_record(_spill.key, rec.seq, false, payload.data(), length));
         const auto* cur = reinterpret_cast<const uint8_t*>(payload.data());
         const auto* end = cur + length;
@@ -1043,6 +1058,12 @@ Status ColumnModePartialUpdateHandler::_update_source_chunk_from_spill(uint32_t 
                 _tracker->consume(grown);
                 selected_bytes += grown;
             }
+            if (const int64_t grown =
+                        static_cast<int64_t>(source_rowids.capacity() * sizeof(uint32_t)) - source_rowids_bytes;
+                grown > 0) {
+                _tracker->consume(grown);
+                source_rowids_bytes += grown;
+            }
             if (selected.empty()) {
                 continue;
             }
@@ -1053,8 +1074,7 @@ Status ColumnModePartialUpdateHandler::_update_source_chunk_from_spill(uint32_t 
             TRY_CATCH_BAD_ALLOC(upt_chunk->append_selective(*rec_chunk, selected.data(), 0, selected.size()));
             RETURN_IF_ERROR(ChunkHelper::reject_if_over_capacity(*upt_chunk, "column mode partial update spill rows",
                                                                  _rowset_ptr->tablet_id(), _txn_id));
-            const int64_t bytes = static_cast<int64_t>(upt_chunk->bytes_usage(from, selected.size())) +
-                                  static_cast<int64_t>(selected.size() * sizeof(uint32_t));
+            const int64_t bytes = static_cast<int64_t>(upt_chunk->bytes_usage(from, selected.size()));
             _tracker->consume(bytes);
             upt_bytes += bytes;
         }

@@ -901,6 +901,19 @@ TEST_P(LakePartialUpdateTest, test_column_mode_spills_update_rows) {
             }
         }
         SyncPoint::GetInstance()->ClearCallBack("ColumnModePartialUpdateHandler::_update_source_chunk_from_spill:read");
+        // A record that comes back with one bit changed still decodes to the same number of rows.
+        // Its checksum does not match, so it is not applied and the range is re-read as well.
+        SyncPoint::GetInstance()->SetCallBack("ColumnModePartialUpdateHandler::_update_source_chunk_from_spill:payload",
+                                              [&](void* arg) {
+                                                  auto* payload = static_cast<std::string*>(arg);
+                                                  (*payload)[payload->size() / 2] ^= 0x01;
+                                              });
+        read_fallbacks = 0;
+        run_update(80);
+        EXPECT_EQ(kSourceSegments, upt_reads.load());
+        EXPECT_GT(read_fallbacks.load(), 0);
+        SyncPoint::GetInstance()->ClearCallBack(
+                "ColumnModePartialUpdateHandler::_update_source_chunk_from_spill:payload");
         SyncPoint::GetInstance()->ClearCallBack("ColumnModePartialUpdateHandler::execute:spill_read_fallback");
     }
     // A record lands on disk as it was serialized, unless transparent data encryption is on: then
