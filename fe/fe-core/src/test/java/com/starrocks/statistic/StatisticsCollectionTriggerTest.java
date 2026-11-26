@@ -21,6 +21,8 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DmlType;
 import com.starrocks.server.GlobalStateMgr;
@@ -39,10 +41,21 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+<<<<<<< HEAD
+=======
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
+import org.mockito.Mockito;
+>>>>>>> e26cc71 ([BugFix] Protect first-load statistics row counts with table locks (#82917))
 
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class StatisticsCollectionTriggerTest extends PlanTestBase {
 
@@ -287,6 +300,114 @@ public class StatisticsCollectionTriggerTest extends PlanTestBase {
         StatisticsCollectionTrigger trigger = StatisticsCollectionTrigger.triggerOnFirstLoad(
                 transactionState, db, table, true, true, DmlType.INSERT_INTO);
         Assertions.assertNull(trigger.getAnalyzeType());
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = DmlType.class, names = {"INSERT_INTO", "UPDATE"})
+    public void triggerOnLoadProtectsRowCountsButDoesNotLockCollection(DmlType dmlType) throws Exception {
+        final String dbName = "test_statistics";
+        final String tableName = dmlType == DmlType.INSERT_INTO ? "t_insert_row_count_lock" : "t_update_row_count_lock";
+        starRocksAssert.withDatabase(dbName).useDatabase(dbName);
+        createPartitionedTable(tableName, "");
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+        OlapTable table = Mockito.spy((OlapTable) db.getTable(tableName));
+        Partition partition = Mockito.spy(table.getPartition("p1"));
+        long partitionId = partition.getId();
+        Mockito.doReturn(Optional.of(partition)).when(table).mayGetPartition(partitionId);
+        if (dmlType == DmlType.INSERT_INTO) {
+            // INSERT must protect the partition read even when table statistics are already available.
+            BasicStatsMeta statsMeta = new BasicStatsMeta(db.getId(), table.getId(), List.of(),
+                    StatsConstants.AnalyzeType.SAMPLE, LocalDateTime.now(), Map.of(), 1_000_000_000L);
+            GlobalStateMgr.getCurrentState().getAnalyzeMgr().getBasicStatsMetaMap().put(table.getId(), statsMeta);
+        } else {
+            // UPDATE falls back to the same partition read when no table statistics exist.
+            GlobalStateMgr.getCurrentState().getAnalyzeMgr().getBasicStatsMetaMap().remove(table.getId());
+        }
+
+        ExecutorService writer = Executors.newSingleThreadExecutor();
+        try {
+            Mockito.doAnswer(invocation -> {
+                // Wait for an actual competing writer while getRowCount is still on the reader's stack.
+                // A bounded lock attempt makes this deterministic without scheduling sleeps.
+                Assertions.assertFalse(writer.submit(() -> tryTableWriteLock(db, table))
+                        .get(5, TimeUnit.SECONDS), "a writer must not enter while partition row counts are read");
+                return 1000L;
+            }).when(partition).getRowCount();
+
+            AtomicBoolean collectionCanWrite = new AtomicBoolean();
+            new MockUp<StatisticExecutor>() {
+                @Mock
+                public AnalyzeStatus collectStatistics(ConnectContext context, StatisticsCollectJob job,
+                                                        AnalyzeStatus status, boolean refreshAsync,
+                                                        boolean resetWarehouse) {
+                    // This runs on the real analyze worker while the triggering thread waits for it.
+                    collectionCanWrite.set(tryTableWriteLock(db, table));
+                    return status;
+                }
+            };
+
+            TransactionState transactionState = firstLoadTransaction(table, partition);
+            StatisticsCollectionTrigger trigger = StatisticsCollectionTrigger.triggerOnFirstLoad(
+                    transactionState, db, table, true, true, dmlType);
+
+            Assertions.assertEquals(StatsConstants.AnalyzeType.FULL, trigger.getAnalyzeType());
+            Mockito.verify(partition).getRowCount();
+            Assertions.assertTrue(collectionCanWrite.get(),
+                    "the table lock must be released before collection runs and the trigger waits for completion");
+        } finally {
+            writer.shutdownNow();
+            Assertions.assertTrue(writer.awaitTermination(5, TimeUnit.SECONDS));
+        }
+    }
+
+    @Test
+    public void triggerOnLoadReleasesTableLockWhenReadingRowsFails() throws Exception {
+        final String dbName = "test_statistics";
+        final String tableName = "t_load_row_count_failure";
+        starRocksAssert.withDatabase(dbName).useDatabase(dbName);
+        createPartitionedTable(tableName, "");
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+        OlapTable table = Mockito.spy((OlapTable) db.getTable(tableName));
+        Partition partition = Mockito.spy(table.getPartition("p1"));
+        long partitionId = partition.getId();
+        Mockito.doReturn(Optional.of(partition)).when(table).mayGetPartition(partitionId);
+        IllegalStateException failure = new IllegalStateException("failed to read partition rows");
+        Mockito.doThrow(failure).when(partition).getRowCount();
+
+        Assertions.assertSame(failure, Assertions.assertThrows(IllegalStateException.class, () ->
+                StatisticsCollectionTrigger.triggerOnFirstLoad(
+                        firstLoadTransaction(table, partition), db, table, true, true, DmlType.INSERT_INTO)));
+
+        ExecutorService writer = Executors.newSingleThreadExecutor();
+        try {
+            Assertions.assertTrue(writer.submit(() -> tryTableWriteLock(db, table)).get(5, TimeUnit.SECONDS),
+                    "a failed partition read must release the table lock");
+        } finally {
+            writer.shutdownNow();
+            Assertions.assertTrue(writer.awaitTermination(5, TimeUnit.SECONDS));
+        }
+    }
+
+    private TransactionState firstLoadTransaction(OlapTable table, Partition partition) {
+        TransactionState transactionState = new TransactionState();
+        TableCommitInfo commitInfo = new TableCommitInfo(table.getId());
+        commitInfo.addPartitionCommitInfo(new PartitionCommitInfo(
+                partition.getDefaultPhysicalPartition().getId(), Partition.PARTITION_INIT_VERSION + 1, 1));
+        transactionState.putIdToTableCommitInfo(table.getId(), commitInfo);
+        transactionState.setTxnCommitAttachment(new InsertTxnCommitAttachment(1000));
+        return transactionState;
+    }
+
+    private boolean tryTableWriteLock(Database db, Table table) {
+        Locker locker = new Locker();
+        boolean acquired = locker.tryLockTableWithIntensiveDbLock(
+                db.getId(), table.getId(), LockType.WRITE, 100, TimeUnit.MILLISECONDS);
+        if (acquired) {
+            locker.unLockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.WRITE);
+        }
+        return acquired;
     }
 
     @Test
