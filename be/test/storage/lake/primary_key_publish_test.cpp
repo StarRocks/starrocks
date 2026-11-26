@@ -248,6 +248,13 @@ public:
         EXPECT_TRUE(_primary_key_mgr->try_remove_primary_index_cache(tablet_id));
     }
 
+    // publish_single_version wraps a failed publish in an InternalError, so match the text of the
+    // Cancelled status that PrimaryKeyManager::is_missing_rssid_error checks in publish_version.
+    static bool failed_on_missing_rssid(const Status& st) {
+        return st.message().find("rowset_segment_id") != std::string_view::npos &&
+               st.message().find("no exist") != std::string_view::npos;
+    }
+
     // Leaves the tablet with one compacted rowset that holds keys [kChunkSize, 2 * kChunkSize), after
     // deleting keys [0, kChunkSize) in a load whose deletes did not reach an index sstable.
     void prepare_deletes_removed_by_compaction(int64_t tablet_id, int64_t* version) {
@@ -5040,7 +5047,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_stale_index_wedges_condition_update) {
     for (int attempt = 0; attempt < 2; attempt++) {
         auto res = publish_single_version(tablet_id, version + 1, txn_id);
         ASSERT_FALSE(res.ok());
-        EXPECT_TRUE(PrimaryKeyManager::is_missing_rssid_error(res.status())) << res.status();
+        EXPECT_TRUE(failed_on_missing_rssid(res.status())) << res.status();
     }
     EXPECT_EQ(rebuilds_before, StorageMetrics::instance()->primary_key_index_auto_rebuild_total.value());
     // What ALTER TABLE ... DROP PERSISTENT INDEX ON TABLETS does.
@@ -5065,7 +5072,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_auto_rebuild_index_on_missing_rssid) {
     // The first attempt fails and asks for a rebuild, the retry rebuilds the index and goes through.
     auto res = publish_single_version(tablet_id, version + 1, txn_id);
     ASSERT_FALSE(res.ok());
-    EXPECT_TRUE(PrimaryKeyManager::is_missing_rssid_error(res.status())) << res.status();
+    EXPECT_TRUE(failed_on_missing_rssid(res.status())) << res.status();
     ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
     version++;
     EXPECT_EQ(rebuilds_before + 1, StorageMetrics::instance()->primary_key_index_auto_rebuild_total.value());
