@@ -142,13 +142,15 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
                 .map(TvrTableSnapshotInfo::getTvrSnapshot)
                 .allMatch(TvrVersionRange::isEmpty);
         if (isTaskRunSkipped) {
-<<<<<<< HEAD
             if (mvRefreshParams.isNonTentativeForce()) {
                 logger.info("No base table has changed, but force refresh is requested, " +
                         "proceed with refresh for materialized view: {}", mv.getName());
             } else {
                 logger.info("No base table has changed, skip the refresh for materialized view: {}",
                         mv.getName());
+                if (!mvContext.isExplain()) {
+                    recordVersionsLeftUnrecorded();
+                }
                 // No base-table change means the MV is confirmed fresh as of this run's start.
                 confirmFreshness();
                 // Every delta here is a point range (from == to): the window records that the
@@ -157,19 +159,6 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
                 // IVM rejects partial refresh above, so the whole MV is fresh, not just a range.
                 return ProcessExecPlan.skipped(ProcessExecPlan.SkipReason.MV_UP_TO_DATE);
             }
-=======
-            logger.info("No base table has changed, skip the refresh for materialized view: {}", mv.getName());
-            if (!mvContext.isExplain()) {
-                recordVersionsLeftUnrecorded();
-            }
-            // No base-table change means the MV is confirmed fresh as of this run's start.
-            confirmFreshness();
-            // Every delta here is a point range (from == to): the window records that the
-            // bookmark had caught up with the base table head.
-            recordImvSourceRangesOnTaskRun();
-            // IVM rejects partial refresh above, so the whole MV is fresh, not just a range.
-            return ProcessExecPlan.skipped(ProcessExecPlan.SkipReason.MV_UP_TO_DATE);
->>>>>>> 666aab6 ([BugFix] Record IVM refresh versions only once the write is visible (#83971))
         }
 
         try (Timer ignored = Tracers.watchScope("MVRefreshCheckMVToRefreshPartitions")) {
