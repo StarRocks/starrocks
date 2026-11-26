@@ -27,18 +27,23 @@ products: [oss]
 
 | Spark connector | Spark              | StarRocks      | Java | Scala |
 | --------------- | ------------------ | -------------- | ---- | ----- |
+| 1.1.5           | 4.0, 4.1           | 2.5 and later  | 17   | 2.13  |
+| 1.1.5           | 3.3, 3.4, 3.5      | 2.5 and later  | 8    | 2.12  |
 | 1.1.4           | 4.0, 4.1           | 2.5 and later  | 17   | 2.13  |
 | 1.1.4           | 3.3, 3.4, 3.5      | 2.5 and later  | 8    | 2.12  |
 | 1.1.3           | 3.2, 3.3, 3.4, 3.5 | 2.5 and later  | 8    | 2.12  |
-| 1.1.2           | 3.2, 3.3, 3.4, 3.5 | 2.5 and later  | 8    | 2.12  |
-| 1.1.1           | 3.2, 3.3, or 3.4   | 2.5 and later  | 8    | 2.12  |
-| 1.1.0           | 3.2, 3.3, or 3.4   | 2.5 and later  | 8    | 2.12  |
-| 1.0.0           | 3.x                | 1.18 and later | 8    | 2.12  |
-| 1.0.0           | 2.x                | 1.18 and later | 8    | 2.11  |
 
 ## Release notes
 
 ### 1.1
+
+#### 1.1.5
+
+This release mainly includes an improvement for reading data from StarRocks.
+
+**Improvements**
+
+- Added the `starrocks.request.warehouse` parameter to choose the warehouse that serves reads on a shared-data cluster. [#172](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/172)
 
 #### 1.1.4
 
