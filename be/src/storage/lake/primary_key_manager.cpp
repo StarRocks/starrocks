@@ -440,10 +440,26 @@ bool PrimaryKeyManager::take_pk_index_rebuild_request(int64_t tablet_id, int64_t
         return false;
     }
     _pk_index_auto_rebuilt[tablet_id] = base_version;
-    StorageMetrics::instance()->primary_key_index_auto_rebuild_total.increment(1);
     LOG(WARNING) << "Rebuilding PK index of tablet " << tablet_id << " from base version " << base_version
                  << " because a publish read a missing segment";
     return true;
+}
+
+void PrimaryKeyManager::end_pk_index_rebuild(int64_t tablet_id, int64_t base_version, const Status& publish_st) {
+    // Only a publish that commits, or that rebuilt the index and still read a missing segment, tells whether
+    // the rebuild helped. Any other failure leaves the stale index in storage, so the retry rebuilds again.
+    if (!publish_st.ok() && !is_missing_rssid_error(publish_st)) {
+        std::lock_guard<std::mutex> lg(_pk_index_rebuild_mutex);
+        auto it = _pk_index_auto_rebuilt.find(tablet_id);
+        if (it != _pk_index_auto_rebuilt.end() && it->second == base_version) {
+            _pk_index_auto_rebuilt.erase(it);
+        }
+        _pk_index_rebuild_requests.insert_or_assign(tablet_id, base_version);
+        LOG(WARNING) << "Publish that rebuilt the PK index of tablet " << tablet_id << " from base version "
+                     << base_version << " failed: " << publish_st << ", the next publish rebuilds it again";
+        return;
+    }
+    StorageMetrics::instance()->primary_key_index_auto_rebuild_total.increment(1);
 }
 
 // Plan for interleaving del files with segments during a primary-key publish. Per del file:

@@ -294,6 +294,10 @@ public:
     // Returns true once for a rebuild requested at `base_version`.
     bool take_pk_index_rebuild_request(int64_t tablet_id, int64_t base_version);
 
+    // Called with the result of the publish that took a rebuild request. A publish that failed for another
+    // reason than a missing rssid does not count as a rebuild: the request is restored for the next publish.
+    void end_pk_index_rebuild(int64_t tablet_id, int64_t base_version, const Status& publish_st);
+
     DynamicCache<uint64_t, LakePersistentIndex>& index_cache() { return _index_cache; }
 
     void lock_shard_pk_index_shard(int64_t tablet_id) { _get_pk_index_shard_lock(tablet_id).lock_shared(); }

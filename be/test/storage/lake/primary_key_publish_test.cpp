@@ -5103,11 +5103,38 @@ TEST_P(LakePrimaryKeyPublishTest, test_pk_index_rebuild_request_runs_once_per_ba
     EXPECT_TRUE(_primary_key_mgr->take_pk_index_rebuild_request(tablet_id, 5));
     EXPECT_FALSE(_primary_key_mgr->take_pk_index_rebuild_request(tablet_id, 5));
     // After a rebuild from base version 5 did not help, do not rebuild from 5 again.
+    const int64_t rebuilds_before = StorageMetrics::instance()->primary_key_index_auto_rebuild_total.value();
+    const Status missing_rssid = Status::Cancelled("tablet id 1 version 5 rowset_segment_id 3 no exist");
+    ASSERT_TRUE(PrimaryKeyManager::is_missing_rssid_error(missing_rssid));
+    _primary_key_mgr->end_pk_index_rebuild(tablet_id, 5, missing_rssid);
+    EXPECT_EQ(rebuilds_before + 1, StorageMetrics::instance()->primary_key_index_auto_rebuild_total.value());
     EXPECT_FALSE(_primary_key_mgr->request_pk_index_rebuild(tablet_id, 5));
     EXPECT_FALSE(_primary_key_mgr->take_pk_index_rebuild_request(tablet_id, 5));
     // A later base version may rebuild again.
     EXPECT_TRUE(_primary_key_mgr->request_pk_index_rebuild(tablet_id, 6));
     EXPECT_TRUE(_primary_key_mgr->take_pk_index_rebuild_request(tablet_id, 6));
+    _primary_key_mgr->end_pk_index_rebuild(tablet_id, 6, Status::OK());
+    EXPECT_EQ(rebuilds_before + 2, StorageMetrics::instance()->primary_key_index_auto_rebuild_total.value());
+}
+
+// A publish that took the rebuild request and failed for an unrelated reason did not show whether the
+// rebuild helps, so the next publish from the same base version rebuilds again.
+TEST_P(LakePrimaryKeyPublishTest, test_pk_index_rebuild_request_restored_after_failed_publish) {
+    const int64_t tablet_id = next_id();
+    const int64_t rebuilds_before = StorageMetrics::instance()->primary_key_index_auto_rebuild_total.value();
+    EXPECT_TRUE(_primary_key_mgr->request_pk_index_rebuild(tablet_id, 5));
+    EXPECT_TRUE(_primary_key_mgr->take_pk_index_rebuild_request(tablet_id, 5));
+    _primary_key_mgr->end_pk_index_rebuild(tablet_id, 5, Status::IOError("injected object storage error"));
+    EXPECT_EQ(rebuilds_before, StorageMetrics::instance()->primary_key_index_auto_rebuild_total.value());
+    // The retry takes the restored request without a new missing rssid error.
+    EXPECT_TRUE(_primary_key_mgr->take_pk_index_rebuild_request(tablet_id, 5));
+    const Status missing_rssid = Status::Cancelled("tablet id 1 version 5 rowset_segment_id 3 no exist");
+    ASSERT_TRUE(PrimaryKeyManager::is_missing_rssid_error(missing_rssid));
+    _primary_key_mgr->end_pk_index_rebuild(tablet_id, 5, missing_rssid);
+    EXPECT_EQ(rebuilds_before + 1, StorageMetrics::instance()->primary_key_index_auto_rebuild_total.value());
+    // That rebuild completed and still read a missing segment: no more rebuilds from base version 5.
+    EXPECT_FALSE(_primary_key_mgr->request_pk_index_rebuild(tablet_id, 5));
+    EXPECT_FALSE(_primary_key_mgr->take_pk_index_rebuild_request(tablet_id, 5));
 }
 
 INSTANTIATE_TEST_SUITE_P(LakePrimaryKeyPublishTest, LakePrimaryKeyPublishTest,
