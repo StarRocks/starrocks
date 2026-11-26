@@ -41,30 +41,16 @@ void Pipeline::on_driver_finished(RuntimeState* state) {
 }
 
 void Pipeline::clear_drivers() {
-    _drivers_ready.store(false, std::memory_order_release);
+    _drivers_prepared.store(false, std::memory_order_release);
     _drivers.clear();
 }
 
 const Drivers& Pipeline::drivers() const {
-    static const Drivers kEmptyDrivers;
-    if (!_drivers_ready.load(std::memory_order_acquire)) {
-        return kEmptyDrivers;
-    }
     return _drivers;
 }
 
 Drivers& Pipeline::mutable_drivers() {
     return _drivers;
-}
-
-void Pipeline::publish_drivers(RuntimeState* runtime_state) {
-    if (_drivers_ready.load(std::memory_order_acquire)) {
-        return;
-    }
-    if (runtime_state != nullptr) {
-        setup_pipeline_profile(runtime_state);
-    }
-    _drivers_ready.store(true, std::memory_order_release);
 }
 
 void Pipeline::setup_pipeline_profile(RuntimeState* runtime_state) {

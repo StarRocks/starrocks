@@ -242,6 +242,9 @@ void FragmentContext::report_exec_state_if_necessary() {
     if (_fragment_runtime_state._last_report_exec_state_ns.compare_exchange_strong(last_report_ns,
                                                                                    normalized_report_ns)) {
         iterate_pipeline([](const Pipeline* pipeline) {
+            if (!pipeline->is_drivers_prepared()) {
+                return;
+            }
             for (const auto& driver : pipeline->drivers()) {
                 driver->runtime_report_action();
             }
@@ -414,6 +417,9 @@ Status FragmentContext::iterate_pipeline(const std::function<Status(Pipeline*)>&
 
 void FragmentContext::iterate_drivers(const std::function<void(const DriverPtr&)>& call) {
     iterate_pipeline([&](const Pipeline* pipeline) {
+        if (!pipeline->is_drivers_prepared()) {
+            return;
+        }
         for (const auto& driver : pipeline->drivers()) {
             call(driver);
         }
@@ -475,10 +481,9 @@ Status FragmentContext::prepare_active_drivers() {
         }
     }
 
-    iterate_pipeline([this](Pipeline* pipeline) {
-        if (!pipeline->mutable_drivers().empty() &&
-            pipeline->source_operator_factory()->is_adaptive_group_initial_active()) {
-            pipeline->publish_drivers(_runtime_state.get());
+    iterate_pipeline([](Pipeline* pipeline) {
+        if (!pipeline->drivers().empty() && pipeline->source_operator_factory()->is_adaptive_group_initial_active()) {
+            pipeline->set_drivers_prepared(true);
         }
     });
 

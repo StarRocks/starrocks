@@ -360,19 +360,19 @@ TEST(FragmentContextExecRuntimeTest, ReportExecStateSkipsUnpublishedAdaptivePipe
     fragment_ctx.set_pipelines({exec_group}, {p0, p1});
 
     ASSERT_OK(fragment_ctx.prepare_all_pipelines());
+    p0->setup_pipeline_profile(state);
     instantiate_test_drivers(&fragment_ctx, &query_runtime_state, p0.get());
     ASSERT_OK(fragment_ctx.prepare_active_drivers());
 
-    EXPECT_TRUE(p0->drivers_ready());
-    EXPECT_FALSE(p1->drivers_ready());
+    EXPECT_TRUE(p0->is_drivers_prepared());
+    EXPECT_FALSE(p1->is_drivers_prepared());
 
-    // Simulate adaptive DOP instantiating drivers for p1 before prepare/prepare_local_state/publish_drivers complete.
+    // Simulate adaptive DOP instantiating drivers for p1 before prepare/prepare_local_state finish.
     instantiate_test_drivers(&fragment_ctx, &query_runtime_state, p1.get());
-    ASSERT_TRUE(p1->drivers().empty());
-    ASSERT_EQ(2, p1->mutable_drivers().size());
-    ASSERT_FALSE(p1->mutable_drivers()[0]->local_prepare_is_done());
+    ASSERT_EQ(2, p1->drivers().size());
+    ASSERT_FALSE(p1->drivers()[0]->local_prepare_is_done());
 
-    // Reporting and driver iteration must skip unpublished p1 without crashing or blocking p0's report.
+    // Reporting and driver iteration must skip unprepared p1 without crashing or blocking p0's report.
     fragment_ctx.report_exec_state_if_necessary();
     ASSERT_NE(nullptr, recording_executor);
     EXPECT_EQ(1, recording_executor->report_exec_state_count.load());
@@ -386,13 +386,14 @@ TEST(FragmentContextExecRuntimeTest, ReportExecStateSkipsUnpublishedAdaptivePipe
     EXPECT_NE(nullptr, state->runtime_profile()->get_child("Pipeline (id=0)"));
     EXPECT_EQ(nullptr, state->runtime_profile()->get_child("Pipeline (id=1)"));
 
-    // Once p1 finishes prepare + prepare_local_state and publishes, it becomes visible to reporting and iteration.
-    for (const auto& driver : p1->mutable_drivers()) {
+    // Once p1 finishes prepare + prepare_local_state and marks prepared, it becomes visible to reporting and iteration.
+    for (const auto& driver : p1->drivers()) {
         ASSERT_OK(driver->prepare(state));
         ASSERT_OK(driver->prepare_local_state(state));
     }
-    p1->publish_drivers(state);
-    EXPECT_TRUE(p1->drivers_ready());
+    p1->setup_pipeline_profile(state);
+    p1->set_drivers_prepared(true);
+    EXPECT_TRUE(p1->is_drivers_prepared());
     EXPECT_EQ(2, p1->drivers().size());
 
     fragment_ctx.report_exec_state_if_necessary();
@@ -479,11 +480,12 @@ TEST(FragmentContextExecRuntimeTest, ConcurrentAdaptivePublishAndProfileReport) 
         });
 
         instantiate_test_drivers(&fragment_ctx, &query_runtime_state, p1.get());
-        for (const auto& driver : p1->mutable_drivers()) {
+        for (const auto& driver : p1->drivers()) {
             ASSERT_OK(driver->prepare(state));
             ASSERT_OK(driver->prepare_local_state(state));
         }
-        p1->publish_drivers(state);
+        p1->setup_pipeline_profile(state);
+        p1->set_drivers_prepared(true);
 
         // Let the concurrent reporter observe the published pipeline at least once.
         fragment_ctx.report_exec_state_if_necessary();

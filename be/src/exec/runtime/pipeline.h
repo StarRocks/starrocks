@@ -48,8 +48,8 @@ public:
     }
     const Drivers& drivers() const;
     Drivers& mutable_drivers();
-    bool drivers_ready() const { return _drivers_ready.load(std::memory_order_acquire); }
-    void publish_drivers(RuntimeState* runtime_state);
+    bool is_drivers_prepared() const { return _drivers_prepared.load(std::memory_order_acquire); }
+    void set_drivers_prepared(bool prepared) { _drivers_prepared.store(prepared, std::memory_order_release); }
     void on_driver_finished(RuntimeState* state) override;
     void clear_drivers();
 
@@ -111,7 +111,7 @@ private:
     std::shared_ptr<RuntimeProfile> _runtime_profile = nullptr;
     OpFactories _op_factories;
     Drivers _drivers;
-    std::atomic<bool> _drivers_ready{false};
+    std::atomic<bool> _drivers_prepared{false};
     std::atomic<size_t> _num_finished_drivers = 0;
 
     EventPtr _pipeline_event;

@@ -263,11 +263,11 @@ void PipeLineFileScanNodeTest::prepare_pipeline() {
 
 void PipeLineFileScanNodeTest::execute_pipeline() {
     _fragment_ctx->iterate_pipeline([state = _fragment_ctx->runtime_state()](Pipeline* pipeline) {
-        for (const auto& driver : pipeline->mutable_drivers()) {
+        for (const auto& driver : pipeline->drivers()) {
             CHECK_OK(driver->prepare(state));
             CHECK_OK(driver->prepare_local_state(state));
         }
-        pipeline->publish_drivers(state);
+        pipeline->set_drivers_prepared(true);
     });
 
     _fragment_ctx->iterate_drivers([exec_env = _exec_env](const DriverPtr& driver) {

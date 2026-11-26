@@ -158,7 +158,6 @@ void add_drivers(Pipeline* pipeline, size_t dop) {
         pipeline->mutable_drivers().emplace_back(std::make_shared<PipelineDriver>(
                 operators, nullptr, nullptr, pipeline->pipeline_event(), pipeline, nullptr, i));
     }
-    pipeline->publish_drivers(nullptr);
 }
 
 } // namespace
