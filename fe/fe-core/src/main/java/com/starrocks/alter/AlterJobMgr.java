@@ -415,8 +415,15 @@ public class AlterJobMgr {
      */
     public void rebuildRelationshipForActivate(
             MaterializedView materializedView, AlterMaterializedViewStatusContext context) {
-        materializedView.setBaseTableInfos(context.baseTableInfos());
-        materializedView.fixRelationship();
+        if (MvUtils.isSameBaseTables(materializedView.getBaseTableInfos(), context.baseTableInfos())) {
+            materializedView.setBaseTableInfos(context.baseTableInfos());
+            materializedView.fixRelationship();
+        } else {
+            // The defined query reads other base tables than the mv tracks, e.g. because a connector view was
+            // redefined while the mv was inactive. Adopt them the way a refresh does, which also makes the mv
+            // stale: its data still reflects the old ones, see MVPCTRefreshProcessor#syncBaseTableInfosWithDefinedQuery.
+            materializedView.replaceBaseTableInfos(context.baseTableInfos());
+        }
     }
 
     /**

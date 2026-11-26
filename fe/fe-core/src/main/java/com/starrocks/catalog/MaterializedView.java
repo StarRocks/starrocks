@@ -1970,7 +1970,13 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
      * <p>NOTE: caller need to hold the mv write lock; the returned future does not.
      */
     public CompletableFuture<?> activateOnReplay(List<BaseTableInfo> journaledBaseTableInfos) {
-        this.baseTableInfos = journaledBaseTableInfos;
+        if (MvUtils.isSameBaseTables(ListUtils.emptyIfNull(baseTableInfos), journaledBaseTableInfos)) {
+            this.baseTableInfos = journaledBaseTableInfos;
+        } else {
+            // the leader's activation found the defined query reading other base tables, see
+            // AlterJobMgr#applyAlterMaterializedViewStatus; the relinking below covers the new ones
+            adoptRedefinedBaseTableInfos(journaledBaseTableInfos);
+        }
         if (GlobalStateMgr.isCheckpointThread()) {
             setActive();
             return CompletableFuture.completedFuture(null);
@@ -3418,10 +3424,21 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
      * NOTE: caller need to hold the mv's write lock
      */
     public void replaceBaseTableInfos(List<BaseTableInfo> newBaseTableInfos) {
-        Set<BaseTableInfo> kept = Sets.newHashSet(newBaseTableInfos);
+        adoptRedefinedBaseTableInfos(newBaseTableInfos);
+        fixRelationship();
+    }
+
+    /**
+     * {@link #replaceBaseTableInfos} without relinking the new base tables, which resolves them through their
+     * connectors. For a caller that relinks them itself, see #activateOnReplay.
+     */
+    private void adoptRedefinedBaseTableInfos(List<BaseTableInfo> newBaseTableInfos) {
+        // by name: an activation resolves the base tables again, and a connector hands out new ids for the same ones
+        Set<String> kept = newBaseTableInfos.stream()
+                .map(MvUtils::getBaseTableQualifiedName).collect(Collectors.toSet());
         MvId mvId = getMvId();
         for (BaseTableInfo oldBaseTableInfo : ListUtils.emptyIfNull(baseTableInfos)) {
-            if (!kept.contains(oldBaseTableInfo)) {
+            if (!kept.contains(MvUtils.getBaseTableQualifiedName(oldBaseTableInfo))) {
                 unlinkFromBaseTable(oldBaseTableInfo, mvId);
             }
         }
@@ -3433,7 +3450,6 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         setBaseTableInfos(Lists.newArrayList(newBaseTableInfos));
         resetMetadataCache();
         CachingMvPlanContextBuilder.getInstance().evictMaterializedViewCache(this);
-        fixRelationship();
     }
 
     /**

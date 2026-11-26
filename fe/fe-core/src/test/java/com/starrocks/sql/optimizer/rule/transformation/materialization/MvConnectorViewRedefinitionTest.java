@@ -29,6 +29,7 @@ import com.starrocks.connector.MockedMetadataMgr;
 import com.starrocks.connector.hive.MockedHiveMetadata;
 import com.starrocks.journal.JournalEntity;
 import com.starrocks.persist.AlterMaterializedViewBaseTableInfosLog;
+import com.starrocks.persist.AlterMaterializedViewStatusLog;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.EditLogDeserializer;
 import com.starrocks.persist.OperationType;
@@ -38,6 +39,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.scheduler.MVTaskRunProcessor;
 import com.starrocks.scheduler.TaskRun;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AlterMaterializedViewStatusClause;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.ExecPlan;
@@ -447,6 +449,84 @@ class MvConnectorViewRedefinitionTest extends MVTestBase {
             starRocksAssert.dropTable("mv_view_table_2");
             starRocksAssert.dropTable("mv_view_table_1");
         }
+    }
+
+    /**
+     * An unpartitioned mv on a view reading table_1 UNION ALL table_2 is inactivated by the user, which keeps its
+     * version map. While it is inactive, the view drops the table_2 branch. Activating it must then drop table_2 the
+     * way a refresh does, see MaterializedView#replaceBaseTableInfos, and leave the mv stale although table_1 is
+     * unchanged, since it still holds table_2's rows.
+     */
+    @Test
+    void activationAfterViewDropsAUnionBranchRebuildsTheMv() throws Exception {
+        String mvName = "table_view_activated_dropped_branch_mv";
+        createViewBaseTables("");
+        try {
+            MaterializedView mv = createInactiveMvOnRedefinedTableViewUnion(mvName);
+            cluster.runSql("test", "ALTER MATERIALIZED VIEW " + mvName + " ACTIVE");
+            assertTrue(mv.isActive(), mv.getInactiveReason());
+            assertAdoptedTable1AsStale(mv);
+            PlanTestBase.assertNotContains(getFragmentPlan(TABLE_1_SQL), "TABLE: " + mvName);
+
+            TaskRun refreshTask = buildMVTaskRun(mv, "test");
+            ExecPlan refreshPlan = getMVRefreshExecPlan(refreshTask);
+            assertNotNull(refreshPlan, "refresh was skipped although the mv still holds the old union's data");
+            PlanTestBase.assertNotContains(refreshPlan.getExplainString(TExplainLevel.NORMAL),
+                    "TABLE: mv_view_table_2");
+        } finally {
+            tableViewSql = TABLE_1_SQL;
+            dropMv("test", mvName);
+            starRocksAssert.dropTable("mv_view_table_2");
+            starRocksAssert.dropTable("mv_view_table_1");
+        }
+    }
+
+    /** Same as {@link #activationAfterViewDropsAUnionBranchRebuildsTheMv}, replaying the leader's activation. */
+    @Test
+    void replayedActivationAfterViewDropsAUnionBranchKeepsTheMvStale() throws Exception {
+        String mvName = "table_view_replayed_activation_mv";
+        createViewBaseTables("");
+        try {
+            MaterializedView mv = createInactiveMvOnRedefinedTableViewUnion(mvName);
+            AlterMaterializedViewStatusLog activation = new AlterMaterializedViewStatusLog(mv.getDbId(), mv.getId(),
+                    AlterMaterializedViewStatusClause.ACTIVE, "");
+            activation.setBaseTableInfos(mv.getBaseTableInfos().stream()
+                    .filter(info -> !"mv_view_table_2".equalsIgnoreCase(info.getTableName()))
+                    .collect(Collectors.toList()));
+            GlobalStateMgr.getCurrentState().getEditLog().loadJournal(GlobalStateMgr.getCurrentState(),
+                    new JournalEntity(OperationType.OP_ALTER_MATERIALIZED_VIEW_STATUS, activation));
+            assertAdoptedTable1AsStale(mv);
+        } finally {
+            tableViewSql = TABLE_1_SQL;
+            dropMv("test", mvName);
+            starRocksAssert.dropTable("mv_view_table_2");
+            starRocksAssert.dropTable("mv_view_table_1");
+        }
+    }
+
+    /** A refreshed mv on the view's union, inactivated by the user, after which the view keeps table_1 only. */
+    private MaterializedView createInactiveMvOnRedefinedTableViewUnion(String mvName) throws Exception {
+        tableViewSql = TABLE_1_SQL + " UNION ALL " + TABLE_2_SQL;
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW " + mvName + " " +
+                "DISTRIBUTED BY HASH(c_custkey) BUCKETS 1 REFRESH DEFERRED MANUAL " +
+                "PROPERTIES (\"replication_num\" = \"1\", \"query_rewrite_consistency\" = \"checked\") " +
+                "AS SELECT * FROM " + TABLE_VIEW);
+        refreshMaterializedView("test", mvName);
+        cluster.runSql("test", "ALTER MATERIALIZED VIEW " + mvName + " INACTIVE");
+        MaterializedView mv = getMv(mvName);
+        // the user's inactivation keeps the version map, unlike one caused by a base table change
+        assertTrue(mv.getRefreshScheme().getAsyncRefreshContext().getBaseTableVisibleVersionMap()
+                .containsKey(getTable("test", "mv_view_table_1").getId()));
+        tableViewSql = TABLE_1_SQL;
+        return mv;
+    }
+
+    private void assertAdoptedTable1AsStale(MaterializedView mv) {
+        assertEquals(List.of("customer_table_view", "mv_view_table_1"), mv.getBaseTableInfos().stream()
+                .map(BaseTableInfo::getTableName).sorted().collect(Collectors.toList()));
+        assertFalse(getTable("test", "mv_view_table_2").getRelatedMaterializedViews().contains(mv.getMvId()));
+        assertTrue(mv.getRefreshScheme().getAsyncRefreshContext().getBaseTableVisibleVersionMap().isEmpty());
+        assertEquals(0, mv.getLastRefreshTime());
     }
 
     private static final String PARTITION_REBINDING_UNSUPPORTED = "partition-expression rebinding is not supported";
