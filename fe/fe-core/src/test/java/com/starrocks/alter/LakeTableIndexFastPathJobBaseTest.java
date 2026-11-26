@@ -81,6 +81,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -94,6 +96,7 @@ import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -582,14 +585,54 @@ public class LakeTableIndexFastPathJobBaseTest {
         setField(finished, "watershedTxnId", 1003L);
         setField(finished, "commitVersionMap", new HashMap<>(commit));
 
-        try (MockedStatic<Utils> utilsStatic = Mockito.mockStatic(Utils.class)) {
+        // The reporting node: FE's heartbeat state says it is down, yet it has just sent the report.
+        ComputeNode reporter = new ComputeNode(5L, "cn-5", 9050);
+        reporter.setAlive(false);
+        GlobalStateMgr gsm = buildLockableGsm(null, null);
+        when(gsm.getNodeMgr().getClusterInfo().getBackendOrComputeNode(5L)).thenReturn(reporter);
+
+        try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class);
+                MockedStatic<Utils> utilsStatic = Mockito.mockStatic(Utils.class)) {
+            gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
             for (LakeTableAddIndexJob job : List.of(cancelled, forcedOut, running, finished)) {
                 job.handleFinishReportOfRemovedTask(11L, 5L);
             }
             // The abort goes to the node that sent the report, with no lookup.
-            utilsStatic.verify(() -> Utils.abortTxnWithCleanup(eq(List.of(11L)), eq(Map.of(11L, 5L)),
-                    argThat(txnInfo -> txnInfo.txnId == 1000L), any()), times(1));
-            utilsStatic.verify(() -> Utils.abortTxnWithCleanup(any(), any(), any(), any()), times(1));
+            utilsStatic.verify(() -> Utils.sendAbortTxnWithCleanup(same(reporter), eq(List.of(11L)),
+                    argThat(txnInfo -> txnInfo.txnId == 1000L)), times(1));
+            utilsStatic.verify(() -> Utils.sendAbortTxnWithCleanup(any(), any(), any()), times(1));
+            utilsStatic.verify(() -> Utils.abortTxnWithCleanup(any(), any(), any(), any()), never());
+        }
+    }
+
+    @Test
+    public void testHandleFinishReportOfRemovedTask_RunningJobDoesNotWaitForTheJobLock() throws Exception {
+        // After a leader change every task the previous leader sent reports to a job that no longer has it queued,
+        // while run() holds the job's monitor through the whole dispatch. Those reports must not wait for it.
+        LakeTableAddIndexJob running = newJob();
+        setField(running, "jobState", AlterJobV2.JobState.RUNNING);
+        setField(running, "watershedTxnId", 1002L);
+        CountDownLatch locked = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        Thread holder = new Thread(() -> {
+            synchronized (running) {
+                locked.countDown();
+                try {
+                    release.await();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            }
+        });
+        holder.start();
+        try {
+            assertTrue(locked.await(10, TimeUnit.SECONDS));
+            CompletableFuture<Void> report =
+                    CompletableFuture.runAsync(() -> running.handleFinishReportOfRemovedTask(11L, 5L));
+            report.get(10, TimeUnit.SECONDS);
+        } finally {
+            release.countDown();
+            holder.join();
         }
     }
 

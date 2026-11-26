@@ -217,7 +217,10 @@ public class Utils {
                 unplaced.add(tabletId);
             }
         }
-        if (!unplaced.isEmpty()) {
+        int skipped = 0;
+        // A failed batch ends a lookup and leaves the tablets of the batches after it out of the reply, so look those
+        // up again, for as long as a lookup returns any of them.
+        while (!unplaced.isEmpty()) {
             Map<Long, List<Long>> assigned = null;
             try {
                 assigned = GlobalStateMgr.getCurrentState().getWarehouseMgr()
@@ -226,37 +229,56 @@ public class Utils {
                 LOG.debug("fail to look up the nodes to abort txn {} on {} tablet(s)", txnInfo.txnId,
                         unplaced.size(), e);
             }
-            int skipped = 0;
+            if (assigned == null || assigned.isEmpty()) {
+                break;
+            }
+            List<Long> notReturned = new ArrayList<>();
             for (Long tabletId : unplaced) {
-                List<Long> nodeIds = assigned == null ? null : assigned.get(tabletId);
-                ComputeNode node = nodeIds == null ? null : nodeIds.stream()
+                List<Long> nodeIds = assigned.get(tabletId);
+                if (nodeIds == null) {
+                    notReturned.add(tabletId);
+                    continue;
+                }
+                ComputeNode node = nodeIds.stream()
                         .map(nodeId -> aliveNode(clusterInfo, nodeId))
                         .filter(Objects::nonNull)
                         .findFirst()
                         .orElse(null);
                 if (node == null) {
                     skipped++;
-                    continue;
+                } else {
+                    tabletsByNode.computeIfAbsent(node, k -> new ArrayList<>()).add(tabletId);
                 }
-                tabletsByNode.computeIfAbsent(node, k -> new ArrayList<>()).add(tabletId);
             }
-            if (skipped > 0) {
-                LOG.warn("skip aborting txn {} on {} of {} tablet(s): no alive compute node is assigned to them",
-                        txnInfo.txnId, skipped, tabletIds.size());
+            if (notReturned.size() == unplaced.size()) {
+                break;
             }
+            unplaced = notReturned;
+        }
+        skipped += unplaced.size();
+        if (skipped > 0) {
+            LOG.warn("skip aborting txn {} on {} of {} tablet(s): no alive compute node is assigned to them",
+                    txnInfo.txnId, skipped, tabletIds.size());
         }
         for (Map.Entry<ComputeNode, List<Long>> entry : tabletsByNode.entrySet()) {
-            ComputeNode node = entry.getKey();
-            AbortTxnRequest request = new AbortTxnRequest();
-            request.tabletIds = entry.getValue();
-            request.txnInfos = Lists.newArrayList(txnInfo);
-            request.skipCleanup = false;
-            try {
-                BrpcProxy.getLakeService(node.getHost(), node.getBrpcPort()).abortTxn(request);
-            } catch (Throwable e) {
-                LOG.warn("fail to send abort of txn {} for {} tablet(s) to node {}: {}", txnInfo.txnId,
-                        request.tabletIds.size(), node.getId(), e.getMessage());
-            }
+            sendAbortTxnWithCleanup(entry.getKey(), entry.getValue(), txnInfo);
+        }
+    }
+
+    /**
+     * Sends {@code node} one request to abort {@code txnInfo} on {@code tabletIds} with cleanup; the response is not
+     * awaited. See {@link #abortTxnWithCleanup}.
+     */
+    public static void sendAbortTxnWithCleanup(ComputeNode node, List<Long> tabletIds, TxnInfoPB txnInfo) {
+        AbortTxnRequest request = new AbortTxnRequest();
+        request.tabletIds = tabletIds;
+        request.txnInfos = Lists.newArrayList(txnInfo);
+        request.skipCleanup = false;
+        try {
+            BrpcProxy.getLakeService(node.getHost(), node.getBrpcPort()).abortTxn(request);
+        } catch (Throwable e) {
+            LOG.warn("fail to send abort of txn {} for {} tablet(s) to node {}: {}", txnInfo.txnId,
+                    tabletIds.size(), node.getId(), e.getMessage());
         }
     }
 

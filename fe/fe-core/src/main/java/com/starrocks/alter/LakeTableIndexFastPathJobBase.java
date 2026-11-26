@@ -153,6 +153,10 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
     // leader demotion. Holds the partition object so a pin can be released after its table left the catalog.
     private final transient Map<Long, RetainPin> retainPins = new ConcurrentHashMap<>();
 
+    // Set once cancelImpl has journaled CANCELLED on this FE. Volatile: finish reports read it on FE request threads
+    // without the job's monitor (handleFinishReportOfRemovedTask).
+    private transient volatile boolean cancelJournaled = false;
+
     private record RetainPin(PhysicalPartition partition, long version) {
     }
 
@@ -708,10 +712,13 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
             releaseRetainPins();
             persistStateChange(this, JobState.CANCELLED);
         }
+        cancelJournaled = true;
         // CANCELLED is in the journal now, so no leader will publish this txn. A task still running or queued on a
         // node writes its txn log after this abort looked for it; its finish report aborts that tablet again
         // (handleFinishReportOfRemovedTask).
-        abortTxnOnTablets(allTabletIds(), dispatchedNodeOfTablet());
+        if (txnAbortAllowed()) {
+            abortTxnOnTablets(allTabletIds(), dispatchedNodeOfTablet());
+        }
         LOG.info("index fast-path job {} cancelled (force={}): {}", jobId, force, errMsg);
         return true;
     }
@@ -720,36 +727,71 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
      * Handles the finish report that node {@code backendId} sent for one of this job's AlterReplicaTasks after the task
      * left AgentTaskQueue. A cancel removes every task from the queue, but a node may still be running or queueing
      * some of them: such a node writes the task's txn log and files after the abort sent at the cancel looked for
-     * them, so the report is when they can be reclaimed.
-     *
-     * <p>Synchronized like run() and cancel(), which write the state the decision reads. They hold the monitor of a
-     * cancelled job only briefly, since it is final.
+     * them, so the report is when they can be reclaimed. The abort goes to the node that sent the report, which needs
+     * no lookup and has just shown it is up, whatever its heartbeat state says.
      */
-    public synchronized void handleFinishReportOfRemovedTask(long tabletId, long backendId) {
-        abortTxnOnTablets(List.of(tabletId), Map.of(tabletId, backendId));
+    public void handleFinishReportOfRemovedTask(long tabletId, long backendId) {
+        // Most of these reports belong to a job that is not cancelled: after a leader change, every task the previous
+        // leader sent reports to a job that no longer has it queued. Return for them without the monitor, which run()
+        // holds through a whole dispatch. A cancel on this FE sets the volatile cancelJournaled; a job loaded already
+        // cancelled reads CANCELLED from jobState.
+        if (!cancelJournaled && jobState != JobState.CANCELLED) {
+            return;
+        }
+        TxnInfoPB txnInfo;
+        // Decide under the monitor that run() and cancel() hold while they write the state the decision reads.
+        synchronized (this) {
+            if (!txnAbortAllowed()) {
+                return;
+            }
+            txnInfo = abortTxnInfo();
+        }
+        try {
+            ComputeNode node = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
+                    .getBackendOrComputeNode(backendId);
+            if (node == null) {
+                LOG.warn("index fast-path job {} cannot abort txn {} on tablet {}: node {} is gone", jobId,
+                        watershedTxnId, tabletId, backendId);
+                return;
+            }
+            LOG.info("index fast-path job {} aborts txn {} on tablet {} reported by node {}", jobId, watershedTxnId,
+                    tabletId, backendId);
+            Utils.sendAbortTxnWithCleanup(node, List.of(tabletId), txnInfo);
+        } catch (Exception e) {
+            LOG.warn("index fast-path job {} fails to abort txn {} on tablet {}", jobId, watershedTxnId, tabletId, e);
+        }
     }
 
     /**
-     * Aborts this job's txn on {@code tabletIds}: BE deletes the txn log the tablet's AlterReplicaTask wrote under
-     * {@link #watershedTxnId} and the files it references, the .idx files of an ADD INDEX, which nothing else
-     * reclaims once the job is cancelled. Only for a cancelled job that never reserved its commit versions: a
+     * Whether this job's txn may be aborted with cleanup, which deletes the txn log the tablet's AlterReplicaTask
+     * wrote under {@link #watershedTxnId} and the files it references, the .idx files of an ADD INDEX, which nothing
+     * else reclaims once the job is cancelled. Only for a cancelled job that never reserved its commit versions: a
      * publish is sent only after they are reserved at the RUNNING -> FINISHED_REWRITING transition, and a job forced
      * out of FINISHED_REWRITING may already have published on some tablets, whose files the cleanup would delete
      * from under the published metadata.
-     *
-     * <p>{@code nodeOfTablet} names the node already known to have handled a tablet, so it needs no lookup.
+     */
+    private boolean txnAbortAllowed() {
+        boolean hasReservedVersion = commitVersionMap != null && !commitVersionMap.isEmpty();
+        return jobState == JobState.CANCELLED && !hasReservedVersion && watershedTxnId != -1;
+    }
+
+    /** The txn info this job's publish sends, so BE reads the same txn log a publish would. */
+    private TxnInfoPB abortTxnInfo() {
+        return TxnInfoHelper.forJobPublish(watershedTxnId, TxnTypePB.TXN_NORMAL, System.currentTimeMillis(),
+                commitGtid);
+    }
+
+    /**
+     * Aborts this job's txn on {@code tabletIds}, once {@link #txnAbortAllowed()} holds. {@code nodeOfTablet} names
+     * the node already known to have handled a tablet, so it needs no lookup.
      */
     private void abortTxnOnTablets(Collection<Long> tabletIds, Map<Long, Long> nodeOfTablet) {
-        boolean hasReservedVersion = commitVersionMap != null && !commitVersionMap.isEmpty();
-        if (jobState != JobState.CANCELLED || hasReservedVersion || watershedTxnId == -1 || tabletIds.isEmpty()) {
+        if (tabletIds.isEmpty()) {
             return;
         }
-        // The txn info this job's publish sends, so BE reads the same txn log a publish would.
-        TxnInfoPB txnInfo = TxnInfoHelper.forJobPublish(watershedTxnId, TxnTypePB.TXN_NORMAL,
-                System.currentTimeMillis(), commitGtid);
         LOG.info("index fast-path job {} aborts txn {} on {} tablet(s)", jobId, watershedTxnId, tabletIds.size());
         try {
-            Utils.abortTxnWithCleanup(tabletIds, nodeOfTablet, txnInfo, computeResource);
+            Utils.abortTxnWithCleanup(tabletIds, nodeOfTablet, abortTxnInfo(), computeResource);
         } catch (Exception e) {
             // Best effort: the cancel is already in the journal, and what is not deleted stays as before this cleanup.
             LOG.warn("index fast-path job {} fails to abort txn {}", jobId, watershedTxnId, e);
