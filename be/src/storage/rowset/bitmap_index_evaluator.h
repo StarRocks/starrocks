@@ -65,17 +65,26 @@ public:
 
     Status init(BitmapIndexIteratorSupplier&& supplier);
 
-    Status evaluate(SparseRange<>& dst_scan_range, PredicateTree& dst_pred_tree);
+    // With |prefetch|, the pages the lookups read are asked for all at once before they are read, instead of being
+    // fetched one after another: first the dictionary pages of the EQ and IN values, then, once the dictionary lookups
+    // have found their ordinals, the pages of the bitmaps they selected. The iterators must have been created with
+    // IndexReadOptions::prefetch_bitmap_index_pages for this to do anything.
+    Status evaluate(SparseRange<>& dst_scan_range, PredicateTree& dst_pred_tree, bool prefetch = false);
 
     void close();
 
     bool has_bitmap_index() const { return _has_bitmap_index; }
 
 private:
+    void _prefetch_dictionary_pages();
+    void _prefetch_bitmap_pages();
+
     friend struct BitmapIndexInitializer;
     friend struct BitmapIndexSeeker;
     friend struct BitmapIndexRetriver;
     friend struct BitmapIndexPredicateEraser;
+    friend struct BitmapIndexDictionaryPrefetcher;
+    friend struct BitmapIndexBitmapPrefetcher;
 
     const Schema& _schema;
     const PredicateTree& _pred_tree;

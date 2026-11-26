@@ -30,6 +30,7 @@
 #include "common/config_ingest_fwd.h"
 #include "common/config_json_flat_fwd.h"
 #include "common/config_lake_fwd.h"
+#include "common/config_rowset_fwd.h"
 #include "common/config_scan_io_fwd.h"
 #include "common/config_staros_worker_fwd.h"
 #include "common/status.h"
@@ -472,10 +473,11 @@ static bool allocate_initial_coarse_split(const PreparedSegmentReadStatePtr& seg
 }
 
 // lake_scan_warm_index: starts filling the local cache with the index pages the scan of |state| reads next, and
-// returns without waiting. Per segment: the short key index, the zone map and bloom filter roots of |predicate_cids|
-// and the ordinal index roots of |read_cids|. An index root that is not the sole data page of its index sits right
-// after that index's other pages, so the block before it is warmed as well. The fills are scheduled as a demand; the
-// reads that follow join them. Nothing here is required for correctness: a segment whose file cannot warm is read as
+// returns without waiting. Per segment: the short key index, the zone map, bloom filter and bitmap index roots of
+// |predicate_cids| and the ordinal index roots of |read_cids|. An index root that is not the sole data page of its
+// index sits right after that index's other pages, so the block before it is warmed as well (a bitmap index has a
+// single index level, so its roots are warmed alone). The fills are scheduled as a demand; the reads that follow
+// join them. Nothing here is required for correctness: a segment whose file cannot warm is read as
 // before.
 // With a non-null |prune_tree|, a segment that SegmentMetadataFilter excludes is not warmed: Rowset::read skips it by
 // the same test before loading any segment. A rowset whose opened segments are not indexed by metadata position, or a
@@ -551,6 +553,19 @@ static void warm_prepared_indexes(PreparedTabletReadState* state, const TabletSc
                     // A loaded BloomFilterIndexReader keeps its ordinal index, not its filter data pages, so the
                     // root and the block before it are warmed whether it is loaded or not.
                     add(roots.bloom_filter, !roots.bloom_filter_root_is_data);
+                    if (config::enable_index_bitmap_filter) {
+                        // The bitmap index lookups of each segment load these roots before anything else. Their
+                        // indexes have a single level, so no other index page sits before a root. A root that is
+                        // its column's only data page is read by the lookups, not by the load, so a loaded index
+                        // says nothing about it: it is warmed either way.
+                        const bool loaded = reader->has_loaded_bitmap_index();
+                        auto add_bitmap_root = [&](const PagePointer& pp, bool root_is_data) {
+                            add_unloaded(pp, loaded && !root_is_data, false);
+                        };
+                        add_bitmap_root(roots.bitmap_dict_value, roots.bitmap_dict_value_root_is_data);
+                        add_bitmap_root(roots.bitmap_dict_ordinal, roots.bitmap_dict_ordinal_root_is_data);
+                        add_bitmap_root(roots.bitmap_ordinal, roots.bitmap_ordinal_root_is_data);
+                    }
                 }
             }
             for (ColumnId cid : read_cids) {

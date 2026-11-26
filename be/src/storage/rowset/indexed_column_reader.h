@@ -36,6 +36,7 @@
 
 #include <memory>
 #include <utility>
+#include <vector>
 
 #include "base/compression/block_compression.h"
 #include "base/string/slice.h"
@@ -120,6 +121,15 @@ public:
     Status new_iterator(const IndexReadOptions& opts, std::unique_ptr<IndexedColumnIterator>* iter);
 
     int64_t num_values() const { return _num_values; }
+
+    // The data page IndexedColumnIterator::seek_at_or_after(|key|) reads, looked up in the index load() read, without
+    // any I/O. Returns false if the column has no value index or no values.
+    bool data_page_at_or_after(const void* key, PagePointer* page) const;
+
+    // Appends to |pages| the data pages holding the entries [|from|, |to|), at most |max_pages| of them, looked up in
+    // the index load() read, without any I/O. Returns false if the column has no ordinal index.
+    bool data_pages_of_ordinals(ordinal_t from, ordinal_t to, size_t max_pages, std::vector<PagePointer>* pages) const;
+
     const EncodingInfo* encoding_info() const { return _encoding_info; }
     const TypeInfoPtr& type_info() const { return _type_info; }
     bool support_ordinal_seek() const { return _meta.has_ordinal_index_meta(); }

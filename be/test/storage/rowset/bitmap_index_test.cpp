@@ -34,8 +34,11 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
+#include <limits>
 #include <numeric>
 #include <optional>
+#include <set>
 #include <string>
 #include <thread>
 
@@ -79,6 +82,53 @@ public:
     Status failure;
     std::optional<int64_t> failure_offset;
     int failed_reads = 0;
+
+private:
+    std::shared_ptr<io::SeekableInputStream> _stream;
+};
+
+class FakeBitmapWarmHandle final : public io::CacheWarmHandle {
+public:
+    size_t submitted_blocks() const override { return 1; }
+    size_t pending_blocks() const override { return 0; }
+};
+
+// Records, in order, the page reads ('r') and the background fill requests ('w') of a bitmap index by offset.
+class RecordingBitmapInputStream final : public io::SeekableInputStreamWrapper {
+public:
+    explicit RecordingBitmapInputStream(std::shared_ptr<io::SeekableInputStream> stream)
+            : SeekableInputStreamWrapper(stream.get(), kDontTakeOwnership), _stream(std::move(stream)) {}
+
+    Status read_at_fully(int64_t offset, void* out, int64_t count) override {
+        events.emplace_back('r', offset);
+        return SeekableInputStreamWrapper::read_at_fully(offset, out, count);
+    }
+
+    StatusOr<std::shared_ptr<io::CacheWarmHandle>> warm_cache_async(int64_t offset, size_t length,
+                                                                    bool urgent) override {
+        events.emplace_back('w', offset);
+        EXPECT_TRUE(urgent);
+        EXPECT_GT(length, 0);
+        if (!warm_supported) {
+            return Status::NotSupported("test: no background cache fill");
+        }
+        return std::make_shared<FakeBitmapWarmHandle>();
+    }
+
+    std::set<int64_t> offsets(char kind) const {
+        std::set<int64_t> result;
+        for (const auto& [k, offset] : events) {
+            if (k == kind) result.insert(offset);
+        }
+        return result;
+    }
+
+    size_t count(char kind) const {
+        return std::count_if(events.begin(), events.end(), [kind](const auto& e) { return e.first == kind; });
+    }
+
+    std::vector<std::pair<char, int64_t>> events;
+    bool warm_supported = true;
 
 private:
     std::shared_ptr<io::SeekableInputStream> _stream;
@@ -141,6 +191,78 @@ protected:
         ASSERT_TRUE(writer->finish(wfile.get(), meta).ok());
         ASSERT_EQ(BITMAP_INDEX, meta->type());
         ASSERT_TRUE(wfile->close().ok());
+    }
+
+    // A BIGINT bitmap index of one value per row, prefetch_value(0..kPrefetchRows-1), and one null, over several
+    // dictionary and bitmap pages, read through |stream| with prefetching allowed. The dictionary of a value seek
+    // index is frame-of-reference encoded, which packs consecutive integers into one page; values 2^40 + 1 apart take
+    // 41 bits each, about 3 MB. Their low bits are the row's, as the writer's hash map of the values needs: it hashes
+    // an integer by its low bits, and values whose low bits are all zero would land in one bucket.
+    static constexpr int kPrefetchRows = 600000;
+    static int64_t prefetch_value(int64_t row) { return row * ((int64_t{1} << 40) + 1); }
+    void open_prefetch_index(const std::string& name, ColumnIndexMetaPB* meta,
+                             std::unique_ptr<RecordingBitmapInputStream>* stream, BitmapIndexReader* reader) {
+        std::vector<int64_t> values(kPrefetchRows);
+        for (int row = 0; row < kPrefetchRows; row++) {
+            values[row] = prefetch_value(row);
+        }
+        std::string filename = kTestDir + "/" + name;
+        write_index_file<TYPE_BIGINT>(filename, values.data(), values.size(), 1, meta);
+        ASSERT_FALSE(meta->bitmap_index().dict_column().value_index_meta().is_root_data_page());
+        ASSERT_FALSE(meta->bitmap_index().bitmap_column().ordinal_index_meta().is_root_data_page());
+        ASSIGN_OR_ABORT(auto rfile, _fs->new_random_access_file(filename));
+        *stream = std::make_unique<RecordingBitmapInputStream>(rfile->stream());
+        _opts.read_file = stream->get();
+        _opts.use_page_cache = false;
+        _opts.prefetch_bitmap_index_pages = true;
+        ASSIGN_OR_ABORT(auto first_load, reader->load(_opts, meta->bitmap_index()));
+        ASSERT_TRUE(first_load);
+        (*stream)->events.clear();
+    }
+
+    static bool reader_bitmap_pages(const BitmapIndexReader& reader, ordinal_t from, ordinal_t to,
+                                    std::vector<PagePointer>* pages) {
+        return reader._bitmap_column_reader->data_pages_of_ordinals(from, to, std::numeric_limits<size_t>::max(),
+                                                                    pages);
+    }
+
+    static uint64_t reader_dictionary_page(const BitmapIndexReader& reader, int64_t value) {
+        PagePointer page;
+        EXPECT_TRUE(reader._dict_column_reader->data_page_at_or_after(&value, &page));
+        return page.offset;
+    }
+
+    static uint64_t reader_bitmap_page(const BitmapIndexReader& reader, ordinal_t ordinal) {
+        std::vector<PagePointer> pages;
+        EXPECT_TRUE(reader_bitmap_pages(reader, ordinal, ordinal + 1, &pages));
+        EXPECT_EQ(size_t{1}, pages.size());
+        return pages.empty() ? 0 : pages[0].offset;
+    }
+
+    // Evaluates |root| with prefetch over the prefetch index of |reader|, which serves every column but |unindexed|,
+    // and checks that it keeps row 3 only and reads every page it asked for.
+    void check_evaluator_reads_every_page_it_asks_for(const Schema& schema, PredicateAndNode root,
+                                                      RecordingBitmapInputStream* stream, BitmapIndexReader* reader,
+                                                      std::optional<ColumnId> unindexed) {
+        auto tree = PredicateTree::create(std::move(root));
+        BitmapIndexEvaluator evaluator(schema, tree);
+        ASSERT_OK(evaluator.init([&](ColumnId cid) -> StatusOr<BitmapIndexIterator*> {
+            if (unindexed.has_value() && cid == *unindexed) {
+                return nullptr;
+            }
+            BitmapIndexIterator* iter = nullptr;
+            RETURN_IF_ERROR(reader->new_iterator(_opts, &iter));
+            return iter;
+        }));
+        SparseRange<> range(0, kPrefetchRows + 1);
+        stream->events.clear();
+        ASSERT_OK(evaluator.evaluate(range, tree, true));
+        EXPECT_EQ(SparseRange<>(3, 4), range);
+        EXPECT_GT(stream->count('w'), 0);
+        const auto read = stream->offsets('r');
+        for (auto offset : stream->offsets('w')) {
+            EXPECT_TRUE(read.count(offset)) << "page at " << offset << " asked for but never read";
+        }
     }
 
     std::shared_ptr<MemoryFileSystem> _fs = nullptr;
@@ -823,6 +945,269 @@ TEST_F(BitmapIndexTest, test_mem_usage_before_and_after_load) {
 
     // After load: mem_usage should be larger (includes dict and bitmap column readers).
     ASSERT_GT(reader.mem_usage(), sizeof(BitmapIndexReader));
+}
+
+// The pages prefetch_dictionary_page() and prefetch_bitmap_pages() ask for, found without any I/O, are exactly the pages
+// the lookups and the bitmap reads that follow read, and each page is asked for once.
+TEST_F(BitmapIndexTest, prefetch_asks_for_exactly_the_pages_the_lookups_read) {
+    ColumnIndexMetaPB meta;
+    std::unique_ptr<RecordingBitmapInputStream> stream;
+    BitmapIndexReader reader;
+    open_prefetch_index("prefetch_exact_pages", &meta, &stream, &reader);
+    SegmentBitmapIndexIterator* raw = nullptr;
+    ASSERT_OK(reader.new_iterator(_opts, &raw));
+    std::unique_ptr<SegmentBitmapIndexIterator> iter(raw);
+
+    // The rows (and ordinals) of the looked-up values: 3 and 4 share a dictionary page and a bitmap page, the others
+    // are far apart, so the lookups read more than one page of each but fewer pages than lookups.
+    const std::vector<int64_t> lookups{3, 4, kPrefetchRows / 2, kPrefetchRows - 1};
+    for (auto row : lookups) {
+        int64_t value = prefetch_value(row);
+        iter->prefetch_dictionary_page(&value);
+    }
+    EXPECT_EQ(0, stream->count('r'));
+    const auto dict_pages = stream->offsets('w');
+    EXPECT_EQ(dict_pages.size(), stream->count('w'));
+    EXPECT_GT(dict_pages.size(), 1);
+    EXPECT_LT(dict_pages.size(), lookups.size());
+
+    stream->events.clear();
+    SparseRange<> ordinals;
+    for (auto row : lookups) {
+        int64_t value = prefetch_value(row);
+        bool exact_match = false;
+        ASSERT_OK(iter->seek_dictionary(&value, &exact_match));
+        ASSERT_TRUE(exact_match);
+        ASSERT_EQ(row, iter->current_ordinal());
+        ordinals.add(Range<>(iter->current_ordinal(), iter->current_ordinal() + 1));
+    }
+    EXPECT_EQ(dict_pages, stream->offsets('r'));
+
+    stream->events.clear();
+    iter->prefetch_bitmap_pages(ordinals);
+    const rowid_t null_ordinal = iter->bitmap_nums() - 1;
+    iter->prefetch_bitmap_pages(SparseRange<>(null_ordinal, null_ordinal + 1));
+    EXPECT_EQ(0, stream->count('r'));
+    const auto bitmap_pages = stream->offsets('w');
+    EXPECT_EQ(bitmap_pages.size(), stream->count('w'));
+    EXPECT_GT(bitmap_pages.size(), 1);
+    EXPECT_LT(bitmap_pages.size(), lookups.size() + 1);
+
+    stream->events.clear();
+    Roaring rows;
+    ASSERT_OK(iter->read_union_bitmap(ordinals, &rows));
+    Roaring nulls;
+    ASSERT_OK(iter->read_null_bitmap(&nulls));
+    EXPECT_EQ(bitmap_pages, stream->offsets('r'));
+    EXPECT_EQ(lookups.size(), rows.cardinality());
+    EXPECT_EQ(1, nulls.cardinality());
+    EXPECT_TRUE(nulls.contains(kPrefetchRows));
+
+    EXPECT_EQ(static_cast<int64_t>(dict_pages.size() + bitmap_pages.size()), _stats.bitmap_index_prefetch_pages);
+    EXPECT_EQ(static_cast<int64_t>(dict_pages.size() + bitmap_pages.size()), _stats.bitmap_index_prefetch_blocks);
+
+    // A page asked for once is not asked for again.
+    stream->events.clear();
+    for (auto row : lookups) {
+        int64_t value = prefetch_value(row);
+        iter->prefetch_dictionary_page(&value);
+    }
+    iter->prefetch_bitmap_pages(ordinals);
+    EXPECT_TRUE(stream->events.empty());
+}
+
+// A long ordinal range asks for its first pages only, in order. The cap is lowered to fit the index of the test.
+TEST_F(BitmapIndexTest, prefetch_caps_the_bitmap_pages_of_a_long_range) {
+    ColumnIndexMetaPB meta;
+    std::unique_ptr<RecordingBitmapInputStream> stream;
+    BitmapIndexReader reader;
+    open_prefetch_index("prefetch_long_range", &meta, &stream, &reader);
+    SegmentBitmapIndexIterator* raw = nullptr;
+    ASSERT_OK(reader.new_iterator(_opts, &raw));
+    std::unique_ptr<SegmentBitmapIndexIterator> iter(raw);
+
+    std::vector<PagePointer> all_pages;
+    // Every bitmap of the index: the null bitmap is the last one.
+    ASSERT_TRUE(reader_bitmap_pages(reader, 0, iter->bitmap_nums(), &all_pages));
+    const size_t expected = 2;
+    ASSERT_GT(all_pages.size(), expected);
+    iter->_max_prefetch_bitmap_pages = expected;
+    iter->prefetch_bitmap_pages(SparseRange<>(0, iter->bitmap_nums()));
+    ASSERT_EQ(expected, stream->count('w'));
+    for (size_t i = 0; i < expected; i++) {
+        EXPECT_EQ(static_cast<int64_t>(all_pages[i].offset), stream->events[i].second);
+    }
+}
+
+// A file that cannot fill its cache in the background is asked once; the lookups and their results are unchanged.
+TEST_F(BitmapIndexTest, prefetch_stops_when_the_file_cannot_fill_in_the_background) {
+    ColumnIndexMetaPB meta;
+    std::unique_ptr<RecordingBitmapInputStream> stream;
+    BitmapIndexReader reader;
+    open_prefetch_index("prefetch_unsupported", &meta, &stream, &reader);
+    stream->warm_supported = false;
+    SegmentBitmapIndexIterator* raw = nullptr;
+    ASSERT_OK(reader.new_iterator(_opts, &raw));
+    std::unique_ptr<SegmentBitmapIndexIterator> iter(raw);
+
+    for (int64_t row : {3, 99999}) {
+        int64_t value = prefetch_value(row);
+        iter->prefetch_dictionary_page(&value);
+    }
+    iter->prefetch_bitmap_pages(SparseRange<>(3, 4));
+    EXPECT_EQ(1, stream->count('w'));
+    EXPECT_EQ(0, _stats.bitmap_index_prefetch_pages);
+
+    int64_t value = prefetch_value(99999);
+    bool exact_match = false;
+    ASSERT_OK(iter->seek_dictionary(&value, &exact_match));
+    ASSERT_TRUE(exact_match);
+    Roaring rows;
+    ASSERT_OK(iter->read_bitmap(iter->current_ordinal(), &rows));
+    EXPECT_EQ(1, rows.cardinality());
+    EXPECT_TRUE(rows.contains(99999));
+}
+
+// An iterator created without IndexReadOptions::prefetch_bitmap_index_pages never asks.
+TEST_F(BitmapIndexTest, prefetch_is_off_unless_the_options_allow_it) {
+    ColumnIndexMetaPB meta;
+    std::unique_ptr<RecordingBitmapInputStream> stream;
+    BitmapIndexReader reader;
+    open_prefetch_index("prefetch_off", &meta, &stream, &reader);
+    _opts.prefetch_bitmap_index_pages = false;
+    SegmentBitmapIndexIterator* raw = nullptr;
+    ASSERT_OK(reader.new_iterator(_opts, &raw));
+    std::unique_ptr<SegmentBitmapIndexIterator> iter(raw);
+    int64_t value = prefetch_value(3);
+    iter->prefetch_dictionary_page(&value);
+    iter->prefetch_bitmap_pages(SparseRange<>(3, 4));
+    EXPECT_EQ(0, stream->count('w'));
+}
+
+// With prefetch, the evaluator asks for every page before it reads it -- all dictionary pages of the IN values before
+// the first dictionary lookup, all selected bitmap pages before the first bitmap read -- and gets the same result as
+// without.
+TEST_F(BitmapIndexTest, evaluator_prefetches_the_pages_before_reading_them) {
+    ColumnIndexMetaPB meta;
+    std::unique_ptr<RecordingBitmapInputStream> stream;
+    BitmapIndexReader reader;
+    open_prefetch_index("prefetch_evaluator", &meta, &stream, &reader);
+
+    Schema schema({std::make_shared<Field>(0, "indexed", TYPE_BIGINT, true)});
+    // 123456789 is not a value of the index.
+    std::unique_ptr<ColumnPredicate> in(
+            new_column_in_predicate(get_type_info(TYPE_BIGINT), 0,
+                                    {std::to_string(prefetch_value(99999)), std::to_string(prefetch_value(3)),
+                                     std::to_string(prefetch_value(40000)), "123456789"}));
+    auto evaluate = [&](bool prefetch) {
+        PredicateAndNode root;
+        root.add_child(PredicateColumnNode{in.get()});
+        auto tree = PredicateTree::create(std::move(root));
+        BitmapIndexEvaluator evaluator(schema, tree);
+        EXPECT_OK(evaluator.init([&](ColumnId) -> StatusOr<BitmapIndexIterator*> {
+            BitmapIndexIterator* iter = nullptr;
+            RETURN_IF_ERROR(reader.new_iterator(_opts, &iter));
+            return iter;
+        }));
+        EXPECT_TRUE(evaluator.has_bitmap_index());
+        SparseRange<> range(0, kPrefetchRows + 1);
+        stream->events.clear();
+        EXPECT_OK(evaluator.evaluate(range, tree, prefetch));
+        return range;
+    };
+
+    const auto without = evaluate(false);
+    EXPECT_EQ(0, stream->count('w'));
+    const auto with = evaluate(true);
+    EXPECT_EQ(without, with);
+    SparseRange<> expected;
+    for (rowid_t row : {3, 40000, 99999}) {
+        expected.add(Range<>(row, row + 1));
+    }
+    EXPECT_EQ(expected, with);
+
+    // Every page read was asked for before; the requests come in two waves, each before the reads it serves.
+    std::set<int64_t> asked;
+    size_t waves = 0;
+    char last = 0;
+    for (const auto& [kind, offset] : stream->events) {
+        if (kind == 'w') {
+            asked.insert(offset);
+            if (last != 'w') waves++;
+        } else {
+            EXPECT_TRUE(asked.count(offset)) << "page at " << offset << " read without being asked for";
+        }
+        last = kind;
+    }
+    EXPECT_EQ(2, waves);
+    EXPECT_GT(stream->count('r'), 0);
+}
+
+// c = v3 AND (a IN (vm, vl) OR b = 2), where b has no bitmap index: the seek does not descend into the OR, which is
+// filtered row by row, so the dictionary pages of a's values are not asked for either, whichever child of the OR the
+// initializer visits first.
+TEST_F(BitmapIndexTest, evaluator_asks_for_no_page_under_an_or_without_bitmap_index) {
+    ColumnIndexMetaPB meta;
+    std::unique_ptr<RecordingBitmapInputStream> stream;
+    BitmapIndexReader reader;
+    open_prefetch_index("prefetch_unindexed_or", &meta, &stream, &reader);
+    const int64_t c_value = prefetch_value(3);
+    const std::vector<int64_t> a_values{prefetch_value(kPrefetchRows / 2), prefetch_value(kPrefetchRows - 1)};
+    for (auto value : a_values) {
+        ASSERT_NE(reader_dictionary_page(reader, c_value), reader_dictionary_page(reader, value));
+    }
+
+    Schema schema({std::make_shared<Field>(0, "c", TYPE_BIGINT, true),
+                   std::make_shared<Field>(1, "b", TYPE_BIGINT, true),
+                   std::make_shared<Field>(2, "a", TYPE_BIGINT, true)});
+    const auto type = get_type_info(TYPE_BIGINT);
+    std::unique_ptr<ColumnPredicate> c_eq(new_column_eq_predicate(type, 0, std::to_string(c_value)));
+    std::unique_ptr<ColumnPredicate> b_eq(new_column_eq_predicate(type, 1, "2"));
+    std::unique_ptr<ColumnPredicate> a_in(
+            new_column_in_predicate(type, 2, {std::to_string(a_values[0]), std::to_string(a_values[1])}));
+    PredicateOrNode or_node;
+    or_node.add_child(PredicateColumnNode{a_in.get()});
+    or_node.add_child(PredicateColumnNode{b_eq.get()});
+    PredicateAndNode root;
+    root.add_child(PredicateColumnNode{c_eq.get()});
+    root.add_child(std::move(or_node));
+    check_evaluator_reads_every_page_it_asks_for(schema, std::move(root), stream.get(), &reader, 1);
+}
+
+// d = v3 AND ((a = vm AND c = vm) OR (a >= v100 AND c >= v100)): the second AND selects too many rows, so the OR is
+// not used and the retrieval does not descend into it. The bitmaps of the first AND, which the seek kept, are not
+// asked for.
+TEST_F(BitmapIndexTest, evaluator_asks_for_no_bitmap_under_an_or_it_does_not_use) {
+    ColumnIndexMetaPB meta;
+    std::unique_ptr<RecordingBitmapInputStream> stream;
+    BitmapIndexReader reader;
+    open_prefetch_index("prefetch_unused_or", &meta, &stream, &reader);
+    const ordinal_t middle = kPrefetchRows / 2;
+    ASSERT_NE(reader_bitmap_page(reader, 3), reader_bitmap_page(reader, middle));
+    ASSERT_NE(reader_bitmap_page(reader, kPrefetchRows), reader_bitmap_page(reader, middle)); // the null bitmap
+
+    Schema schema({std::make_shared<Field>(0, "d", TYPE_BIGINT, true),
+                   std::make_shared<Field>(1, "a", TYPE_BIGINT, true),
+                   std::make_shared<Field>(2, "c", TYPE_BIGINT, true)});
+    const auto type = get_type_info(TYPE_BIGINT);
+    std::unique_ptr<ColumnPredicate> d_eq(new_column_eq_predicate(type, 0, std::to_string(prefetch_value(3))));
+    std::unique_ptr<ColumnPredicate> a_eq(new_column_eq_predicate(type, 1, std::to_string(prefetch_value(middle))));
+    std::unique_ptr<ColumnPredicate> c_eq(new_column_eq_predicate(type, 2, std::to_string(prefetch_value(middle))));
+    std::unique_ptr<ColumnPredicate> a_ge(new_column_ge_predicate(type, 1, std::to_string(prefetch_value(100))));
+    std::unique_ptr<ColumnPredicate> c_ge(new_column_ge_predicate(type, 2, std::to_string(prefetch_value(100))));
+    PredicateAndNode selective;
+    selective.add_child(PredicateColumnNode{a_eq.get()});
+    selective.add_child(PredicateColumnNode{c_eq.get()});
+    PredicateAndNode unselective;
+    unselective.add_child(PredicateColumnNode{a_ge.get()});
+    unselective.add_child(PredicateColumnNode{c_ge.get()});
+    PredicateOrNode or_node;
+    or_node.add_child(std::move(selective));
+    or_node.add_child(std::move(unselective));
+    PredicateAndNode root;
+    root.add_child(PredicateColumnNode{d_eq.get()});
+    root.add_child(std::move(or_node));
+    check_evaluator_reads_every_page_it_asks_for(schema, std::move(root), stream.get(), &reader, std::nullopt);
 }
 
 } // namespace starrocks

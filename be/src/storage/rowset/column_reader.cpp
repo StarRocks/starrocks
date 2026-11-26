@@ -228,6 +228,21 @@ Status ColumnReader::_init(ColumnMetaPB* meta, const TabletColumn* column) {
                 break;
             case BITMAP_INDEX:
                 _bitmap_index_meta.reset(index_meta->release_bitmap_index());
+                if (_bitmap_index_meta->dict_column().has_value_index_meta()) {
+                    const auto& index_meta = _bitmap_index_meta->dict_column().value_index_meta();
+                    _index_root_pages.bitmap_dict_value = PagePointer(index_meta.root_page());
+                    _index_root_pages.bitmap_dict_value_root_is_data = index_meta.is_root_data_page();
+                }
+                if (_bitmap_index_meta->dict_column().has_ordinal_index_meta()) {
+                    const auto& index_meta = _bitmap_index_meta->dict_column().ordinal_index_meta();
+                    _index_root_pages.bitmap_dict_ordinal = PagePointer(index_meta.root_page());
+                    _index_root_pages.bitmap_dict_ordinal_root_is_data = index_meta.is_root_data_page();
+                }
+                if (_bitmap_index_meta->bitmap_column().has_ordinal_index_meta()) {
+                    const auto& index_meta = _bitmap_index_meta->bitmap_column().ordinal_index_meta();
+                    _index_root_pages.bitmap_ordinal = PagePointer(index_meta.root_page());
+                    _index_root_pages.bitmap_ordinal_root_is_data = index_meta.is_root_data_page();
+                }
                 MEM_TRACKER_SAFE_CONSUME(RuntimeEnv::GetInstance()->bitmap_index_mem_tracker(),
                                          _bitmap_index_meta->SpaceUsedLong());
                 _meta_mem_usage.fetch_add(_bitmap_index_meta->SpaceUsedLong(), std::memory_order_relaxed);
@@ -824,6 +839,10 @@ bool ColumnReader::has_loaded_ordinal_index() const {
 
 bool ColumnReader::has_loaded_zone_map_index() const {
     return _zonemap_index != nullptr && _zonemap_index->loaded();
+}
+
+bool ColumnReader::has_loaded_bitmap_index() const {
+    return _bitmap_index != nullptr && _bitmap_index->loaded();
 }
 
 Status ColumnReader::load_ordinal_index(const IndexReadOptions& opts) {
