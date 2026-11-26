@@ -468,7 +468,7 @@ public class PCTRefreshRangePartitionOlapTest extends MVTestBase {
                 TaskRun baseline = buildMVTaskRun(mv, "test");
                 baseline.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
                 executeDirectRun(baseline, 0);
-                Assertions.assertNull(getPartitionBasedRefreshProcessor(baseline).getNextTaskRun());
+                Assertions.assertNull(((PartitionBasedMvRefreshProcessor) baseline.getProcessor()).getNextTaskRun());
                 OlapTable base = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
                         .getTable("test", tableName);
                 Map<String, MaterializedView.BasePartitionInfo> versions = mv.getRefreshScheme().getAsyncRefreshContext()
@@ -510,7 +510,7 @@ public class PCTRefreshRangePartitionOlapTest extends MVTestBase {
                     executeCapturedRun(fixture, run, confirmedBefore);
                     Assertions.assertEquals(Set.of("p20240106_20240107"),
                             run.getStatus().getMvTaskRunExtraMessage().getMvPartitionsToRefresh());
-                    Assertions.assertNull(getPartitionBasedRefreshProcessor(run).getNextTaskRun());
+                    Assertions.assertNull(((PartitionBasedMvRefreshProcessor) run.getProcessor()).getNextTaskRun());
                     Assertions.assertEquals(oldVersion, versions.get("p1").getVersion());
                     Assertions.assertEquals(secondOldVersion, versions.get("p2").getVersion());
                     Assertions.assertEquals(confirmedBefore, mv.getRefreshScheme().getLastFreshnessConfirmedAt());
@@ -537,7 +537,7 @@ public class PCTRefreshRangePartitionOlapTest extends MVTestBase {
                         executeCapturedRun(fixture, periodic, confirmedBefore);
                         Assertions.assertEquals(run.getStatus().getMvTaskRunExtraMessage().getMvPartitionsToRefresh(),
                                 periodic.getStatus().getMvTaskRunExtraMessage().getMvPartitionsToRefresh());
-                        Assertions.assertNull(getPartitionBasedRefreshProcessor(periodic).getNextTaskRun());
+                        Assertions.assertNull(((PartitionBasedMvRefreshProcessor) periodic.getProcessor()).getNextTaskRun());
                     }
                 }
             } finally {
