@@ -35,6 +35,7 @@ import com.starrocks.connector.hive.HiveStorageFormat;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AggregateType;
+import com.starrocks.sql.ast.JoinOperator;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
@@ -766,6 +767,15 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
     @Override
     public DecodeInfo visitPhysicalJoin(OptExpression optExpression, DecodeInfo context) {
         PhysicalJoinOperator join = optExpression.getOp().cast();
+        // An outer join outputs NULL for the columns of its null-supplying side on unmatched rows, so a column a
+        // projection below the join set to a string constant is no longer that constant above the join.
+        JoinOperator joinType = join.getJoinType();
+        if (joinType.isRightOuterJoin() || joinType.isFullOuterJoin()) {
+            unionDictionaryManager.removeConstants(optExpression.getChildOutputColumns(0));
+        }
+        if (joinType.isAnyLeftOuterJoin() || joinType.isFullOuterJoin()) {
+            unionDictionaryManager.removeConstants(optExpression.getChildOutputColumns(1));
+        }
         DecodeInfo result = context.createOutputInfo();
         if (join.getOnPredicate() == null) {
             return result;

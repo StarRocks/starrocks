@@ -1,0 +1,34 @@
+-- name: test_union_constant_outer_join_null_side
+create table t_city (id int not null, c_city varchar(20) null) duplicate key(id) distributed by hash(id) buckets 1 properties ("replication_num" = "1");
+-- result:
+-- !result
+insert into t_city values (1, 'bj'), (2, 'sh'), (3, 'sz'), (4, 'gz'), (5, 'bj'), (6, 'sh'), (7, NULL), (8, 'hz');
+-- result:
+-- !result
+[UC] analyze full table t_city;
+function: wait_global_dict_ready('c_city', 't_city')
+-- result:
+
+-- !result
+select x, count(*) from (select c_city from t_city union all select a.x from (select distinct 'sz' as x) a right join t_city tr on tr.c_city = 'no-such-city') u(x) group by x order by x;
+-- result:
+None	9
+bj	2
+gz	1
+hz	1
+sh	2
+sz	1
+-- !result
+select x, count(*) from (select a.x from (select distinct 'sz' as x) a right join t_city tr on tr.c_city = 'no-such-city') u(x) group by x order by x;
+-- result:
+None	8
+-- !result
+select x, count(*) from (select c_city from t_city union all select a.x from t_city tr left join (select distinct 'sz' as x) a on tr.c_city = 'no-such-city') u(x) group by x order by x;
+-- result:
+None	9
+bj	2
+gz	1
+hz	1
+sh	2
+sz	1
+-- !result
