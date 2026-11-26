@@ -77,6 +77,7 @@ import com.starrocks.connector.iceberg.cost.IcebergStatisticProvider;
 import com.starrocks.connector.iceberg.io.IcebergCachingFileIO;
 import com.starrocks.connector.iceberg.io.IcebergPlanningIoStats;
 import com.starrocks.connector.iceberg.procedure.IcebergProcedureRegistry;
+import com.starrocks.connector.iceberg.procedure.RewriteDataFilesProcedure;
 import com.starrocks.connector.metadata.MetadataTableType;
 import com.starrocks.connector.share.iceberg.IcebergTablePayload;
 import com.starrocks.connector.share.iceberg.SerializableTable;
@@ -87,6 +88,8 @@ import com.starrocks.metric.MetricRepo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AlterClause;
+import com.starrocks.sql.ast.AlterTableOperationClause;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
@@ -487,7 +490,19 @@ public class IcebergMetadata implements ConnectorMetadata {
             }
             asyncRefreshOthersFeMetadataCache(dbName, tableName);
         }
+        // Schema and property changes, branches and tags, and the table procedures (rollback, cherry-pick,
+        // expire snapshots, ...) all commit new table metadata. A rename drops the old name.
+        if (!commitsOnlyThroughSink(stmt)) {
+            invalidateOthersFeTable(dbName, tableName);
+        }
         return resultSet;
+    }
+
+    // rewrite_data_files commits through finishSink, which has already told the other FEs: do not wait for them twice
+    private static boolean commitsOnlyThroughSink(AlterTableStmt stmt) {
+        List<AlterClause> clauses = stmt.getAlterClauseList();
+        return !clauses.isEmpty() && clauses.stream().allMatch(clause -> clause instanceof AlterTableOperationClause op
+                && op.getTableProcedure() instanceof RewriteDataFilesProcedure);
     }
 
     @Override
@@ -520,6 +535,7 @@ public class IcebergMetadata implements ConnectorMetadata {
             if (shouldInvalidateCache) {
                 invalidateCacheAfterCommit(dbName, tableName);
                 asyncRefreshOthersFeMetadataCache(dbName, tableName);
+                invalidateOthersFeTable(dbName, tableName);
             }
         }
     }
@@ -785,6 +801,10 @@ public class IcebergMetadata implements ConnectorMetadata {
         } catch (UncheckedIOException | ValidationException | CommitFailedException | CommitStateUnknownException e) {
             LOG.error("Failed to execute metadata delete on {}.{}", dbName, tableName, e);
             ConnectorMetricsMgr.increaseDeleteTotalFail(ConnectorMetricsMgr.CONNECTOR_ICEBERG, e, deleteType);
+            if (e instanceof CommitStateUnknownException) {
+                // The delete may have been applied: drop the cached table everywhere, as truncateTable does
+                invalidateCachesAfterDelete(dbName, tableName);
+            }
             throw new StarRocksConnectorException(
                     String.format("Failed to execute metadata delete on %s.%s", dbName, tableName), e);
         } finally {
@@ -792,9 +812,13 @@ public class IcebergMetadata implements ConnectorMetadata {
                     System.currentTimeMillis() - startMs, deleteType);
         }
 
-        // Invalidate cache after commit
+        invalidateCachesAfterDelete(dbName, tableName);
+    }
+
+    private void invalidateCachesAfterDelete(String dbName, String tableName) {
         invalidateCacheAfterCommit(dbName, tableName);
         asyncRefreshOthersFeMetadataCache(dbName, tableName);
+        invalidateOthersFeTable(dbName, tableName);
     }
 
     /**
@@ -829,6 +853,7 @@ public class IcebergMetadata implements ConnectorMetadata {
             tables.remove(TableIdentifier.of(stmt.getDbName(), stmt.getTableName()));
             dropNameKeyedStatistics(stmt.getDbName(), stmt.getTableName());
             asyncRefreshOthersFeMetadataCache(stmt.getDbName(), stmt.getTableName());
+            invalidateOthersFeTable(stmt.getDbName(), stmt.getTableName());
             return;
         }
 
@@ -845,6 +870,8 @@ public class IcebergMetadata implements ConnectorMetadata {
         tables.remove(TableIdentifier.of(stmt.getDbName(), stmt.getTableName()));
         StatisticUtils.dropStatisticsAfterDropTable(icebergTable);
         asyncRefreshOthersFeMetadataCache(stmt.getDbName(), stmt.getTableName());
+        // Otherwise the other FEs keep serving the dropped table, and a table re-created under its name
+        invalidateOthersFeTable(stmt.getDbName(), stmt.getTableName());
     }
 
     /**
@@ -3220,9 +3247,14 @@ public class IcebergMetadata implements ConnectorMetadata {
             }
         }
 
-        // The commit writes no edit log, and the refresh the commit dispatched to the other FEs is not waited
-        // for: make them drop the pre-commit table before the statement returns. Outside the commit queue, so
-        // a slow peer does not hold up the next commit to the table.
+        // Outside the commit queue, so a slow peer does not hold up the next commit to the table.
+        invalidateOthersFeTable(dbName, tableName);
+    }
+
+    // A change to an Iceberg table writes no edit log, so the journal wait of a forwarded statement does nothing
+    // for it, and the refresh dispatched to the other FEs is not waited for: make them drop the pre-change table
+    // before the statement returns, so that a read on any FE sees the change. Never throws.
+    private void invalidateOthersFeTable(String dbName, String tableName) {
         GlobalStateMgr.getCurrentState().invalidateOthersFeTable(new TableName(catalogName, dbName, tableName),
                 Config.iceberg_commit_invalidate_other_fe_timeout_ms);
     }

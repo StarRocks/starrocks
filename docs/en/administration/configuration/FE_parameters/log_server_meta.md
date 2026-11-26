@@ -1595,7 +1595,7 @@ This topic introduces the following types of FE configurations:
 - Type: Int
 - Unit: Milliseconds
 - Is mutable: Yes
-- Description: The maximum time a commit to an Iceberg table (INSERT, INSERT OVERWRITE, DELETE, UPDATE, MERGE, or compaction) waits for the other FEs to drop their cached copy of the table, so that a query on any FE sees the commit once the statement returns. An FE that does not respond in time is left to the background refresh. During a rolling upgrade, an FE of an earlier version refreshes the table instead, so a commit can wait up to this long. Set it to 0 or less to disable the wait.
+- Description: The maximum time a commit to an Iceberg table (INSERT, INSERT OVERWRITE, DELETE, UPDATE, MERGE, or compaction), or a TRUNCATE TABLE, ALTER TABLE, or DROP TABLE on an Iceberg table, waits for the other FEs to drop their cached copy of the table, so that a query on any FE sees the change once the statement returns. An FE that does not respond in time is left to the background refresh. During a rolling upgrade, an FE of an earlier version refreshes the table instead, so a statement can wait up to this long. Set it to 0 or less to disable the wait.
 - Introduced in: -
 
 ### `hive_commit_invalidate_other_fe_timeout_ms`
