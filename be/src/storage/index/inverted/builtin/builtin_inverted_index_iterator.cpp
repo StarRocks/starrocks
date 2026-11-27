@@ -103,19 +103,6 @@ Status BuiltinInvertedIndexIterator::_tokenize_query_by_parser(const Slice& quer
     }
 }
 
-std::string get_next_prefix(const Slice& prefix_s) {
-    std::string next_prefix = prefix_s.to_string();
-
-    for (int i = next_prefix.length() - 1; i >= 0; i--) {
-        if (static_cast<unsigned char>(next_prefix[i]) != 0xFF) {
-            next_prefix[i]++;
-            next_prefix.resize(i + 1);
-            return next_prefix;
-        }
-    }
-    return "";
-}
-
 Status BuiltinInvertedIndexIterator::_equal_query(const Slice* search_query, roaring::Roaring* bitmap) {
     bool exact_match = false;
     Status st = _bitmap_itr->seek_dictionary(search_query, &exact_match);

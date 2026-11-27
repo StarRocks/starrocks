@@ -23,6 +23,7 @@ set(STORAGE_PRIMITIVE_TEST_FILES
     chunk_aggregator_test.cpp
     column_and_predicate_test.cpp
     column_aggregator_test.cpp
+    column_expr_predicate_test.cpp
     column_or_predicate_test.cpp
     column_predicate_test.cpp
     column_value_range_test.cpp

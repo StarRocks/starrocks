@@ -16,9 +16,26 @@
 
 #include <string>
 
+#include "base/string/slice.h"
+
 namespace starrocks {
 
 const std::string LIKE_FN_NAME = "like";
+
+// Returns the smallest string greater than every string that starts with |prefix_s|, comparing bytes as unsigned, or
+// an empty string when there is none (|prefix_s| is empty or all 0xFF).
+inline std::string get_next_prefix(const Slice& prefix_s) {
+    std::string next_prefix = prefix_s.to_string();
+
+    for (int i = next_prefix.length() - 1; i >= 0; i--) {
+        if (static_cast<unsigned char>(next_prefix[i]) != 0xFF) {
+            next_prefix[i]++;
+            next_prefix.resize(i + 1);
+            return next_prefix;
+        }
+    }
+    return "";
+}
 
 enum class InvertedIndexQueryType {
     UNKNOWN_QUERY = -1,

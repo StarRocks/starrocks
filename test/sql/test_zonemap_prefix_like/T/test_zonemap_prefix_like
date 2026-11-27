@@ -1,0 +1,79 @@
+-- name: test_zonemap_prefix_like
+-- ColumnExprPredicate::try_to_rewrite_for_zone_map_filter rewrites a prefix LIKE or starts_with to
+-- `col >= prefix AND col < successor(prefix)` for the zone map only. Rows are still filtered by the
+-- original predicate, so every count below equals a full scan. The profile checks show that zones
+-- were skipped: before the rewrite ZoneMapIndexFilterRows was 0 for these predicates, because a LIKE
+-- is not monotonic and ColumnExprPredicate::zone_map_filter keeps every zone for it.
+create database db_${uuid0};
+use db_${uuid0};
+
+-- k is the sort key, so each of the four prefixes is one run of 50000 rows.
+CREATE TABLE t_sorted (
+    k VARCHAR(32) NOT NULL,
+    v INT NOT NULL
+) DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(v) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+insert into t_sorted
+select concat(case x % 4 when 0 then 'aaa_' when 1 then 'abc_' when 2 then 'mmm_' else 'zzz_' end,
+              lpad(cast(x as varchar), 8, '0')), x
+from table(generate_series(1, 200000)) t(x);
+
+select count(*) from t_sorted where k like 'abc%';
+-- '_' is a wildcard: the prefix is 'ab'.
+select count(*) from t_sorted where k like 'ab_\\_%';
+-- '\_' is a literal '_': the prefix is 'abc_0000000'.
+select count(*) from t_sorted where k like 'abc\\_0000000%';
+select count(*) from t_sorted where starts_with(k, 'mmm');
+select count(*) from t_sorted where k like 'abc%' and k < 'abc_00000100';
+-- Not rewritten.
+select count(*) from t_sorted where k not like 'abc%';
+select count(*) from t_sorted where k like '%bc_%';
+
+-- code has 8 values and is read through the global dictionary, so the predicate reaches the
+-- storage layer as DictMappingExpr(code, LIKE).
+CREATE TABLE t_dict (
+    code VARCHAR(16) NOT NULL,
+    v INT NOT NULL
+) DUPLICATE KEY(code)
+DISTRIBUTED BY HASH(v) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+insert into t_dict
+select case x % 8 when 0 then 'aaa_1' when 1 then 'aaa_2' when 2 then 'abc_1' when 3 then 'abc_2'
+                  when 4 then 'abc_3' when 5 then 'mmm_1' when 6 then 'zzz_1' else 'zzz_2' end, x
+from table(generate_series(1, 1000000)) t(x);
+[UC] ANALYZE FULL TABLE t_dict;
+function: wait_global_dict_ready('code', 't_dict')
+function: assert_explain_verbose_contains('select count(*) from t_dict where code like \'abc%\'', 'DictDecode')
+select count(*) from t_dict where code like 'abc%';
+select count(*) from t_dict where code like 'abc\\_%';
+
+set enable_profile = true;
+set enable_async_profile = false;
+
+[UC]select count(*) from t_sorted where k like 'abc%';
+create table profile_like properties("replication_num"="1") as
+    select line from table(unnest(split(get_query_profile(last_query_id()), "\n"))) t(line);
+select assert_true(count(1) > 0)
+    from profile_like
+    where line like '%- ZoneMapIndexFilterRows%';
+select assert_true(max(cast(coalesce(nullif(regexp_extract(line, '.*- ZoneMapIndexFilterRows: ([0-9.]+).*', 1), ''), '0') as double)) > 0)
+    from profile_like
+    where line like '%- ZoneMapIndexFilterRows%';
+
+[UC]select count(*) from t_sorted where starts_with(k, 'mmm');
+create table profile_starts_with properties("replication_num"="1") as
+    select line from table(unnest(split(get_query_profile(last_query_id()), "\n"))) t(line);
+select assert_true(max(cast(coalesce(nullif(regexp_extract(line, '.*- ZoneMapIndexFilterRows: ([0-9.]+).*', 1), ''), '0') as double)) > 0)
+    from profile_starts_with
+    where line like '%- ZoneMapIndexFilterRows%';
+
+[UC]select count(*) from t_dict where code like 'abc%';
+create table profile_dict properties("replication_num"="1") as
+    select line from table(unnest(split(get_query_profile(last_query_id()), "\n"))) t(line);
+select assert_true(max(cast(coalesce(nullif(regexp_extract(line, '.*- ZoneMapIndexFilterRows: ([0-9.]+).*', 1), ''), '0') as double)) > 0)
+    from profile_dict
+    where line like '%- ZoneMapIndexFilterRows%';
+
+set enable_profile = false;
+drop database db_${uuid0};

@@ -9,9 +9,11 @@
 #include "exprs/binary_predicate.h"
 #include "exprs/cast_expr.h"
 #include "exprs/column_ref.h"
+#include "exprs/dictmapping_expr_interface.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "exprs/literal.h"
+#include "gutil/casts.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
@@ -40,6 +42,106 @@ std::optional<InvertedIndexQueryType> choose_inverted_index_query_type(bool vali
     bool has_wildcard = pattern.find('%') != std::string_view::npos;
     return has_wildcard ? InvertedIndexQueryType::MATCH_WILDCARD_QUERY : InvertedIndexQueryType::EQUAL_QUERY;
 }
+
+std::optional<LikePatternPrefix> extract_like_pattern_prefix(std::string_view pattern) {
+    LikePatternPrefix result;
+    size_t i = 0;
+    for (; i < pattern.size(); i++) {
+        const char c = pattern[i];
+        if (c == '%' || c == '_') {
+            break;
+        }
+        if (c == '\\') {
+            const bool literal_escape = i + 1 < pattern.size() &&
+                                        (pattern[i + 1] == '%' || pattern[i + 1] == '_' || pattern[i + 1] == '\\');
+            if (!literal_escape) {
+                break;
+            }
+            i++;
+        }
+        result.prefix.push_back(pattern[i]);
+    }
+    if (result.prefix.empty()) {
+        return std::nullopt;
+    }
+    result.exact = i == pattern.size();
+    return result;
+}
+
+namespace {
+
+const std::string STARTS_WITH_FN_NAME = "starts_with";
+
+// Builds `column <op> 'value'` for zone map filtering.
+Expr* build_string_bound(ObjectPool* pool, const TypeDescriptor& result_type, Expr* column, TExprOpcode::type op,
+                         const std::string& value) {
+    TExprNode node;
+    node.node_type = TExprNodeType::BINARY_PRED;
+    node.type = result_type.to_thrift();
+    node.child_type = to_thrift(column->type().type);
+    node.__set_opcode(op);
+
+    Expr* bound = pool->add(VectorizedBinaryPredicateFactory::from_thrift(node));
+    DCHECK(bound != nullptr);
+    bound->add_child(Expr::copy(pool, column));
+    bound->add_child(pool->add(
+            new VectorizedLiteral(ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice(value), 1), column->type())));
+    bound->set_monotonic(true);
+    return bound;
+}
+
+// Rewrites `col LIKE 'abc%'` and `starts_with(col, 'abc')` on a VARCHAR column to `col >= 'abc'` and `col < 'abd'`.
+// Every matching value is in that range, so a zone whose min and max are outside it holds no match. On a
+// global-dictionary column the root is DictMappingExpr(column, string predicate). The string predicate reads the
+// column through a PlaceHolderRef, which is a slot ref with the slot id of the column, so it also evaluates on string
+// zone map values.
+void rewrite_string_prefix_predicate(ObjectPool* pool, Expr* root, std::vector<Expr*>* output) {
+    Expr* expr = root;
+    if (auto* dict_mapping = dynamic_cast<DictMappingExprInterface*>(root); dict_mapping != nullptr) {
+        expr = dict_mapping->dict_mapping_origin_expr();
+    }
+
+    const bool is_function_call = expr->node_type() == TExprNodeType::FUNCTION_CALL;
+    const std::string fn_name = is_function_call ? boost::to_lower_copy(expr->fn().name.function_name) : "";
+    const bool valid_args = expr->get_num_children() == 2 && expr->get_child(0)->is_slotref() &&
+                            expr->get_child(0)->type().type == TYPE_VARCHAR && expr->get_child(1)->is_literal() &&
+                            expr->get_child(1)->type().type == TYPE_VARCHAR;
+    const bool valid_like = fn_name == LIKE_FN_NAME && valid_args;
+    const bool valid_starts_with = fn_name == STARTS_WITH_FN_NAME && valid_args;
+    if (!valid_like && !valid_starts_with) {
+        return;
+    }
+
+    const ColumnPtr literal = down_cast<const VectorizedLiteral*>(expr->get_child(1))->value();
+    if (literal->is_null(0)) {
+        return;
+    }
+    const Slice value = literal->get(0).get_slice();
+    const std::string_view pattern(value.data, value.size);
+
+    LikePatternPrefix prefix;
+    if (valid_like) {
+        auto like_prefix = extract_like_pattern_prefix(pattern);
+        if (!like_prefix.has_value()) {
+            return;
+        }
+        prefix = std::move(like_prefix.value());
+    } else if (!pattern.empty()) {
+        prefix.prefix = std::string(pattern);
+    } else {
+        return;
+    }
+
+    Expr* column = expr->get_child(0);
+    output->emplace_back(build_string_bound(pool, expr->type(), column, TExprOpcode::GE, prefix.prefix));
+    if (prefix.exact) {
+        output->emplace_back(build_string_bound(pool, expr->type(), column, TExprOpcode::LE, prefix.prefix));
+    } else if (const std::string upper = get_next_prefix(Slice(prefix.prefix)); !upper.empty()) {
+        output->emplace_back(build_string_bound(pool, expr->type(), column, TExprOpcode::LT, upper));
+    }
+}
+
+} // namespace
 
 ColumnExprPredicate::ColumnExprPredicate(TypeInfoPtr type_info, ColumnId column_id, RuntimeState* state,
                                          const SlotDescriptor* slot_desc)
@@ -292,6 +394,9 @@ Status ColumnExprPredicate::try_to_rewrite_for_zone_map_filter(starrocks::Object
             exprs_after_rewrite.emplace_back(le);
             exprs_after_rewrite.emplace_back(ge);
         }
+    } else if (_type_info != nullptr && _type_info->type() == TYPE_VARCHAR) {
+        // _type_info can be null: get_type_info(type, precision, scale) returns null for non-scalar types.
+        rewrite_string_prefix_predicate(pool, root, &exprs_after_rewrite);
     }
 
     if (exprs_after_rewrite.empty()) {
