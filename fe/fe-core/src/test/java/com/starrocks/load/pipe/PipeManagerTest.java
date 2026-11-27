@@ -1381,8 +1381,8 @@ public class PipeManagerTest {
                 "create pipe list_p2 as insert into tbl1 select * from files('path'='fake://pipe', 'format'='parquet')";
         CreatePipeStmt createStmt = (CreatePipeStmt) UtFrameUtils.parseStmtWithNewParser(createSql, ctx);
         pm.createPipe(createStmt);
-        long pipeId = getPipe("list_p2").getPipeId().getId();
 
+        long pipeId = getPipe("list_p2").getPipeId().getId();
         List<PipeFileRecord> records = Arrays.asList(
                 new PipeFileRecord(pipeId, "file1", "version1", 1024),
                 new PipeFileRecord(pipeId, "file2", "version1", 1024),
