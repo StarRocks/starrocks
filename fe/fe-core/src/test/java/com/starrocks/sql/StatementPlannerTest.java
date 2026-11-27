@@ -494,6 +494,41 @@ class StatementPlannerTest extends PlanTestBase {
         assertFilesResolvedBeforeLock(sql);
     }
 
+    /**
+     * The lock collection walks the select list before analysis and locks t0 there, so files() there has to be
+     * found and resolved before the lock as well.
+     */
+    @Test
+    public void testQueryFilesInSelectListSubqueryResolvedBeforeLock() throws Exception {
+        assertFilesResolvedBeforeLock("select (select count(*) from t0), "
+                + "(select count(*) from files(\"path\"=\"fake://select_list\", \"format\"=\"csv\"))");
+    }
+
+    @Test
+    public void testQueryFilesInWhereSubqueryResolvedBeforeLock() throws Exception {
+        assertFilesResolvedBeforeLock("select v1 from t0 where v1 in "
+                + "(select col_int from files(\"path\"=\"fake://where\", \"format\"=\"csv\"))");
+    }
+
+    @Test
+    public void testQueryFilesInJoinOnSubqueryResolvedBeforeLock() throws Exception {
+        assertFilesResolvedBeforeLock("select t0.v1 from t0 join t1 on t0.v1 = t1.v4 and t0.v2 in "
+                + "(select col_int from files(\"path\"=\"fake://join_on\", \"format\"=\"csv\"))");
+    }
+
+    @Test
+    public void testInsertFilesInSelectListSubqueryResolvedBeforeLock() throws Exception {
+        boolean originalRunningUnitTest = FeConstants.runningUnitTest;
+        try {
+            FeConstants.runningUnitTest = false;
+            assertFilesResolvedBeforeLock("insert into t0 select "
+                    + "(select count(*) from files(\"path\"=\"fake://insert_select_list\", \"format\"=\"csv\")), "
+                    + "v2, v3 from t0");
+        } finally {
+            FeConstants.runningUnitTest = originalRunningUnitTest;
+        }
+    }
+
     @Test
     public void testCreatePipeFilesResolvedBeforeLock() throws Exception {
         // CREATE PIPE analyzes its INSERT from inside PipeAnalyzer, i.e. after the lock of the outer
