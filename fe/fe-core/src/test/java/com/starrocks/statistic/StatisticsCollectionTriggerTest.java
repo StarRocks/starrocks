@@ -41,12 +41,9 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-<<<<<<< HEAD
-=======
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.mockito.Mockito;
->>>>>>> e26cc71 ([BugFix] Protect first-load statistics row counts with table locks (#82917))
 
 import java.time.LocalDateTime;
 import java.util.List;
