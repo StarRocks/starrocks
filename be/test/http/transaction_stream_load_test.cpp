@@ -1531,34 +1531,6 @@ TEST_F(TransactionStreamLoadActionTest, on_header_numeric_headers_rejected) {
     }
 }
 
-<<<<<<< HEAD
-=======
-// Transaction stream load does not plan a flexible partial update, so it refuses partial_update_mode=flexible /
-// flexible_row whatever enable_flexible_partial_update says, instead of ignoring the value and running a plain
-// partial update that overwrites the columns a row omits with NULL. The other tokens behave as before, an
-// unknown one is still ignored, and none of them sets the flexible bit.
-TEST_F(TransactionStreamLoadActionTest, partial_update_mode_flexible_rejected) {
-    const bool saved = config::enable_flexible_partial_update;
-    DeferOp restore([saved]() { config::enable_flexible_partial_update = saved; });
-
-    PartialUpdateModeCase test_cases[] = {
-            {"row", "true", "json", true, true, TPartialUpdateMode::ROW_MODE, false, nullptr, nullptr},
-            {"column", "true", "json", true, true, TPartialUpdateMode::COLUMN_UPSERT_MODE, false, nullptr, nullptr},
-            {"auto", "true", "json", true, true, TPartialUpdateMode::AUTO_MODE, false, nullptr, nullptr},
-            {"unknown_mode", "true", "json", true, false, TPartialUpdateMode::UNKNOWN_MODE, false, nullptr, nullptr},
-            {"flexible", "true", "json", false, false, TPartialUpdateMode::UNKNOWN_MODE, false, "NOT_IMPLEMENTED_ERROR",
-             "partial_update_mode=flexible is not supported by transaction stream load"},
-            {"flexible_row", "true", "json", false, false, TPartialUpdateMode::UNKNOWN_MODE, false,
-             "NOT_IMPLEMENTED_ERROR", "partial_update_mode=flexible_row is not supported by transaction stream load"},
-    };
-    for (bool enabled : {false, true}) {
-        config::enable_flexible_partial_update = enabled;
-        for (const auto& tc : test_cases) {
-            ASSERT_NO_FATAL_FAILURE(run_partial_update_mode_case(tc)) << tc.mode << " enabled=" << enabled;
-        }
-    }
-}
-
 // skip_header, trim_space, enclose and escape used to be dropped on this endpoint: the plan request sent to the FE
 // never carried them, so a transaction stream load split quoted CSV fields that contain the column separator,
 // loaded header rows as data and kept the spaces around fields, while the streaming endpoint honored the same
@@ -1832,5 +1804,4 @@ TEST_F(TransactionStreamLoadActionTest, csv_format_headers_must_match_across_loa
     }
 }
 
->>>>>>> 82c5e5b91be... [BugFix][RB-1826] Pass the CSV format headers of a transaction stream load to the FE (#70648)
 } // namespace starrocks
