@@ -1,0 +1,85 @@
+-- name: test_skew_join_v1_null_safe
+CREATE TABLE sj_skew(
+    c_key INT NOT NULL,
+    c_val INT
+)
+DUPLICATE KEY(c_key)
+DISTRIBUTED BY HASH(c_key) BUCKETS 1
+PROPERTIES (
+    "replication_num"="1"
+);
+-- result:
+-- !result
+CREATE TABLE sj_other(
+    c_key INT NOT NULL,
+    c_val INT
+)
+DUPLICATE KEY(c_key)
+DISTRIBUTED BY HASH(c_key) BUCKETS 1
+PROPERTIES (
+    "replication_num"="1"
+);
+-- result:
+-- !result
+insert into sj_skew values (1, null), (2, null), (3, null), (4, 7), (5, 7), (6, 9);
+-- result:
+-- !result
+insert into sj_other values (10, null), (11, 7);
+-- result:
+-- !result
+set enable_optimize_skew_join_v1 = true;
+-- result:
+-- !result
+set enable_optimize_skew_join_v2 = false;
+-- result:
+-- !result
+select count(*) from sj_skew join sj_other on sj_skew.c_val <=> sj_other.c_val;
+-- result:
+5
+-- !result
+select count(*) from sj_skew left join sj_other on sj_skew.c_val <=> sj_other.c_val;
+-- result:
+6
+-- !result
+select count(*) from sj_skew join [skew|sj_skew.c_val(null)] sj_other on sj_skew.c_val <=> sj_other.c_val;
+-- result:
+5
+-- !result
+select sj_skew.c_key, sj_other.c_key from sj_skew left join [skew|sj_skew.c_val(null)] sj_other on sj_skew.c_val <=> sj_other.c_val order by 1,2;
+-- result:
+1	10
+2	10
+3	10
+4	11
+5	11
+6	None
+-- !result
+function: assert_explain_contains('select sj_skew.c_key, sj_other.c_key from sj_skew left join [skew|sj_skew.c_val(null)] sj_other on sj_skew.c_val <=> sj_other.c_val', 'rand_col')
+-- result:
+None
+-- !result
+select count(*) from sj_skew join [skew|sj_skew.c_val(7)] sj_other on sj_skew.c_val <=> sj_other.c_val;
+-- result:
+5
+-- !result
+select sj_skew.c_key, sj_other.c_key from sj_skew left join [skew|sj_skew.c_val(7)] sj_other on sj_skew.c_val <=> sj_other.c_val order by 1,2;
+-- result:
+1	10
+2	10
+3	10
+4	11
+5	11
+6	None
+-- !result
+function: assert_explain_contains('select sj_skew.c_key, sj_other.c_key from sj_skew left join [skew|sj_skew.c_val(7)] sj_other on sj_skew.c_val <=> sj_other.c_val', 'rand_col')
+-- result:
+None
+-- !result
+select count(*) from sj_skew left join [skew|sj_other.c_val(null)] sj_other on sj_skew.c_val <=> sj_other.c_val;
+-- result:
+6
+-- !result
+function: assert_explain_not_contains('select sj_skew.c_key, sj_other.c_key from sj_skew left join [skew|sj_other.c_val(null)] sj_other on sj_skew.c_val <=> sj_other.c_val', 'rand_col')
+-- result:
+None
+-- !result

@@ -1,0 +1,50 @@
+-- name: test_skew_join_v1_null_safe
+
+CREATE TABLE sj_skew(
+    c_key INT NOT NULL,
+    c_val INT
+)
+DUPLICATE KEY(c_key)
+DISTRIBUTED BY HASH(c_key) BUCKETS 1
+PROPERTIES (
+    "replication_num"="1"
+);
+
+CREATE TABLE sj_other(
+    c_key INT NOT NULL,
+    c_val INT
+)
+DUPLICATE KEY(c_key)
+DISTRIBUTED BY HASH(c_key) BUCKETS 1
+PROPERTIES (
+    "replication_num"="1"
+);
+
+insert into sj_skew values (1, null), (2, null), (3, null), (4, 7), (5, 7), (6, 9);
+insert into sj_other values (10, null), (11, 7);
+
+-- The skew rewrite adds a random salt to the skewed rows of sj_skew and copies the matching rows
+-- of sj_other once per salt value, so every salted row still finds its partner.
+-- Under <=>, NULL matches NULL, so sj_other's NULL row must be copied too. If it is not,
+-- NULL matches are lost at random. Each hinted query is checked against the same query without the hint.
+set enable_optimize_skew_join_v1 = true;
+set enable_optimize_skew_join_v2 = false;
+
+-- Reference: No hint --> no rewrite.
+select count(*) from sj_skew join sj_other on sj_skew.c_val <=> sj_other.c_val;
+select count(*) from sj_skew left join sj_other on sj_skew.c_val <=> sj_other.c_val;
+
+-- NULL is a skew value: sj_skew salts its NULLs, so sj_other must give its NULL one copy per salt value
+select count(*) from sj_skew join [skew|sj_skew.c_val(null)] sj_other on sj_skew.c_val <=> sj_other.c_val;
+select sj_skew.c_key, sj_other.c_key from sj_skew left join [skew|sj_skew.c_val(null)] sj_other on sj_skew.c_val <=> sj_other.c_val order by 1,2;
+function: assert_explain_contains('select sj_skew.c_key, sj_other.c_key from sj_skew left join [skew|sj_skew.c_val(null)] sj_other on sj_skew.c_val <=> sj_other.c_val', 'rand_col')
+
+-- Only 7 is a skew value: NULLs are not salted on either side, so they still find each other
+select count(*) from sj_skew join [skew|sj_skew.c_val(7)] sj_other on sj_skew.c_val <=> sj_other.c_val;
+select sj_skew.c_key, sj_other.c_key from sj_skew left join [skew|sj_skew.c_val(7)] sj_other on sj_skew.c_val <=> sj_other.c_val order by 1,2;
+function: assert_explain_contains('select sj_skew.c_key, sj_other.c_key from sj_skew left join [skew|sj_skew.c_val(7)] sj_other on sj_skew.c_val <=> sj_other.c_val', 'rand_col')
+
+-- Hint on sj_other: the rewrite would have to copy sj_skew rows, and in a LEFT JOIN every copy
+-- shows up in the result, so rows would be duplicated. The rule must skip the rewrite.
+select count(*) from sj_skew left join [skew|sj_other.c_val(null)] sj_other on sj_skew.c_val <=> sj_other.c_val;
+function: assert_explain_not_contains('select sj_skew.c_key, sj_other.c_key from sj_skew left join [skew|sj_other.c_val(null)] sj_other on sj_skew.c_val <=> sj_other.c_val', 'rand_col')
