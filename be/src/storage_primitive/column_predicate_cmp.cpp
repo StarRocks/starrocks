@@ -585,6 +585,10 @@ public:
         roaring::Roaring roaring;
         RETURN_IF_ERROR(iterator->read_from_inverted_index(column_name, &this->_value, query_type, &roaring));
         *row_bitmap -= roaring;
+        // NULL <> v is NULL: drop NULL rows too, as nothing re-evaluates the predicate once the index answers it.
+        roaring::Roaring null_roaring;
+        RETURN_IF_ERROR(iterator->read_null(column_name, &null_roaring));
+        *row_bitmap -= null_roaring;
         return Status::OK();
 #else
         return Status::OK();
@@ -996,6 +1000,10 @@ public:
         roaring::Roaring roaring;
         RETURN_IF_ERROR(iterator->read_from_inverted_index(column_name, &padded_value, query_type, &roaring));
         *row_bitmap -= roaring;
+        // NULL <> v is NULL: drop NULL rows too, as nothing re-evaluates the predicate once the index answers it.
+        roaring::Roaring null_roaring;
+        RETURN_IF_ERROR(iterator->read_null(column_name, &null_roaring));
+        *row_bitmap -= null_roaring;
         return Status::OK();
 #else
         return Status::OK();
