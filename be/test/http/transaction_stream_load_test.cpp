@@ -20,9 +20,36 @@
 #include <gtest/gtest.h>
 #include <rapidjson/document.h>
 
+<<<<<<< HEAD
+=======
+#include <cstring>
+#include <optional>
+>>>>>>> 7533999 ([BugFix] Pass the CSV format headers of a transaction stream load to the FE (#84744))
 #include <string>
 
+<<<<<<< HEAD
 #include "common/config.h"
+=======
+#include "base/metrics.h"
+#include "base/testutil/assert.h"
+#include "base/testutil/sync_point.h"
+#include "base/uid_util.h"
+#include "base/utility/defer_op.h"
+#include "common/config_ingest_fwd.h"
+#include "common/config_storage_fwd.h"
+#include "common/status.h"
+#include "common/system/cpu_info.h"
+#include "compute_env/compute_env.h"
+#include "compute_env/load/http_load_params.h"
+#include "compute_env/load/stream_context_mgr.h"
+#include "compute_env/load/stream_load_context.h"
+#include "compute_env/load/stream_load_pipe.h"
+#include "data_workflows/load/stream_load/stream_load_executor.h"
+#include "data_workflows/load/stream_load/transaction_mgr.h"
+#include "exec/exec_env.h"
+#include "exec/pipeline/driver_executor_factory.h"
+#include "exec/pipeline/driver_queue_factory.h"
+>>>>>>> 7533999 ([BugFix] Pass the CSV format headers of a transaction stream load to the FE (#84744))
 #include "gen_cpp/FrontendService_types.h"
 #include "gen_cpp/HeartbeatService_types.h"
 #include "http/download_action.h"
@@ -1357,6 +1384,279 @@ TEST_F(TransactionStreamLoadActionTest, on_header_numeric_headers_rejected) {
         doc.Parse(k_response_str.c_str());
         ASSERT_NE(nullptr, std::strstr(doc["Message"].GetString(), tc.expected_message.c_str()))
                 << tc.header << ": " << tc.value << " -> " << doc["Message"].GetString();
+    }
+}
+
+// skip_header, trim_space, enclose and escape used to be dropped on this endpoint: the plan request sent to the FE
+// never carried them, so a transaction stream load split quoted CSV fields that contain the column separator,
+// loaded header rows as data and kept the spaces around fields, while the streaming endpoint honored the same
+// headers. The plan request now carries them as on the streaming endpoint.
+TEST_F(TransactionStreamLoadActionTest, csv_format_headers_reach_fe_plan_request) {
+    struct TestCase {
+        const char* label;
+        // Header values; nullptr leaves the header out of the request.
+        const char* skip_header;
+        const char* trim_space;
+        const char* enclose;
+        const char* escape;
+        // Plan request fields; std::nullopt means the field stays unset.
+        std::optional<int64_t> expected_skip_header;
+        std::optional<bool> expected_trim_space;
+        std::optional<int8_t> expected_enclose;
+        std::optional<int8_t> expected_escape;
+    };
+    TestCase test_cases[] = {
+            {"csv_format_headers_absent", nullptr, nullptr, nullptr, nullptr, std::nullopt, std::nullopt, std::nullopt,
+             std::nullopt},
+            {"csv_format_headers_set", "1", "true", "\"", "\\", 1, true, '"', '\\'},
+            {"csv_format_headers_other_values", "0", "FALSE", "'", "|", 0, false, '\'', '|'},
+            {"csv_format_headers_trim_space_mixed_case", nullptr, "True", nullptr, nullptr, std::nullopt, true,
+             std::nullopt, std::nullopt},
+    };
+
+    for (const auto& tc : test_cases) {
+        TransactionManagerAction txn_action(&_env, _transaction_mgr.get());
+        HttpRequest begin_req(_evhttp_req);
+        begin_req._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+        begin_req._headers.emplace(HttpHeaders::CONTENT_LENGTH, "0");
+        begin_req._headers.emplace(HTTP_LABEL_KEY, tc.label);
+        begin_req._params.emplace(HTTP_TXN_OP_KEY, TXN_BEGIN);
+        txn_action.handle(&begin_req);
+
+        rapidjson::Document doc;
+        doc.Parse(k_response_str.c_str());
+        ASSERT_STREQ("OK", doc["Status"].GetString()) << tc.label;
+
+        SyncPoint::GetInstance()->EnableProcessing();
+        DeferOp defer([]() {
+            SyncPoint::GetInstance()->ClearCallBack("TransactionStreamLoadAction::_exec_plan_fragment::rpc_timeout");
+            SyncPoint::GetInstance()->DisableProcessing();
+        });
+
+        bool captured = false;
+        TStreamLoadPutRequest plan_request;
+        SyncPoint::GetInstance()->SetCallBack("TransactionStreamLoadAction::_exec_plan_fragment::rpc_timeout",
+                                              [&](void* arg) {
+                                                  plan_request = *static_cast<TStreamLoadPutRequest*>(arg);
+                                                  captured = true;
+                                              });
+
+        TransactionStreamLoadAction action(&_env, &_stream_load_orchestrator, _transaction_mgr.get());
+        HttpRequest request(_evhttp_req);
+        request.set_handler(&action);
+        request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+        request._headers.emplace(HttpHeaders::CONTENT_LENGTH, "16");
+        request._headers.emplace(HTTP_LABEL_KEY, tc.label);
+        request._headers.emplace(HTTP_COLUMN_SEPARATOR, ",");
+        if (tc.skip_header != nullptr) {
+            request._headers.emplace(HTTP_SKIP_HEADER, tc.skip_header);
+        }
+        if (tc.trim_space != nullptr) {
+            request._headers.emplace(HTTP_TRIM_SPACE, tc.trim_space);
+        }
+        if (tc.enclose != nullptr) {
+            request._headers.emplace(HTTP_ENCLOSE, tc.enclose);
+        }
+        if (tc.escape != nullptr) {
+            request._headers.emplace(HTTP_ESCAPE, tc.escape);
+        }
+        ASSERT_EQ(0, action.on_header(&request)) << tc.label << " -> " << k_response_str;
+        action.handle(&request);
+
+        ASSERT_TRUE(captured) << tc.label;
+        EXPECT_EQ(tc.expected_skip_header.has_value(), plan_request.__isset.skipHeader) << tc.label;
+        if (tc.expected_skip_header.has_value()) {
+            EXPECT_EQ(*tc.expected_skip_header, plan_request.skipHeader) << tc.label;
+        }
+        EXPECT_EQ(tc.expected_trim_space.has_value(), plan_request.__isset.trimSpace) << tc.label;
+        if (tc.expected_trim_space.has_value()) {
+            EXPECT_EQ(*tc.expected_trim_space, plan_request.trimSpace) << tc.label;
+        }
+        EXPECT_EQ(tc.expected_enclose.has_value(), plan_request.__isset.enclose) << tc.label;
+        if (tc.expected_enclose.has_value()) {
+            EXPECT_EQ(*tc.expected_enclose, plan_request.enclose) << tc.label;
+        }
+        EXPECT_EQ(tc.expected_escape.has_value(), plan_request.__isset.escape) << tc.label;
+        if (tc.expected_escape.has_value()) {
+            EXPECT_EQ(*tc.expected_escape, plan_request.escape) << tc.label;
+        }
+
+        // Roll the transaction back, so that the fixture's teardown has no context left to roll back.
+        HttpRequest rollback_req(_evhttp_req);
+        rollback_req._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+        rollback_req._headers.emplace(HttpHeaders::CONTENT_LENGTH, "0");
+        rollback_req._headers.emplace(HTTP_LABEL_KEY, tc.label);
+        rollback_req._params.emplace(HTTP_TXN_OP_KEY, TXN_ROLLBACK);
+        txn_action.handle(&rollback_req);
+        doc.Parse(k_response_str.c_str());
+        ASSERT_STREQ("OK", doc["Status"].GetString()) << tc.label << " rollback -> " << k_response_str;
+    }
+}
+
+// A load with a channel (a parallel or multi-table transaction) was planned by the FE from the same headers, with
+// the FE's own parsing: there trim_space: 1 is true and skip_header: -1 skips nothing, while the streaming endpoint
+// refuses both values. The CN leaves the CSV format headers to that plan, so such a load is still accepted.
+TEST_F(TransactionStreamLoadActionTest, channel_load_leaves_csv_format_headers_to_fe_plan) {
+    const std::string label = "channel_csv_format_headers";
+    const std::string db = "db";
+    const std::string table = "tbl";
+    const int channel_id = 0;
+    StreamLoadContext* ctx = nullptr;
+    ASSERT_OK(_env.stream_context_mgr()->create_channel_context(
+            label, channel_id, db, table, TFileFormatType::FORMAT_CSV_PLAIN, ctx, UniqueId::gen_uid().to_thrift(), 1));
+    DeferOp release_ctx([&] { StreamLoadContext::release(ctx); });
+    ASSERT_OK(_env.stream_context_mgr()->put_channel_context(label, table, channel_id, ctx));
+    DeferOp remove_ctx([&] { _env.stream_context_mgr()->remove_channel_context(ctx); });
+
+    TransactionStreamLoadAction action(&_env, &_stream_load_orchestrator, _transaction_mgr.get());
+    // Both load calls carry the same headers, so the check that they match passes too.
+    for (int call = 1; call <= 2; ++call) {
+        k_response_str = "";
+        HttpRequest request(_evhttp_req);
+        request.set_handler(&action);
+        request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+        request._headers.emplace(HttpHeaders::CONTENT_LENGTH, "16");
+        request._headers.emplace(HTTP_DB_KEY, db);
+        request._headers.emplace(HTTP_TABLE_KEY, table);
+        request._headers.emplace(HTTP_LABEL_KEY, label);
+        request._headers.emplace(HTTP_CHANNEL_ID, std::to_string(channel_id));
+        request._headers.emplace(HTTP_TRIM_SPACE, "1");
+        request._headers.emplace(HTTP_SKIP_HEADER, "-1");
+        request._headers.emplace(HTTP_ENCLOSE, "\"");
+        ASSERT_EQ(0, action.on_header(&request)) << "call " << call << " -> " << k_response_str;
+        action.handle(&request);
+
+        rapidjson::Document doc;
+        doc.Parse(k_response_str.c_str());
+        ASSERT_STREQ("OK", doc["Status"].GetString()) << "call " << call << " -> " << k_response_str;
+    }
+}
+
+// Invalid skip_header and trim_space values are refused with the streaming endpoint's messages, instead of being
+// ignored.
+TEST_F(TransactionStreamLoadActionTest, on_header_invalid_csv_format_headers_rejected) {
+    struct TestCase {
+        std::string header;
+        std::string value;
+        std::string expected_message;
+    };
+    TestCase test_cases[] = {
+            {HTTP_SKIP_HEADER, "-1", "skip_header must be equal or greater than 0"},
+            {HTTP_SKIP_HEADER, "not-a-number", "Invalid parameter skip_header. The value must be an integer"},
+            {HTTP_TRIM_SPACE, "yes", "Invalid trim space format. Must be bool type"},
+            {HTTP_TRIM_SPACE, "1", "Invalid trim space format. Must be bool type"},
+    };
+
+    for (const auto& tc : test_cases) {
+        k_response_str = "";
+        TransactionStreamLoadAction action(&_env, &_stream_load_orchestrator, _transaction_mgr.get());
+        auto ctx = new StreamLoadContext(_env.load_stream_mgr());
+        ctx->ref();
+        ctx->db = "db";
+        ctx->table = "tbl";
+        ctx->label = "invalid_csv_format_headers";
+        ctx->body_sink = std::make_shared<StreamLoadPipe>();
+        bool remove_from_stream_context_mgr = false;
+        DeferOp defer([&]() {
+            if (remove_from_stream_context_mgr) {
+                _env.stream_context_mgr()->remove(ctx->label);
+            }
+            if (ctx->unref()) {
+                delete ctx;
+            }
+        });
+        ASSERT_OK((_env.stream_context_mgr())->put(ctx->label, ctx));
+        remove_from_stream_context_mgr = true;
+
+        HttpRequest request(_evhttp_req);
+        request.set_handler(&action);
+        request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+        request._headers.emplace(HttpHeaders::CONTENT_LENGTH, "3");
+        request._headers.emplace(HTTP_DB_KEY, ctx->db);
+        request._headers.emplace(HTTP_TABLE_KEY, ctx->table);
+        request._headers.emplace(HTTP_LABEL_KEY, ctx->label);
+        request._headers.emplace(tc.header, tc.value);
+
+        ASSERT_EQ(-1, action.on_header(&request)) << tc.header << ": " << tc.value;
+
+        rapidjson::Document doc;
+        doc.Parse(k_response_str.c_str());
+        ASSERT_STREQ("INVALID_ARGUMENT", doc["Status"].GetString()) << tc.header << ": " << tc.value;
+        ASSERT_NE(nullptr, std::strstr(doc["Message"].GetString(), tc.expected_message.c_str()))
+                << tc.header << ": " << tc.value << " -> " << doc["Message"].GetString();
+    }
+}
+
+// The FE plans a transaction stream load once, from its first load call, so every load call of the transaction must
+// carry the same parameters. The CSV format headers take part in that check now: a later call that changes one of
+// them, or leaves out one that the first call sent, is refused instead of being parsed with the first call's
+// settings.
+TEST_F(TransactionStreamLoadActionTest, csv_format_headers_must_match_across_loads) {
+    struct TestCase {
+        const char* label;
+        std::string header;
+        const char* first_value;
+        // nullptr leaves the header out of the later call.
+        const char* changed_value;
+    };
+    TestCase test_cases[] = {
+            {"csv_format_headers_changed_skip_header", HTTP_SKIP_HEADER, "1", "0"},
+            {"csv_format_headers_dropped_skip_header", HTTP_SKIP_HEADER, "1", nullptr},
+            {"csv_format_headers_changed_trim_space", HTTP_TRIM_SPACE, "true", "false"},
+            {"csv_format_headers_changed_enclose", HTTP_ENCLOSE, "\"", "'"},
+            {"csv_format_headers_changed_escape", HTTP_ESCAPE, "\\", "|"},
+    };
+
+    for (const auto& tc : test_cases) {
+        TransactionManagerAction txn_action(&_env, _transaction_mgr.get());
+        {
+            HttpRequest begin_req(_evhttp_req);
+            begin_req._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+            begin_req._headers.emplace(HttpHeaders::CONTENT_LENGTH, "0");
+            begin_req._headers.emplace(HTTP_DB_KEY, "db");
+            begin_req._headers.emplace(HTTP_LABEL_KEY, tc.label);
+            begin_req._params.emplace(HTTP_TXN_OP_KEY, TXN_BEGIN);
+            txn_action.handle(&begin_req);
+
+            rapidjson::Document doc;
+            doc.Parse(k_response_str.c_str());
+            ASSERT_STREQ("OK", doc["Status"].GetString()) << tc.label;
+        }
+
+        TransactionStreamLoadAction action(&_env, &_stream_load_orchestrator, _transaction_mgr.get());
+        // Sends one load call of the transaction and returns what on_header returned.
+        auto send_load = [&](const char* value) {
+            k_response_str = "";
+            HttpRequest request(_evhttp_req);
+            request.set_handler(&action);
+            request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+            request._headers.emplace(HttpHeaders::CONTENT_LENGTH, "16");
+            request._headers.emplace(HTTP_DB_KEY, "db");
+            request._headers.emplace(HTTP_LABEL_KEY, tc.label);
+            request._headers.emplace(HTTP_COLUMN_SEPARATOR, ",");
+            if (value != nullptr) {
+                request._headers.emplace(tc.header, value);
+            }
+            int ret = action.on_header(&request);
+            if (ret == 0) {
+                action.handle(&request);
+            }
+            return ret;
+        };
+
+        // The first call caches its plan request; a second call with the same headers passes the check.
+        for (int call = 1; call <= 2; ++call) {
+            ASSERT_EQ(0, send_load(tc.first_value)) << tc.label << " call " << call << " -> " << k_response_str;
+            rapidjson::Document doc;
+            doc.Parse(k_response_str.c_str());
+            ASSERT_STREQ("OK", doc["Status"].GetString()) << tc.label << " call " << call;
+        }
+
+        ASSERT_EQ(-1, send_load(tc.changed_value)) << tc.label << " -> " << k_response_str;
+        rapidjson::Document doc;
+        doc.Parse(k_response_str.c_str());
+        ASSERT_NE(nullptr, std::strstr(doc["Message"].GetString(), "load request not equal last"))
+                << tc.label << " -> " << doc["Message"].GetString();
     }
 }
 
