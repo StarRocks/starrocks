@@ -124,6 +124,7 @@ dependencies {
         exclude(group = "org.checkerframework", module = "checker-qual")
     }
     implementation("com.sun.activation:javax.activation")
+    testImplementation("com.unboundid:unboundid-ldapsdk")
     implementation("com.zaxxer:HikariCP:${project.ext["hikaricp.version"]}")
     implementation("commons-cli:commons-cli")
     implementation("commons-codec:commons-codec")
@@ -223,6 +224,8 @@ dependencies {
     implementation("org.apache.iceberg:iceberg-common")
     implementation("org.apache.iceberg:iceberg-core")
     implementation("org.apache.iceberg:iceberg-hive-metastore")
+    // Registers Parquet with Iceberg's InternalData: format-version 4 manifests are Parquet files.
+    implementation("org.apache.iceberg:iceberg-parquet")
     implementation("org.apache.ivy:ivy")
     implementation("org.apache.kudu:kudu-client") {
         exclude(group = "io.netty", module = "netty-handler")
