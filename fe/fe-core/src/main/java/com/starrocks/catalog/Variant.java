@@ -25,6 +25,7 @@ import com.starrocks.type.Type;
 import com.starrocks.type.TypeDeserializer;
 import com.starrocks.type.TypeSerializer;
 
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 /*
@@ -55,6 +56,11 @@ public abstract class Variant implements Comparable<Variant> {
 
     public abstract long getLongValue();
 
+    // The value as raw bytes. Only StringVariant can hold bytes that are not valid UTF-8.
+    public byte[] getBytesValue() {
+        return getStringValue().getBytes(StandardCharsets.UTF_8);
+    }
+
     public TVariant toThrift() {
         TVariant variant = new TVariant();
         variant.setType(TypeSerializer.toThrift(type));
@@ -66,7 +72,7 @@ public abstract class Variant implements Comparable<Variant> {
             variant.setVariant_type(TVariantType.MAXIMUM);
         } else {
             variant.setVariant_type(TVariantType.NORMAL_VALUE);
-            variant.setValue(getStringValue());
+            variant.setValue(getBytesValue());
         }
         return variant;
     }
@@ -82,7 +88,7 @@ public abstract class Variant implements Comparable<Variant> {
             variant.variantType = VariantTypePB.MAXIMUM;
         } else {
             variant.variantType = VariantTypePB.NORMAL_VALUE;
-            variant.value = getStringValue();
+            variant.value = getBytesValue();
         }
         return variant;
     }
@@ -142,6 +148,20 @@ public abstract class Variant implements Comparable<Variant> {
                 return new DecimalVariant(type, value);
             default:
                 throw new IllegalArgumentException("Type[" + type.toSql() + "] not supported.");
+        }
+    }
+
+    public static Variant of(Type type, byte[] bytes) {
+        Preconditions.checkArgument(type.isValid());
+        switch (type.getPrimitiveType()) {
+            case CHAR:
+            case VARCHAR:
+            case BINARY:
+            case VARBINARY:
+            case HLL:
+                return new StringVariant(type, bytes);
+            default:
+                return of(type, new String(bytes, StandardCharsets.UTF_8));
         }
     }
 
@@ -206,11 +226,11 @@ public abstract class Variant implements Comparable<Variant> {
         Preconditions.checkArgument(destType.isValid());
         Variant newKey1 = key1;
         if (key1.getType() != destType) {
-            newKey1 = Variant.of(destType, key1.getStringValue());
+            newKey1 = Variant.of(destType, key1.getBytesValue());
         }
         Variant newKey2 = key2;
         if (key2.getType() != destType) {
-            newKey2 = Variant.of(destType, key2.getStringValue());
+            newKey2 = Variant.of(destType, key2.getBytesValue());
         }
         return newKey1.compareTo(newKey2);
     }

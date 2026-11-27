@@ -73,6 +73,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Method;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -396,14 +397,18 @@ public class AgentTaskTest {
         // Verify lower bound
         Assertions.assertNotNull(thriftRange.getLower_bound());
         Assertions.assertEquals(2, thriftRange.getLower_bound().getValues().size());
-        Assertions.assertEquals("100", thriftRange.getLower_bound().getValues().get(0).getValue());
-        Assertions.assertEquals("abc", thriftRange.getLower_bound().getValues().get(1).getValue());
+        Assertions.assertEquals("100",
+                new String(thriftRange.getLower_bound().getValues().get(0).getValue(), StandardCharsets.UTF_8));
+        Assertions.assertEquals("abc",
+                new String(thriftRange.getLower_bound().getValues().get(1).getValue(), StandardCharsets.UTF_8));
         
         // Verify upper bound
         Assertions.assertNotNull(thriftRange.getUpper_bound());
         Assertions.assertEquals(2, thriftRange.getUpper_bound().getValues().size());
-        Assertions.assertEquals("200", thriftRange.getUpper_bound().getValues().get(0).getValue());
-        Assertions.assertEquals("xyz", thriftRange.getUpper_bound().getValues().get(1).getValue());
+        Assertions.assertEquals("200",
+                new String(thriftRange.getUpper_bound().getValues().get(0).getValue(), StandardCharsets.UTF_8));
+        Assertions.assertEquals("xyz",
+                new String(thriftRange.getUpper_bound().getValues().get(1).getValue(), StandardCharsets.UTF_8));
     }
 
     @Test
