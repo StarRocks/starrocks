@@ -60,6 +60,12 @@ public class IcebergDeleteSinkTest {
                 .thenReturn(mockCloudConfig);
         when(IcebergUtil.getVendedCloudConfiguration(isNull(), any(IcebergTable.class)))
                 .thenReturn(mockCloudConfig);
+        // The sink write path calls getVendedCloudConfigurationForWrite; the static mock stubs every
+        // IcebergUtil method to a default, so its real delegation does not run - stub it too.
+        when(IcebergUtil.getVendedCloudConfigurationForWrite(anyString(), any(IcebergTable.class)))
+                .thenReturn(mockCloudConfig);
+        when(IcebergUtil.getVendedCloudConfigurationForWrite(isNull(), any(IcebergTable.class)))
+                .thenReturn(mockCloudConfig);
     }
 
     @AfterEach

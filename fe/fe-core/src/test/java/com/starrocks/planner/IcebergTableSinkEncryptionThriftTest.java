@@ -70,6 +70,12 @@ public class IcebergTableSinkEncryptionThriftTest {
                 .thenReturn(mockCloudConfig);
         when(IcebergUtil.getVendedCloudConfiguration(isNull(), any(IcebergTable.class)))
                 .thenReturn(mockCloudConfig);
+        // The sink write paths call getVendedCloudConfigurationForWrite; the static mock stubs every
+        // IcebergUtil method to a default, so its real delegation does not run - stub it too.
+        when(IcebergUtil.getVendedCloudConfigurationForWrite(anyString(), any(IcebergTable.class)))
+                .thenReturn(mockCloudConfig);
+        when(IcebergUtil.getVendedCloudConfigurationForWrite(isNull(), any(IcebergTable.class)))
+                .thenReturn(mockCloudConfig);
         // resolveTargetMaxFileSize and tableDataLocation are static on the same class, so the static
         // mock intercepts them too; give them values toThrift() can serialize.
         when(IcebergUtil.tableDataLocation(any(org.apache.iceberg.Table.class))).thenReturn("/tmp/iceberg/data");
