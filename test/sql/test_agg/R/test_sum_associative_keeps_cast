@@ -1,0 +1,37 @@
+-- name: test_sum_associative_keeps_cast
+CREATE TABLE t_sum_${uuid0} (k INT, b BOOLEAN) DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO t_sum_${uuid0} VALUES (1, true), (2, false), (3, NULL);
+-- result:
+-- !result
+SELECT sum(cast(b AS INT) + (3/2)) FROM t_sum_${uuid0};
+-- result:
+4.0
+-- !result
+SELECT sum(cast(b AS DOUBLE) + 1.5) FROM t_sum_${uuid0};
+-- result:
+4.0
+-- !result
+SELECT sum(cast(b AS DECIMAL(10, 2)) + 1.5) FROM t_sum_${uuid0};
+-- result:
+4.00
+-- !result
+SELECT sum(cast(k AS LARGEINT) + 1) FROM t_sum_${uuid0};
+-- result:
+9
+-- !result
+SELECT sum(cast(b AS INT) + 1), sum(k + 1) FROM t_sum_${uuid0};
+-- result:
+3	9
+-- !result
+SELECT k, sum(cast(b AS INT) + (3/2)) FROM t_sum_${uuid0} GROUP BY k ORDER BY k;
+-- result:
+1	2.5
+2	1.5
+3	None
+-- !result
+DROP TABLE t_sum_${uuid0};
+-- result:
+-- !result

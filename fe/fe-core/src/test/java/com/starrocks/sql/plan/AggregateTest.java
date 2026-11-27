@@ -2123,6 +2123,27 @@ public class AggregateTest extends PlanTestBase {
                 "  |  <slot 3> : -9223372036854775808");
     }
 
+    // RewriteSumByAssociativeRule removes the cast around the summed column when sum(fromType) exists, but that
+    // lookup ignores the result type: it stripped cast(BOOLEAN AS DOUBLE / DECIMAL) and cast(INT AS LARGEINT) and
+    // built sum(BOOLEAN) -> DOUBLE or sum(INT) -> LARGEINT, which the BE rejects with "Invalid agg function plan".
+    @Test
+    public void testRewriteSumByAssociativeKeepsCastForUnsupportedSum() throws Exception {
+        String[][] cases = {
+                {"sum(cast(cast(t1c as boolean) as int) + (3 / 2))", "args: BOOLEAN; result: DOUBLE"},
+                {"sum(cast(t1c as boolean) + 1.5)", "args: BOOLEAN; result: DECIMAL128"},
+                {"sum(cast(t1c as largeint) + 1)", "args: INT; result: LARGEINT"},
+        };
+        for (String[] c : cases) {
+            String plan = getVerboseExplain("select " + c[0] + " from test_all_type");
+            assertNotContains(plan, c[1]);
+            // the rule still applies: sum(x + c) -> sum(x) + count(x) * c
+            assertContains(plan, "count[");
+        }
+        // a cast whose sum keeps the result type is still removed: sum(BOOLEAN) -> BIGINT
+        String plan = getVerboseExplain("select sum(cast(t1c as boolean) + 1) from test_all_type");
+        assertContains(plan, "args: BOOLEAN; result: BIGINT");
+    }
+
     @Test
     public void testRewriteSumByAssociativeRule() throws Exception {
         // 1. different types

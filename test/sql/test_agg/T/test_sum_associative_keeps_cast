@@ -1,0 +1,13 @@
+-- name: test_sum_associative_keeps_cast
+-- sum(x + c) is rewritten to sum(x) + count(x) * c. The cast around x may only be removed when sum(x) returns
+-- the aggregate's result type; otherwise the BE has no such sum and the query failed with an invalid plan.
+CREATE TABLE t_sum_${uuid0} (k INT, b BOOLEAN) DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+INSERT INTO t_sum_${uuid0} VALUES (1, true), (2, false), (3, NULL);
+SELECT sum(cast(b AS INT) + (3/2)) FROM t_sum_${uuid0};
+SELECT sum(cast(b AS DOUBLE) + 1.5) FROM t_sum_${uuid0};
+SELECT sum(cast(b AS DECIMAL(10, 2)) + 1.5) FROM t_sum_${uuid0};
+SELECT sum(cast(k AS LARGEINT) + 1) FROM t_sum_${uuid0};
+SELECT sum(cast(b AS INT) + 1), sum(k + 1) FROM t_sum_${uuid0};
+SELECT k, sum(cast(b AS INT) + (3/2)) FROM t_sum_${uuid0} GROUP BY k ORDER BY k;
+DROP TABLE t_sum_${uuid0};
