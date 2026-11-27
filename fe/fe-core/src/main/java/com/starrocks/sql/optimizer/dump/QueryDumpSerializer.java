@@ -30,11 +30,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.Version;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
-<<<<<<< HEAD
-=======
-import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.RunMode;
->>>>>>> 38254d3 ([BugFix] Count the warehouse's execution nodes when costing joins in shared-data mode (#82918))
 import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.system.BackendResourceStat;
