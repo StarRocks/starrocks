@@ -95,6 +95,8 @@ public class IvmUnaliasedColumnNamesIcebergTest extends MVIVMIcebergTestBase {
 
             AlterMVJobExecutor.inactiveMvAndLog(mv, MaterializedViewExceptions.inactiveReasonForBaseTableChanged("t0"));
             MVActiveChecker.tryToActivate(mv, false);
+            // MVActiveChecker.tryToActivate removes the thread's context when it is done.
+            connectContext.setThreadLocalInfo();
             Assertions.assertTrue(mv.isActive(), mv.getInactiveReason());
             Assertions.assertEquals(expectedNames, visibleColumns(mv));
         } finally {
