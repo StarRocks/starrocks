@@ -16,6 +16,7 @@ package com.starrocks.catalog;
 
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.starrocks.analysis.FunctionName;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
 import com.starrocks.credential.CloudType;
