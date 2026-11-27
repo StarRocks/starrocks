@@ -298,6 +298,9 @@ struct OlapReaderStatistics {
     // Segments the segment metadata filter excludes from the scan, so they were not warmed, nor, when the non-split
     // path opened the segments in parallel, opened.
     int64_t lake_prepared_tablet_warm_index_pruned_segments = 0;
+    // IDG .idx files (bitmap indexes added by ADD INDEX) whose footer was read and whose bitmap index roots started
+    // warming. Their ranges and blocks are counted with the others.
+    int64_t lake_prepared_tablet_warm_index_idg_files = 0;
     // Rowsets of a non-split query scan whose iterators were built inline instead of on the rowset thread pool,
     // because every segment of the tablet was already open in the metadata cache.
     int64_t lake_prepared_tablet_inline_rowsets = 0;
@@ -474,6 +477,7 @@ struct OlapReaderStatistics {
         lake_prepared_tablet_warm_index_blocks += other.lake_prepared_tablet_warm_index_blocks;
         lake_prepared_tablet_warm_index_skipped += other.lake_prepared_tablet_warm_index_skipped;
         lake_prepared_tablet_warm_index_pruned_segments += other.lake_prepared_tablet_warm_index_pruned_segments;
+        lake_prepared_tablet_warm_index_idg_files += other.lake_prepared_tablet_warm_index_idg_files;
         lake_prepared_tablet_inline_rowsets += other.lake_prepared_tablet_inline_rowsets;
         lake_prepared_seed_segment_init_ns += other.lake_prepared_seed_segment_init_ns;
         lake_prepared_seed_vector_index_load_ns += other.lake_prepared_seed_vector_index_load_ns;

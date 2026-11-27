@@ -43,6 +43,7 @@
 #include "column/vectorized_fwd.h"
 #include "common/config_ingest_fwd.h"
 #include "common/config_lake_fwd.h"
+#include "common/config_rowset_fwd.h"
 #include "common/config_scan_io_fwd.h"
 #include "common/config_staros_worker_fwd.h"
 #include "common/logging.h"
@@ -59,6 +60,8 @@
 #include "runtime/runtime_env.h"
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
+#include "storage/lake/add_index_schema_change.h"
+#include "storage/lake/index_file_reader.h"
 #include "storage/lake/metacache.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/tablet.h"
@@ -4179,6 +4182,146 @@ TEST_F(LakeTabletReaderSpit, test_index_warm_includes_bitmap_index_roots) {
     EXPECT_EQ(cold.lake_prepared_tablet_warm_index_skipped, warm.lake_prepared_tablet_warm_index_skipped);
     EXPECT_TRUE(covered(roots.bitmap_dict_value));
     EXPECT_TRUE(covered(roots.bitmap_ordinal));
+}
+
+// A bitmap index added by ADD INDEX through the IDG fast path lives in a .idx file, and the segment footer has no
+// roots for it: the warm starts filling the tail of the .idx file, where its footer is, then reads that footer and
+// warms the bitmap index roots it points to. A missing .idx file is skipped, and the scan reads as before.
+TEST_F(LakeTabletReaderSpit, test_index_warm_includes_idg_bitmap_index_roots) {
+    write_two_rowsets_with_three_segments();
+    // Keep only rowset 2, whose single segment the .idx file below belongs to.
+    _tablet_metadata->mutable_rowsets()->DeleteSubrange(0, 1);
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+
+    // ADD INDEX on c1, which has no bitmap index in the segment footer.
+    const int32_t c1_uid = _tablet_schema->column(1).unique_id();
+    ASSERT_FALSE(_tablet_schema->column(1).has_bitmap_index());
+    ASSIGN_OR_ABORT(auto vt, _tablet_mgr->get_tablet(_tablet_metadata->id(), _tablet_metadata->version()));
+    TabletIndexPB index;
+    index.set_index_id(next_id());
+    index.set_index_name("ix_c1");
+    index.set_index_type(IndexType::BITMAP);
+    index.add_col_unique_id(c1_uid);
+    AddIndexSchemaChange sc(_tablet_mgr.get(), next_id(), vt, vt, {index}, _tablet_metadata->version(),
+                            vt.get_schema());
+    TxnLogPB_OpAddIndex op;
+    ASSERT_OK(sc.run(&op));
+    ASSERT_EQ(1, op.segment_entries_size());
+    const auto& entry = op.segment_entries(0).entry();
+    ASSERT_GT(entry.file_size(), 0);
+    (*_tablet_metadata->mutable_idg_meta()->mutable_idgs())[op.segment_entries(0).segment_id()].add_entries()->CopyFrom(
+            entry);
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+
+    // Where the bitmap index roots are in the .idx file.
+    const std::string idx_path = _tablet_mgr->segment_location(_tablet_metadata->id(), entry.index_file());
+    ASSIGN_OR_ABORT(auto idx_fs, FileSystemFactory::CreateSharedFromString(idx_path));
+    ColumnReader::IndexRootPages roots;
+    {
+        ASSIGN_OR_ABORT(auto idx_file, idx_fs->new_random_access_file(idx_path));
+        IndexFileReader idx_reader;
+        ASSERT_OK(idx_reader.init(idx_file.get()));
+        const ColumnIndexMetaPB* meta = idx_reader.find(c1_uid, IndexType::BITMAP);
+        ASSERT_NE(nullptr, meta);
+        ColumnReader::set_bitmap_index_root_pages(meta->bitmap_index(), &roots);
+    }
+    ASSERT_GT(roots.bitmap_dict_value.size, 0);
+    ASSERT_GT(roots.bitmap_ordinal.size, 0);
+
+    ConfigResetGuard<bool> warm_guard(&config::lake_scan_warm_index, true);
+    ConfigResetGuard<bool> open_guard(&config::lake_scan_parallel_segment_open, false);
+    const bool old_scheduler = g_remote_io_scheduler_enabled.exchange(true);
+    auto* sync = SyncPoint::GetInstance();
+    sync->EnableProcessing();
+    DeferOp cleanup([&] {
+        sync->ClearAllCallBacks();
+        sync->DisableProcessing();
+        g_remote_io_scheduler_enabled.store(old_scheduler);
+    });
+    // The local file system cannot warm: the calls below succeed instead.
+    sync->SetCallBack("TabletReader::warm_prepared_indexes::warm", [&](void* arg) {
+        *std::get<2>(*static_cast<IndexWarmCall*>(arg)) = std::make_shared<FakeIndexWarmHandle>();
+    });
+    std::vector<std::pair<int64_t, size_t>> idx_ranges;
+    sync->SetCallBack("TabletReader::warm_prepared_indexes::warm_idx", [&](void* arg) {
+        auto* call = static_cast<IndexWarmCall*>(arg);
+        idx_ranges.emplace_back(std::get<0>(*call), std::get<1>(*call));
+        *std::get<2>(*call) = std::make_shared<FakeIndexWarmHandle>();
+    });
+    auto read = [&](ColumnId pred_cid, const char* value, int64_t expected_rows) {
+        idx_ranges.clear();
+        std::unique_ptr<ColumnPredicate> pred(new_column_eq_predicate(get_type_info(TYPE_INT), pred_cid, value));
+        auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), _tablet_metadata, *_schema);
+        EXPECT_OK(reader->prepare());
+        TabletReaderParams params;
+        params.reader_type = READER_QUERY;
+        PredicateAndNode root;
+        root.add_child(PredicateColumnNode(pred.get()));
+        params.pred_tree = PredicateTree::create(std::move(root));
+        EXPECT_OK(reader->open(params));
+        auto chunk = ChunkFactory::new_chunk(*_schema, 1024);
+        int64_t rows = 0;
+        while (true) {
+            chunk->reset();
+            auto st = reader->get_next(chunk.get());
+            if (st.is_end_of_file()) break;
+            EXPECT_OK(st);
+            rows += chunk->num_rows();
+        }
+        EXPECT_EQ(expected_rows, rows);
+        auto stats = reader->stats();
+        reader->close();
+        return stats;
+    };
+    auto covered = [&](const PagePointer& page) {
+        for (const auto& [offset, length] : idx_ranges) {
+            if (offset <= static_cast<int64_t>(page.offset) &&
+                static_cast<int64_t>(page.offset + page.size) <= offset + static_cast<int64_t>(length)) {
+                return true;
+            }
+        }
+        return false;
+    };
+    auto covers_tail = [&]() {
+        return !idx_ranges.empty() &&
+               idx_ranges.front().first + static_cast<int64_t>(idx_ranges.front().second) == entry.file_size();
+    };
+
+    // c1 = 8 is the row with key 4.
+    _tablet_mgr->metacache()->prune();
+    auto stats = read(1, "8", 1);
+    EXPECT_TRUE(covers_tail());
+    EXPECT_TRUE(covered(roots.bitmap_dict_value));
+    EXPECT_TRUE(covered(roots.bitmap_ordinal));
+    if (roots.bitmap_dict_ordinal.size > 0) {
+        EXPECT_TRUE(covered(roots.bitmap_dict_ordinal));
+    }
+    EXPECT_EQ(1, stats.lake_prepared_tablet_warm_index_idg_files);
+    EXPECT_EQ(1, stats.lake_prepared_tablet_warm_index_segments);
+    EXPECT_GE(stats.lake_prepared_tablet_warm_index_ranges, static_cast<int64_t>(idx_ranges.size()));
+
+    // Not a predicate column: its .idx file is not touched.
+    _tablet_mgr->metacache()->prune();
+    stats = read(0, "4", 1);
+    EXPECT_TRUE(idx_ranges.empty());
+    EXPECT_EQ(0, stats.lake_prepared_tablet_warm_index_idg_files);
+
+    // Bitmap index filtering off: no bitmap index is warmed.
+    {
+        ConfigResetGuard<bool> bitmap_guard(&config::enable_index_bitmap_filter, false);
+        _tablet_mgr->metacache()->prune();
+        stats = read(1, "8", 1);
+        EXPECT_TRUE(idx_ranges.empty());
+        EXPECT_EQ(0, stats.lake_prepared_tablet_warm_index_idg_files);
+    }
+
+    // A missing .idx file (vacuumed under an old version) is not warmed, and the scan still finds the row. The local
+    // file system fails the open; a remote one fails the footer read.
+    ASSERT_OK(idx_fs->delete_file(idx_path));
+    _tablet_mgr->metacache()->prune();
+    stats = read(1, "8", 1);
+    EXPECT_TRUE(idx_ranges.empty());
+    EXPECT_EQ(0, stats.lake_prepared_tablet_warm_index_idg_files);
 }
 
 // Concurrent readers of the index roots while other threads load the indexes see the same, stable values.

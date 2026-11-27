@@ -180,6 +180,9 @@ public:
         bool bitmap_ordinal_root_is_data = true;
     };
     const IndexRootPages& index_root_pages() const { return _index_root_pages; }
+    // Sets the bitmap index roots of |roots| from |meta|, which may also come from an IDG .idx file. The page
+    // pointers are relative to the file that holds the index.
+    static void set_bitmap_index_root_pages(const BitmapIndexPB& meta, IndexRootPages* roots);
 
     // Observe only successfully published index loads. These readers are immutable after load;
     // do not inspect the index metas, which the loading thread may already have released.
@@ -294,7 +297,8 @@ private:
     // passed through RandomAccessFileOptions so that the .idx file is
     // read as cleartext rather than ciphertext.
     Status _new_idg_backed_bitmap_index_iterator(const IndexReadOptions& opts, const std::string& idx_filename,
-                                                 const std::string& encryption_meta, BitmapIndexIterator** iterator);
+                                                 const std::string& encryption_meta, int64_t file_size,
+                                                 BitmapIndexIterator** iterator);
 
     // Determines the logical type to use when parsing zone map values for predicate filtering,
     // handling type mismatches between column and predicate types after fast schema evolution

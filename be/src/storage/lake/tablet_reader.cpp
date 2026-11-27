@@ -39,6 +39,7 @@
 #include "fs/fs_factory.h"
 #include "fs/remote_read_context.h"
 #include "gutil/stl_util.h"
+#include "platform/key_cache.h"
 #include "runtime/current_thread.h"
 #include "runtime/runtime_env.h"
 #include "runtime/runtime_state.h"
@@ -47,6 +48,8 @@
 #include "storage/delta_column_group.h"
 #include "storage/flat_json_metrics.h"
 #include "storage/json_path_deriver.h"
+#include "storage/lake/index_delta_group_loader.h"
+#include "storage/lake/index_file_reader.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/segment_metadata_filter.h"
@@ -473,20 +476,39 @@ static bool allocate_initial_coarse_split(const PreparedSegmentReadStatePtr& seg
     return true;
 }
 
-// lake_scan_warm_index: starts filling the local cache with the index pages the scan of |state| reads next, and
-// returns without waiting. Per segment: the short key index, the zone map, bloom filter and bitmap index roots of
-// |predicate_cids| and the ordinal index roots of |read_cids|. An index root that is not the sole data page of its
-// index sits right after that index's other pages, so the block before it is warmed as well (a bitmap index has a
-// single index level, so its roots are warmed alone). The fills are scheduled as a demand; the reads that follow
-// join them. Nothing here is required for correctness: a segment whose file cannot warm is read as
-// before.
+// Sorts the [begin, end) ranges of |ranges| and merges those that overlap or touch.
+static std::vector<std::pair<int64_t, int64_t>> merge_ranges(std::vector<std::pair<int64_t, int64_t>> ranges) {
+    std::sort(ranges.begin(), ranges.end());
+    std::vector<std::pair<int64_t, int64_t>> merged;
+    for (const auto& r : ranges) {
+        if (!merged.empty() && r.first <= merged.back().second) {
+            merged.back().second = std::max(merged.back().second, r.second);
+        } else {
+            merged.push_back(r);
+        }
+    }
+    return merged;
+}
+
+// lake_scan_warm_index: starts filling the local cache with the index pages the scan of |state| reads next. Per
+// segment: the short key index, the zone map, bloom filter and bitmap index roots of |predicate_cids| and the ordinal
+// index roots of |read_cids|. An index root that is not the sole data page of its index sits right after that index's
+// other pages, so the block before it is warmed as well (a bitmap index has a single index level, so its roots are
+// warmed alone). The fills are scheduled as a demand; the reads that follow join them. Nothing here is required for
+// correctness: a segment whose file cannot warm is read as before.
+// A bitmap index that ADD INDEX added through the IDG fast path lives in a .idx file of its own, and the segment footer
+// has no roots for it. With the indexes of each segment, the tail of each such .idx file, where its footer is, starts
+// filling; once all segments are done, the footers are read, which joins those fills, and the bitmap index roots they
+// point to start filling. That wait is the only one here, and only a tablet with IDG-backed bitmap
+// indexes on predicate columns has it: the scan reads those footers next anyway, one segment after another.
 // With a non-null |prune_tree|, a segment that SegmentMetadataFilter excludes is not warmed: Rowset::read skips it by
 // the same test before loading any segment. A rowset whose opened segments are not indexed by metadata position, or a
 // segment without sort key bounds, is warmed as before.
 static void warm_prepared_indexes(PreparedTabletReadState* state, const TabletSchema& tablet_schema,
-                                  const std::vector<ColumnId>& predicate_cids, const std::vector<ColumnId>& read_cids,
-                                  const PredicateTree* prune_tree, const LakeIOOptions& query_io_opts,
-                                  const std::atomic<bool>* is_cancelled, OlapReaderStatistics* stats) {
+                                  const TabletMetadataPtr& tablet_metadata, const std::vector<ColumnId>& predicate_cids,
+                                  const std::vector<ColumnId>& read_cids, const PredicateTree* prune_tree,
+                                  const LakeIOOptions& query_io_opts, const std::atomic<bool>* is_cancelled,
+                                  OlapReaderStatistics* stats) {
     LakeIOOptions lake_io_opts = query_io_opts;
     lake_io_opts.remote_read = ScopedRemoteReadContext::or_current(query_io_opts.remote_read);
 #ifdef USE_STAROS
@@ -495,6 +517,118 @@ static void warm_prepared_indexes(PreparedTabletReadState* state, const TabletSc
     // starlet_star_cache_block_size_bytes exists only in StarOS builds; use its default.
     const int64_t block_size = 1 << 20;
 #endif
+    // Starts filling [offset, offset + length) of |file|, the segment file (relative to the segment) or a .idx file.
+    // Returns false if the file cannot warm.
+    auto start_warm = [&](RandomAccessFile* file, [[maybe_unused]] bool is_idx, int64_t offset, size_t length) {
+        auto handle_or = file->warm_cache_async(offset, length, true /* urgent */);
+#ifdef BE_TEST
+        // Tests see the range and may replace the result.
+        std::tuple<int64_t, size_t, StatusOr<std::shared_ptr<io::CacheWarmHandle>>*> warm_call{offset, length,
+                                                                                               &handle_or};
+        if (is_idx) {
+            TEST_SYNC_POINT_CALLBACK("TabletReader::warm_prepared_indexes::warm_idx", &warm_call);
+        } else {
+            TEST_SYNC_POINT_CALLBACK("TabletReader::warm_prepared_indexes::warm", &warm_call);
+        }
+#endif
+        if (!handle_or.ok()) {
+            VLOG(2) << "stop warming the indexes of " << file->filename() << ": " << handle_or.status();
+            return false;
+        }
+        stats->lake_prepared_tablet_warm_index_ranges++;
+        stats->lake_prepared_tablet_warm_index_blocks += static_cast<int64_t>((*handle_or)->submitted_blocks());
+        state->index_warm_handles.emplace_back(std::move(handle_or).value());
+        return true;
+    };
+    // The IDG-backed bitmap indexes, only looked up when the tablet has IDG entries and bitmap index filtering is on.
+    std::unique_ptr<LakeIndexDeltaGroupLoader> idg_loader;
+    if (config::enable_index_bitmap_filter && tablet_metadata != nullptr && tablet_metadata->has_idg_meta() &&
+        tablet_metadata->idg_meta().idgs_size() > 0) {
+        idg_loader = std::make_unique<LakeIndexDeltaGroupLoader>(tablet_metadata);
+    }
+    // A .idx file whose tail started filling, and the predicate columns whose bitmap index it holds.
+    struct IdgBitmapFile {
+        std::unique_ptr<RandomAccessFile> file;
+        int64_t file_size = 0;
+        std::vector<int32_t> col_unique_ids;
+    };
+    std::vector<IdgBitmapFile> idg_files;
+    // Starts filling the tail, where the footer is, of each .idx file that holds the IDG-backed bitmap index of a
+    // predicate column of |segment|, and keeps the file for the footer read. Returns whether a fill started.
+    auto warm_idg_bitmap_file_tails = [&](uint32_t rowset_id, Segment& segment) {
+        IndexDeltaGroupList entries;
+        const TabletSegmentId tsid(tablet_metadata->id(), rowset_id + static_cast<uint32_t>(segment.id()));
+        if (!idg_loader->load(tsid, tablet_metadata->version(), &entries).ok() || entries.empty()) {
+            return false;
+        }
+        // Each column reads its bitmap index from the newest entry that has one, as ColumnReader does.
+        std::vector<std::pair<const IndexDeltaGroupEntry*, std::vector<int32_t>>> files;
+        for (ColumnId cid : predicate_cids) {
+            if (cid >= tablet_schema.num_columns()) {
+                continue;
+            }
+            const int32_t uid = tablet_schema.column(cid).unique_id();
+            if (segment.column_with_uid(uid) == nullptr) {
+                continue;
+            }
+            auto entry = std::find_if(entries.begin(), entries.end(), [&](const IndexDeltaGroupEntry& e) {
+                return std::any_of(e.keys.begin(), e.keys.end(), [&](const IndexDeltaGroupEntry::Key& k) {
+                    return k.col_unique_id == uid && k.index_type == IndexType::BITMAP;
+                });
+            });
+            if (entry == entries.end()) {
+                continue;
+            }
+            auto file = std::find_if(files.begin(), files.end(), [&](const auto& f) { return f.first == &*entry; });
+            if (file == files.end()) {
+                files.emplace_back(&*entry, std::vector<int32_t>{uid});
+            } else {
+                file->second.push_back(uid);
+            }
+        }
+        bool warmed = false;
+        for (auto& [entry, uids] : files) {
+            // Without its size, finding the footer of the file would take a request of its own.
+            if (entry->file_size <= 0) {
+                continue;
+            }
+            // Opened as ColumnReader opens it, with the size from the entry: under the segment's directory, and
+            // decrypted with the entry's encryption meta.
+            const std::string& seg_path = segment.file_name();
+            const auto pos = seg_path.find_last_of('/');
+            FileInfo info{.path = pos == std::string::npos ? entry->index_file
+                                                           : seg_path.substr(0, pos + 1) + entry->index_file,
+                          .size = entry->file_size};
+            RandomAccessFileOptions raf_opts;
+            raf_opts.remote_read = lake_io_opts.remote_read;
+            if (!entry->encryption_meta.empty()) {
+                auto encryption_or = KeyCache::instance().unwrap_encryption_meta(entry->encryption_meta);
+                if (!encryption_or.ok()) {
+                    VLOG(2) << "skip warming " << info.path << ": " << encryption_or.status();
+                    continue;
+                }
+                raf_opts.encryption_info = std::move(encryption_or).value();
+            }
+            auto fs_or = FileSystemFactory::CreateSharedFromString(info.path);
+            if (!fs_or.ok()) {
+                VLOG(2) << "skip warming " << info.path << ": " << fs_or.status();
+                continue;
+            }
+            auto file_or = (*fs_or)->new_random_access_file(raf_opts, info);
+            if (!file_or.ok()) {
+                VLOG(2) << "skip warming " << info.path << ": " << file_or.status();
+                continue;
+            }
+            // The footer is small: the last block, or the last two when the footer starts in the one before.
+            const int64_t tail = std::max<int64_t>(0, entry->file_size - block_size) / block_size * block_size;
+            if (!start_warm(file_or.value().get(), true, tail, static_cast<size_t>(entry->file_size - tail))) {
+                continue;
+            }
+            warmed = true;
+            idg_files.push_back(IdgBitmapFile{std::move(file_or).value(), entry->file_size, std::move(uids)});
+        }
+        return warmed;
+    };
     for (size_t rowset_idx = 0; rowset_idx < state->rowset_segments.size(); ++rowset_idx) {
         const auto& segments = state->rowset_segments[rowset_idx];
         const RowsetMetadataPB* rowset_meta = nullptr;
@@ -578,18 +712,19 @@ static void warm_prepared_indexes(PreparedTabletReadState* state, const TabletSc
                                  false);
                 }
             }
+            bool warmed = false;
+            DeferOp count_warmed_segment([&] {
+                if (warmed) {
+                    stats->lake_prepared_tablet_warm_index_segments++;
+                }
+            });
+            if (idg_loader != nullptr && rowset_idx < state->rowsets.size() && state->rowsets[rowset_idx] != nullptr) {
+                warmed = warm_idg_bitmap_file_tails(state->rowsets[rowset_idx]->id(), *segment);
+            }
             if (blocks.empty()) {
                 continue;
             }
-            std::sort(blocks.begin(), blocks.end());
-            std::vector<std::pair<int64_t, int64_t>> merged;
-            for (const auto& b : blocks) {
-                if (!merged.empty() && b.first <= merged.back().second) {
-                    merged.back().second = std::max(merged.back().second, b.second);
-                } else {
-                    merged.push_back(b);
-                }
-            }
+            const auto merged = merge_ranges(std::move(blocks));
             // The segment's own read file applies the bundle offset and the encryption of the segment, so the
             // ranges below are passed relative to the segment. A fill does not need the file once started, so the
             // file is closed when this segment is done. It is not opened retainable: the index blocks go to the
@@ -602,7 +737,6 @@ static void warm_prepared_indexes(PreparedTabletReadState* state, const TabletSc
             std::unique_ptr<RandomAccessFile> file = std::move(file_or).value();
             const int64_t file_end = object_offset + static_cast<int64_t>(segment->file_info().size.value_or(
                                                              std::numeric_limits<int64_t>::max() - object_offset));
-            bool warmed = false;
             for (const auto& [begin, end] : merged) {
                 if (cancel_requested(is_cancelled)) {
                     break;
@@ -612,28 +746,56 @@ static void warm_prepared_indexes(PreparedTabletReadState* state, const TabletSc
                 if (to <= from) {
                     continue;
                 }
-                const int64_t offset = from - object_offset;
-                const auto length = static_cast<size_t>(to - from);
-                auto handle_or = file->warm_cache_async(offset, length, true /* urgent */);
-#ifdef BE_TEST
-                // Tests see the segment-relative range and may replace the result.
-                std::tuple<int64_t, size_t, StatusOr<std::shared_ptr<io::CacheWarmHandle>>*> warm_call{offset, length,
-                                                                                                       &handle_or};
-                TEST_SYNC_POINT_CALLBACK("TabletReader::warm_prepared_indexes::warm", &warm_call);
-#endif
-                if (!handle_or.ok()) {
-                    // A stream that cannot warm at all will not start to: stop asking for this segment.
-                    VLOG(2) << "stop warming the indexes of " << segment->file_name() << ": " << handle_or.status();
+                // A stream that cannot warm at all will not start to: stop asking for this segment.
+                if (!start_warm(file.get(), false, from - object_offset, static_cast<size_t>(to - from))) {
                     break;
                 }
-                stats->lake_prepared_tablet_warm_index_ranges++;
-                stats->lake_prepared_tablet_warm_index_blocks += static_cast<int64_t>((*handle_or)->submitted_blocks());
-                state->index_warm_handles.emplace_back(std::move(handle_or).value());
                 warmed = true;
             }
-            if (warmed) {
-                stats->lake_prepared_tablet_warm_index_segments++;
+        }
+    }
+    // The footers of the .idx files are read now, while all their tails fill.
+    for (auto& idx : idg_files) {
+        if (cancel_requested(is_cancelled)) {
+            return;
+        }
+        IndexFileReader idx_reader;
+        if (auto st = idx_reader.init(idx.file.get()); !st.ok()) {
+            VLOG(2) << "skip warming the bitmap indexes of " << idx.file->filename() << ": " << st;
+            continue;
+        }
+        std::vector<std::pair<int64_t, int64_t>> blocks;
+        for (int32_t uid : idx.col_unique_ids) {
+            const ColumnIndexMetaPB* meta = idx_reader.find(uid, IndexType::BITMAP);
+            if (meta == nullptr || !meta->has_bitmap_index()) {
+                continue;
             }
+            ColumnReader::IndexRootPages roots;
+            ColumnReader::set_bitmap_index_root_pages(meta->bitmap_index(), &roots);
+            // As for a bitmap index in the segment: each root is warmed alone. A transient reader loads the index on
+            // every scan, so the roots are warmed whether they are data pages or not.
+            for (const PagePointer& pp : {roots.bitmap_dict_value, roots.bitmap_dict_ordinal, roots.bitmap_ordinal}) {
+                if (pp.size == 0) {
+                    continue;
+                }
+                const int64_t begin = static_cast<int64_t>(pp.offset);
+                blocks.emplace_back(
+                        begin / block_size * block_size,
+                        std::min(idx.file_size, (begin + pp.size + block_size - 1) / block_size * block_size));
+            }
+        }
+        bool warmed = false;
+        for (const auto& [begin, end] : merge_ranges(std::move(blocks))) {
+            if (end <= begin) {
+                continue;
+            }
+            if (!start_warm(idx.file.get(), true, begin, static_cast<size_t>(end - begin))) {
+                break;
+            }
+            warmed = true;
+        }
+        if (warmed) {
+            stats->lake_prepared_tablet_warm_index_idg_files++;
         }
     }
 }
@@ -1265,7 +1427,7 @@ void TabletReader::warm_index_pages(PreparedTabletReadState* state, const Tablet
             read_cids.push_back(field->id());
         }
     }
-    warm_prepared_indexes(state, *options.tablet_schema, predicate_cids, read_cids,
+    warm_prepared_indexes(state, *options.tablet_schema, _tablet_metadata, predicate_cids, read_cids,
                           SegmentMetadataFilter::filter_tree(options), lake_io_opts,
                           params.runtime_state != nullptr ? &params.runtime_state->cancelled_ref() : nullptr, &_stats);
 }
