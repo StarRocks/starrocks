@@ -21,7 +21,7 @@ To facilitate the maintenance of StarRocks clusters, StarRocks provides various 
 | GET                 | `/api/_check_storagetype`                                       | |
 | POST                | `/api/{db}/{table}/_cancel?label={}`                            | |
 | GET                 | `/api/{db}/get_load_state`                                      | |
-| GET                 | `/api/health`                                                   | |
+| GET                 | `/api/health`                                                   | Check FE health. With `check_nodes=true`, returns 503 until a BE or CN is alive. |
 | GET                 | `/metrics?type={core/json}`                                     | View metrics of the current FE.                                                                                      |
 | GET                 | `/api/show_meta_info`                                           | |
 | GET                 | `/api/show_proc`                                                | |
