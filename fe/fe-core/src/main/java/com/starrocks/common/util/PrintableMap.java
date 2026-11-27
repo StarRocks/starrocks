@@ -151,6 +151,9 @@ public class PrintableMap<K, V> {
                 sb.append(CredentialMask.SHORT);
             } else {
                 String text = entry.getValue().toString();
+                if (hidePassword) {
+                    text = SqlCredentialRedactor.redactUriCredentials(text);
+                }
                 if (withQuotation) {
                     text = escaper.escape(text);
                 }

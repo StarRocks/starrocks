@@ -18,6 +18,7 @@ import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.JDBCResource;
 import com.starrocks.common.util.CredentialMask;
 import com.starrocks.common.util.PrintableMap;
+import com.starrocks.common.util.SqlCredentialRedactor;
 import com.starrocks.connector.iceberg.IcebergCatalogProperties;
 import com.starrocks.connector.iceberg.rest.OAuth2SecurityConfig;
 import com.starrocks.connector.odps.OdpsProperties;
@@ -140,8 +141,10 @@ public class CredentialUtil {
         properties.remove(JDBCResource.PASSWORD);
 
         // PrintableMap.SENSITIVE_KEY contains CREDENTIAL_KEYS, so this masks the keys listed above, the
-        // prefixed keys, and the keys only PrintableMap lists (e.g. fs.s3a.secret.key).
-        properties.replaceAll((key, value) -> value != null && PrintableMap.isSensitiveKey(key) ? mask(value) : value);
+        // prefixed keys, and the keys only PrintableMap lists (e.g. fs.s3a.secret.key). Any other value can
+        // still be a URI that carries a password.
+        properties.replaceAll((key, value) -> value != null && PrintableMap.isSensitiveKey(key) ?
+                mask(value) : SqlCredentialRedactor.redactUriCredentials(value));
     }
 
     private static String mask(String value) {

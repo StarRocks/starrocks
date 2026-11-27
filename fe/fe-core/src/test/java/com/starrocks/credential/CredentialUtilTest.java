@@ -29,6 +29,17 @@ import java.util.List;
 import java.util.Map;
 
 public class CredentialUtilTest {
+
+    @Test
+    public void testMaskCredentialMasksPasswordsInsideUriValues() {
+        Map<String, String> masked = CredentialUtil.maskedCopy(Map.of(
+                "iceberg.catalog.uri", "http://user:uripw1@host:8181",
+                "jdbc_uri", "jdbc:mysql://host:3306/db?user=u&password=uripw2",
+                "type", "iceberg"));
+        Assertions.assertEquals("http://user:***@host:8181", masked.get("iceberg.catalog.uri"));
+        Assertions.assertEquals("jdbc:mysql://host:3306/db?user=u&password=***", masked.get("jdbc_uri"));
+        Assertions.assertEquals("iceberg", masked.get("type"));
+    }
     @Test
     public void testAdls2SecretsAreMaskedInRenderedProperties() {
         for (String key : List.of(CloudConfigurationConstants.AZURE_ADLS2_SHARED_KEY,
