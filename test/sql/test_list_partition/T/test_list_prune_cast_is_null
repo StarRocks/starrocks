@@ -1,0 +1,24 @@
+-- name: test_list_prune_cast_is_null
+-- CAST(partition column) IS NULL also holds for the values the cast turns into NULL, so it must not be pruned to
+-- the NULL partitions the way partition_column IS NULL is (RB-1188).
+create table t1 (k_id int not null, c_city varchar(20) null) duplicate key(k_id, c_city)
+partition by list(c_city) (partition p_north values in ('bj', 'tj'), partition p_south values in ('gz', 'sz'), partition p_num values in ('10', '20'))
+distributed by hash(k_id) buckets 1 properties ("replication_num" = "1");
+insert into t1 values (1, 'bj'), (2, 'tj'), (3, 'gz'), (4, 'sz'), (5, '10'), (6, '20');
+select count(*) from t1 where cast(c_city as int) is null;
+select sum(case when cast(c_city as int) is null then 1 else 0 end) from t1;
+select k_id from t1 where cast(c_city as int) is not null order by k_id;
+select count(*) from t1 where c_city is null;
+-- with a NULL partition, CAST(...) IS NULL must also keep the partitions whose values the cast turns into NULL,
+-- not only the NULL partition
+create table t2 (k_id int not null, c_city varchar(20) null) duplicate key(k_id, c_city)
+partition by list(c_city) (partition p_north values in ('bj', 'tj'), partition p_num values in ('10', '20'), partition p_null values in (NULL))
+distributed by hash(k_id) buckets 1 properties ("replication_num" = "1");
+insert into t2 values (1, 'bj'), (2, 'tj'), (3, '10'), (4, '20'), (5, NULL), (6, NULL);
+select k_id from t2 where cast(c_city as int) is null order by k_id;
+select sum(case when cast(c_city as int) is null then 1 else 0 end) from t2;
+select k_id from t2 where cast(c_city as date) is null order by k_id;
+select k_id from t2 where not (cast(c_city as int) is null) order by k_id;
+select k_id from t2 where cast(c_city as int) is not null order by k_id;
+select k_id from t2 where c_city is null order by k_id;
+select k_id from t2 where c_city is not null order by k_id;
