@@ -16,8 +16,10 @@
 #include "compute_env/staros/staros_worker.h"
 
 #include <aws/core/Aws.h>
+#include <fslib/cache_fill.h>
 #include <fslib/configuration.h>
 #include <fslib/fslib_all_initializer.h>
+#include <fslib/remote_read_scheduler.h>
 #include <gflags/gflags.h>
 #include <gmock/gmock.h>
 #include <grpcpp/grpcpp.h>
@@ -44,12 +46,16 @@
 #include "base/utility/defer_op.h"
 #include "common/config_metrics_fwd.h"
 #include "common/config_staros_worker_fwd.h"
+#include "common/config_update_registry.h"
 #include "common/configbase.h"
+#include "common/gflags_utils.h"
 #include "common/logging.h"
 #include "common/shutdown_hook.h"
+#include "common/system/cpu_info.h"
 #include "common/util/table_metrics.h"
 #include "compute_env/staros/staros_worker_metrics.h"
 #include "compute_env/staros/staros_worker_runtime.h"
+#include "fs/remote_read_context.h"
 
 DECLARE_int64(fslib_s3_max_single_part_size);
 DECLARE_int64(fslib_s3_min_upload_part_size);
@@ -57,6 +63,13 @@ DECLARE_int64(fslib_gs_max_single_part_size);
 DECLARE_int64(fslib_azure_storage_max_single_part_size);
 DECLARE_int64(fslib_azure_storage_min_upload_part_size);
 DECLARE_bool(fslib_s3_multipart_equal_part_size);
+
+DECLARE_bool(fs_enable_buffer_prefetch);
+
+namespace staros::starlet::fslib {
+DECLARE_bool(remote_read_skip_contended_cache_writes);
+DECLARE_int64(remote_read_retain_prefetched_bytes);
+} // namespace staros::starlet::fslib
 
 namespace starrocks {
 
@@ -989,6 +1002,110 @@ TEST_F(StarOSWorkerTest, kept_filesystem_survives_a_replaced_fs_cache_entry) {
     EXPECT_EQ(rebuilt->get(), reused->get());
 }
 
+// Builds a filesystem for each of |count| partitions of one table and returns the keys of their filesystem
+// cache entries. FE gives every partition its own path, so each partition gets its own entry. A caller
+// holds the keys for as long as the entries must stay: releasing a key erases its entry.
+static std::vector<std::shared_ptr<std::string>> build_partition_filesystems(StarOSWorker* worker, int count) {
+    std::vector<std::shared_ptr<std::string>> keys;
+    keys.reserve(count);
+    for (int i = 0; i < count; ++i) {
+        auto info = make_s3_shard_info(20000 + i, absl::StrFormat("s3://test_bucket/db/tbl/p%d", i), 1);
+        auto built = worker->build_filesystem_from_shard_info(info, {});
+        EXPECT_TRUE(built.ok()) << built.status();
+        if (built.ok()) {
+            keys.push_back(std::move(built->first));
+        }
+    }
+    return keys;
+}
+
+static int count_live_fs_cache_keys(StarOSWorker* worker, const std::vector<std::shared_ptr<std::string>>& keys) {
+    return std::count_if(keys.begin(), keys.end(),
+                         [&](const std::shared_ptr<std::string>& key) { return worker->is_live_fs_cache_key(key); });
+}
+
+// What the filesystem cache charges a filesystem: the 1 it is inserted with plus its handle and key.
+static size_t fs_cache_entry_charge(const std::string& key) {
+    return 1 + LRUCache::key_handle_size(CacheKey(key));
+}
+
+// `starlet_filesystem_instance_cache_capacity` is a number of filesystems. A node that reads more
+// partitions than that number misses the cache on almost every lookup and builds a new filesystem each time,
+// so a number of partitions well below the capacity must all stay cached, although the cache itself charges each
+// entry its handle and key as well.
+TEST_F(StarOSWorkerTest, fs_cache_capacity_counts_filesystems) {
+    staros::starlet::fslib::register_builtin_filesystems();
+    SCOPED_UPDATE(int32_t, config::starlet_filesystem_instance_cache_capacity, 10000);
+    // A released key erases its entry through the global worker.
+    auto origin = get_staros_worker();
+    auto worker = std::make_shared<StarOSWorker>();
+    set_staros_worker_for_test(worker);
+    DeferOp restore([&] { set_staros_worker_for_test(origin); });
+
+    // Each LRU shard holds a 32nd of the capacity, so stay well below it.
+    constexpr int kPartitions = 1000;
+    auto keys = build_partition_filesystems(worker.get(), kPartitions);
+    ASSERT_EQ(kPartitions, keys.size());
+    EXPECT_EQ(kPartitions, count_live_fs_cache_keys(worker.get(), keys));
+    // Every filesystem is charged the same, which the conversion of the capacity relies on.
+    const size_t entry_charge = fs_cache_entry_charge(*keys.front());
+    EXPECT_EQ(kPartitions * entry_charge, worker->_fs_cache->get_memory_usage());
+    EXPECT_EQ(10000 * entry_charge, worker->_fs_cache->get_capacity());
+}
+
+// Each LRU shard of the filesystem cache gets a 32nd of its capacity, so a multiple of 32 divides evenly.
+static constexpr int kExactFsCacheCapacity = 4 * kNumShards;
+
+// The exact bound: once every LRU shard overflows, the cache holds exactly as many filesystems as its capacity.
+// One fewer per shard means each filesystem is charged more than the capacity was converted for; the usage check
+// catches a charge that is off in either direction.
+TEST_F(StarOSWorkerTest, fs_cache_holds_exactly_its_capacity) {
+    staros::starlet::fslib::register_builtin_filesystems();
+    SCOPED_UPDATE(int32_t, config::starlet_filesystem_instance_cache_capacity, kExactFsCacheCapacity);
+    auto origin = get_staros_worker();
+    auto worker = std::make_shared<StarOSWorker>();
+    set_staros_worker_for_test(worker);
+    DeferOp restore([&] { set_staros_worker_for_test(origin); });
+
+    // About 31 partitions per LRU shard, well above the 4 each one holds.
+    constexpr int kPartitions = 1000;
+    auto keys = build_partition_filesystems(worker.get(), kPartitions);
+    ASSERT_EQ(kPartitions, keys.size());
+    EXPECT_EQ(kExactFsCacheCapacity, count_live_fs_cache_keys(worker.get(), keys));
+    const size_t entry_charge = fs_cache_entry_charge(*keys.front());
+    EXPECT_EQ(kExactFsCacheCapacity * entry_charge, worker->_fs_cache->get_memory_usage());
+    EXPECT_EQ(kExactFsCacheCapacity * entry_charge, worker->_fs_cache->get_capacity());
+}
+
+// The config is mutable: raising it through `set_fs_cache_capacity` makes room for that many more filesystems,
+// and lowering it evicts down to exactly that many.
+TEST_F(StarOSWorkerTest, fs_cache_capacity_update_counts_filesystems) {
+    staros::starlet::fslib::register_builtin_filesystems();
+    SCOPED_UPDATE(int32_t, config::starlet_filesystem_instance_cache_capacity, 64);
+    auto origin = get_staros_worker();
+    auto worker = std::make_shared<StarOSWorker>();
+    set_staros_worker_for_test(worker);
+    DeferOp restore([&] { set_staros_worker_for_test(origin); });
+
+    constexpr int kPartitions = 1000;
+    auto evicted = build_partition_filesystems(worker.get(), kPartitions);
+    ASSERT_EQ(kPartitions, evicted.size());
+    // 64 filesystems split over 32 LRU shards: 2 per shard.
+    const size_t entry_charge = fs_cache_entry_charge(*evicted.front());
+    EXPECT_GT(count_live_fs_cache_keys(worker.get(), evicted), 0);
+    EXPECT_LE(worker->_fs_cache->get_memory_usage(), 64 * entry_charge);
+
+    worker->set_fs_cache_capacity(10000);
+    auto keys = build_partition_filesystems(worker.get(), kPartitions);
+    ASSERT_EQ(kPartitions, keys.size());
+    EXPECT_EQ(kPartitions, count_live_fs_cache_keys(worker.get(), keys));
+    EXPECT_EQ(kPartitions * entry_charge, worker->_fs_cache->get_memory_usage());
+
+    worker->set_fs_cache_capacity(kExactFsCacheCapacity);
+    EXPECT_EQ(kExactFsCacheCapacity, count_live_fs_cache_keys(worker.get(), keys));
+    EXPECT_EQ(kExactFsCacheCapacity * entry_charge, worker->_fs_cache->get_memory_usage());
+}
+
 TEST_F(StarOSWorkerTest, failed_fetch_is_not_kept) {
     SCOPED_UPDATE(int64_t, config::lake_shard_info_cache_ttl_sec, 60);
     RemoteCountingStarOSWorker worker;
@@ -1188,6 +1305,31 @@ TEST_F(StarOSWorkerTest, upload_threshold_configs_reject_non_positive_at_startup
     EXPECT_EQ(11L << 20, FLAGS_fslib_azure_storage_min_upload_part_size);
 }
 
+// The BE config default must equal the starlet gflag's registered default, so that a node without
+// the config in its conf file keeps starlet's own choice of whether to use a proxy.
+TEST_F(StarOSWorkerTest, grpc_client_proxy_config_default_matches_starlet) {
+    auto configs = config::list_configs();
+    auto it = std::find_if(configs.begin(), configs.end(), [](const config::ConfigInfo& info) {
+        return info.name == "starlet_grpc_client_enable_http_proxy";
+    });
+    ASSERT_NE(configs.end(), it);
+    EXPECT_FALSE(it->valmutable);
+
+    gflags::CommandLineFlagInfo flag_info;
+    ASSERT_TRUE(gflags::GetCommandLineFlagInfo("grpc_client_enable_http_proxy", &flag_info));
+    EXPECT_EQ(flag_info.default_value, it->defval);
+}
+
+TEST_F(StarOSWorkerTest, grpc_client_proxy_config_applied_at_startup) {
+    gflags::FlagSaver flag_saver;
+
+    for (bool value : {true, false}) {
+        SCOPED_UPDATE(bool, config::starlet_grpc_client_enable_http_proxy, value);
+        apply_starlet_grpc_client_proxy_config();
+        EXPECT_EQ(value, FLAGS_grpc_client_enable_http_proxy) << value;
+    }
+}
+
 // s3_multipart_equal_part_size is shared with the BE S3 filesystem, so it has no `starlet_` prefix,
 // but it reaches starlet through the same startup hook as the thresholds above.
 TEST_F(StarOSWorkerTest, s3_multipart_equal_part_size_applied_at_startup) {
@@ -1207,6 +1349,151 @@ TEST_F(StarOSWorkerTest, s3_multipart_equal_part_size_applied_at_startup) {
         FLAGS_fslib_s3_multipart_equal_part_size = !value;
         apply_starlet_upload_threshold_configs();
         EXPECT_EQ(value, FLAGS_fslib_s3_multipart_equal_part_size);
+    }
+}
+
+// The BE default must equal starlet's, so that this config alone changes no behavior.
+TEST_F(StarOSWorkerTest, skip_contended_cache_writes_applied_at_startup) {
+    gflags::FlagSaver flag_saver;
+    namespace fslib = staros::starlet::fslib;
+
+    auto configs = config::list_configs();
+    auto it = std::find_if(configs.begin(), configs.end(), [](const config::ConfigInfo& info) {
+        return info.name == "remote_read_skip_contended_cache_writes";
+    });
+    ASSERT_NE(configs.end(), it);
+    EXPECT_EQ("false", it->defval);
+    EXPECT_TRUE(it->valmutable);
+    gflags::CommandLineFlagInfo flag_info;
+    ASSERT_TRUE(gflags::GetCommandLineFlagInfo("remote_read_skip_contended_cache_writes", &flag_info));
+    EXPECT_EQ(flag_info.default_value, it->defval);
+
+    // Start from the opposite value each time, so both directions are really assigned.
+    for (bool value : {true, false}) {
+        SCOPED_UPDATE(bool, config::remote_read_skip_contended_cache_writes, value);
+        fslib::FLAGS_remote_read_skip_contended_cache_writes = !value;
+        apply_remote_read_skip_contended_cache_writes();
+        EXPECT_EQ(value, fslib::FLAGS_remote_read_skip_contended_cache_writes);
+    }
+}
+
+// With the scheduler off, nothing reads the flag, but it still mirrors the config, and starting the scheduler (or
+// declining to) leaves it as the config set it.
+TEST_F(StarOSWorkerTest, skip_contended_cache_writes_kept_with_scheduler_off) {
+    gflags::FlagSaver flag_saver;
+    namespace fslib = staros::starlet::fslib;
+    SCOPED_UPDATE(bool, config::remote_io_scheduler_enable, false);
+    for (bool value : {true, false}) {
+        SCOPED_UPDATE(bool, config::remote_read_skip_contended_cache_writes, value);
+        fslib::FLAGS_remote_read_skip_contended_cache_writes = !value;
+        apply_remote_read_skip_contended_cache_writes();
+        EXPECT_OK(enable_remote_io_scheduler());
+        EXPECT_FALSE(remote_io_scheduler_enabled());
+        EXPECT_EQ(value, fslib::FLAGS_remote_read_skip_contended_cache_writes);
+    }
+}
+
+// The BE turns retention on by default with 2 GiB, while starlet's own default keeps it off.
+TEST_F(StarOSWorkerTest, remote_read_retain_prefetched_bytes_defaults) {
+    auto configs = config::list_configs();
+    auto it = std::find_if(configs.begin(), configs.end(), [](const config::ConfigInfo& info) {
+        return info.name == "remote_read_retain_prefetched_bytes";
+    });
+    ASSERT_NE(configs.end(), it);
+    EXPECT_EQ("2147483648", it->defval);
+    EXPECT_TRUE(it->valmutable);
+
+    gflags::CommandLineFlagInfo flag_info;
+    ASSERT_TRUE(gflags::GetCommandLineFlagInfo("remote_read_retain_prefetched_bytes", &flag_info));
+    EXPECT_EQ("0", flag_info.default_value);
+}
+
+// Startup and every dynamic update go through the same function: raising, lowering and zeroing the budget each
+// reach the starlet flag; a negative value is refused and leaves the effective budget as it was.
+TEST_F(StarOSWorkerTest, remote_read_retain_prefetched_bytes_applied_to_starlet) {
+    gflags::FlagSaver flag_saver;
+    namespace fslib = staros::starlet::fslib;
+    fslib::FLAGS_remote_read_retain_prefetched_bytes = 7;
+
+    for (int64_t bytes :
+         {int64_t{2} << 30, int64_t{1} << 20, int64_t{3} << 30, int64_t{0}, std::numeric_limits<int64_t>::max()}) {
+        SCOPED_UPDATE(int64_t, config::remote_read_retain_prefetched_bytes, bytes);
+        ASSERT_OK(update_remote_read_retain_prefetched_bytes());
+        EXPECT_EQ(bytes, fslib::FLAGS_remote_read_retain_prefetched_bytes);
+    }
+
+    fslib::FLAGS_remote_read_retain_prefetched_bytes = 5L << 20;
+    for (int64_t bytes : {int64_t{-1}, std::numeric_limits<int64_t>::min()}) {
+        SCOPED_UPDATE(int64_t, config::remote_read_retain_prefetched_bytes, bytes);
+        auto st = update_remote_read_retain_prefetched_bytes();
+        EXPECT_TRUE(st.is_invalid_argument()) << st;
+        EXPECT_EQ(5L << 20, fslib::FLAGS_remote_read_retain_prefetched_bytes);
+    }
+}
+
+// Through the config update registry, as the BE hook registers it: a refused value is rolled back in the BE config,
+// so the config and the effective starlet budget never disagree.
+TEST_F(StarOSWorkerTest, remote_read_retain_prefetched_bytes_dynamic_update_rolls_back) {
+    gflags::FlagSaver flag_saver;
+    namespace fslib = staros::starlet::fslib;
+    SCOPED_UPDATE(int64_t, config::remote_read_retain_prefetched_bytes, config::remote_read_retain_prefetched_bytes);
+    auto* registry = ConfigUpdateRegistry::instance();
+    registry->TEST_reset();
+    DeferOp reset_registry([registry] { registry->TEST_reset(); });
+    registry->register_callback("remote_read_retain_prefetched_bytes", update_remote_read_retain_prefetched_bytes);
+    registry->set_ready();
+
+    ASSERT_OK(registry->update_config("remote_read_retain_prefetched_bytes", "1073741824"));
+    EXPECT_EQ(1L << 30, config::remote_read_retain_prefetched_bytes);
+    EXPECT_EQ(1L << 30, fslib::FLAGS_remote_read_retain_prefetched_bytes);
+
+    EXPECT_FALSE(registry->update_config("remote_read_retain_prefetched_bytes", "-1").ok());
+    EXPECT_EQ(1L << 30, config::remote_read_retain_prefetched_bytes);
+    EXPECT_EQ(1L << 30, fslib::FLAGS_remote_read_retain_prefetched_bytes);
+
+    ASSERT_OK(registry->update_config("remote_read_retain_prefetched_bytes", "0"));
+    EXPECT_EQ(0, config::remote_read_retain_prefetched_bytes);
+    EXPECT_EQ(0, fslib::FLAGS_remote_read_retain_prefetched_bytes);
+}
+
+// Skipping contended cache writes with a zero retain budget: starlet then retains no block, so nothing is skipped,
+// but both flags still mirror their own config whichever is applied first, and applying the budget (accepted or
+// refused) never touches the skip flag.
+TEST_F(StarOSWorkerTest, skip_contended_cache_writes_with_zero_retain_budget) {
+    gflags::FlagSaver flag_saver;
+    namespace fslib = staros::starlet::fslib;
+    SCOPED_UPDATE(bool, config::remote_read_skip_contended_cache_writes, true);
+    SCOPED_UPDATE(int64_t, config::remote_read_retain_prefetched_bytes, 0);
+
+    for (bool skip_first : {true, false}) {
+        fslib::FLAGS_remote_read_skip_contended_cache_writes = false;
+        fslib::FLAGS_remote_read_retain_prefetched_bytes = 7;
+        if (skip_first) {
+            apply_remote_read_skip_contended_cache_writes();
+            ASSERT_OK(update_remote_read_retain_prefetched_bytes());
+        } else {
+            ASSERT_OK(update_remote_read_retain_prefetched_bytes());
+            apply_remote_read_skip_contended_cache_writes();
+        }
+        EXPECT_TRUE(config::remote_read_skip_contended_cache_writes);
+        EXPECT_EQ(0, config::remote_read_retain_prefetched_bytes);
+        EXPECT_TRUE(fslib::FLAGS_remote_read_skip_contended_cache_writes);
+        EXPECT_EQ(0, fslib::FLAGS_remote_read_retain_prefetched_bytes);
+    }
+
+    // Re-applying the zero budget, or refusing a negative one, leaves the skip flag alone, even if it no longer
+    // matches the config, so the budget update cannot be what restores or clears it.
+    for (bool skip_flag : {true, false}) {
+        fslib::FLAGS_remote_read_skip_contended_cache_writes = skip_flag;
+        ASSERT_OK(update_remote_read_retain_prefetched_bytes());
+        EXPECT_EQ(skip_flag, fslib::FLAGS_remote_read_skip_contended_cache_writes);
+        EXPECT_EQ(0, fslib::FLAGS_remote_read_retain_prefetched_bytes);
+        {
+            SCOPED_UPDATE(int64_t, config::remote_read_retain_prefetched_bytes, -1);
+            EXPECT_TRUE(update_remote_read_retain_prefetched_bytes().is_invalid_argument());
+        }
+        EXPECT_EQ(skip_flag, fslib::FLAGS_remote_read_skip_contended_cache_writes);
+        EXPECT_EQ(0, fslib::FLAGS_remote_read_retain_prefetched_bytes);
     }
 }
 
@@ -1255,6 +1542,174 @@ TEST_F(StarOSWorkerTest, retained_starlet_outlives_shutdown_release) {
     // Touches Starlet::_mutex, the member a use-after-free would have corrupted. Under ASAN this
     // is what fails if the retained reference stops keeping the runtime alive.
     EXPECT_FALSE(held->is_ready());
+}
+
+// The remote I/O scheduler configs are only checked when the scheduler is going to run.
+TEST(RemoteIOSchedulerConfigTest, ValidateOnlyWhenEnabledWithCache) {
+    SCOPED_UPDATE(int32_t, config::remote_read_query_weight, 0);
+    SCOPED_UPDATE(int32_t, config::remote_read_io_threads, -1);
+    {
+        SCOPED_UPDATE(bool, config::remote_io_scheduler_enable, false);
+        EXPECT_OK(validate_remote_io_scheduler_config());
+    }
+    SCOPED_UPDATE(bool, config::remote_io_scheduler_enable, true);
+    {
+        SCOPED_UPDATE(bool, config::datacache_enable, false);
+        EXPECT_OK(validate_remote_io_scheduler_config());
+    }
+    {
+        SCOPED_UPDATE(bool, config::starlet_use_star_cache, false);
+        EXPECT_OK(validate_remote_io_scheduler_config());
+    }
+    SCOPED_UPDATE(bool, config::datacache_enable, true);
+    SCOPED_UPDATE(bool, config::starlet_use_star_cache, true);
+    EXPECT_TRUE(validate_remote_io_scheduler_config().is_invalid_argument());
+}
+
+TEST(RemoteIOSchedulerConfigTest, ValidateRejectsInvalidValues) {
+    SCOPED_UPDATE(bool, config::remote_io_scheduler_enable, true);
+    SCOPED_UPDATE(bool, config::datacache_enable, true);
+    SCOPED_UPDATE(bool, config::starlet_use_star_cache, true);
+    EXPECT_OK(validate_remote_io_scheduler_config());
+    {
+        SCOPED_UPDATE(int32_t, config::remote_read_io_threads, -1);
+        EXPECT_TRUE(validate_remote_io_scheduler_config().is_invalid_argument());
+    }
+    for (int32_t* weight : {&config::remote_read_query_weight, &config::remote_read_load_weight,
+                            &config::remote_read_compaction_weight, &config::remote_read_background_weight}) {
+        ScopedUpdater<int32_t> zero(*weight, 0);
+        EXPECT_TRUE(validate_remote_io_scheduler_config().is_invalid_argument());
+    }
+    {
+        SCOPED_UPDATE(int32_t, config::remote_read_adaptive_min_inflight, 0);
+        EXPECT_TRUE(validate_remote_io_scheduler_config().is_invalid_argument());
+    }
+    {
+        SCOPED_UPDATE(int64_t, config::remote_read_weight_decay_ios, -1);
+        EXPECT_TRUE(validate_remote_io_scheduler_config().is_invalid_argument());
+    }
+    for (double decay_min : {0.0, -0.5, 1.5}) {
+        SCOPED_UPDATE(double, config::remote_read_weight_decay_min, decay_min);
+        EXPECT_TRUE(validate_remote_io_scheduler_config().is_invalid_argument()) << decay_min;
+    }
+    {
+        SCOPED_UPDATE(int64_t, config::remote_read_retain_prefetched_bytes, -1);
+        EXPECT_TRUE(validate_remote_io_scheduler_config().is_invalid_argument());
+    }
+    {
+        SCOPED_UPDATE(int64_t, config::remote_read_retain_prefetched_bytes, 0);
+        EXPECT_OK(validate_remote_io_scheduler_config());
+    }
+    {
+        // 0 turns the decay off, and a minimum of 1 means no decay either.
+        SCOPED_UPDATE(int64_t, config::remote_read_weight_decay_ios, 0);
+        SCOPED_UPDATE(double, config::remote_read_weight_decay_min, 1.0);
+        EXPECT_OK(validate_remote_io_scheduler_config());
+    }
+}
+
+TEST(RemoteIOSchedulerConfigTest, OptionsFollowConfigs) {
+    SCOPED_UPDATE(int32_t, config::remote_read_io_threads, 0);
+    SCOPED_UPDATE(double, config::pipeline_connector_scan_thread_num_per_cpu, 2.0);
+    SCOPED_UPDATE(int32_t, config::starlet_star_cache_block_size_bytes, 1 << 20);
+    SCOPED_UPDATE(bool, config::remote_read_adaptive_limit, true);
+    SCOPED_UPDATE(int32_t, config::remote_read_adaptive_min_inflight, 8);
+    SCOPED_UPDATE(int64_t, config::remote_read_weight_decay_ios, 512);
+    SCOPED_UPDATE(double, config::remote_read_weight_decay_min, 0.25);
+    SCOPED_UPDATE(int32_t, config::remote_read_query_weight, 7);
+    SCOPED_UPDATE(int32_t, config::remote_read_load_weight, 3);
+    SCOPED_UPDATE(int32_t, config::remote_read_compaction_weight, 4);
+    SCOPED_UPDATE(int32_t, config::remote_read_background_weight, 2);
+
+    namespace fslib = staros::starlet::fslib;
+    auto opts = remote_read_scheduler_options();
+    // The automatic pool follows the lake scan threads, without any cap.
+    EXPECT_EQ(std::max(1, static_cast<int32_t>(2.0 * CpuInfo::num_cores())), opts.io_threads);
+    EXPECT_EQ(1 << 20, opts.block_bytes);
+    EXPECT_TRUE(opts.adaptive_limit);
+    EXPECT_EQ(8, opts.adaptive_min_inflight);
+    EXPECT_EQ(512, opts.weight_decay_ios);
+    EXPECT_DOUBLE_EQ(0.25, opts.weight_decay_min);
+    EXPECT_EQ(7, opts.weight(fslib::ReadWorkload::QUERY));
+    EXPECT_EQ(3, opts.weight(fslib::ReadWorkload::LOAD));
+    EXPECT_EQ(4, opts.weight(fslib::ReadWorkload::COMPACTION));
+    EXPECT_EQ(2, opts.weight(fslib::ReadWorkload::OTHER_BACKGROUND));
+
+    SCOPED_UPDATE(int32_t, config::remote_read_io_threads, 1000);
+    SCOPED_UPDATE(bool, config::remote_read_adaptive_limit, false);
+    opts = remote_read_scheduler_options();
+    EXPECT_EQ(1000, opts.io_threads);
+    EXPECT_FALSE(opts.adaptive_limit);
+}
+
+// Disabled, or without the cache, the scheduler stays off and the old read-ahead keeps its configured value.
+TEST(RemoteIOSchedulerConfigTest, EnableFallsBackWithoutSchedulerOrCache) {
+    SCOPED_UPDATE(bool, config::starlet_fs_read_prefetch_enable, true);
+    SCOPED_UPDATE(bool, config::io_coalesce_lake_read_enable, true);
+    ASSERT_FALSE(staros::starlet::common::GFlagsUtils::UpdateFlagValue("fs_enable_buffer_prefetch", "1").empty());
+    DeferOp restore([] {
+        (void)staros::starlet::common::GFlagsUtils::UpdateFlagValue(
+                "fs_enable_buffer_prefetch", std::to_string(config::starlet_fs_read_prefetch_enable));
+    });
+    {
+        SCOPED_UPDATE(bool, config::remote_io_scheduler_enable, false);
+        EXPECT_OK(enable_remote_io_scheduler());
+    }
+    {
+        SCOPED_UPDATE(bool, config::remote_io_scheduler_enable, true);
+        SCOPED_UPDATE(bool, config::starlet_use_star_cache, false);
+        // Not checked without the cache: the node starts on the old paths.
+        SCOPED_UPDATE(int32_t, config::remote_read_query_weight, 0);
+        EXPECT_OK(enable_remote_io_scheduler());
+    }
+    EXPECT_FALSE(remote_io_scheduler_enabled());
+    EXPECT_EQ(nullptr, staros::starlet::fslib::RemoteReadScheduler::instance());
+    EXPECT_TRUE(FLAGS_fs_enable_buffer_prefetch);
+    EXPECT_TRUE(config::io_coalesce_lake_read_enable);
+}
+
+// With the scheduler running, a dynamic update that turns io_coalesce_lake_read_enable on is rejected and rolled back.
+// The rollback restores the value recorded last, which must be the false the scheduler set, not the true of be.conf.
+TEST(RemoteIOSchedulerConfigTest, IoCoalesceStaysOffAfterRejectedUpdate) {
+    ASSERT_OK(config::set_config("io_coalesce_lake_read_enable", "true"));
+    DeferOp restore([] { (void)config::set_config("io_coalesce_lake_read_enable", "false"); });
+    EXPECT_TRUE(turn_io_coalesce_lake_read_off());
+    EXPECT_FALSE(config::io_coalesce_lake_read_enable);
+    // What ConfigUpdateRegistry::update_config does when the hook refuses the new value.
+    ASSERT_OK(config::set_config("io_coalesce_lake_read_enable", "true"));
+    ASSERT_OK(config::rollback_config("io_coalesce_lake_read_enable"));
+    EXPECT_FALSE(config::io_coalesce_lake_read_enable);
+}
+
+// With the cache on and valid configs, startup installs the fill buffer allocator and turns the starlet buffer
+// prefetch off before starting the scheduler. A unit test cannot start it (see enable_remote_io_scheduler), so this
+// takes the path of a scheduler that failed to start: the prefetch flag is restored and nothing is marked enabled.
+TEST(RemoteIOSchedulerConfigTest, EnableFallsBackWhenTheSchedulerDoesNotStart) {
+    SCOPED_UPDATE(bool, config::remote_io_scheduler_enable, true);
+    SCOPED_UPDATE(bool, config::datacache_enable, true);
+    SCOPED_UPDATE(bool, config::starlet_use_star_cache, true);
+    SCOPED_UPDATE(bool, config::starlet_fs_read_prefetch_enable, true);
+    DeferOp restore([] {
+        (void)staros::starlet::fslib::set_fill_buffer_allocator(staros::starlet::fslib::FillBufferAllocator{});
+        (void)staros::starlet::common::GFlagsUtils::UpdateFlagValue("fs_enable_buffer_prefetch", "false");
+    });
+    ASSERT_FALSE(staros::starlet::common::GFlagsUtils::UpdateFlagValue("fs_enable_buffer_prefetch", "1").empty());
+
+    EXPECT_OK(enable_remote_io_scheduler());
+    EXPECT_FALSE(remote_io_scheduler_enabled());
+    EXPECT_EQ(nullptr, staros::starlet::fslib::RemoteReadScheduler::instance());
+    EXPECT_TRUE(FLAGS_fs_enable_buffer_prefetch);
+}
+
+// An invalid config refuses startup instead of falling back.
+TEST(RemoteIOSchedulerConfigTest, EnableRejectsInvalidConfig) {
+    SCOPED_UPDATE(bool, config::remote_io_scheduler_enable, true);
+    SCOPED_UPDATE(bool, config::datacache_enable, true);
+    SCOPED_UPDATE(bool, config::starlet_use_star_cache, true);
+    SCOPED_UPDATE(int32_t, config::remote_read_background_weight, 0);
+    EXPECT_TRUE(enable_remote_io_scheduler().is_invalid_argument());
+    EXPECT_FALSE(remote_io_scheduler_enabled());
+    EXPECT_EQ(nullptr, staros::starlet::fslib::RemoteReadScheduler::instance());
 }
 
 } // namespace starrocks

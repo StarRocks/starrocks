@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "STRUCT 式から FILE 値を構築します。"
 sidebar_position: 10
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 import Experimental from '../../../_assets/commonMarkdown/_experimental.mdx'
@@ -41,6 +42,8 @@ FILE 値を返します。`struct_expr` が NULL の場合は NULL を返しま�
 - URI 参照の `offset` と `size` は NULL にできますが、非 NULL の値は 0 以上である必要があります。インライン内容では、両方とも NULL である必要があります。いずれかの行がこのルール、または `uri` と `inline` のルールに違反すると、クエリは失敗します。このような行で NULL を返すには、[try_to_file](try_to_file.md) を使用してください。
 - URI の構文、MIME タイプ、チェックサム、参照するバイト範囲は検証しません。
 - `inline` は生のバイト列です。空文字列と長さゼロのバイナリ値も非 NULL とみなし、そのまま保持します。
+
+`content_type` が NULL または空文字列の場合、`ai_complete` または `ai_embed` がその FILE を受け取った時点でメディアタイプの推定を試みます。[FILE 入力の対応範囲](../ai-functions/ai_functions.mdx#file-input)を参照してください。
 
 ## 例
 

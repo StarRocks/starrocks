@@ -226,7 +226,7 @@ public class StarRocksIcebergTableScan
         MetadataCollectJob metadataCollectJob = new IcebergMetadataCollectJob(
                 catalogName, dbName, tableName, TResultSinkType.METADATA_ICEBERG, snapshotId(), icebergSerializedPredicate);
 
-        metadataCollectJob.init(connectContext.getSessionVariable());
+        metadataCollectJob.init(connectContext);
 
         long currentTimestamp = System.currentTimeMillis();
         String threadNamePrefix = String.format("%s-%s-%s-%d", catalogName, dbName, tableName, currentTimestamp);
@@ -392,9 +392,9 @@ public class StarRocksIcebergTableScan
                     }
                     matchingCachedDeleteFiles.addAll(deleteFiles);
                 } else {
-                    deleteFileCache.put(manifestFile.path(), ConcurrentHashMap.newKeySet());
+                    deleteFileCache.put(manifestEntriesCacheKey(manifestFile), ConcurrentHashMap.newKeySet());
                     metaFileCacheMap.computeIfAbsent(icebergTableName,
-                            t -> ConcurrentHashMap.newKeySet()).add(manifestFile.path());
+                            t -> ConcurrentHashMap.newKeySet()).add(manifestEntriesCacheKey(manifestFile));
                     deleteManifestWithoutCache.add(manifestFile);
                 }
             }
@@ -465,9 +465,9 @@ public class StarRocksIcebergTableScan
                 }
             } else {
                 if (!onlyReadCache) {
-                    dataFileCache.put(manifestFile.path(), ConcurrentHashMap.newKeySet());
+                    dataFileCache.put(manifestEntriesCacheKey(manifestFile), ConcurrentHashMap.newKeySet());
                     metaFileCacheMap.computeIfAbsent(icebergTableName,
-                            t -> ConcurrentHashMap.newKeySet()).add(manifestFile.path());
+                            t -> ConcurrentHashMap.newKeySet()).add(manifestEntriesCacheKey(manifestFile));
                 }
                 dataManifestWithoutCache.add(manifestFile);
             }
@@ -649,9 +649,9 @@ public class StarRocksIcebergTableScan
 
     public void refreshDataFileCache(List<ManifestFile> manifestFiles) {
         manifestFiles.forEach(manifestFile -> {
-            dataFileCache.put(manifestFile.path(), Sets.newHashSet());
+            dataFileCache.put(manifestEntriesCacheKey(manifestFile), Sets.newHashSet());
             metaFileCacheMap.computeIfAbsent(icebergTableName,
-                    t -> ConcurrentHashMap.newKeySet()).add(manifestFile.path());
+                    t -> ConcurrentHashMap.newKeySet()).add(manifestEntriesCacheKey(manifestFile));
         });
         this.deleteFileIndex = DeleteFileIndex.builderFor(new ArrayList<>()).build();
 
@@ -694,9 +694,9 @@ public class StarRocksIcebergTableScan
 
                     matchingCachedDeleteFiles.addAll(deleteFiles);
                 } else {
-                    deleteFileCache.put(manifestFile.path(), ConcurrentHashMap.newKeySet());
+                    deleteFileCache.put(manifestEntriesCacheKey(manifestFile), ConcurrentHashMap.newKeySet());
                     metaFileCacheMap.computeIfAbsent(icebergTableName,
-                            t -> ConcurrentHashMap.newKeySet()).add(manifestFile.path());
+                            t -> ConcurrentHashMap.newKeySet()).add(manifestEntriesCacheKey(manifestFile));
                     deleteManifestWithoutCache.add(manifestFile);
                 }
             }
@@ -892,8 +892,18 @@ public class StarRocksIcebergTableScan
         return files.size() == expectedLiveFilesCount;
     }
 
+    // Key of a manifest's entries in the data/delete file caches. It has the first_row_id: an upgrade to V3 gives
+    // existing manifests one without rewriting them, so entries cached before the upgrade have no row ids.
+    public static String manifestEntriesCacheKey(ManifestFile manifest) {
+        return manifestEntriesCacheKey(manifest.path(), manifest.firstRowId());
+    }
+
+    public static String manifestEntriesCacheKey(String path, Long firstRowId) {
+        return firstRowId == null ? path : path + "#first_row_id=" + firstRowId;
+    }
+
     static <F> Set<F> getCompleteCachedFiles(Cache<String, Set<F>> cache, ManifestFile manifest) {
-        Set<F> files = cache.getIfPresent(manifest.path());
+        Set<F> files = cache.getIfPresent(manifestEntriesCacheKey(manifest));
         if (isCompleteCachedFiles(manifest, files)) {
             return files;
         }
@@ -905,7 +915,7 @@ public class StarRocksIcebergTableScan
                 LOG.warn("Dropping incomplete Iceberg manifest cache entry {}: cached {} files, manifest expects {}",
                         manifest.path(), files.size(), expectedLiveFilesCount(manifest));
             }
-            cache.invalidate(manifest.path());
+            cache.invalidate(manifestEntriesCacheKey(manifest));
         }
         return null;
     }

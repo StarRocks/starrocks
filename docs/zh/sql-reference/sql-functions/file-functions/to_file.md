@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "根据 STRUCT 表达式构造 FILE 值。"
 sidebar_position: 10
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 import Experimental from '../../../_assets/commonMarkdown/_experimental.mdx'
@@ -41,6 +42,8 @@ FILE to_file(STRUCT struct_expr)
 - URI 引用的 `offset`、`size` 可以为 NULL；非 NULL 值必须大于等于 0。内联内容的 `offset`、`size` 必须均为 NULL。任意一行违反此规则或 `uri`/`inline` 二选一规则，查询都会失败。如需对这类行返回 NULL，请使用 [try_to_file](try_to_file.md)。
 - 不校验 URI 格式、MIME 类型、校验和，以及引用的字节范围。
 - `inline` 保存原始字节。空字符串和零长度二进制值仍算非 NULL，并会被保留。
+
+如果 `content_type` 缺失或为空，`ai_complete` 或 `ai_embed` 在使用该 FILE 时会尝试推断媒体类型。参见 [FILE 输入支持范围](../ai-functions/ai_functions.mdx#file-input)。
 
 ## 示例
 

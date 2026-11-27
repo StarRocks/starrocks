@@ -678,6 +678,57 @@ TEST_F(VectorizedCaseExprTest, WhenNoCaseIntNullElse) {
     }
 }
 
+// An expression may return a const column of size 1 for a chunk of N rows (ExprContext::evaluate resizes it only
+// when it is the evaluated root). CASE must not take its result size from such a WHEN (RB-1379).
+TEST_F(VectorizedCaseExprTest, caseWithSizeOneConstWhen) {
+    TExprNode node;
+    node.node_type = TExprNodeType::CASE_EXPR;
+    node.child_type = TPrimitiveType::INT;
+    node.__isset.child_type = true;
+    node.type = gen_type_desc(TPrimitiveType::INT);
+    node.case_expr.has_case_expr = true;
+    node.case_expr.has_else_expr = false;
+    node.__isset.case_expr = true;
+    std::unique_ptr<Expr> expr(VectorizedCaseExprFactory::from_thrift(node));
+
+    TypeDescriptor int_type(TYPE_INT);
+    auto case_column = Int32Column::create();
+    auto then_column = Int32Column::create();
+    for (int32_t v : {7, 8, 7, 9}) {
+        case_column->append(v);
+        then_column->append(v * 10);
+    }
+    auto when_data = Int32Column::create();
+    when_data->append(7);
+    MockExpr case_expr(int_type, std::move(case_column));
+    MockExpr when_expr(int_type, ConstColumn::create(std::move(when_data), 1));
+    MockExpr then_expr(int_type, std::move(then_column));
+    expr->add_child(&case_expr);
+    expr->add_child(&when_expr);
+    expr->add_child(&then_expr);
+
+    Chunk chunk;
+    auto slot_column = Int32Column::create();
+    slot_column->resize(4);
+    chunk.append_column(std::move(slot_column), 0);
+
+    ColumnPtr result = expr->evaluate(nullptr, &chunk);
+    ASSERT_EQ(4, result->size());
+    ColumnViewer<TYPE_INT> viewer(result);
+    ASSERT_FALSE(viewer.is_null(0));
+    ASSERT_EQ(70, viewer.value(0));
+    ASSERT_TRUE(viewer.is_null(1));
+    ASSERT_FALSE(viewer.is_null(2));
+    ASSERT_EQ(70, viewer.value(2));
+    ASSERT_TRUE(viewer.is_null(3));
+
+    // A chunk without columns reports 0 rows; the row count then comes from the non-const inputs.
+    Chunk no_columns;
+    result = expr->evaluate(nullptr, &no_columns);
+    ASSERT_EQ(4, result->size());
+    expr->_children.clear();
+}
+
 TEST_F(VectorizedCaseExprTest, whenConstantAndElseVariable) {
     expr_node.child_type = TPrimitiveType::INT;
     expr_node.type = gen_type_desc(TPrimitiveType::INT);

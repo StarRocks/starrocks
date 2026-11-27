@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "如何通过 StarRocks 的异步物化视图进行数据建模，简化 ETL Pipeline、构建可复用数据模型并提高查询性能。"
 sidebar_position: 10
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 使用物化视图进行数据建模
@@ -45,8 +46,8 @@ StarRocks 的异步物化视图具备以下原子能力，可助力数据建模�
 
 创建异步物化视图时，您可以使用 REFRESH 子句指定刷新策略。目前，StarRocks 异步物化视图支持以下刷新策略：
 
-- 自动刷新（`REFRESH ASYNC`）：每当基表中的数据发生变化时，都会触发刷新任务。数据依赖关系由物化视图自动管理。
-- 定时刷新（`REFRESH ASYNC EVERY (INTERVAL <refresh_interval>)`）：定期触发刷新任务，例如，每分钟、每天或每月。如果基表中没有数据更改，将不会触发刷新任务。
+- 自动刷新（`REFRESH ON_CHANGE`）：每当基表中的数据发生变化时，都会触发刷新任务。数据依赖关系由物化视图自动管理。
+- 定时刷新（`REFRESH SCHEDULE EVERY (INTERVAL <refresh_interval>)`）：定期触发刷新任务，例如，每分钟、每天或每月。如果基表中没有数据更改，将不会触发刷新任务。
 - 手动刷新（`REFRESH MANUAL`）：您只能通过手动执行 `REFRESH MATERIALIZED VIEW` 触发刷新任务。如果您通过外部调度框架触发刷新任务，可以使用此刷新策略。
 
 语法：
@@ -54,8 +55,8 @@ StarRocks 的异步物化视图具备以下原子能力，可助力数据建模�
 ```SQL
 CREATE MATERIALIZED VIEW <name>
 REFRESH 
-    [ ASYNC | 
-      ASYNC [START <time>] EVERY(<interval>) | 
+    [ ON_CHANGE | 
+      SCHEDULE [START <time>] EVERY(<interval>) | 
       MANUAL
     ]
 AS <query>
@@ -73,7 +74,7 @@ AS <query>
 
 ```SQL
 CREATE MATERIALIZED VIEW <name>
-REFRESH ASYNC
+REFRESH ON_CHANGE
 PARTITION BY 
     [
         <base_table_column> | 

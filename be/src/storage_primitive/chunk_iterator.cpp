@@ -32,6 +32,12 @@ public:
     size_t merged_rows() const override { return _iter->merged_rows(); }
 
     OlapReaderStatistics* set_read_stats(OlapReaderStatistics* stats) override { return _iter->set_read_stats(stats); }
+    Status start_read_ahead(bool* started) override {
+        SCOPED_RAW_TIMER(&_cost);
+        return _iter->start_read_ahead(started);
+    }
+    size_t read_ahead_blocks() const override { return _iter->read_ahead_blocks(); }
+    bool read_ahead_done() const override { return _iter->read_ahead_done(); }
 
     Status init_encoded_schema(ColumnIdToGlobalDictMap& dict_maps) override {
         RETURN_IF_ERROR(ChunkIterator::init_encoded_schema(dict_maps));

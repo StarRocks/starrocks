@@ -690,8 +690,8 @@ public class LakeRangeRollupColocateTest {
                 "Synchronous materialized view with range distribution requires a shared-data, non-primary-key table "
                         + "that is a member of its colocate group when it has colocate_with. "
                         + "Use an asynchronous materialized view instead: declare it with an explicit "
-                        + "REFRESH clause (REFRESH ASYNC or REFRESH MANUAL) or a DISTRIBUTED BY clause, "
-                        + "e.g. CREATE MATERIALIZED VIEW ... DISTRIBUTED BY HASH(...) REFRESH ASYNC AS SELECT ...");
+                        + "REFRESH clause or a DISTRIBUTED BY clause, "
+                        + "e.g. CREATE MATERIALIZED VIEW ... DISTRIBUTED BY HASH(...) REFRESH MANUAL AS SELECT ...");
     }
 
     /**
@@ -897,8 +897,6 @@ public class LakeRangeRollupColocateTest {
 
     /** Runs a WAITING_TXN job to RUNNING: the loads before the watershed are reported finished. */
     private static void runWaitingTxnJobToRunning(LakeRangeRollupJob job) throws Exception {
-        // The first round allocates the watershed and exposes the shadow index to loads.
-        job.runWaitingTxnJob();
         new MockUp<LakeRangeRollupJob>() {
             @Mock
             public boolean isPreviousLoadFinished(long dbId, long tableId, long txnId) {

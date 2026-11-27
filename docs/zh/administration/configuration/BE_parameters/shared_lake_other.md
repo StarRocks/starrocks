@@ -3,6 +3,7 @@ displayed_sidebar: docs
 description: "BE configuration parameters for shared-data clusters, data lake integration, and miscellaneous settings."
 sidebar_label: "存算分离、数据湖和其他"
 keywords: ['Canshu']
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 import BEConfigMethod from '../../../_assets/commonMarkdown/BE_config_method.mdx'
@@ -110,6 +111,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：节点上为所有并发 Compaction 任务执行并行归并预填读取的共享线程池的线程数。该值高于单任务的在途读取上限，以避免并发任务之间相互稀释；空闲线程会在 10 秒后回收，因此空闲节点不会为这部分余量付出任何开销。读取也在该线程池上解码，因此调大该值会同时增加 CPU、内存占用和 IO 并发。
 - 引入版本：v4.2
 
+### enable_lake_compaction_range_split
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：存算分离集群中，并行 Compaction 是否按排序键范围切分输入。设为 `true` 时，并行 Compaction 的每个子任务读取全部输入 Rowset 中落在一个排序键范围内的数据，各子任务共同写出一个 Segment 互不重叠的 Rowset。仅当所有输入 Segment 都记录了排序键上下界时，才按范围切分。否则，或者设为 `false` 时，并行 Compaction 按整个 Rowset 分组，或按 Segment 序号切分大 Rowset，各子任务的输出可能相互重叠。每个 Tablet 的最大子任务数由表属性 `lake_compaction_max_parallel` 设置。
+- 引入版本：v4.2
+
 ### lake_compaction_stream_buffer_size_bytes
 
 - 默认值：1048576
@@ -161,7 +171,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 类型：Boolean
 - 单位：-
 - 是否动态：是
-- 描述：存算分离集群下，是否在单个导入事务内保留主键表 UPSERT 与 DELETE 的先后顺序。当同一个导入事务中同一个 key 先 `DELETE` 后再 `UPSERT` 时，开启该配置后以最后写入的 `UPSERT` 为准（与存算一体集群行为一致）。默认开启。出于降级安全考虑，在回滚到（或与其混部）不支持该修复的 BE 版本之前，请先将其设为 `false`：开启后，导入可能会持久化新版本格式的元数据，若 BE 回滚到不支持该修复的版本会被错误解析，可能产生主键重复。关闭时，DELETE 回退到旧有行为（在事务内所有 UPSERT 之后生效）。
+- 描述：存算分离集群下，是否在单个导入事务内保留主键表 UPSERT 与 DELETE 的先后顺序。当同一个导入事务中同一个 key 先 `DELETE` 后再 `UPSERT` 时，开启该配置后以最后写入的 `UPSERT` 为准（与存算一体集群行为一致）。默认开启。出于降级安全考虑，在回滚到（或与其混部）不支持该修复的 BE 版本之前，请先将其设为 `false`：开启后，导入可能会持久化新版本格式的元数据，若 BE 回滚到不支持该修复的版本会被错误解析，可能产生主键重复。关闭时，DELETE 回退到旧有行为（在事务内所有 UPSERT 之后生效）：如果一次导入先 DELETE 某个 key 再重新 UPSERT，且两者被分别 flush（例如数据量较大的导入），该 key 最终会被删除，这次 UPSERT 丢失。排序键（`ORDER BY`）与主键不同的主键表始终保留该顺序，不受此配置影响。
 - 引入版本：v4.1.4
 
 ### lake_enable_protobuf_file_checksum
@@ -193,6 +203,21 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：存算分离集群中开启 File Bundling 的表在导入发布（Publish）时，是否保留聚合节点可能未收到的 Tablet 发布结果。某个 Tablet 的 Publish 在请求到达后超过 Publish RPC 超时时间加 3 秒才完成，或者本次 Publish 是重试，就会把结果保存在本节点的 Data Cache 中，不写入对象存储。之后该节点上的重试会直接读取这份结果，不再重新执行事务，因此慢分区每次重试时，已完成的 Tablet 不会被重做。这些缓存条目和其他 Data Cache 数据一样按需淘汰。仅在开启 Data Cache 时生效。所有 BE 和 CN 节点应设置相同的值。
 - 引入版本：v4.2
 
+### lake_enable_txn_vlog_group
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：存算分离集群的 Schema Change Publish 是否将多语句事务按语句顺序保存为日志组，写入独立的 `{tablet}_{version}.group.vlog` 文件。旧格式单日志使用 `{tablet}_{version}.vlog` 文件。无论该配置项如何设置，本版本的读取端始终支持旧单日志格式和新语句组格式。默认 `true` 时，每条语句保留各自的 Schema、Segment、重写元数据和删除位置，同一事务中先 DELETE 后 INSERT 不会再因部分更新元数据不匹配导致 Shadow Publish 失败。设置为 `false` 会恢复旧的合并日志写入路径，也会恢复这个已知问题。修改该配置项不会转换已经写入的版本事务日志。
+
+  不支持语句组读取的版本的 CN 无法读取语句组。从没有该配置项或该配置项默认为 `false` 的更早版本升级时，请在启动每个升级后的 CN 之前，在 `cn.conf` 中设置 `lake_enable_txn_vlog_group = false`，并保持为 `false`，直到所有可能执行 Publish、回放或清理的 CN 都已升级，包括后台工作节点和替换节点使用的镜像，然后按下文步骤开启。如果更早的版本不支持读取语句组，必须执行这一步：仍有旧 CN 时开启语句组写入，可能静默丢失已提交事务中的语句。新写入端删除部分源日志后，旧 CN 重试时可能仅用剩余源日志写出不完整的旧格式日志，而回放会优先读取该旧格式日志。
+
+  无论开启还是关闭，切换前都应暂停相关 Schema Change 和多语句 Publish 工作，排空在途请求，在全部相关 CN 上一致更新配置后再恢复工作。该配置项不协商读取能力，也不提供集群范围的原子切换。
+
+  设置为 `false` 只会停止后续语句组写入，不会转换、排空或删除已存在的语句组日志。降级到不支持语句组读取的版本前，必须列举所有相关存储根目录的 `txnlog` 目录，确认不存在任何 `*.group.vlog` 文件，包括与有效旧格式日志并存但未被使用的语句组文件，因为旧版本的 Tablet 清理也会扫描这些文件，且无法解码。ALTER 达到 `FINISHED`、事务达到 `VISIBLE` 或常规 Vacuum 完成，都不能证明这些文件已不存在。开启 File Bundling 时，成功回放后仍会保留这些日志，常规 Vacuum 也不会回收版本事务日志。如果仍有此类文件，应继续使用支持语句组读取的版本，直到完成安全清理。仅关闭该配置项并不代表可以安全降级。
+- 引入版本：-
+
 ### lake_pk_compaction_max_input_rowsets
 
 - 默认值：500
@@ -217,8 +242,8 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 类型：Boolean
 - 单位：-
 - 是否动态：是
-- 描述：存算分离集群下，主键表 Tablet 的删除量达到 `lake_pk_compaction_base_delete_ratio_threshold` 或 `lake_pk_compaction_base_delete_rows_threshold` 时，是否自动从 Cumulative Compaction 切换到 Base Compaction。默认关闭，因为 `lake_pk_compaction_base_delete_rows_threshold` 是绝对行数：在已有数据持续被更新或删除的大表上，Tablet 每次 Base Compaction 之后很快又会达到该值，而每次 Base Compaction 最多重写 Tablet 中 `update_compaction_ratio_threshold`（默认 0.5）比例的数据。手动执行 `ALTER TABLE ... COMPACT` 时，无论该参数如何设置都会执行 Base Compaction。
-- 引入版本：v4.1.6, v26.2.1
+- 描述：是否允许存算分离主键表的自动 Compaction 在删除比例或删除行数达到阈值时选择 Base Compaction。此项只控制按删除量自动触发 Base Compaction，不影响普通 Cumulative Compaction。默认关闭，因为持续更新或删除的大 Tablet 可能频繁达到绝对删除行数阈值，导致反复重写数据。手动 `ALTER TABLE ... COMPACT` 不受此开关和两个删除阈值限制；没有删除行时回退到普通 Compaction 选取。自动和手动请求都不保证一次合完整个 Tablet。详见[主键表 Base Compaction](../../management/compaction.md#primary-key-base-compaction)。
+- 引入版本：v4.1.7, v26.2.1
 
 ### lake_pk_compaction_base_delete_ratio_threshold
 
@@ -226,8 +251,8 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 类型：Double
 - 单位：-
 - 是否动态：是
-- 描述：存算分离集群下，将主键表 Tablet 从 Cumulative Compaction（Size-tiered 小文件合并）切换到 Base Compaction 的两个触发条件之一。Base Compaction 会重写带删除的 Rowset（删除行数多的优先），物理清除被删除的行并缩小其 Delete Vector。`lake_pk_compaction_base_enable_delete_trigger` 为 `true` 时，当 Tablet 的整体删除比例（各 Rowset 的 `sum(num_dels) / sum(num_rows)`）达到该值、或其累计删除行数达到 `lake_pk_compaction_base_delete_rows_threshold` 时触发。手动执行 `ALTER TABLE ... COMPACT` 时，无论这些参数如何设置都会强制执行 Base Compaction。
-- 引入版本：v4.2
+- 描述：存算分离主键表按删除量自动选择 Base Compaction 的两个阈值之一。Tablet 当前所有 Rowset 的整体删除比例 `sum(num_dels) / sum(num_rows)` 达到此值，或累计删除行数达到 `lake_pk_compaction_base_delete_rows_threshold`，即可进入 Base Compaction 选取。v4.1.4～v4.1.6 直接检查这两个阈值；从 v4.1.7 开始，还需要 `lake_pk_compaction_base_enable_delete_trigger = true`。手动 `ALTER TABLE ... COMPACT` 不受这两个阈值限制。达到阈值不保证立即获得 FE 调度。详见[自动触发](../../management/compaction.md#automatic-base-compaction)。
+- 引入版本：v4.1.4
 
 ### lake_pk_compaction_base_delete_rows_threshold
 
@@ -235,8 +260,8 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 类型：Int
 - 单位：-
 - 是否动态：是
-- 描述：存算分离集群下主键表 Base Compaction 的两个触发条件之一（参见 `lake_pk_compaction_base_delete_ratio_threshold`）。`lake_pk_compaction_base_enable_delete_trigger` 为 `true` 时，当 Tablet 的累计删除行数（各 Rowset 的 `sum(num_dels)`）达到该值时触发 Base Compaction。该绝对数量触发条件是对比例触发条件的补充：在高频更新/删除的表上，Delete Vector 会膨胀、空间被浪费，但整体删除比例可能因大量存活行的稀释而偏低，仅靠比例触发条件不会触发。调大该值可降低 Base Compaction 频率，调小则可更早回收 Delete Vector。
-- 引入版本：v4.2
+- 描述：存算分离主键表按删除量自动选择 Base Compaction 的绝对行数阈值，与 `lake_pk_compaction_base_delete_ratio_threshold` 为 OR 关系。累计删除行数为 Tablet 当前所有 Rowset 的 `sum(num_dels)`。v4.1.4～v4.1.6 直接检查此阈值；从 v4.1.7 开始，还需要 `lake_pk_compaction_base_enable_delete_trigger = true`。手动请求不受此阈值限制。该条件补充了整体删除比例较低、但 Delete Vector 中删除标记较多的场景。调大该值可降低自动 Base Compaction 的频率，调小可更早进入删除回收选取。详见[自动触发](../../management/compaction.md#automatic-base-compaction)。
+- 引入版本：v4.1.4
 
 ### enable_lake_pk_compaction_score_gate
 
@@ -344,13 +369,48 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 是否动态：是
 - 描述：存算分离集群下，主键表轻量 Compaction 发布阶段，`RowsMapperIterator` 流水化读取 `.lcrm` 文件时使用的 sub-chunk 粒度。每个输出 segment 被切分为 `ceil(segment_bytes / lake_rows_mapper_sub_chunk_bytes)` 个 sub-chunk，独立流水化。值越小，少而大的输出 segment 能获得越高的并发度，但代价是更多的范围读取和消费时一次额外的 memcpy。默认 4 MiB，与 starcache 磁盘层 block 大小对齐。
 
-### lake_segment_metadata_cache_limit_percent
+### lake_scan_parallel_segment_open
 
-- 默认值：20
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：存算分离集群中，查询扫描是否一次性打开 Tablet 所有 Rowset 的 Segment（在 Segment 加载线程池中每个 Segment 一个任务），而不是逐个 Rowset 依次打开，并并行构建各 Rowset 的迭代器。仅对查询扫描生效，且仅当 `remote_io_scheduler_enable` 为 `true` 时生效。导入、Compaction 及其他读取仍由 `enable_load_segment_parallel` 控制。Footer 已在 Segment 元数据缓存中打开的 Segment 直接复用，不再提交任务。Query Profile 中，这类 Segment 计入 `TabletPrepareCachedSegments`，Footer 读取计入其他 `TabletPrepare*` 指标。
+- 引入版本：-
+
+### lake_scan_warm_index
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：存算分离集群中，查询扫描（无论是否切分）打开 Tablet 的 Segment 后，是否异步预热随后要读取的索引页，包括每个 Segment 的短键索引、谓词列的 zone map、bloom filter 和 bitmap 索引根页，以及读取列的 ordinal index 根页。等值和 `IN` 谓词在用 bitmap 索引查找时也会提前一次性请求所有值所在的字典页，随后再一次性请求选中的全部 bitmap 所在的页，然后才读取。扫描不等待预热完成；预热失败时照常读取。被 Segment 元数据过滤（`enable_lake_segment_metadata_filter`）排除的 Segment 不预热。该项只对查询生效，且仅在启用远程 I/O 调度器（`remote_io_scheduler_enable`）时有效，与 `lake_scan_parallel_segment_open` 相互独立。预热情况记录在 Query Profile 的 `TabletPrepareIndexWarmSegments`、`TabletPrepareIndexWarmRanges`、`TabletPrepareIndexWarmBlocks`、`TabletPrepareIndexWarmSkipped` 和 `TabletPrepareIndexWarmPrunedSegments` 中，bitmap 索引页的请求情况记录在 `BitmapIndexPrefetchPages` 和 `BitmapIndexPrefetchBlocks` 中。
+
+### lake_scan_read_ahead_segments
+
+- 默认值：16
 - 类型：Int
 - 单位：-
 - 是否动态：是
-- 描述：存算分离集群中 Segment 元数据缓存的容量，以 BE 进程内存上限的百分比表示。该缓存存放已打开的 Segment（包括 Footer、索引和列读取器）、Delete Vector 以及 Tablet Schema。它与 Tablet 元数据缓存（参见 `lake_tablet_metadata_cache_limit_percent`）相互独立，加载再多的 Segment 也不会把 Tablet 元数据和事务日志挤出缓存。超出 0–100 的取值按 0 或 100 处理。设为 `0` 即关闭该缓存。该项与 `lake_tablet_metadata_cache_limit_percent` 共同取代原有的 `lake_metadata_cache_limit`。
+- 描述：远端 IO 调度器启用时，如果 lake 查询扫描逐个读取一个 Tablet 的 Segment（即该 Tablet 没有切分给多个扫描任务），那么当前 Segment 的块全部发出读取后，扫描会一边读当前 Segment，一边提前读取后面几个 Segment 开头的块。提前预读的 Segment 最多为该值。只有当这些 Segment 已发出读取但还没读的块合计少于 `remote_prefetch_window_blocks` 个缓存块时，才会开始预读下一个 Segment，因此最后开始的那个 Segment 可能让合计达到窗口的两倍左右。设为 `0` 表示关闭，每个 Segment 轮到时才开始预读。切分扫描、导入和 Compaction 不受影响。查询 profile 中的 SegmentReadAheadStarted 记录提前开始预读的 Segment 数。
+- 引入版本：-
+
+### lake_segment_metadata_cache_limit_percent
+
+- 默认值：10
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：存算分离集群中 Segment 元数据缓存的容量，以 BE 进程内存上限的百分比表示。该缓存存放已打开的 Segment（包括 Footer、索引和列读取器）、Delete Vector 以及 Tablet Schema。它与 Tablet 元数据缓存（参见 `lake_tablet_metadata_cache_limit_percent`）相互独立，加载再多的 Segment 也不会把 Tablet 元数据和事务日志挤出缓存。超出 0–100 的取值按 0 或 100 处理。设为 `0` 即关闭该缓存。该项与 `lake_tablet_metadata_cache_limit_percent` 共同取代原有的 `lake_metadata_cache_limit`。该值是缓存容量的上限，BE 进程内存紧张时缓存会缩到该值以下（参见 `lake_tablet_metadata_cache_min_limit`）。
+- 引入版本：-
+
+### lake_segment_metadata_cache_min_limit
+
+- 默认值：1073741824
+- 类型：Long
+- 单位：Bytes
+- 是否动态：是
+- 描述：存算分离集群中，Segment 元数据缓存在内存紧张时让出内存（参见 `lake_tablet_metadata_cache_min_limit`），容量不会缩到该值以下。如果该值大于 `lake_segment_metadata_cache_limit_percent` 设定的容量，缓存保持该容量不变。
 - 引入版本：-
 
 ### lake_shard_info_cache_ttl_sec
@@ -364,11 +424,20 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ### lake_tablet_metadata_cache_limit_percent
 
-- 默认值：10
+- 默认值：5
 - 类型：Int
 - 单位：-
 - 是否动态：是
-- 描述：存算分离集群中 Tablet 元数据缓存的容量，以 BE 进程内存上限的百分比表示。该缓存存放 Tablet 元数据和事务日志。它与 Segment 元数据缓存（参见 `lake_segment_metadata_cache_limit_percent`）相互独立，加载再多的 Segment 也不会把这些元数据挤出缓存。超出 0–100 的取值按 0 或 100 处理。设为 `0` 即关闭该缓存。该项与 `lake_segment_metadata_cache_limit_percent` 共同取代原有的 `lake_metadata_cache_limit`。
+- 描述：存算分离集群中 Tablet 元数据缓存的容量，以 BE 进程内存上限的百分比表示。该缓存存放 Tablet 元数据和事务日志。它与 Segment 元数据缓存（参见 `lake_segment_metadata_cache_limit_percent`）相互独立，加载再多的 Segment 也不会把这些元数据挤出缓存。超出 0–100 的取值按 0 或 100 处理。设为 `0` 即关闭该缓存。该项与 `lake_segment_metadata_cache_limit_percent` 共同取代原有的 `lake_metadata_cache_limit`。该值是缓存容量的上限，BE 进程内存紧张时缓存会缩到该值以下（参见 `lake_tablet_metadata_cache_min_limit`）。
+- 引入版本：-
+
+### lake_tablet_metadata_cache_min_limit
+
+- 默认值：1073741824
+- 类型：Long
+- 单位：Bytes
+- 是否动态：是
+- 描述：存算分离集群中，Tablet 元数据缓存容量的下限。BE 进程内存占用超过 `memory_high_level` 后，Tablet 元数据缓存和 Segment 元数据缓存把容量调到当前占用以下，淘汰最久未使用的条目。需要让出的内存，按两个缓存各自超出下限（该项和 `lake_segment_metadata_cache_min_limit`）的占用比例分摊。超出 `memory_high_level` 的部分在约 50 秒内逐步释放；如果占用还超过了 `memory_urgent_level`，超出 `memory_urgent_level` 的部分立即释放。占用回落到 `memory_high_level` 以下后，两个缓存的容量在约 200 秒内逐步恢复到 `lake_tablet_metadata_cache_limit_percent` 和 `lake_segment_metadata_cache_limit_percent` 设定的值。每 10 秒检查一次。如果该值大于 `lake_tablet_metadata_cache_limit_percent` 设定的容量，缓存保持该容量不变。
 - 引入版本：-
 
 ### lake_vacuum_enable_task_timeout
@@ -440,6 +509,141 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 是否动态配置: 是
 - 描述: 存算分离集群中主键索引缓存的占用上限，以缓存容量的百分比表示。每次 Publish 结束后（因超出内存限制而失败的除外）都会检查一次：占用超过该比例时，按最近最少使用的顺序淘汰未在使用的主键索引，直至占用回落到该比例以内。缓存增长快于后台线程将其回收到 `primary_key_index_memory_high_percent` 的速度时，由该配置项兜底，因此应设置为大于该配置项的值。
 - 引入版本: -
+
+### remote_io_scheduler_enable
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：否
+- 描述：存算分离集群中是否启用远程 I/O 调度器。启用后，读请求未命中 Data Cache 而向对象存储发出的 GET 请求，都在每个 CN 上唯一的调度器中排队，由调度器按权重放行：查询、导入、Compaction 和其他后台任务按 `remote_read_query_weight`、`remote_read_load_weight`、`remote_read_compaction_weight` 和 `remote_read_background_weight` 分配对象存储的读取能力；查询之间先按资源组的 `cpu_weight` 分配，同一资源组内，查询读得越多份额越低，大查询因此会让位于新来的小查询。查询扫描还会预读即将读取的页面所在的缓存块（见 `remote_prefetch_window_blocks`）。调度器要求 `datacache_enable` 和 `starlet_use_star_cache` 均为 `true`，否则 CN 打印告警日志，按未启用调度器的方式读取。启用期间，`io_coalesce_lake_read_enable` 在启动时被设为 `false`，`starlet_fs_read_prefetch_enable` 不改配置值但强制不生效，动态开启这两项都会被拒绝。配置文件不会被修改，关闭调度器并重启 CN 后两项即恢复。调度器参数取值非法时，CN 拒绝启动。
+- 引入版本：-
+
+### remote_prefetch_late_read_ahead_ratio
+
+- 默认值：0.5
+- 类型：Double
+- 单位：-
+- 是否动态：是
+- 描述：启用延迟物化时，只为通过谓词的行读取的列，会在这些行确定后按 Chunk 逐批读取。从 Segment Reader 的第四个 Chunk 起，如果这些行已经触及其所跨页面的比例达到该值，这些列改为与谓词列一样预读。取值大于 1 时从不切换。修改后对之后打开的 Segment Reader 生效。仅当 `remote_io_scheduler_enable` 为 `true` 时生效。
+- 引入版本：-
+
+### lake_compaction_prefetch_window_blocks
+
+- 默认值：32
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：实验参数。单个 lake compaction 任务提前读取并填入 Data Cache 的目标块数。预算最多占已配置的每 worker 内存限额的八分之一，按物理输入 segment 数平均分配并向下取整。每个 segment 至少提前 1 块，因此 segment 数多于预算时，每个 segment 各读 1 块，总量会超过预算和内存上限。0 表示关闭。需要启用 remote I/O scheduler、表缓存及对应 compaction 模式的缓存填充。符合条件的标量数据页使用 COMPACTION 工作负载。
+- 引入版本：-
+
+### remote_prefetch_window_blocks
+
+- 默认值：128
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：查询的 Segment Reader 最多提前请求多少个 Data Cache 缓存块，包括排队中、读取中以及已读取但尚未消费的缓存块。该参数限制 Reader 超前的距离，缓存块何时读取由调度器决定。导入等其他后台读取不预读，compaction 的预读由 `lake_compaction_prefetch_window_blocks` 控制。设为 `0` 关闭预读。修改后对之后打开的 Segment Reader 生效。仅当 `remote_io_scheduler_enable` 为 `true` 时生效。
+- 引入版本：-
+
+### remote_read_adaptive_limit
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：否
+- 描述：远程 I/O 调度器是否根据通往对象存储的链路实际能承载的并发，在 `remote_read_io_threads` 以内控制在途 GET 请求数。超出部分在调度器中等待并按权重决定先后，而不是堵在网络上。设为 `false` 时，在途请求最多为 `remote_read_io_threads` 个。仅当 `remote_io_scheduler_enable` 为 `true` 时生效。
+- 引入版本：-
+
+### remote_read_adaptive_min_inflight
+
+- 默认值：16
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：自适应并发上限的下限，也是调度器测量空载请求延迟时短暂保持的并发数。必须为正数。仅当 `remote_io_scheduler_enable` 和 `remote_read_adaptive_limit` 均为 `true` 时生效。
+- 引入版本：-
+
+### remote_read_background_weight
+
+- 默认值：1
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：多方同时等待时，Compaction 以外的后台任务读取对象存储的份额，与 `remote_read_query_weight`、`remote_read_load_weight`、`remote_read_compaction_weight` 相对。必须为正数。仅当 `remote_io_scheduler_enable` 为 `true` 时生效。
+- 引入版本：-
+
+### remote_read_compaction_weight
+
+- 默认值：1
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：多方同时等待时，Compaction 读取对象存储的份额，与 `remote_read_query_weight`、`remote_read_load_weight`、`remote_read_background_weight` 相对。必须为正数。仅当 `remote_io_scheduler_enable` 为 `true` 时生效。
+- 引入版本：-
+
+### remote_read_io_threads
+
+- 默认值：0
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：发出调度后 GET 请求的线程数，即 CN 上在途 GET 请求数的上限。设为 `0` 时取存算分离扫描线程数，即 `pipeline_connector_scan_thread_num_per_cpu` 乘以 CPU 核数。不能为负数。仅当 `remote_io_scheduler_enable` 为 `true` 时生效。
+- 引入版本：-
+
+### remote_read_load_weight
+
+- 默认值：5
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：多方同时等待时，导入读取对象存储的份额，与 `remote_read_query_weight`、`remote_read_compaction_weight`、`remote_read_background_weight` 相对。导入的读取包括 Publish、主键索引、删除文件以及导入的落盘。必须为正数。仅当 `remote_io_scheduler_enable` 为 `true` 时生效。
+- 引入版本：-
+
+### remote_read_query_weight
+
+- 默认值：9
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：多方同时等待时，查询读取对象存储的份额，与 `remote_read_load_weight`、`remote_read_compaction_weight`、`remote_read_background_weight` 相对。必须为正数。仅当 `remote_io_scheduler_enable` 为 `true` 时生效。
+- 引入版本：-
+
+### remote_read_retain_prefetched_bytes
+
+- 默认值：2147483648
+- 类型：Int
+- 单位：Bytes
+- 是否动态：是
+- 描述：存算分离集群中，节点在内存中保留的 Segment 文件预读完成 Block 的总大小上限。开启远程 I/O 调度器（`remote_io_scheduler_enable`）后，调度器为查询扫描预读的 Block 读取完成后，只要扫描仍覆盖该 Block，就保留在内存中，扫描直接从内存复制所需的 Page，不再从 Data Cache 读回。该 Block 仍会写入 Data Cache。内存中保留的 Block 总大小达到该值后，之后完成的 Block 不再保留。设置为 `0` 表示关闭该功能。远程 I/O 调度器未开启时，该项不生效。只保留不会被覆盖写的 Segment 文件，元数据等其他文件不保留。这部分内存计入进程，不计入任何查询。调大该值后，对之后完成的 Block 生效。调小后，在保留总量降到新值以下之前不再保留新的 Block，已保留的 Block 若在下次被读取时总量仍超过新值，读取后即释放；扫描不再覆盖时也会释放。不会在后台主动淘汰。该值不能为负数：开启远程 I/O 调度器时，配置为负数 CN 将无法启动；动态修改为负数会被拒绝。
+- 引入版本：v4.2
+
+### remote_read_skip_contended_cache_writes
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：存算分离集群中，缓存盘繁忙时远端 IO 调度器是否可以不把拉取到的数据块写入 Data Cache。缓存盘繁忙指连续两次 250 ms 采样中，磁盘利用率都不低于 90%，且读请求占服务时间的比例不低于 20%。只有大查询扫描后段拉取的数据块才可能跳过写入，且该数据块必须已按 `remote_read_retain_prefetched_bytes` 保留在内存中，由内存中的副本供读取方使用。跳过写入的数据块再次被读取时，会重新从对象存储拉取。如果缓存盘比网络慢，且后续扫描经常回读前面扫描刚写入缓存的数据，开启该参数可能有帮助。`remote_io_scheduler_enable` 为 `false` 或 `remote_read_retain_prefetched_bytes` 为 `0` 时不生效。修改后对之后拉取的数据块生效。
+- 引入版本：-
+
+### remote_read_weight_decay_ios
+
+- 默认值：1024
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：查询在资源组内的份额随读取量下降的速度。查询或后台任务读取的第 n 个缓存块，权重为 `max(remote_read_weight_decay_min, 2^(-n / remote_read_weight_decay_ios))`，大查询因此越来越多地让位于同一资源组中新来的查询。设为 `0` 关闭衰减。不能为负数。仅当 `remote_io_scheduler_enable` 为 `true` 时生效。
+- 引入版本：-
+
+### remote_read_weight_decay_min
+
+- 默认值：0.03125
+- 类型：Double
+- 单位：-
+- 是否动态：否
+- 描述：`remote_read_weight_decay_ios` 衰减后的最低权重。取值范围为 (0, 1]。仅当 `remote_io_scheduler_enable` 为 `true` 时生效。
+- 引入版本：-
 
 ### s3_multipart_equal_part_size
 
@@ -513,6 +717,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：存算分离集群中，向 S3 或兼容 S3 的对象存储进行分片上传时使用的分片大小。每次上传分片之前，每个输出流最多在内存中缓存该大小的数据，因此调大该值会增加内存占用，且随并发输出流数量成倍增加。取值过小会增加请求数量，并可能超出 AWS S3 的 10000 个分片上限，或低于其 5 MB 的最小分片大小；其他兼容 S3 的对象存储限制不同。修改该参数对正在进行的上传立即生效。取值必须大于 0，非正数将被拒绝。合法取值会覆盖通过 BE 命令行传入的对应的 `--fslib_*` gflag；而在 BE 启动时被拒绝的取值不会生效，BE 保留此前生效的值并记录 WARNING 日志，此时该参数显示的值可能并非实际生效的值。该参数用于存算分离集群中的 starlet 上传，与 `experimental_s3_*` 系列参数无关。
 - 引入版本：v4.1.5, v4.2
 
+### starlet_grpc_client_enable_http_proxy
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：否
+- 描述：存算分离集群中，当前 CN 向 StarMgr 及其他 CN 发起的 gRPC 连接是否经过 CN 进程环境变量中设置的 HTTP 代理。这些连接用于查询 Tablet 信息（GetShard）、发送 Worker 心跳、更新 Tablet 副本信息，以及在 CN 之间复制 Data Cache 数据。CN 只从小写的 `grpc_proxy`、`https_proxy` 和 `http_proxy` 环境变量获取代理，并且只对小写的 `no_grpc_proxy` 或 `no_proxy` 中列出的主机绕过代理。默认值 `false` 表示忽略这些环境变量，直接建立连接。这样，即使 CN 进程为其他对外访问继承了代理配置，而且豁免列表中没有集群节点地址，集群节点之间的流量也不会被转发到代理。仅当这些连接必须经过代理时才需要设为 `true`，即沿用早期版本的行为。该项不影响 CN 的其他对外访问，例如访问对象存储。CN 仅在启动时读取该项，修改后需重启 CN 才能生效。FE 侧的对应配置参见 FE 参数 `starmgr_grpc_client_enable_http_proxy`。
+- 引入版本：v26.3
+
 ### starlet_port
 
 - 默认值：9070
@@ -539,6 +752,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 是否动态：否
 - 描述：存算分离集群中，对于由当前 CN 进程写入且此后未被淘汰的 Data Cache 磁盘 Block，后续请求首次访问时是否跳过整块 Checksum 校验读取。该校验会从磁盘重新读取整个 Block，以校验进程刚刚写入且仍在内存中跟踪的数据，因此每个新写入 Block 的首次访问都会多一次磁盘读取。将该项设置为 `false` 可在首次访问时校验每个 Block，仅当怀疑缓存磁盘存在静态数据损坏时才值得付出该开销。无论该项如何设置，从进程上一次运行继承下来的 Block 始终会被校验，因为当前进程并未见证其写入过程。该项仅在 Data Cache 初始化时读取一次。
 - 引入版本：v4.2.0
+
+### starlet_star_cache_write_overwrite
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：存算分离集群中，Data Cache 写入时是否覆盖同一 Key 下已缓存的对象。设为 `false` 时保留已有对象并将本次写入视为成功，适用于读穿透填充路径，此时写入的字节与已缓存的内容相同。设为 `true` 可让重新读取刷新疑似过期或损坏的 Block。Data Cache 在每次写入时都会读取该项，因此修改后在下一次写入即生效，无需重新初始化缓存。
+- 引入版本：-
 
 ### starlet_starmgr_client_compression_type
 
@@ -607,11 +829,11 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ### datacache_disk_size
 
-- 默认值：0
+- 默认值：100%
 - 类型：String
 - 单位：-
 - 是否动态：是
-- 描述：单个磁盘缓存数据量的上限，可设为比例上限（如 `80%`）或物理上限（如 `2T`, `500G` 等）。假设系统使用了两块磁盘进行缓存，并设置 `datacache_disk_size` 参数值为 `21474836480`，即 20 GB，那么最多可缓存 40 GB 的磁盘数据。默认值为 `0`，即仅使用内存作为缓存介质，不使用磁盘。
+- 描述：单个磁盘缓存数据量的上限，可设为比例上限（如 `80%`）或物理上限（如 `2T`, `500G` 等）。假设系统使用了两块磁盘进行缓存，并设置 `datacache_disk_size` 参数值为 `21474836480`，即 20 GB，那么最多可缓存 40 GB 的磁盘数据。比例上限是相对于每个 `storage_root_path` 所在磁盘的容量。默认值为 `100%`。当 `enable_datacache_disk_auto_adjust` 为 `true`（默认）时，系统会根据磁盘使用率自动调整实际的磁盘缓存容量，该参数仅作为该容量的上限。设为 `0` 表示禁用磁盘缓存。
 - 引入版本：-
 
 ### datacache_enable
@@ -640,6 +862,33 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 是否动态：否
 - 描述：Data Cache 内联对象数量上限。当缓存的 Block 对象特别小时，Data Cache 会选择使用内联方式将 Block 数据和元数据一起缓存在内存中。
 - 引入版本：v3.4.0
+
+### datacache_lru_shard_evict_fallback_enable
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：Data Cache 的 LRU 分片在被回填或自身无法腾出足够空间时，是否允许淘汰其他分片中的缓存项。设置为 `false` 时恢复分片只淘汰自身缓存项的行为，并忽略 `datacache_lru_shard_refill_low_watermark_percent` 和 `datacache_lru_shard_refill_high_watermark_percent`。
+- 引入版本：-
+
+### datacache_lru_shard_refill_low_watermark_percent
+
+- 默认值：50
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：Data Cache 的 LRU 分片的使用量低于其容量的该百分比后，不再淘汰自身的缓存项，而是从最大的分片回填，直到达到 `datacache_lru_shard_refill_high_watermark_percent`。该值不能超过 `datacache_lru_shard_refill_high_watermark_percent`。两个参数都设置为 `0` 时关闭回填。
+- 引入版本：-
+
+### datacache_lru_shard_refill_high_watermark_percent
+
+- 默认值：70
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：Data Cache 的 LRU 分片停止回填时的容量百分比。取值范围：`datacache_lru_shard_refill_low_watermark_percent` 到 `100`。两个参数都设置为 `0` 时关闭回填。
+- 引入版本：-
 
 ### datacache_mem_size
 
@@ -900,8 +1149,8 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 默认值：0
 - 类型：Int
 - 单位：-
-- 是否动态：是
-- 描述：物化视图刷新任务在单个 BE 上的并发上限。默认为 `0`，即不做并发数限制。
+- 是否动态：否
+- 描述：物化视图刷新任务在单个 BE 上的并发上限。默认为 `0`，即不做并发数限制。已弃用：自 v3.4 起，FE 持久化 `default_mv_wg` 并下发给 BE，该参数不再生效。请使用 `ALTER RESOURCE GROUP default_mv_wg WITH (...)` 调整。
 - 引入版本：-
 
 ### default_mv_resource_group_cpu_limit
@@ -909,8 +1158,8 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 默认值：1
 - 类型：Int
 - 单位：-
-- 是否动态：是
-- 描述：物化视图刷新任务占用单个 BE 的 CPU 核数上限。
+- 是否动态：否
+- 描述：物化视图刷新任务占用单个 BE 的 CPU 核数上限。已弃用：自 v3.4 起，FE 持久化 `default_mv_wg` 并下发给 BE，该参数不再生效。请使用 `ALTER RESOURCE GROUP default_mv_wg WITH (...)` 调整。
 - 引入版本：-
 
 ### default_mv_resource_group_memory_limit
@@ -918,8 +1167,8 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 默认值：0.8
 - 类型：Double
 - 单位：
-- 是否动态：是
-- 描述：物化视图刷新任务占用单个 BE 内存上限，默认 80%。
+- 是否动态：否
+- 描述：物化视图刷新任务占用单个 BE 内存上限，默认 80%。已弃用：自 v3.4 起，FE 持久化 `default_mv_wg` 并下发给 BE，该参数不再生效。请使用 `ALTER RESOURCE GROUP default_mv_wg WITH (...)` 调整。
 - 引入版本：v3.1
 
 ### default_mv_resource_group_spill_mem_limit_threshold
@@ -927,8 +1176,8 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 默认值：0.8
 - 类型：Double
 - 单位：
-- 是否动态：是
-- 描述：物化视图刷新任务触发落盘的内存占用阈值，默认80%。
+- 是否动态：否
+- 描述：物化视图刷新任务触发落盘的内存占用阈值，默认80%。已弃用：自 v3.4 起，FE 持久化 `default_mv_wg` 并下发给 BE，该参数不再生效。请使用 `ALTER RESOURCE GROUP default_mv_wg WITH (...)` 调整。
 - 引入版本：v3.1
 
 ### enable_resolve_hostname_to_ip_in_load_error_url
@@ -1029,7 +1278,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 类型：Long
 - 单位：Percent
 - 是否动态：是
-- 描述：以进程内存上限的百分比表示的高水位内存阈值。当总内存消耗上升超过该百分比时，BE 开始逐步释放内存（目前通过驱逐 data cache 和 update cache）以缓解压力。监控器使用此值来计算 `memory_high = mem_limit * memory_high_level / 100`，并且如果消耗大于 memory_high，则在 GC advisor 的指导下执行受控驱逐；如果消耗超过 memory_urgent_level（一个单独的配置），则会进行更激进的即时回收。此值还用于在超过阈值时禁用某些高内存消耗的操作（例如 primary-key preload）。必须满足与 memory_urgent_level 的校验关系（memory_urgent_level `>` memory_high_level，memory_high_level `>=` 1，memory_urgent_level `<=` 100）。
+- 描述：以进程内存上限的百分比表示的高水位内存阈值。当总内存消耗上升超过该百分比时，BE 开始逐步释放内存（目前通过驱逐 data cache 和 update cache，以及缩小存算分离的元数据缓存）以缓解压力。监控器使用此值来计算 `memory_high = mem_limit * memory_high_level / 100`，并且如果消耗大于 memory_high，则在 GC advisor 的指导下执行受控驱逐；如果消耗超过 memory_urgent_level（一个单独的配置），则会进行更激进的即时回收。此值还用于在超过阈值时禁用某些高内存消耗的操作（例如 primary-key preload）。必须满足与 memory_urgent_level 的校验关系（memory_urgent_level `>` memory_high_level，memory_high_level `>=` 1，memory_urgent_level `<=` 100）。
 - 引入版本：v3.2.0
 
 ### memory_urgent_level
@@ -1039,6 +1288,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 单位：Percent
 - 是否动态：否
 - 描述：内存紧急阈值（占进程内存上限的百分比）。当消耗超过该值时会触发更激进的即时回收；需满足 `memory_urgent_level > memory_high_level` 且不超过 100。
+- 引入版本：-
+
+### olap_string_max_length
+
+- 默认值：1048576
+- 类型：Int
+- 单位：字节
+- 是否动态：是
+- 描述：BE 字符串函数（如 `repeat` 和 `concat`）用于限制单个结果大小的最大字符串长度，默认值为 1 MiB。当结果超过此限制时，这些函数返回 `NULL`。此限制按字节数计算，而非字符数。
 - 引入版本：-
 
 ### report_exec_rpc_request_retry_num

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "SHOW FUNCTIONS queries all the custom (or built-in) functions under a database."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # SHOW FUNCTIONS

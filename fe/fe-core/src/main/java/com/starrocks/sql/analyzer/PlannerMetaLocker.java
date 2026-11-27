@@ -18,6 +18,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.View;
@@ -37,6 +38,7 @@ import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.MergeIntoStmt;
 import com.starrocks.sql.ast.ParseNode;
+import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.SelectRelation;
@@ -44,6 +46,7 @@ import com.starrocks.sql.ast.SetOperationRelation;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.TableRelation;
+import com.starrocks.sql.ast.UnionRelation;
 import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.ast.ViewRelation;
 import com.starrocks.sql.ast.expression.Expr;
@@ -118,9 +121,14 @@ public class PlannerMetaLocker implements AutoCloseable {
     private record WalkedView(TableName name, View view, String inlineViewDef, long sqlMode) {
     }
 
+    /** A [_SYNC_MV_] relation, with the ids of the tables its index name resolved to for the lock set. */
+    private record WalkedSyncMV(TableName indexName, Set<Long> baseTableIds) {
+    }
+
     // The session the views were resolved in; null for a locker built by forAllTablesOf, which walks no view body.
     private final ConnectContext session;
     private final List<WalkedView> walkedViews;
+    private final List<WalkedSyncMV> walkedSyncMVs;
     private boolean walkedViewsChecked = false;
     // Whether the statement reads an external table a policy may apply to; see mayReachExternalTablePolicy.
     private boolean mayReachExternalTablePolicy = false;
@@ -134,6 +142,7 @@ public class PlannerMetaLocker implements AutoCloseable {
         this.queryId = session.getQueryId();
         this.session = session;
         this.walkedViews = collector.walkedViews;
+        this.walkedSyncMVs = collector.walkedSyncMVs;
         this.mayReachExternalTablePolicy = collector.mayReachExternalTablePolicy;
     }
 
@@ -152,6 +161,7 @@ public class PlannerMetaLocker implements AutoCloseable {
         this.acquireTimeoutMs = acquireTimeoutMs;
         this.session = null;
         this.walkedViews = List.of();
+        this.walkedSyncMVs = List.of();
     }
 
     /**
@@ -178,6 +188,18 @@ public class PlannerMetaLocker implements AutoCloseable {
                 unlock();
                 throw new StarRocksPlannerException(String.format("View %s was changed while the statement was "
                         + "being planned, please retry", walked.name()), ErrorType.INTERNAL_ERROR);
+            }
+        }
+        // The analyzer copies the base table of a [_SYNC_MV_] read while analyzing, before the coverage check of
+        // StatementPlanner#copyOlapTablesAndUnlock can see it. A base table dropped and recreated, or an index of that
+        // name added or dropped, between the walk and this lock would leave it copying a table this lock does not
+        // hold. With those locked, their indexes stay as they are.
+        for (WalkedSyncMV walked : walkedSyncMVs) {
+            if (!walked.baseTableIds().equals(tableIdsOf(resolveSyncMVBaseTables(session, walked.indexName())))) {
+                unlock();
+                throw new StarRocksPlannerException(String.format("The base table of %s [_SYNC_MV_] was changed "
+                        + "while the statement was being planned, please retry", walked.indexName()),
+                        ErrorType.INTERNAL_ERROR);
             }
         }
     }
@@ -289,6 +311,11 @@ public class PlannerMetaLocker implements AutoCloseable {
 
     public void setAcquireTimeoutMs(long acquireTimeoutMs) {
         this.acquireTimeoutMs = acquireTimeoutMs;
+    }
+
+    /** The bound {@link #setAcquireTimeoutMs} set, or negative for none. */
+    public long getAcquireTimeoutMs() {
+        return acquireTimeoutMs;
     }
 
     /**
@@ -465,6 +492,51 @@ public class PlannerMetaLocker implements AutoCloseable {
         return new Pair<>(db, table);
     }
 
+    /**
+     * The tables that may be behind a {@code [_SYNC_MV_]} relation: every olap table of the database with a rollup or
+     * synchronous materialized view of that name. As in {@code Database#getMaterializedViewIndexes}, which the analyzer
+     * reads it with, the base index of a table, named after the table, is not one, and the temporary tables of other
+     * sessions are left out. The analyzer picks the one whose index is visible; locking every table that has one,
+     * visible or not, covers it. Empty when nothing matches -- the analyzer reports that.
+     *
+     * <p>Run before the lock is taken, and again under it by {@link #checkWalkedViewsOnFirstLock} and the slow path of
+     * {@code StatementPlanner#copyOlapTablesAndUnlock}, holding the locks of other tables only. So it reads nothing a
+     * concurrent DDL on another table mutates in place: the database's table map is concurrent, and an index name is
+     * looked up in its table rather than found by iterating its indexes ({@code Database#getMaterializedViewIndexes}
+     * does that, and a rollup change on any table of the database can make it throw). Nor does it take a lock: under
+     * the lock it would take one out of order.
+     */
+    private static List<Pair<Database, Table>> resolveSyncMVBaseTables(ConnectContext session, TableName indexName) {
+        TableName qualified = qualify(session, indexName);
+        if (qualified == null || !CatalogMgr.isInternalCatalog(qualified.getCatalog())) {
+            return List.of();
+        }
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(qualified.getDb());
+        if (db == null) {
+            return List.of();
+        }
+        List<Pair<Database, Table>> baseTables = new ArrayList<>();
+        for (Table table : db.getTables()) {
+            if (!(table instanceof OlapTable olapTable) || !olapTable.isMetaLockTarget()) {
+                continue;
+            }
+            if (olapTable.isTemporaryTable() && !olapTable.getSessionId().equals(session.getSessionId())) {
+                continue;
+            }
+            Long indexMetaId = olapTable.getIndexMetaIdByName(qualified.getTbl());
+            if (indexMetaId != null && indexMetaId != olapTable.getBaseIndexMetaId()) {
+                baseTables.add(new Pair<>(db, olapTable));
+            }
+        }
+        return baseTables;
+    }
+
+    private static Set<Long> tableIdsOf(List<Pair<Database, Table>> dbAndTables) {
+        Set<Long> tableIds = new HashSet<>();
+        dbAndTables.forEach(dbAndTable -> tableIds.add(dbAndTable.second.getId()));
+        return tableIds;
+    }
+
     private static class TableCollector extends AstTraverser<Void, Void> {
         private final ConnectContext session;
 
@@ -478,7 +550,10 @@ public class PlannerMetaLocker implements AutoCloseable {
         // The CTE names of the with clauses in scope, innermost first. A table of the same name stays unlocked only
         // where the analyzer would read the CTE instead, never more: that would leave a table it reads unlocked.
         private final Deque<Set<String>> cteNames = new ArrayDeque<>();
+        // Whether the with clause whose CTEs are being walked is WITH RECURSIVE; see visitCTE.
+        private boolean inRecursiveWithClause = false;
         private final List<WalkedView> walkedViews = new ArrayList<>();
+        private final List<WalkedSyncMV> walkedSyncMVs = new ArrayList<>();
         // Whether the relations being walked get a policy injected by the analyzer, besides the ones the statement
         // flags itself: everything in the body of a view so flagged (see QueryAnalyzer#inheritPolicyRewriteFlag).
         private boolean inBodyRewrittenByPolicy = false;
@@ -543,7 +618,7 @@ public class PlannerMetaLocker implements AutoCloseable {
          */
         private void visitRawDmlClauses(List<CTERelation> cteRelations, List<Relation> relations,
                                         Expr wherePredicate) {
-            withCtes(cteRelations, () -> {
+            withCtes(cteRelations, false, () -> {
                 if (cteRelations != null) {
                     cteRelations.forEach(this::visitIfPresent);
                 }
@@ -604,41 +679,76 @@ public class PlannerMetaLocker implements AutoCloseable {
 
         @Override
         public Void visitSelect(SelectRelation node, Void context) {
-            withCtes(node.getCteRelations(), () -> super.visitSelect(node, context));
+            withCtes(node.getCteRelations(), node.isHasRecursiveCTE(), () -> super.visitSelect(node, context));
             return null;
         }
 
         @Override
         public Void visitSetOp(SetOperationRelation node, Void context) {
-            withCtes(node.getCteRelations(), () -> super.visitSetOp(node, context));
+            withCtes(node.getCteRelations(), node.isHasRecursiveCTE(), () -> super.visitSetOp(node, context));
             return null;
         }
 
-        /** Run {@code body} in a new with-clause scope, which {@link #visitCTE} fills as the CTEs are walked. */
-        private void withCtes(List<CTERelation> cteRelations, Runnable body) {
-            if (cteRelations == null || cteRelations.isEmpty()) {
-                body.run();
-                return;
+        /**
+         * Run {@code body} in a new with-clause scope, which {@link #visitCTE} fills as the CTEs are walked.
+         * {@code recursive}: whether the clause is WITH RECURSIVE.
+         */
+        private void withCtes(List<CTERelation> cteRelations, boolean recursive, Runnable body) {
+            boolean scoped = cteRelations != null && !cteRelations.isEmpty();
+            boolean enclosingRecursive = inRecursiveWithClause;
+            if (scoped) {
+                cteNames.push(new HashSet<>());
             }
-            cteNames.push(new HashSet<>());
+            inRecursiveWithClause = recursive;
             try {
                 body.run();
             } finally {
-                cteNames.pop();
+                inRecursiveWithClause = enclosingRecursive;
+                if (scoped) {
+                    cteNames.pop();
+                }
             }
         }
 
         /**
-         * A CTE's name is in scope only after its own definition, as the analyzer has it: in
-         * {@code WITH t0 AS (SELECT * FROM t0)} the inner {@code t0} is the table.
+         * A CTE's name comes into scope where the analyzer brings it in: after its own definition, so in
+         * {@code WITH t0 AS (SELECT * FROM t0)} the inner {@code t0} is the table, but before the recursive
+         * members of a recursive one, where a self-reference is the CTE.
          */
         @Override
         public Void visitCTE(CTERelation node, Void context) {
-            super.visitCTE(node, context);
-            if (!cteNames.isEmpty() && node.getName() != null) {
-                cteNames.peek().add(node.getName());
+            if (node.isRecursive() && !node.isAnchor()) {
+                // A reference to a recursive CTE, in an analyzed statement: it shares the definition's query, which
+                // contains it. AstTraverser#visitCTE stops here too; walking on would go round the cycle for good.
+                return null;
+            }
+            UnionRelation union = AnalyzerUtils.recursiveCteUnion(node, inRecursiveWithClause);
+            if (union == null) {
+                super.visitCTE(node, context);
+                declareCte(node);
+                return null;
+            }
+            if (union.hasWithClause()) {
+                // The union's own with clause is not in scope for its operands here, but the analyzer reads its
+                // CTEs when it falls back to a CTE that is not recursive. Walk them in a scope of their own.
+                withCtes(union.getCteRelations(), union.isHasRecursiveCTE(),
+                        () -> union.getCteRelations().forEach(cte -> visit(cte, context)));
+            }
+            // The anchor, the first operand, comes before the name; the recursive members after it.
+            List<QueryRelation> operands = union.getRelations();
+            visit(operands.get(0), context);
+            declareCte(node);
+            for (QueryRelation member : operands.subList(1, operands.size())) {
+                visit(member, context);
             }
             return null;
+        }
+
+        /** Bring the name of {@code cte} into scope in the with clause being walked. */
+        private void declareCte(CTERelation cte) {
+            if (!cteNames.isEmpty() && cte.getName() != null) {
+                cteNames.peek().add(cte.getName());
+            }
         }
 
         /** An unqualified name a with clause in scope declares: the analyzer reads the CTE, not a table. */
@@ -657,6 +767,16 @@ public class PlannerMetaLocker implements AutoCloseable {
                 return null;
             }
             noteExternalTablePolicy(node);
+            if (node.isSyncMVQuery()) {
+                // [_SYNC_MV_] names a materialized index, not a table: resolving it as a table finds nothing, which
+                // left the base table the analyzer copies out of the lock set -- copied unlocked on the fast path,
+                // and failing the coverage check in StatementPlanner#copyOlapTablesAndUnlock on the slow one.
+                // A base table is never a view, and policies are not applied to a [_SYNC_MV_] read.
+                List<Pair<Database, Table>> baseTables = resolveSyncMVBaseTables(session, node.getName());
+                baseTables.forEach(this::put);
+                walkedSyncMVs.add(new WalkedSyncMV(node.getName(), tableIdsOf(baseTables)));
+                return null;
+            }
             Pair<Database, Table> dbAndTable = resolveTable(session, node.getName());
             put(dbAndTable);
             if (dbAndTable == null) {
@@ -700,14 +820,15 @@ public class PlannerMetaLocker implements AutoCloseable {
         private void visitPolicyBodies(TableName name, Table table) {
             List<Expr> bodies = new ArrayList<>();
             try {
-                Expr rowAccess = Authorizer.getRowAccessPolicy(session, name);
+                // The analyzer's own lookup is the one that counts (and, under Ranger, the one audited).
+                Expr rowAccess = Authorizer.getRowAccessPolicyWithoutAudit(session, name);
                 if (rowAccess != null) {
                     bodies.add(rowAccess);
                 }
                 // The columns SecurityPolicyRewriteRule#buildView masks.
                 List<Column> columns = table.getBaseSchema().stream()
                         .filter(c -> !c.getType().isUnknown()).filter(Column::isVisible).toList();
-                Map<String, Expr> masking = Authorizer.getColumnMaskingPolicy(session, name, columns);
+                Map<String, Expr> masking = Authorizer.getColumnMaskingPolicyWithoutAudit(session, name, columns);
                 if (masking != null) {
                     bodies.addAll(masking.values());
                 }

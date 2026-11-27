@@ -2,6 +2,7 @@
 sidebar_position: 40
 displayed_sidebar: docs
 description: "FE 节点异常时恢复 StarRocks 集群元数据的方法和步骤。"
+products: [oss, enterprise, anywhere]
 ---
 
 # 恢复元数据
@@ -79,7 +80,7 @@ Environment is invalid and must be closed.
 :::tip
 
 - 该 Bug 已在 StarRocks v3.1 中修复。您可以通过将集群升级到 v3.1 及以上版本避免此问题。
-- 如果超过半数的 FE 节点遇到了此问题，则此解决方案不适用，必须按照 [最终应急方案](#7-最终应急方案) 中提供的说明来解决此问题。
+- 如果超过半数的 FE 节点遇到了此问题，则此解决方案不适用，必须按照 [最终应急方案](#10-最终应急方案) 中提供的说明来解决此问题。
 
 :::
 
@@ -723,4 +724,5 @@ com.sleepycat.je.rep.UnknownMasterException: (JE 18.3.16) Could not determine ma
 
 - [bdbje_reset_election_group](./configuration/FE_parameters/FE_parameters.md#bdbje_reset_election_group)
 - [metadata_enable_recovery_mode](./configuration/FE_parameters/FE_parameters.md#metadata_enable_recovery_mode)
+- [metadata_ignore_image_checksum_error](./configuration/FE_parameters/FE_parameters.md#metadata_ignore_image_checksum_error)
 - [metadata_ignore_unknown_operation_type](./configuration/FE_parameters/FE_parameters.md#metadata_ignore_unknown_operation_type)

@@ -34,10 +34,14 @@
 
 #include "storage/rowset/indexed_column_reader.h"
 
+#include <algorithm>
+
+#include "common/logging.h"
 #include "fs/fs.h"
 #include "gutil/strings/substitute.h"     // for Substitute
 #include "storage/rowset/encoding_info.h" // for EncodingInfo
 #include "storage/rowset/page_io.h"
+#include "storage/storage_metrics.h"
 #include "storage_primitive/key_coder.h"
 
 namespace starrocks {
@@ -99,6 +103,64 @@ Status IndexedColumnReader::read_page(const IndexReadOptions& opts, const PagePo
     return PageIO::read_and_decompress_page(page_opts, handle, body, footer);
 }
 
+bool IndexedColumnReader::data_page_at_or_after(const void* key, PagePointer* page) const {
+    if (!support_value_seek() || _num_values == 0) {
+        return false;
+    }
+    // The same choice IndexedColumnIterator::seek_at_or_after() makes.
+    if (!_has_index_page) {
+        *page = _sole_data_page;
+        return true;
+    }
+    if (_value_index_reader.get_keys().empty()) {
+        return false;
+    }
+    std::string encoded_key;
+    _validx_key_coder->full_encode_ascending(key, &encoded_key);
+    IndexPageIterator iter(&_value_index_reader);
+    if (!iter.seek_at_or_after(encoded_key).ok()) {
+        return false;
+    }
+    *page = iter.current_page_pointer();
+    return true;
+}
+
+bool IndexedColumnReader::data_pages_of_ordinals(ordinal_t from, ordinal_t to, size_t max_pages,
+                                                 std::vector<PagePointer>* pages) const {
+    if (!support_ordinal_seek()) {
+        return false;
+    }
+    to = std::min<ordinal_t>(to, static_cast<ordinal_t>(_num_values));
+    if (from >= to || max_pages == 0) {
+        return true;
+    }
+    // The same choice IndexedColumnIterator::seek_to_ordinal() makes.
+    if (!_has_index_page) {
+        pages->push_back(_sole_data_page);
+        return true;
+    }
+    // The key of an entry is the first ordinal of its page, encoded so that the keys sort like the ordinals.
+    std::string from_key;
+    std::string to_key;
+    KeyCoderTraits<TYPE_UNSIGNED_BIGINT>::full_encode_ascending(&from, &from_key);
+    KeyCoderTraits<TYPE_UNSIGNED_BIGINT>::full_encode_ascending(&to, &to_key);
+    const auto& keys = _ordinal_index_reader.get_keys();
+    if (keys.empty()) {
+        return false;
+    }
+    // The first page is the last one starting at or before |from|; the pages that follow it up to the first one
+    // starting at or after |to| hold the rest.
+    auto first = std::upper_bound(keys.begin(), keys.end(), Slice(from_key));
+    if (first != keys.begin()) {
+        --first;
+    }
+    const auto last = std::lower_bound(first, keys.end(), Slice(to_key));
+    for (auto it = first; it != last && max_pages > 0; ++it, --max_pages) {
+        pages->push_back(_ordinal_index_reader.get_value(static_cast<int>(it - keys.begin())));
+    }
+    return true;
+}
+
 Status IndexedColumnReader::new_iterator(const IndexReadOptions& opts, std::unique_ptr<IndexedColumnIterator>* iter) {
     iter->reset(new IndexedColumnIterator(this, opts));
     return Status::OK();
@@ -115,7 +177,20 @@ Status IndexedColumnIterator::_read_data_page(const PagePointer& pp) {
     PageHandle handle;
     Slice body;
     PageFooterPB footer;
-    RETURN_IF_ERROR(_reader->read_page(_opts, pp, &handle, &body, &footer));
+    Status st = _reader->read_page(_opts, pp, &handle, &body, &footer);
+    if (st.is_not_found() && _opts.idg_bitmap_file_missing != nullptr) {
+        if (!*_opts.idg_bitmap_file_missing) {
+            *_opts.idg_bitmap_file_missing = true;
+            StorageMetrics::instance()->lake_idg_files_missing_total.increment(1);
+            LOG_EVERY_N(WARNING, 100) << "IDG bitmap index file " << _opts.read_file->filename() << " of tablet "
+                                      << _opts.tablet_id << " segment " << _opts.segment_id
+                                      << " is missing during a lazy page read, reading the segment without it: " << st;
+        }
+        // Dictionary predicates interpret NotFound as a value beyond the last key. Keep a missing file
+        // distinct from that semantic miss so EQ/IN cannot turn this I/O failure into an empty result.
+        return Status::IOError("optional IDG bitmap index file is missing: " + st.to_string());
+    }
+    RETURN_IF_ERROR(st);
     // parse data page
     // note that page_index is not used in IndexedColumnIterator, so we pass 0
     return parse_page(&_data_page, std::move(handle), body, footer.data_page_footer(), _reader->encoding_info(), pp, 0);

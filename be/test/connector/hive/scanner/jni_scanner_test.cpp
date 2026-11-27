@@ -16,12 +16,16 @@
 
 #include <gtest/gtest.h>
 
+#include <cstdlib>
 #include <string>
 
 #include "common/config_exec_fwd.h"
+#include "common/util/debug_util.h"
 #include "common/util/thrift_util.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors_ext.h"
+#include "runtime/java/jni_env.h"
+#include "runtime/java/jvm_helper.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {
@@ -481,6 +485,66 @@ TEST_F(JniScannerTest, test_create_odps_jni_scanner) {
     check_jni_scanner_params(scanner->_jni_scanner_params, expected);
 }
 
+static TTableDescriptor create_iceberg_metadata_table_desc() {
+    THdfsTable hdfs_table;
+    hdfs_table.__set_hive_column_names("file_path,record_count");
+    hdfs_table.__set_hive_column_types("string#bigint");
+    hdfs_table.__set_time_zone("Asia/Shanghai");
+
+    TTableDescriptor table_desc;
+    table_desc.__set_id(100000042);
+    table_desc.__set_tableType(TTableType::ICEBERG_FILES_TABLE);
+    table_desc.__set_numCols(2);
+    table_desc.__set_numClusteringCols(0);
+    table_desc.__set_tableName("t$files");
+    table_desc.__set_dbName("db");
+    table_desc.__set_hdfsTable(hdfs_table);
+    return table_desc;
+}
+
+TEST_F(JniScannerTest, test_create_iceberg_metadata_jni_scanner) {
+    TTableDescriptor t_table_desc = create_iceberg_metadata_table_desc();
+    IcebergMetadataTableDescriptor table(t_table_desc, &_pool);
+    THdfsScanRange scan_range;
+    scan_range.__set_serialized_split("split");
+
+    for (bool with_json : {false, true}) {
+        THdfsScanNode scan_node;
+        scan_node.__set_serialized_table("java-table");
+        scan_node.__set_serialized_predicate("java-predicate");
+        scan_node.__set_metadata_table_type("FILES");
+        if (with_json) {
+            scan_node.__set_iceberg_metadata_payload("{\"format\":1}");
+            scan_node.__set_iceberg_predicate_json("true");
+        }
+
+        JniScanner::CreateOptions options;
+        options.hive_table = &table;
+        options.scan_range = &scan_range;
+        options.scan_node = &scan_node;
+        auto scanner = create_iceberg_metadata_jni_scanner(options);
+        const auto& params = scanner->_jni_scanner_params;
+
+        ASSERT_EQ("java-table", params.at("serialized_table"));
+        ASSERT_EQ("java-predicate", params.at("serialized_predicate"));
+        ASSERT_EQ("split", params.at("split_info"));
+        ASSERT_EQ("Asia/Shanghai", params.at("time_zone"));
+        if (with_json) {
+            ASSERT_EQ("{\"format\":1}", params.at("iceberg_metadata_payload"));
+            ASSERT_EQ("true", params.at("iceberg_predicate_json"));
+            ASSERT_EQ(get_short_version(), params.at("reader_build"));
+        } else {
+            ASSERT_EQ(0, params.count("iceberg_metadata_payload"));
+            ASSERT_EQ(0, params.count("iceberg_predicate_json"));
+            ASSERT_EQ(0, params.count("reader_build"));
+        }
+        // the table forms carry storage credentials (in clear text in the JSON one): never logged
+        for (const char* key : {"serialized_table", "serialized_predicate", "iceberg_metadata_payload"}) {
+            ASSERT_EQ(1, scanner->_skipped_log_jni_scanner_params.count(key)) << key;
+        }
+    }
+}
+
 // Test that scanner can be safely closed even when JNI initialization fails
 TEST_F(JniScannerTest, test_close_without_jni_init) {
     // Create a simple JniScanner without initializing JNI
@@ -493,6 +557,52 @@ TEST_F(JniScannerTest, test_close_without_jni_init) {
 
     // If we reach here, the test passed (no crash occurred)
     ASSERT_TRUE(true);
+}
+
+// close() of the Java scanner may throw. do_close() must clear that exception so it does not stay
+// pending on the scan thread, and must release the scanner global ref.
+TEST_F(JniScannerTest, test_close_clears_pending_java_exception) {
+    if (std::getenv("JAVA_HOME") == nullptr) {
+        GTEST_SKIP() << "JAVA_HOME is not set";
+    }
+    JNIEnv* env = getJNIEnv();
+    if (env == nullptr) {
+        GTEST_SKIP() << "JVM is unavailable";
+    }
+
+    // The iterator of an empty ArrayList has a `remove()V` that throws IllegalStateException, which
+    // matches the `()V` signature JniScanner uses for the scanner's close() method.
+    jclass list_cls = env->FindClass("java/util/ArrayList");
+    ASSERT_NE(list_cls, nullptr);
+    LOCAL_REF_GUARD_ENV(env, list_cls);
+    jmethodID list_constructor = env->GetMethodID(list_cls, "<init>", "()V");
+    ASSERT_NE(list_constructor, nullptr);
+    jobject list = env->NewObject(list_cls, list_constructor);
+    ASSERT_NE(list, nullptr);
+    LOCAL_REF_GUARD_ENV(env, list);
+    jmethodID iterator_method = env->GetMethodID(list_cls, "iterator", "()Ljava/util/Iterator;");
+    ASSERT_NE(iterator_method, nullptr);
+    jobject iterator = env->CallObjectMethod(list, iterator_method);
+    ASSERT_NE(iterator, nullptr);
+    LOCAL_REF_GUARD_ENV(env, iterator);
+    jclass iterator_cls = env->GetObjectClass(iterator);
+    ASSERT_NE(iterator_cls, nullptr);
+    LOCAL_REF_GUARD_ENV(env, iterator_cls);
+    jmethodID remove_method = env->GetMethodID(iterator_cls, "remove", "()V");
+    ASSERT_NE(remove_method, nullptr);
+    ASSERT_FALSE(env->ExceptionCheck());
+
+    std::map<std::string, std::string> params = {{"test_key", "test_value"}};
+    auto scanner = std::make_unique<JniScanner>("com/test/TestFactory", params);
+    scanner->_jni_scanner_obj = env->NewGlobalRef(iterator);
+    scanner->_jni_scanner_cls = (jclass)env->NewGlobalRef(iterator_cls);
+    scanner->_jni_scanner_close = remove_method;
+
+    scanner->do_close(_runtime_state);
+
+    ASSERT_FALSE(env->ExceptionCheck()) << "do_close() left a pending Java exception";
+    ASSERT_EQ(scanner->_jni_scanner_obj, nullptr);
+    ASSERT_EQ(scanner->_jni_scanner_cls, nullptr);
 }
 
 } // namespace starrocks

@@ -567,6 +567,17 @@ requires(!lt_is_date<SlotType>) Status ChunkPredicateBuilder<E, Type>::normalize
             values.insert(decoder.decode(value));
         }
 
+        if (values.empty()) {
+            // and col in (null, null): no value is left once NULL is eliminated, so the predicate is never
+            // true. Empty the range instead of calling `add_fixed_values`, which reads an empty set as
+            // "no constraint". The root builder then ends the scan; a builder under OR gives up the push-down.
+            if constexpr (!Negative) {
+                range->clear_to_empty();
+                _normalized_exprs[i] = true;
+            }
+            return Status::OK();
+        }
+
         if (range->add_fixed_values(FILTER_IN, values).ok()) {
             _normalized_exprs[i] = true;
         }
@@ -702,7 +713,12 @@ requires lt_is_date<SlotType> Status ChunkPredicateBuilder<E, Type>::normalize_i
                     }
                 }
                 if (values.empty()) {
-                    status = Status::EndOfFile("const false predicate result");
+                    // No value can match (all NULL, or DATETIME values that are not a whole day),
+                    // so the predicate is never true.
+                    if constexpr (!Negative) {
+                        range->clear_to_empty();
+                        _normalized_exprs[i] = true;
+                    }
                     continue;
                 }
                 if (range->add_fixed_values(FILTER_IN, values).ok()) {

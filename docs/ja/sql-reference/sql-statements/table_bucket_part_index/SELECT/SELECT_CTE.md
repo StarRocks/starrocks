@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "Common Table Expression (CTE) defines temporary result sets referenceable within a SQL statement scope."
 sidebar_label: "CTE"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Common Table Expression

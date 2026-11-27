@@ -1962,6 +1962,25 @@ public class AggregateTest extends PlanTestBase {
                 "  |  group by: \n" +
                 "  |  \n" +
                 "  0:OlapScanNode");
+        // count of a column-free expression that is not a literal can be NULL on every row, so it is not
+        // the row count (RB-1129)
+        sql = "select count(nullif(upper('a'), 'A')) from test_all_type_not_null";
+        plan = getFragmentPlan(sql);
+        assertNotContains(plan, "MetaScan");
+        assertContains(plan, "0:OlapScanNode");
+        // the same for an argument that is NULL on every row after constant folding (RB-1439) or after the
+        // projection of a derived table is merged into it (RB-1438)
+        for (String nullArgSql : new String[] {
+                "select count(false + interval 1 day) from test_all_type_not_null",
+                "select count(case when c is null then 1 end) from " +
+                        "(select trim(false) c from test_all_type_not_null) s"}) {
+            plan = getFragmentPlan(nullArgSql);
+            assertNotContains(plan, "MetaScan");
+            assertContains(plan, "0:OlapScanNode");
+        }
+        sql = "select count(1) from test_all_type_not_null";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "0:MetaScan");
         // with count distinct, shouldn't apply RewriteSimpleAggToMetaScanRule
         sql = "select count(distinct t1b) from test_all_type_not_null";
         plan = getFragmentPlan(sql);
@@ -3644,5 +3663,33 @@ public class AggregateTest extends PlanTestBase {
         String plan = getFragmentPlan("select v1, named_struct('a', sum(v2), 'b', max(v3)).a from t0 group by v1");
         assertContains(plan, "output: sum(2: v2), max(3: v3)");
         assertContains(plan, "named_struct('a', 4: sum, 'b', 5: max).a");
+    }
+
+    // count(v) on a VARIANT counts it as VARIANT. Counting cast(v as VARCHAR) instead turned a variant null into a SQL
+    // NULL and dropped it from the count, although `v IS NULL` is false.
+    @Test
+    public void testCountVariantDoesNotCastToVarchar() throws Exception {
+        int oldStage = connectContext.getSessionVariable().getNewPlannerAggStage();
+        try {
+            for (int stage : new int[] {0, 1, 2}) {
+                connectContext.getSessionVariable().setNewPlanerAggStage(stage);
+                String plan = getVerboseExplain(
+                        "select t1b, count(cast(t1a as variant)) from test_all_type group by t1b");
+                assertContains(plan, "count[([11: cast, VARIANT, true]); args: VARIANT; result: BIGINT");
+                assertNotContains(plan, "as VARCHAR");
+            }
+            // There is no distinct aggregate over VARIANT: count distinct still casts its argument to VARCHAR, so
+            // the multi-phase split never hands a VARIANT column to a VARCHAR distinct state.
+            for (int stage : new int[] {0, 1, 2, 3, 4}) {
+                connectContext.getSessionVariable().setNewPlanerAggStage(stage);
+                String plan = getVerboseExplain(
+                        "select count(distinct cast(t1a as variant)) from test_all_type");
+                assertContains(plan, "VARIANT, true] as VARCHAR)");
+                assertNotContains(plan, "as VARIANT)); args: CHAR");
+                assertNotContains(plan, "VARIANT, true]); args: CHAR");
+            }
+        } finally {
+            connectContext.getSessionVariable().setNewPlanerAggStage(oldStage);
+        }
     }
 }

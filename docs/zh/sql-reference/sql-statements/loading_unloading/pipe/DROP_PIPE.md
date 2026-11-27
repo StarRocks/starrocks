@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "删除 Pipe 及其关联的作业和元数据。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # DROP PIPE

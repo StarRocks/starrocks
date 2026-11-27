@@ -70,7 +70,15 @@ StatusOr<VectorIndexReaderCreateResult> VectorIndexReaderFactory::create_and_ini
                 }
                 ASSIGN_OR_RETURN(index_file, fs::new_random_access_file(index_path));
             }
-            ASSIGN_OR_RETURN(file_size, index_file->get_size());
+            // Object stores open lazily, so an async .vi that is not built yet surfaces as NotFound here.
+            auto size_or = index_file->get_size();
+            if (!size_or.ok()) {
+                if (size_or.status().is_not_found()) {
+                    return VectorIndexReaderCreateResult{};
+                }
+                return size_or.status();
+            }
+            file_size = size_or.value();
         }
         vi_file.size = file_size;
 

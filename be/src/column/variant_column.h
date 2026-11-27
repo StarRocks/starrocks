@@ -18,6 +18,7 @@
 #include <string>
 #include <string_view>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -131,6 +132,11 @@ public:
     bool try_get_row_ref(size_t idx, VariantRowRef* out) const;
     const VariantRowValue* get_row_value(size_t idx, VariantRowValue* output) const;
     bool try_materialize_row(size_t idx, VariantRowValue* output) const;
+    // Write-side materialization: reject malformed residuals/overlays instead of falling back
+    // to a partial base row. SQL NULL belongs to the caller's nullable wrapper; encoded VARIANT
+    // null is a real value. Empty/absent residuals require at least one effective overlay.
+    // The source columns are never modified.
+    StatusOr<VariantRowValue> materialize_row_strict(size_t idx) const;
 
     std::string get_name() const override { return "variant"; }
 
@@ -240,7 +246,13 @@ private:
     template <typename AppendFunc>
     void _append_container_rows_impl(const VariantColumn& src, size_t count, AppendFunc&& append_func);
 
-    const VariantColumn* _prepare_append_source(const VariantColumn& src, MutableColumnPtr* src_working_copy);
+    // Returns `src` when the schemas match, else a copy of the rows `copy_rows` selects, made to fit this column.
+    template <typename CopyRows>
+    const VariantColumn* _prepare_append_source(const VariantColumn& src, CopyRows&& copy_rows,
+                                                MutableColumnPtr* src_working_copy);
+
+    // Moves the shredded paths not in `keep` back into remain.
+    Status _fold_shredded_paths_into_remain(const std::unordered_set<std::string>& keep);
 
     bool _is_shredded_schema_valid() const;
 
@@ -271,6 +283,9 @@ private:
     // not as NullableColumn null flags.
     BinaryColumn::MutablePtr _metadata_column;
     BinaryColumn::MutablePtr _remain_value_column;
+    // Untyped paths that may have values in remain (found there or folded there), so append need not scan for them.
+    // A stale entry only makes append fold a path it could have kept typed.
+    std::unordered_set<std::string> _paths_known_in_remain;
 };
 
 } // namespace starrocks

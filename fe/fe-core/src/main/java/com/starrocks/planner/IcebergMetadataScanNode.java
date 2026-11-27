@@ -38,7 +38,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
-public class IcebergMetadataScanNode extends ScanNode {
+public class IcebergMetadataScanNode extends MetadataScanNode {
     private static final Logger LOG = LogManager.getLogger(IcebergMetadataScanNode.class);
 
     private static final Set<String> STATS_COLUMNS =
@@ -56,6 +56,8 @@ public class IcebergMetadataScanNode extends ScanNode {
     private final HDFSScanNodePredicates scanNodePredicates = new HDFSScanNodePredicates();
     private final List<TScanRangeLocations> result = new ArrayList<>();
     private String serializedTable;
+    private String jsonPayload;
+    private String predicateJson;
     private boolean loadColumnStats;
     private final TvrVersionRange version;
     private final MetadataTableType metadataTableType;
@@ -67,8 +69,13 @@ public class IcebergMetadataScanNode extends ScanNode {
         this.version = version;
     }
 
-    public void preProcessIcebergPredicate(String icebergPredicate) {
+    @Override
+    public void preProcessMetadataPredicate(String icebergPredicate) {
         this.icebergPredicate = icebergPredicate;
+    }
+
+    public void preProcessIcebergPredicate(String predicate) {
+        preProcessMetadataPredicate(predicate);
     }
 
     public HDFSScanNodePredicates getScanNodePredicates() {
@@ -104,6 +111,8 @@ public class IcebergMetadataScanNode extends ScanNode {
         }
 
         this.serializedTable = serializedMetaSpec.getTable();
+        this.jsonPayload = serializedMetaSpec.getJsonPayload();
+        this.predicateJson = serializedMetaSpec.getPredicateJson();
         this.loadColumnStats = serializedMetaSpec.loadColumnStats();
         serializedMetaSpec.getSplits().forEach(this::addSplitScanRangeLocations);
     }
@@ -143,6 +152,10 @@ public class IcebergMetadataScanNode extends ScanNode {
 
         tHdfsScanNode.setSerialized_table(serializedTable);
         tHdfsScanNode.setSerialized_predicate(icebergPredicate);
+        if (jsonPayload != null) {
+            tHdfsScanNode.setIceberg_metadata_payload(jsonPayload);
+            tHdfsScanNode.setIceberg_predicate_json(predicateJson);
+        }
         tHdfsScanNode.setLoad_column_stats(loadColumnStats);
         tHdfsScanNode.setMetadata_table_type(metadataTableType.name());
 

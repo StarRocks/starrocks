@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "ALTER RESOURCE GROUP alters the configuration of a resource group."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ALTER RESOURCE GROUP

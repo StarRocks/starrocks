@@ -20,10 +20,14 @@ import com.google.common.collect.Range;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
+import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvPlanContext;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionKey;
+import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.Replica;
+import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.constraint.ForeignKeyConstraint;
 import com.starrocks.catalog.constraint.UniqueConstraint;
 import com.starrocks.common.AnalysisException;
@@ -928,7 +932,7 @@ public class MvRewriteTest extends MVTestBase {
                         String mvName = "mv_q15";
                         createAndRefreshMv("CREATE MATERIALIZED VIEW `mv_q15`\n" +
                                 "DISTRIBUTED BY HASH(`gender`) BUCKETS 2\n" +
-                                "REFRESH ASYNC\n" +
+                                "REFRESH ON_CHANGE\n" +
                                 "AS \n" +
                                 "SELECT \n" +
                                 "    CAST((`d_user`->'gender') AS string) AS `gender`, \n" +
@@ -949,7 +953,7 @@ public class MvRewriteTest extends MVTestBase {
                         String mvName = "mv_q16";
                         createAndRefreshMv("CREATE MATERIALIZED VIEW `mv_q16`\n" +
                                 "DISTRIBUTED BY HASH(`gender`) BUCKETS 2\n" +
-                                "REFRESH ASYNC\n" +
+                                "REFRESH ON_CHANGE\n" +
                                 "AS \n" +
                                 "SELECT \n" +
                                 "    CAST((`d_user`->'gender') AS string) AS `gender`, \n" +
@@ -1370,7 +1374,7 @@ public class MvRewriteTest extends MVTestBase {
         createAndRefreshMv("CREATE MATERIALIZED VIEW test_partition_tbl_mv1\n" +
                 "               PARTITION BY k1\n" +
                 "               DISTRIBUTED BY HASH(k1) BUCKETS 10\n" +
-                "               REFRESH ASYNC\n" +
+                "               REFRESH ON_CHANGE\n" +
                 "               PROPERTIES(\n" +
                 "               \"partition_ttl_number\"=\"4\",\n" +
                 "               \"auto_refresh_partitions_limit\"=\"4\"\n" +
@@ -1408,7 +1412,7 @@ public class MvRewriteTest extends MVTestBase {
             String mvName = "mv_test_map_element";
             createAndRefreshMv("CREATE MATERIALIZED VIEW \n" + mvName +
                     "\nDISTRIBUTED BY HASH(k1) BUCKETS 10\n" +
-                    "REFRESH ASYNC \n" +
+                    "REFRESH ON_CHANGE \n" +
                     "AS SELECT k1, element_at(v1, 'k1') as col1, sum(v3) as sum_v3 \n" +
                     "FROM test_map_array\n" +
                     "GROUP BY k1, element_at(v1, 'k1') ");
@@ -1435,7 +1439,7 @@ public class MvRewriteTest extends MVTestBase {
             String mvName = "mv_test_array_element";
             createAndRefreshMv("CREATE MATERIALIZED VIEW \n" + mvName +
                     "\nDISTRIBUTED BY HASH(k1) BUCKETS 10\n" +
-                    "REFRESH ASYNC \n" +
+                    "REFRESH ON_CHANGE \n" +
                     "AS SELECT k1, element_at(v2, 1) as col1, sum(v3) as sum_v3 \n" +
                     "FROM test_map_array\n" +
                     "GROUP BY k1, element_at(v2, 1) ");
@@ -1461,7 +1465,7 @@ public class MvRewriteTest extends MVTestBase {
             String mvName = "mv_test_array_slice";
             createAndRefreshMv("CREATE MATERIALIZED VIEW \n" + mvName +
                     "\nDISTRIBUTED BY HASH(k1) BUCKETS 10\n" +
-                    "REFRESH ASYNC \n" +
+                    "REFRESH ON_CHANGE \n" +
                     "AS SELECT k1, array_slice(v2, 1, 1) as col1, sum(v3) as sum_v3 \n" +
                     "FROM test_map_array\n" +
                     "GROUP BY k1, array_slice(v2, 1, 1) ");
@@ -1491,7 +1495,7 @@ public class MvRewriteTest extends MVTestBase {
             String mvName = "mv_projection_const";
             createAndRefreshMv("CREATE MATERIALIZED VIEW \n" + mvName +
                     "\nDISTRIBUTED BY HASH(k1) BUCKETS 10\n" +
-                    "REFRESH ASYNC \n" +
+                    "REFRESH ON_CHANGE \n" +
                     "AS SELECT k1, k2, v3 " +
                     "FROM " + tableName);
             {
@@ -1506,7 +1510,7 @@ public class MvRewriteTest extends MVTestBase {
             String mvName = "mv_aggregation_projection_const";
             createAndRefreshMv("CREATE MATERIALIZED VIEW \n" + mvName +
                     "\nDISTRIBUTED BY HASH(k1) BUCKETS 10\n" +
-                    "REFRESH ASYNC \n" +
+                    "REFRESH ON_CHANGE \n" +
                     "AS SELECT k1, sum(v3) as sum_v3 \n" +
                     "FROM " + tableName + "\n" +
                     "GROUP BY k1");
@@ -1575,7 +1579,7 @@ public class MvRewriteTest extends MVTestBase {
         createAndRefreshMv("CREATE MATERIALIZED VIEW test_partition_tbl_mv3\n" +
                 "PARTITION BY k1\n" +
                 "DISTRIBUTED BY HASH(v1) BUCKETS 10\n" +
-                "REFRESH ASYNC\n" +
+                "REFRESH ON_CHANGE\n" +
                 "AS SELECT a.k1, a.v1,sum(a.v1) as sum_v1 \n" +
                 "FROM test_partition_tbl1 as a \n" +
                 "join test_partition_tbl2 as b " +
@@ -1633,7 +1637,7 @@ public class MvRewriteTest extends MVTestBase {
         createAndRefreshMv("CREATE MATERIALIZED VIEW test_partition_tbl_mv3\n" +
                 "PARTITION BY a_k1\n" +
                 "DISTRIBUTED BY HASH(a_v1) BUCKETS 10\n" +
-                "REFRESH ASYNC\n" +
+                "REFRESH ON_CHANGE\n" +
                 "AS SELECT a.k1 as a_k1, b.k1 as b_k1, " +
                 "a.v1 as a_v1, b.v1 as b_v1,sum(a.v1) as sum_v1 \n" +
                 "FROM test_partition_tbl1 as a \n" +
@@ -1717,7 +1721,7 @@ public class MvRewriteTest extends MVTestBase {
         createAndRefreshMv("CREATE MATERIALIZED VIEW test_partition_tbl_mv3\n" +
                 "PARTITION BY a_k1\n" +
                 "DISTRIBUTED BY HASH(a_v1) BUCKETS 10\n" +
-                "REFRESH ASYNC\n" +
+                "REFRESH ON_CHANGE\n" +
                 "AS SELECT a.k1 as a_k1, a.v1 as a_v1, a.v2 as a_v2, " +
                 "b.k1 as b_k1, b.v1 as b_v1, b.v2 as b_v2 \n" +
                 "FROM test_partition_tbl1 as a \n" +
@@ -1755,7 +1759,7 @@ public class MvRewriteTest extends MVTestBase {
         createAndRefreshMv("CREATE MATERIALIZED VIEW test_partition_tbl_mv3\n" +
                 "PARTITION BY a_k1\n" +
                 "DISTRIBUTED BY HASH(a_v1) BUCKETS 10\n" +
-                "REFRESH ASYNC\n" +
+                "REFRESH ON_CHANGE\n" +
                 "AS SELECT a.k1 as a_k1, a.v1 as a_v1, a.v2 as a_v2, " +
                 "b.k1 as b_k1, b.v1 as b_v1, b.v2 as b_v2 \n" +
                 "FROM test_partition_tbl1 as a \n" +
@@ -1784,7 +1788,7 @@ public class MvRewriteTest extends MVTestBase {
         createAndRefreshMv("CREATE MATERIALIZED VIEW test_partition_tbl_mv3\n" +
                 "PARTITION BY a_k1\n" +
                 "DISTRIBUTED BY HASH(a_v1) BUCKETS 10\n" +
-                "REFRESH ASYNC\n" +
+                "REFRESH ON_CHANGE\n" +
                 "AS SELECT a.k1 as a_k1, a.v1 as a_v1, a.v2 as a_v2, " +
                 "b.k1 as b_k1, b.v1 as b_v1, b.v2 as b_v2 \n" +
                 "FROM test_partition_tbl1 as a \n" +
@@ -2220,7 +2224,7 @@ public class MvRewriteTest extends MVTestBase {
                 "CREATE MATERIALIZED VIEW `mv1` (`event_id`, `event_time`, `event_time1`)\n" +
                         "PARTITION BY (`event_time`)\n" +
                         "DISTRIBUTED BY HASH(`event_id`) BUCKETS 1\n" +
-                        "REFRESH ASYNC\n" +
+                        "REFRESH ON_CHANGE\n" +
                         "PROPERTIES (\n" +
                         "\"replicated_storage\" = \"true\",\n" +
                         "\"partition_refresh_number\" = \"2\",\n" +
@@ -2469,5 +2473,59 @@ public class MvRewriteTest extends MVTestBase {
                     PlanTestBase.assertContains(plan, "test_mv1");
                     connectContext.getSessionVariable().setMaterializedViewUnionRewriteMode(0);
                 });
+    }
+
+    @Test
+    public void testSelectDistinctConstantWithLimitTabletPrune() throws Exception {
+        // RB-1226: SELECT DISTINCT <constant> becomes a scan with LIMIT 1. In the multi-stage MV rewrite, which applies
+        // the partition prune rules iteratively, DistributionPruneRule restored every tablet and LimitPruneTabletsRule
+        // narrowed them again on every pass, so planning never finished. The tablets need rows for the limit pruning.
+        starRocksAssert.withTable("CREATE TABLE t_rb1226 (k1 INT NOT NULL, v1 INT) DUPLICATE KEY(k1) " +
+                "DISTRIBUTED BY HASH(k1) BUCKETS 3 PROPERTIES ('replication_num' = '1')");
+        starRocksAssert.withRefreshedMaterializedView("CREATE MATERIALIZED VIEW mv_rb1226 " +
+                "DISTRIBUTED BY HASH(k1) BUCKETS 1 REFRESH MANUAL AS SELECT k1, v1 FROM t_rb1226");
+        OlapTable table = (OlapTable) starRocksAssert.getTable("test", "t_rb1226");
+        for (PhysicalPartition partition : table.getAllPhysicalPartitions()) {
+            long version = partition.getVisibleVersion();
+            for (Tablet tablet : partition.getLatestBaseIndex().getTablets()) {
+                for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
+                    replica.updateRowCount(version, 100, 10);
+                }
+            }
+        }
+        SessionVariable sessionVariable = connectContext.getSessionVariable();
+        long timeout = sessionVariable.getOptimizerExecuteTimeout();
+        try {
+            sessionVariable.setOptimizerExecuteTimeout(3000);
+            String plan = getFragmentPlan("SELECT DISTINCT 1 FROM t_rb1226");
+            PlanTestBase.assertContains(plan, "OlapScanNode");
+            plan = getFragmentPlan("SELECT count(*) FROM t_rb1226 WHERE v1 = (SELECT DISTINCT 1 FROM t_rb1226 LIMIT 1)");
+            PlanTestBase.assertContains(plan, "OlapScanNode");
+        } finally {
+            sessionVariable.setOptimizerExecuteTimeout(timeout);
+            starRocksAssert.dropMaterializedView("mv_rb1226");
+            starRocksAssert.dropTable("t_rb1226");
+        }
+    }
+
+    @Test
+    public void testSelfEqualityIsCompensatedOnMv() throws Exception {
+        // v2 = v2 is not TRUE where v2 is NULL, so the scan of the MV must still filter on it.
+        createAndRefreshMv("create materialized view mv_self_eq distributed by hash(v1) as " +
+                "select v1, v2, v3 from t0");
+        try {
+            for (String query : new String[] {
+                    "select v1, v2 from t0 where v2 = v2",
+                    "select * from (select v1, v3 from t0 where v2 = v2) s",
+                    "select v1 from t0 where v2 = v2 and v1 = v1"}) {
+                String plan = getFragmentPlan(query);
+                PlanTestBase.assertContains(plan, "TABLE: mv_self_eq");
+                PlanTestBase.assertContains(plan, "v2 = ");
+            }
+            String plan = getFragmentPlan("select v1 from t0 where v2 = v2 and v1 = v1");
+            PlanTestBase.assertContains(plan, "v1 = ");
+        } finally {
+            dropMv("test", "mv_self_eq");
+        }
     }
 }

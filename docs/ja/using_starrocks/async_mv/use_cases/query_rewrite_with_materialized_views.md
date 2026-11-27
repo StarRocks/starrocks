@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "StarRocks automatically rewrites queries to use asynchronous materialized views for transparent query acceleration, including supported rewrite patterns."
 sidebar_position: 20
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # マテリアライズドビューを用いたクエリの書き換え
@@ -540,7 +541,7 @@ GROUP BY lo_orderkey, c_name;
 ```SQL
 CREATE MATERIALIZED VIEW order_agg_mv1
 DISTRIBUTED BY HASH(`order_id`) BUCKETS 12
-REFRESH ASYNC START('2022-09-01 10:00:00') EVERY (interval 1 day)
+REFRESH SCHEDULE START('2022-09-01 10:00:00') EVERY (interval 1 day)
 AS
 SELECT
     order_date,
@@ -1304,6 +1305,7 @@ mysql> EXPLAIN SELECT
 - StarRocks は、ウィンドウ関数を含むクエリの書き換えをサポートしていません。
 - LIMIT、ORDER BY、UNION、EXCEPT、INTERSECT、MINUS、GROUPING SETS、WITH CUBE、または WITH ROLLUP を含むステートメントで定義されたマテリアライズドビューは、クエリの書き換えに使用できません。
 - 外部カタログに基づいて構築されたマテリアライズドビューとベーステーブル間のクエリ結果の強い整合性は保証されません。
+- マテリアライズドビューのリフレッシュで行の破棄が許可されている場合（マテリアライズドビューのプロパティ `session.insert_max_filter_ratio` が `0` より大きい場合、またはこのプロパティを設定せず FE パラメータ `mv_refresh_fail_on_filter_data` が `false` の場合）、リフレッシュで破棄された行は、このマテリアライズドビューに書き換えられたクエリの結果にも含まれません。クエリ結果の完全性を保つには、マテリアライズドビューのプロパティ `enable_query_rewrite` を `false` に設定してください。
 - JDBC カタログ内のベーステーブルに作成された非同期マテリアライズドビューは、クエリの書き換えをサポートしていません。
 
 ビューに基づくマテリアライズドビュークエリの書き換えに関して、StarRocks には現在次の制限があります：

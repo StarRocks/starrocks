@@ -19,10 +19,10 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.context.ai.AIProvider;
 import com.starrocks.planner.expression.ExprToThrift;
+import com.starrocks.sql.analyzer.AIFunctionProviderResolver;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.SlotRef;
-import com.starrocks.sql.common.AIModelConfigs;
 import com.starrocks.thrift.TAIProjectNode;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
@@ -82,19 +82,19 @@ public final class AIProjectNode extends ProjectNode {
         Map<String, AIProvider> copies = new LinkedHashMap<>();
         providers.forEach((key, provider) -> copies.put(key, new AIProvider(provider)));
         this.providers = Map.copyOf(copies);
-        Set<String> usedConfigIds = new HashSet<>();
+        Set<String> usedProviderIds = new HashSet<>();
         for (FunctionCallExpr call : aiCalls) {
-            String configId = call.getAIProviderId();
-            Preconditions.checkState(configId != null && this.providers.containsKey(configId),
+            String providerId = call.getAIProviderId();
+            Preconditions.checkState(providerId != null && this.providers.containsKey(providerId),
                     "AIProject requires an AI provider for each AI call");
-            AIProvider config = this.providers.get(configId);
-            usedConfigIds.add(configId);
-            Preconditions.checkState(configId.equals(config.getId()),
+            AIProvider provider = this.providers.get(providerId);
+            usedProviderIds.add(providerId);
+            Preconditions.checkState(providerId.equals(provider.getId()),
                     "AIProject provider ID must match its mapping key");
-            Preconditions.checkState(AIModelConfigs.parseProviderType(call.getFn()) == config.getType(),
+            Preconditions.checkState(AIFunctionProviderResolver.requiredProviderType(call.getFn()) == provider.getType(),
                     "AIProject provider type does not match the AI function");
         }
-        Preconditions.checkState(usedConfigIds.equals(this.providers.keySet()),
+        Preconditions.checkState(usedProviderIds.equals(this.providers.keySet()),
                 "AIProject must contain only used AI providers");
     }
 
@@ -108,7 +108,7 @@ public final class AIProjectNode extends ProjectNode {
         getCommonSlotMap().forEach((slot, expression) ->
                 aiProject.putToCommon_slot_map(slot.asInt(), ExprToThrift.treeToThrift(expression)));
         aiProject.setAi_provider_mapping(new HashMap<>());
-        providers.forEach((id, config) -> aiProject.putToAi_provider_mapping(id, config.toThrift()));
+        providers.forEach((id, provider) -> aiProject.putToAi_provider_mapping(id, provider.toThrift()));
         message.setNode_type(TPlanNodeType.AI_PROJECT_NODE);
         message.setAi_project_node(aiProject);
     }

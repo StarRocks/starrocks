@@ -36,6 +36,7 @@
 #include "common/statusor.h"
 #include "compute_env/query/file_scan_split_context.h"
 #include "formats/deletion_bitmap.h"
+#include "formats/utils.h"
 #include "gen_cpp/Exprs_types.h"
 #include "runtime/descriptors.h"
 
@@ -58,6 +59,14 @@ using SkipRowsContextPtr = std::shared_ptr<SkipRowsContext>;
 struct FormatScannerStats {
     int64_t raw_rows_read = 0;
     int64_t rows_read = 0;
+    // Audit log row counters, kept by the Parquet and ORC readers: rows read from the file after pruning and
+    // before deletes are applied, and those rows after the deletes.
+    int64_t physical_rows_read = 0;
+    int64_t logical_rows_read = 0;
+    // Audit log byte counters of the Iceberg position-delete files and deletion vectors read for the data file: bytes
+    // read from the file system below the datacache, and bytes served by the datacache.
+    int64_t delete_file_remote_bytes = 0;
+    int64_t delete_file_cache_bytes = 0;
     int64_t late_materialize_skip_rows = 0;
 
     // Parquet lazy materialization: rows filtered before lazy columns were read.
@@ -184,6 +193,11 @@ struct FormatScannerOptions {
     // and a placeholder materialized column was injected.  Combined with
     // use_min_max_opt to skip reading the placeholder from the data file.
     bool can_use_any_column = false;
+    // Materialized slots the query reads itself although can_use_any_column is set. The FE treats the source column
+    // of an Iceberg partition transform (e.g. `d` of `year(d)`) as a partition column, so a query on it gets a
+    // placeholder column, but a file stores the column as data. Only the placeholder may then be filled with a default
+    // value; these slots keep their min/max value or are read from the file.
+    std::unordered_set<SlotId> any_column_queried_slots;
     bool use_count_opt = false;
     bool orc_use_column_names = false;
     bool parquet_page_index_enable = false;
@@ -226,10 +240,7 @@ struct FormatColumnInfo {
     SlotDescriptor* slot_desc;
     bool decode_needed = true;
 
-    std::string formatted_name(bool case_sensitive) const {
-        auto n = std::string(name());
-        return case_sensitive ? n : boost::algorithm::to_lower_copy(n);
-    }
+    std::string formatted_name(bool case_sensitive) const { return Utils::format_name(name(), case_sensitive); }
     std::string_view name() const { return slot_desc->col_name(); }
     int32_t col_unique_id() const { return slot_desc->col_unique_id(); }
     std::string_view col_physical_name() const { return slot_desc->col_physical_name(); }

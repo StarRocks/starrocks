@@ -19,6 +19,7 @@
 #include "base/utility/exclusive_ptr.h"
 #include "column/vectorized_fwd.h"
 #include "common/runtime_profile.h"
+#include "common/scan_audit_counters.h"
 #include "common/statusor.h"
 #include "compute_env/workgroup/work_group_fwd.h"
 #include "exec_primitive/pipeline/scan/scan_morsel.h"
@@ -68,6 +69,13 @@ public:
     int64_t get_io_time_spent() const { return _io_time_spent_ns; }
     int64_t get_scan_rows() const { return _scan_rows_num; }
     int64_t get_scan_bytes() const { return _scan_bytes; }
+    // Growth of the audit read counters of the reader behind this chunk source (see ScanAuditCounters) since the
+    // last call. Called by the io task, so never concurrently.
+    ScanAuditCounters take_unreported_scan_audit_counters() {
+        ScanAuditCounters delta = ScanAuditCounters::delta(_scan_audit_counters, _reported_scan_audit_counters);
+        _reported_scan_audit_counters = _scan_audit_counters;
+        return delta;
+    }
 
     RuntimeProfile::Counter* scan_timer() { return _scan_timer; }
     RuntimeProfile::Counter* io_task_wait_timer() { return _io_task_wait_timer; }
@@ -77,6 +85,10 @@ public:
     void unpin_chunk_token();
 
     virtual bool reach_limit() { return false; }
+
+    // Whether the source waits for its input to become readable, which wakes the scan operator: it has nothing to
+    // read until then, so the operator runs no IO task for it.
+    virtual bool is_waiting_for_input() const { return false; }
 
     virtual void update_chunk_exec_stats(RuntimeState* state) {}
     virtual bool has_reusable_state() const { return false; }
@@ -106,6 +118,10 @@ protected:
     int64_t _scan_rows_num = 0;
     int64_t _scan_bytes = 0;
     int64_t _io_time_spent_ns = 0;
+    // Cumulative audit read counters, and the part of them already reported. Output rows are counted by the scan
+    // operator, not here.
+    ScanAuditCounters _scan_audit_counters;
+    ScanAuditCounters _reported_scan_audit_counters;
 
     BalancedChunkBuffer& _chunk_buffer;
     Status _status = Status::OK();

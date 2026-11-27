@@ -300,7 +300,11 @@ public class RewriteSimpleAggToMetaScanRule extends TransformationRule {
                                 // count()/count(*)
                                 return true;
                             } else {
-                                return arguments.size() == 1 && !arguments.get(0).isConstantNull();
+                                // Only a literal is known not to be NULL. An argument that reads no column but
+                                // is not a literal, such as nullif(upper('a'), 'A'), can be NULL on every row,
+                                // and the row count would then be wrong.
+                                return arguments.size() == 1 && arguments.get(0) instanceof ConstantOperator &&
+                                        !arguments.get(0).isConstantNull();
                             }
                         }
                         return false;
@@ -354,7 +358,12 @@ public class RewriteSimpleAggToMetaScanRule extends TransformationRule {
         long total = 0L;
         for (Partition partition : table.getVisiblePartitions()) {
             for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
-                long visibleVersion = physicalPartition.getVisibleVersion();
+                // Moved since the planning copy: the recheck may re-read the plan's scans at the new version, which a
+                // folded count would not follow. A meta scan is re-read with them.
+                if (table.isPlanningVisibleVersionMoved(physicalPartition)) {
+                    return Optional.empty();
+                }
+                long visibleVersion = table.getVisibleVersionForQuery(physicalPartition);
                 for (Tablet tablet : physicalPartition.getQueryableBaseIndex().getTablets()) {
                     long rowCount = tablet.getRowCountAtVersion(visibleVersion);
                     if (rowCount < 0) {

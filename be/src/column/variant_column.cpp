@@ -25,6 +25,7 @@
 #include "base/coding.h"
 #include "base/simd/simd.h"
 #include "base/status.h"
+#include "base/utility/defer_op.h"
 #include "column/array_column.h"
 #include "column/binary_column.h"
 #include "column/column_builder.h"
@@ -72,14 +73,44 @@ static bool has_variant_descendant(const TypeDescriptor& type_desc) {
     return false;
 }
 
-StatusOr<VariantColumn::EncodedVariantResult> VariantColumn::encode_typed_row_as_variant(
-        const Column* typed_column, size_t typed_row, const TypeDescriptor& type_desc) {
+static StatusOr<VariantRowValue> materialize_row_strict_impl(const VariantColumn* column, size_t row, size_t depth,
+                                                             size_t* work);
+
+static Status consume_strict_variant_bytes(const VariantRowValue& value, size_t* bytes) {
+    const size_t metadata_size = value.get_metadata().raw().size();
+    const size_t value_size = value.get_value().raw().size();
+    if (metadata_size > *bytes || value_size > *bytes - metadata_size) {
+        return Status::InvalidArgument("Strict VARIANT materialization byte limit exceeded");
+    }
+    *bytes -= metadata_size + value_size;
+    return Status::OK();
+}
+
+static StatusOr<VariantColumn::EncodedVariantResult> encode_typed_row_as_variant_impl(const Column* typed_column,
+                                                                                      size_t typed_row,
+                                                                                      const TypeDescriptor& type_desc,
+                                                                                      bool strict, size_t depth,
+                                                                                      size_t* work) {
+    using EncodedVariantState = VariantColumn::EncodedVariantState;
+    using EncodedVariantResult = VariantColumn::EncodedVariantResult;
+    if (strict) {
+        if (depth > VariantBuilder::kMaxStrictDepth || *work == 0) {
+            return Status::InvalidArgument("Strict typed VARIANT nesting/work limit exceeded");
+        }
+        --*work;
+    }
     if (typed_column == nullptr) {
         return Status::InvalidArgument("typed column is null");
     }
 
     const Column* data_column = typed_column;
     while (data_column->is_constant() || data_column->is_nullable()) {
+        if (strict && (typed_row >= data_column->size() || *work == 0)) {
+            return Status::InvalidArgument("Strict typed VARIANT row/wrapper limit exceeded");
+        }
+        if (strict) {
+            --*work;
+        }
         if (data_column->is_constant()) {
             data_column = down_cast<const ConstColumn*>(data_column)->data_column().get();
             typed_row = 0;
@@ -94,11 +125,18 @@ StatusOr<VariantColumn::EncodedVariantResult> VariantColumn::encode_typed_row_as
         }
         data_column = nullable_column->data_column().get();
     }
+    if (strict && typed_row >= data_column->size()) {
+        return Status::InvalidArgument("Strict typed VARIANT row is out of bounds");
+    }
 
     if (type_desc.type == TYPE_VARIANT) {
         const auto* typed_variant_column = down_cast<const VariantColumn*>(data_column);
         if (typed_variant_column == nullptr) {
             return Status::InvalidArgument("typed variant column is null");
+        }
+        if (strict) {
+            ASSIGN_OR_RETURN(auto value, materialize_row_strict_impl(typed_variant_column, typed_row, depth, work));
+            return EncodedVariantResult{.state = EncodedVariantState::kValue, .value = std::move(value)};
         }
         VariantRowValue row_buffer;
         const VariantRowValue* variant = typed_variant_column->get_row_value(typed_row, &row_buffer);
@@ -111,16 +149,24 @@ StatusOr<VariantColumn::EncodedVariantResult> VariantColumn::encode_typed_row_as
         };
     }
 
-    if (type_desc.type == TYPE_ARRAY && has_variant_descendant(type_desc)) {
+    if (type_desc.type == TYPE_ARRAY && (strict || has_variant_descendant(type_desc))) {
         if (type_desc.children.size() != 1) {
             return Status::InvalidArgument("array type must have exactly one child");
         }
         const auto* array_column = down_cast<const ArrayColumn*>(data_column);
         const auto [element_offset, element_size] = array_column->get_element_offset_size(typed_row);
         VariantArrayBuilder builder;
+        size_t bytes = VariantRowValue::kMaxVariantSize;
+        if (strict && element_size > *work) {
+            return Status::InvalidArgument("Strict VARIANT array work limit exceeded");
+        }
         for (size_t i = 0; i < element_size; ++i) {
-            ASSIGN_OR_RETURN(auto element, encode_typed_row_as_variant(array_column->elements_column_raw_ptr(),
-                                                                       element_offset + i, type_desc.children[0]));
+            ASSIGN_OR_RETURN(auto element, encode_typed_row_as_variant_impl(array_column->elements_column_raw_ptr(),
+                                                                            element_offset + i, type_desc.children[0],
+                                                                            strict, depth + 1, work));
+            if (strict) {
+                RETURN_IF_ERROR(consume_strict_variant_bytes(element.value, &bytes));
+            }
             if (element.state == EncodedVariantState::kNull) {
                 builder.add_null();
             } else {
@@ -131,7 +177,7 @@ StatusOr<VariantColumn::EncodedVariantResult> VariantColumn::encode_typed_row_as
         return EncodedVariantResult{.state = EncodedVariantState::kValue, .value = std::move(value)};
     }
 
-    if (type_desc.type == TYPE_MAP && has_variant_descendant(type_desc)) {
+    if (type_desc.type == TYPE_MAP && (strict || has_variant_descendant(type_desc))) {
         if (type_desc.children.size() != 2) {
             return Status::InvalidArgument("map type must have exactly two children");
         }
@@ -157,14 +203,22 @@ StatusOr<VariantColumn::EncodedVariantResult> VariantColumn::encode_typed_row_as
             return Status::NotSupported("Unsupported Variant map key type");
         }
         std::vector<VariantBuilder::Overlay> overlays;
+        size_t bytes = VariantRowValue::kMaxVariantSize;
+        if (strict && (end < begin || end - begin > *work)) {
+            return Status::InvalidArgument("Strict VARIANT map work limit exceeded");
+        }
         overlays.reserve(end - begin);
         for (size_t i = begin; i < end; ++i) {
             Datum key = map_column->keys_column_raw_ptr()->get(i);
             if (key.is_null()) {
                 return Status::NotSupported("Map key is null");
             }
-            ASSIGN_OR_RETURN(auto value, encode_typed_row_as_variant(map_column->values_column_raw_ptr(), i,
-                                                                     type_desc.children[1]));
+            ASSIGN_OR_RETURN(auto value,
+                             encode_typed_row_as_variant_impl(map_column->values_column_raw_ptr(), i,
+                                                              type_desc.children[1], strict, depth + 1, work));
+            if (strict) {
+                RETURN_IF_ERROR(consume_strict_variant_bytes(value.value, &bytes));
+            }
             VariantPath path;
             path.segments.emplace_back(
                     VariantSegment::make_object(VariantEncoder::map_key_to_string(key_type_info.get(), key)));
@@ -174,21 +228,37 @@ StatusOr<VariantColumn::EncodedVariantResult> VariantColumn::encode_typed_row_as
                                                                        : std::move(value.value),
             });
         }
-        ASSIGN_OR_RETURN(auto value, VariantBuilder::build_row_from_overlays(std::nullopt, std::move(overlays)));
+        auto built = strict ? VariantBuilder::build_row_from_overlays_strict(std::nullopt, std::move(overlays))
+                            : VariantBuilder::build_row_from_overlays(std::nullopt, std::move(overlays));
+        ASSIGN_OR_RETURN(auto value, std::move(built));
         return EncodedVariantResult{.state = EncodedVariantState::kValue, .value = std::move(value)};
     }
 
-    if (type_desc.type == TYPE_STRUCT && has_variant_descendant(type_desc)) {
+    if (type_desc.type == TYPE_STRUCT && (strict || has_variant_descendant(type_desc))) {
         if (type_desc.children.size() != type_desc.field_names.size()) {
             return Status::InvalidArgument("struct field names and children size mismatch");
         }
 
         const auto* struct_column = down_cast<const StructColumn*>(data_column);
+        if (strict && type_desc.children.empty()) {
+            std::string value;
+            VariantEncoder::append_object_container(&value, {}, {}, {});
+            return EncodedVariantResult{.state = EncodedVariantState::kValue,
+                                        .value = VariantRowValue(VariantMetadata::kEmptyMetadata, value)};
+        }
+        if (strict && type_desc.children.size() > *work) {
+            return Status::InvalidArgument("Strict VARIANT struct work limit exceeded");
+        }
         std::vector<VariantBuilder::Overlay> overlays;
+        size_t bytes = VariantRowValue::kMaxVariantSize;
         overlays.reserve(type_desc.children.size());
         for (size_t i = 0; i < type_desc.children.size(); ++i) {
-            ASSIGN_OR_RETURN(auto field, encode_typed_row_as_variant(struct_column->field_column_raw_ptr(i), typed_row,
-                                                                     type_desc.children[i]));
+            ASSIGN_OR_RETURN(auto field,
+                             encode_typed_row_as_variant_impl(struct_column->field_column_raw_ptr(i), typed_row,
+                                                              type_desc.children[i], strict, depth + 1, work));
+            if (strict) {
+                RETURN_IF_ERROR(consume_strict_variant_bytes(field.value, &bytes));
+            }
             VariantPath path;
             path.segments.emplace_back(VariantSegment::make_object(type_desc.field_names[i]));
             overlays.emplace_back(VariantBuilder::Overlay{
@@ -197,7 +267,9 @@ StatusOr<VariantColumn::EncodedVariantResult> VariantColumn::encode_typed_row_as
                                                                        : std::move(field.value),
             });
         }
-        ASSIGN_OR_RETURN(auto value, VariantBuilder::build_row_from_overlays(std::nullopt, std::move(overlays)));
+        auto built = strict ? VariantBuilder::build_row_from_overlays_strict(std::nullopt, std::move(overlays))
+                            : VariantBuilder::build_row_from_overlays(std::nullopt, std::move(overlays));
+        ASSIGN_OR_RETURN(auto value, std::move(built));
         return EncodedVariantResult{.state = EncodedVariantState::kValue, .value = std::move(value)};
     }
 
@@ -208,6 +280,11 @@ StatusOr<VariantColumn::EncodedVariantResult> VariantColumn::encode_typed_row_as
         return encoded.status();
     }
     return EncodedVariantResult{.state = EncodedVariantState::kValue, .value = std::move(encoded).value()};
+}
+
+StatusOr<VariantColumn::EncodedVariantResult> VariantColumn::encode_typed_row_as_variant(
+        const Column* typed_column, size_t typed_row, const TypeDescriptor& type_desc) {
+    return encode_typed_row_as_variant_impl(typed_column, typed_row, type_desc, false, 0, nullptr);
 }
 
 // Returns the fallback cell of `fallback_column` at `row` when it is non-null.
@@ -572,18 +649,237 @@ void VariantColumn::append_datum(const Datum& datum) {
     append(value);
 }
 
-const VariantColumn* VariantColumn::_prepare_append_source(const VariantColumn& src,
+// Whether `column` may hold values at `path` without having it typed: under a typed ancestor/descendant, or in remain.
+static bool untyped_side_has_path(const VariantColumn& column, const VariantPath& path) {
+    for (const auto& typed : column.parsed_shredded_paths()) {
+        if (typed.is_ancestor_or_same(path) || path.is_ancestor_or_same(typed)) {
+            return true;
+        }
+    }
+    if (!column.has_metadata_column() || !column.has_remain_value()) {
+        return false;
+    }
+    for (size_t row = 0; row < column.size(); ++row) {
+        const Slice metadata = column.metadata_column()->get_slice(row);
+        const Slice remain = column.remain_value_column()->get_slice(row);
+        if (metadata.size == 0 || remain.size == 0) {
+            continue;
+        }
+        VariantRowRef base(std::string_view(metadata.data, metadata.size), std::string_view(remain.data, remain.size));
+        if (VariantPath::seek_view(base, path).ok()) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Removes from `keep` the ancestors and descendants of every path not in it.
+static void drop_paths_related_to_folded(const std::unordered_map<std::string, const VariantPath*>& all_paths,
+                                         std::unordered_set<std::string>* keep) {
+    bool changed = true;
+    while (changed) {
+        changed = false;
+        for (const auto& [folded_path, folded] : all_paths) {
+            if (keep->count(folded_path) > 0) {
+                continue;
+            }
+            for (auto it = keep->begin(); it != keep->end();) {
+                const VariantPath* kept = all_paths.at(*it);
+                if (folded->is_ancestor_or_same(*kept) || kept->is_ancestor_or_same(*folded)) {
+                    it = keep->erase(it);
+                    changed = true;
+                } else {
+                    ++it;
+                }
+            }
+        }
+    }
+}
+
+static bool has_fallback_values_at(const VariantColumn& column, const std::string& path) {
+    int idx = column.find_shredded_path(path);
+    return idx >= 0 && column.has_any_fallback_value(idx);
+}
+
+// Paths that stay typed: each side lacking one typed has no value at it, and the types match.
+// Ancestors and descendants of a folded path are folded too.
+// Paths in `lhs_in_remain` count as present in lhs without a scan.
+static std::unordered_set<std::string> typed_paths_to_keep(const VariantColumn& lhs, const VariantColumn& rhs,
+                                                           const std::unordered_set<std::string>& lhs_in_remain) {
+    std::unordered_set<std::string> keep;
+    // A path that failed to parse leaves the parsed cache empty, and rows cannot be rebuilt: keep the union as before.
+    for (const VariantColumn* column : {&lhs, &rhs}) {
+        if (column->parsed_shredded_paths().size() != column->shredded_paths().size()) {
+            keep.insert(lhs.shredded_paths().begin(), lhs.shredded_paths().end());
+            keep.insert(rhs.shredded_paths().begin(), rhs.shredded_paths().end());
+            return keep;
+        }
+    }
+    std::unordered_map<std::string, const VariantPath*> all_paths;
+    for (const VariantColumn* column : {&lhs, &rhs}) {
+        for (size_t i = 0; i < column->shredded_paths().size(); ++i) {
+            all_paths.emplace(column->shredded_paths()[i], &column->parsed_shredded_paths()[i]);
+        }
+    }
+
+    for (const auto& [path, parsed] : all_paths) {
+        int lhs_idx = lhs.find_shredded_path(path);
+        int rhs_idx = rhs.find_shredded_path(path);
+        if ((lhs_idx < 0 && (lhs_in_remain.count(path) > 0 || untyped_side_has_path(lhs, *parsed))) ||
+            (rhs_idx < 0 && untyped_side_has_path(rhs, *parsed))) {
+            continue;
+        }
+        if (lhs_idx >= 0 && rhs_idx >= 0 && lhs.shredded_types()[lhs_idx] != rhs.shredded_types()[rhs_idx]) {
+            continue;
+        }
+        keep.emplace(path);
+    }
+    drop_paths_related_to_folded(all_paths, &keep);
+
+    // Folding rebuilds the row metadata, which fallback values are encoded against: fold those paths too.
+    if (keep.size() < all_paths.size()) {
+        for (auto it = keep.begin(); it != keep.end();) {
+            if (has_fallback_values_at(lhs, *it) || has_fallback_values_at(rhs, *it)) {
+                it = keep.erase(it);
+            } else {
+                ++it;
+            }
+        }
+        drop_paths_related_to_folded(all_paths, &keep);
+    }
+    return keep;
+}
+
+Status VariantColumn::_fold_shredded_paths_into_remain(const std::unordered_set<std::string>& keep) {
+    std::vector<size_t> fold_indexes;
+    std::vector<size_t> keep_indexes;
+    for (size_t i = 0; i < _shredded_paths.size(); ++i) {
+        (keep.count(_shredded_paths[i]) > 0 ? keep_indexes : fold_indexes).push_back(i);
+    }
+    if (fold_indexes.empty()) {
+        return Status::OK();
+    }
+    RETURN_IF_ERROR(ensure_base_variant_column());
+    const size_t rows = size();
+    _fallback_columns.resize(_typed_columns.size());
+
+    std::vector<std::string> fold_paths;
+    std::vector<TypeDescriptor> fold_types;
+    MutableColumns fold_typed;
+    MutableColumns fold_fallback;
+    for (size_t i : fold_indexes) {
+        fold_paths.emplace_back(_shredded_paths[i]);
+        fold_types.emplace_back(_shredded_types[i]);
+        fold_typed.emplace_back(std::move(_typed_columns[i]));
+        fold_fallback.emplace_back(std::move(_fallback_columns[i]));
+    }
+    auto folded = VariantColumn::create();
+    folded->set_shredded_columns(std::move(fold_paths), std::move(fold_types), std::move(fold_typed),
+                                 std::move(fold_fallback), std::move(_metadata_column),
+                                 std::move(_remain_value_column));
+    // Until the rows are rebuilt, an error or a bad_alloc moves the columns back and leaves this column as it was.
+    CancelableDefer move_back([&]() {
+        for (size_t k = 0; k < fold_indexes.size(); ++k) {
+            _typed_columns[fold_indexes[k]] = std::move(folded->_typed_columns[k]);
+            _fallback_columns[fold_indexes[k]] = std::move(folded->_fallback_columns[k]);
+        }
+        _metadata_column = std::move(folded->_metadata_column);
+        _remain_value_column = std::move(folded->_remain_value_column);
+    });
+
+    auto [metadata, remain] = _create_metadata_remain_columns(rows);
+    VariantRowValue row;
+    for (size_t r = 0; r < rows; ++r) {
+        if (!folded->try_materialize_row(r, &row)) {
+            return Status::InternalError(strings::Substitute("failed to fold shredded paths at row $0", r));
+        }
+        std::string_view metadata_raw = row.get_metadata().raw();
+        std::string_view remain_raw = row.get_value().raw();
+        metadata->append(Slice(metadata_raw.data(), metadata_raw.size()));
+        remain->append(Slice(remain_raw.data(), remain_raw.size()));
+    }
+    move_back.cancel();
+
+    std::vector<std::string> keep_paths;
+    std::vector<TypeDescriptor> keep_types;
+    MutableColumns keep_typed;
+    MutableColumns keep_fallback;
+    for (size_t i : keep_indexes) {
+        keep_paths.emplace_back(std::move(_shredded_paths[i]));
+        keep_types.emplace_back(std::move(_shredded_types[i]));
+        keep_typed.emplace_back(std::move(_typed_columns[i]));
+        keep_fallback.emplace_back(std::move(_fallback_columns[i]));
+    }
+    set_shredded_columns(std::move(keep_paths), std::move(keep_types), std::move(keep_typed), std::move(keep_fallback),
+                         std::move(metadata), std::move(remain));
+    return Status::OK();
+}
+
+// Copies the rows `copy_rows` selects from each member of `src`, without going through append().
+template <typename CopyRows>
+static MutableColumnPtr copy_shredded_rows(const VariantColumn& src, CopyRows&& copy_rows) {
+    auto copy = [&copy_rows](const Column& col) {
+        auto out = col.clone_empty();
+        copy_rows(out.get(), col);
+        return out;
+    };
+    MutableColumns typed_columns;
+    typed_columns.reserve(src.typed_columns().size());
+    for (const auto& typed_col : src.typed_columns()) {
+        typed_columns.emplace_back(copy(*typed_col));
+    }
+    MutableColumns fallback_columns;
+    fallback_columns.reserve(src.fallback_columns().size());
+    for (const auto& fallback_col : src.fallback_columns()) {
+        fallback_columns.emplace_back(fallback_col != nullptr ? copy(*fallback_col) : nullptr);
+    }
+    BinaryColumn::MutablePtr metadata =
+            src.has_metadata_column() ? BinaryColumn::static_pointer_cast(copy(*src.metadata_column())) : nullptr;
+    BinaryColumn::MutablePtr remain =
+            src.has_remain_value() ? BinaryColumn::static_pointer_cast(copy(*src.remain_value_column())) : nullptr;
+    auto copied = VariantColumn::create();
+    copied->set_shredded_columns(src.shredded_paths(), src.shredded_types(), std::move(typed_columns),
+                                 std::move(fallback_columns), std::move(metadata), std::move(remain));
+    return std::move(copied);
+}
+
+template <typename CopyRows>
+const VariantColumn* VariantColumn::_prepare_append_source(const VariantColumn& src, CopyRows&& copy_rows,
                                                            MutableColumnPtr* src_working_copy) {
     DCHECK(src_working_copy != nullptr);
     const VariantColumn* append_src = &src;
     if (!is_equal_schema(&src)) {
-        *src_working_copy = deep_copy_shredded(src);
+        // Only the appended rows are copied and reshaped, so the cost follows them, not src.size().
+        *src_working_copy = copy_shredded_rows(src, copy_rows);
         auto* src_cloned = down_cast<VariantColumn*>(src_working_copy->get());
         Status arbitrate_st = VariantColumnMerger::arbitrate_type_conflicts(this, src_cloned);
         DCHECK(arbitrate_st.ok()) << "append type arbitration failed: " << arbitrate_st;
         if (!arbitrate_st.ok()) {
             LOG(ERROR) << "append type arbitration failed, err=" << arbitrate_st;
             return nullptr;
+        }
+        // Fold paths one side keeps in remain; the union would hide them behind NULL typed cells.
+        if (size() > 0) {
+            const auto keep = typed_paths_to_keep(*this, *src_cloned, _paths_known_in_remain);
+            // Folded paths end up in remain: later appends need not scan for them.
+            auto remember_folded = [&](const VariantColumn& column) {
+                for (const auto& path : column.shredded_paths()) {
+                    if (keep.count(path) == 0) {
+                        _paths_known_in_remain.insert(path);
+                    }
+                }
+            };
+            remember_folded(*this);
+            remember_folded(*src_cloned);
+            Status fold_st = _fold_shredded_paths_into_remain(keep);
+            if (fold_st.ok()) {
+                fold_st = src_cloned->_fold_shredded_paths_into_remain(keep);
+            }
+            DCHECK(fold_st.ok()) << "append shredded path folding failed: " << fold_st;
+            if (!fold_st.ok()) {
+                LOG(ERROR) << "append shredded path folding failed, err=" << fold_st;
+                return nullptr;
+            }
         }
         append_src = src_cloned;
     }
@@ -602,14 +898,18 @@ void VariantColumn::append(const Column& src, size_t offset, size_t count) {
     size_t before_size = size();
     const auto* other = down_cast<const VariantColumn*>(&src);
     MutableColumnPtr src_working_copy;
-    const VariantColumn* append_src = _prepare_append_source(*other, &src_working_copy);
+    auto append_rows = [offset, count](Column* dst, const Column& src_col) { dst->append(src_col, offset, count); };
+    const VariantColumn* append_src = _prepare_append_source(*other, append_rows, &src_working_copy);
     if (append_src == nullptr) {
         LOG(ERROR) << "append: _prepare_append_source failed, skipping " << count << " rows";
         return;
     }
-    _append_container_rows_impl(*append_src, count, [offset, count](Column* dst, const Column& src_col) {
-        dst->append(src_col, offset, count);
-    });
+    if (append_src == other) {
+        _append_container_rows_impl(*append_src, count, append_rows);
+    } else {
+        _append_container_rows_impl(*append_src, count,
+                                    [count](Column* dst, const Column& src_col) { dst->append(src_col, 0, count); });
+    }
     DCHECK_EQ(size(), before_size + count);
 }
 
@@ -623,26 +923,34 @@ void VariantColumn::append_value_multiple_times(const void* value, size_t count)
 void VariantColumn::append_selective(const Column& src, const uint32_t* indexes, uint32_t from, uint32_t count) {
     const auto* other = down_cast<const VariantColumn*>(&src);
     MutableColumnPtr src_working_copy;
-    const VariantColumn* append_src = _prepare_append_source(*other, &src_working_copy);
+    auto append_rows = [indexes, from, count](Column* dst, const Column& src_col) {
+        dst->append_selective(src_col, indexes, from, count);
+    };
+    const VariantColumn* append_src = _prepare_append_source(*other, append_rows, &src_working_copy);
     if (append_src == nullptr) {
         LOG(ERROR) << "append_selective: _prepare_append_source failed, skipping " << count << " rows";
         return;
     }
-    _append_container_rows_impl(*append_src, count, [indexes, from, count](Column* dst, const Column& src_col) {
-        dst->append_selective(src_col, indexes, from, count);
-    });
+    if (append_src == other) {
+        _append_container_rows_impl(*append_src, count, append_rows);
+    } else {
+        _append_container_rows_impl(*append_src, count,
+                                    [count](Column* dst, const Column& src_col) { dst->append(src_col, 0, count); });
+    }
 }
 
 void VariantColumn::append_value_multiple_times(const Column& src, uint32_t index, uint32_t count) {
     const auto* other = down_cast<const VariantColumn*>(&src);
     MutableColumnPtr src_working_copy;
-    const VariantColumn* append_src = _prepare_append_source(*other, &src_working_copy);
+    auto copy_row = [index](Column* dst, const Column& src_col) { dst->append(src_col, index, 1); };
+    const VariantColumn* append_src = _prepare_append_source(*other, copy_row, &src_working_copy);
     if (append_src == nullptr) {
         LOG(ERROR) << "append_value_multiple_times: _prepare_append_source failed, skipping " << count << " rows";
         return;
     }
-    _append_container_rows_impl(*append_src, count, [index, count](Column* dst, const Column& src_col) {
-        dst->append_value_multiple_times(src_col, index, count);
+    const uint32_t src_index = append_src == other ? index : 0;
+    _append_container_rows_impl(*append_src, count, [src_index, count](Column* dst, const Column& src_col) {
+        dst->append_value_multiple_times(src_col, src_index, count);
     });
 }
 
@@ -1096,11 +1404,13 @@ void VariantColumn::swap_column(Column& rhs) {
     std::swap(_fallback_columns, other._fallback_columns);
     std::swap(_metadata_column, other._metadata_column);
     std::swap(_remain_value_column, other._remain_value_column);
+    std::swap(_paths_known_in_remain, other._paths_known_in_remain);
 }
 
 void VariantColumn::reset_column() {
     BaseClass::reset_column();
     clear_shredded_columns();
+    _paths_known_in_remain.clear();
 }
 
 // ObjectColumn's version guards `_pool.size()`, which is always 0 here, so the limit never fires.
@@ -1217,6 +1527,126 @@ bool VariantColumn::try_get_row_ref(size_t idx, VariantRowRef* out) const {
     *out = VariantRowRef(std::string_view(metadata_slice.data, metadata_slice.size),
                          std::string_view(remain_slice.data, remain_slice.size));
     return true;
+}
+
+static StatusOr<VariantRowValue> materialize_row_strict_impl(const VariantColumn* column, size_t row, size_t depth,
+                                                             size_t* work) {
+    if (depth > VariantBuilder::kMaxStrictDepth || *work == 0) {
+        return Status::InvalidArgument("Strict VARIANT materialization nesting/work limit exceeded");
+    }
+    --*work;
+    const auto& typed_columns = column->typed_columns();
+    const auto& paths = column->parsed_shredded_paths();
+    if (typed_columns.size() != paths.size() || typed_columns.size() != column->shredded_types().size() ||
+        typed_columns.size() != column->shredded_paths().size() ||
+        column->fallback_columns().size() > typed_columns.size()) {
+        return Status::InvalidArgument("Invalid strict VARIANT shredded schema");
+    }
+    if (typed_columns.size() > *work) {
+        return Status::InvalidArgument("Strict VARIANT overlay work limit exceeded");
+    }
+
+    std::string_view metadata;
+    std::string_view residual;
+    if (column->has_metadata_column()) {
+        if (row >= column->metadata_column()->size()) {
+            return Status::InvalidArgument("Missing strict VARIANT row metadata");
+        }
+        const auto slice = column->metadata_column()->get_slice(row);
+        metadata = std::string_view(slice.data, slice.size);
+        RETURN_IF_ERROR(VariantBuilder::validate_metadata_strict(metadata));
+    }
+    if (column->has_remain_value()) {
+        if (row >= column->remain_value_column()->size()) {
+            return Status::InvalidArgument("Missing strict VARIANT residual row");
+        }
+        const auto slice = column->remain_value_column()->get_slice(row);
+        residual = std::string_view(slice.data, slice.size);
+    }
+
+    std::optional<VariantRowRef> base;
+    if (!residual.empty()) {
+        // Validate before even looking at overlays: a root replacement must not hide bad bytes.
+        RETURN_IF_ERROR(VariantBuilder::validate_row_strict(metadata, residual));
+        base.emplace(metadata, residual);
+    }
+
+    std::vector<VariantBuilder::Overlay> overlays;
+    size_t bytes = VariantRowValue::kMaxVariantSize;
+    if (base.has_value()) {
+        bytes -= metadata.size() + residual.size();
+    } else if (metadata.size() > bytes) {
+        return Status::InvalidArgument("Strict VARIANT metadata byte limit exceeded");
+    } else {
+        bytes -= metadata.size();
+    }
+    overlays.reserve(typed_columns.size());
+    for (size_t i = 0; i < typed_columns.size(); ++i) {
+        if (paths[i].empty() || paths[i].segments.size() > VariantBuilder::kMaxStrictDepth - depth) {
+            return Status::InvalidArgument("Invalid strict VARIANT shredded path depth");
+        }
+        const Column* typed = typed_columns[i].get();
+        if (typed == nullptr || row >= typed->size()) {
+            return Status::InvalidArgument("Missing strict VARIANT typed row");
+        }
+        ASSIGN_OR_RETURN(auto encoded, encode_typed_row_as_variant_impl(typed, row, column->shredded_types()[i], true,
+                                                                        depth + paths[i].segments.size(), work));
+        if (encoded.state == VariantColumn::EncodedVariantState::kValue) {
+            RETURN_IF_ERROR(consume_strict_variant_bytes(encoded.value, &bytes));
+            overlays.emplace_back(VariantBuilder::Overlay{.path = paths[i], .value = std::move(encoded.value)});
+            continue;
+        }
+        // A SQL-null typed cell means fallback-or-missing, not an encoded VARIANT null overlay.
+        // Conversely an encoded null has kValue and must replace any residual at this path.
+        const Column* fallback = column->fallback_column_by_index(i);
+        if (fallback == nullptr) {
+            continue;
+        }
+        size_t fallback_row = row;
+        while (fallback->is_constant() || fallback->is_nullable()) {
+            if (fallback_row >= fallback->size() || *work == 0) {
+                return Status::InvalidArgument("Invalid strict VARIANT fallback row/wrapper");
+            }
+            --*work;
+            if (fallback->is_constant()) {
+                fallback = down_cast<const ConstColumn*>(fallback)->data_column().get();
+                fallback_row = 0;
+            } else {
+                const auto* nullable = down_cast<const NullableColumn*>(fallback);
+                if (nullable->is_null(fallback_row)) {
+                    fallback = nullptr;
+                    break;
+                }
+                fallback = nullable->data_column().get();
+            }
+        }
+        if (fallback == nullptr) {
+            continue;
+        }
+        const auto* binary = dynamic_cast<const BinaryColumn*>(fallback);
+        if (binary == nullptr || fallback_row >= binary->size()) {
+            return Status::InvalidArgument("Invalid strict VARIANT fallback binary column");
+        }
+        const auto slice = binary->get_slice(fallback_row);
+        const std::string_view raw(slice.data, slice.size);
+        RETURN_IF_ERROR(VariantBuilder::validate_row_strict(metadata, raw));
+        VariantRowValue value(metadata, raw);
+        RETURN_IF_ERROR(consume_strict_variant_bytes(value, &bytes));
+        overlays.emplace_back(VariantBuilder::Overlay{.path = paths[i], .value = std::move(value)});
+    }
+    if (overlays.empty() && base.has_value()) {
+        return base->to_owned();
+    }
+    // Parent residual fallbacks must be applied before their shredded descendants.
+    std::stable_sort(overlays.begin(), overlays.end(), [](const auto& lhs, const auto& rhs) {
+        return lhs.path.segments.size() < rhs.path.segments.size();
+    });
+    return VariantBuilder::build_row_from_overlays_strict(std::move(base), std::move(overlays));
+}
+
+StatusOr<VariantRowValue> VariantColumn::materialize_row_strict(size_t idx) const {
+    size_t work = VariantBuilder::kMaxStrictWork;
+    return materialize_row_strict_impl(this, idx, 0, &work);
 }
 
 bool VariantColumn::try_materialize_row(size_t idx, VariantRowValue* output) const {
@@ -1356,6 +1786,7 @@ void VariantColumn::clear_shredded_columns() {
 
 void VariantColumn::_init_schema_from(const VariantColumn& other) {
     BaseClass::reset_column();
+    _paths_known_in_remain.clear();
     _shredded_paths = other._shredded_paths;
     _path_index = other._path_index;
     _parsed_shredded_paths = other._parsed_shredded_paths;

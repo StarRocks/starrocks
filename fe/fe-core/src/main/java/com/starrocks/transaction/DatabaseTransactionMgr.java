@@ -102,6 +102,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalLong;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.LongPredicate;
@@ -371,13 +372,16 @@ public class DatabaseTransactionMgr {
             throw new MetaNotFoundException("could not find db [" + dbId + "]");
         }
 
-        TransactionState transactionState = getTransactionState(transactionId);
-        if (transactionState == null) {
+        TransactionState lockedState = getTransactionState(transactionId);
+        if (lockedState == null) {
             throw new TransactionNotFoundException(transactionId);
         }
 
-        transactionState.writeLock();
+        lockedState.writeLock();
         try {
+            // An abort (a rollback, a cancel, the timeout checker) may have run after the lookup above, so prepare
+            // the current state: preparing the looked-up copy would write PREPARED over the abort.
+            TransactionState transactionState = getLatestTransactionStateInTxnLock(transactionId, lockedState);
             if (transactionState.getTransactionStatus() == TransactionStatus.ABORTED) {
                 throw new TransactionCommitFailedException(transactionState.getReason());
             }
@@ -473,7 +477,7 @@ public class DatabaseTransactionMgr {
 
             LOG.debug("transaction:[{}] successfully prepare", copiedState);
         } finally {
-            transactionState.writeUnlock();
+            lockedState.writeUnlock();
         }
     }
 
@@ -500,12 +504,16 @@ public class DatabaseTransactionMgr {
             throw new MetaNotFoundException("could not find db [" + dbId + "]");
         }
 
-        TransactionState transactionState = getTransactionState(transactionId);
-        if (transactionState == null) {
+        TransactionState lockedState = getTransactionState(transactionId);
+        if (lockedState == null) {
             throw new TransactionNotFoundException(transactionId);
         }
-        transactionState.writeLock();
+        lockedState.writeLock();
         try {
+            // A rollback sent together with this commit may have aborted the transaction after the lookup above.
+            // Commit the current state: committing the looked-up PREPARED copy would write COMMITTED over the abort,
+            // while the abort has told the backends to delete the load's txn logs and segments.
+            TransactionState transactionState = getLatestTransactionStateInTxnLock(transactionId, lockedState);
             if (transactionState.getTransactionStatus() == TransactionStatus.ABORTED) {
                 throw new TransactionCommitFailedException(transactionState.getReason());
             }
@@ -582,8 +590,31 @@ public class DatabaseTransactionMgr {
             LOG.info("transaction:[{}] successfully committed", copiedState);
             return waiter;
         } finally {
-            transactionState.writeUnlock();
+            lockedState.writeUnlock();
         }
+    }
+
+    /**
+     * Returns the current state object of a transaction. Call it while holding the transaction's write lock, which
+     * the caller took on {@code lockedState}, the object it looked up before.
+     * <p>
+     * Every state change stores a new copy in the transaction maps, so the looked-up object can be replaced before
+     * the caller gets the lock: a concurrent abort, which does not take the table locks, may already have stored an
+     * ABORTED copy. All copies share one lock, so the map entry no longer changes while the caller holds it, and a
+     * caller that checks and copies the returned object cannot write its change over a newer state.
+     */
+    private TransactionState getLatestTransactionStateInTxnLock(long transactionId, TransactionState lockedState)
+            throws TransactionNotFoundException {
+        TransactionState latest = getTransactionState(transactionId);
+        if (latest == null) {
+            // Only a finished transaction leaves the maps, when it expires.
+            throw new TransactionNotFoundException(transactionId);
+        }
+        if (latest != lockedState) {
+            LOG.info("transaction {} changed from {} to {} before its lock was taken, using the current state",
+                    transactionId, lockedState.getTransactionStatus(), latest.getTransactionStatus());
+        }
+        return latest;
     }
 
     private String buildTableListString(Database db, TransactionState transactionState) {
@@ -2509,6 +2540,27 @@ public class DatabaseTransactionMgr {
     }
 
     /**
+     * The oldest of the running transactions that {@link #isPreviousTransactionsFinished(long, List)} waits for, or
+     * null when there is none.
+     */
+    public TransactionState getOldestPreviousRunningTransaction(long endTransactionId, List<Long> tableIdList) {
+        readLock();
+        try {
+            TransactionState oldest = null;
+            for (TransactionState state : idToRunningTransactionState.values()) {
+                if (state.getDbId() == dbId && isIntersectionNotEmpty(state.getTableIdList(), tableIdList)
+                        && state.isRunning() && state.getTransactionId() <= endTransactionId
+                        && (oldest == null || state.getTransactionId() < oldest.getTransactionId())) {
+                    oldest = state;
+                }
+            }
+            return oldest;
+        } finally {
+            readUnlock();
+        }
+    }
+
+    /**
      * check if there exists a intersection between the source tableId list and target tableId list
      * if one of them is null or empty, that means that we don't know related tables in tableList,
      * we think the two lists may have intersection for right ordered txns
@@ -2559,6 +2611,16 @@ public class DatabaseTransactionMgr {
 
     public void replayUpsertTransactionState(TransactionState transactionState) {
         boolean isCheckpoint = GlobalStateMgr.isCheckpointThread();
+        Database db = globalStateMgr.getLocalMetastore().getDb(transactionState.getDbId());
+        // A VISIBLE record moves the version of every partition the transaction wrote, one at a time. Hold the tables'
+        // WRITE locks as the leader and the batch replay do, before this manager's lock, or a reader holding a table
+        // lock could see the transaction in some partitions only (StarRocksTest#12648).
+        List<Long> lockedTableIds = db != null && transactionState.getTransactionStatus() == TransactionStatus.VISIBLE
+                ? tablesToLockForReplay(transactionState, db) : List.of();
+        Locker locker = new Locker();
+        if (!lockedTableIds.isEmpty()) {
+            locker.lockTablesWithIntensiveDbLock(db.getId(), lockedTableIds, LockType.WRITE);
+        }
         writeLock();
         try {
             if (transactionState.getTransactionStatus() == TransactionStatus.UNKNOWN) {
@@ -2567,7 +2629,6 @@ public class DatabaseTransactionMgr {
             }
             // set transaction status will call txn state change listener
             transactionState.replaySetTransactionStatus();
-            Database db = globalStateMgr.getLocalMetastore().getDb(transactionState.getDbId());
             if (db != null) {
                 if (transactionState.getTransactionStatus() == TransactionStatus.COMMITTED) {
                     if (!isCheckpoint) {
@@ -2593,7 +2654,26 @@ public class DatabaseTransactionMgr {
             }
         } finally {
             writeUnlock();
+            if (!lockedTableIds.isEmpty()) {
+                locker.unLockTablesWithIntensiveDbLock(db.getId(), lockedTableIds, LockType.WRITE);
+            }
         }
+    }
+
+    /**
+     * The tables to lock while a transaction's record is replayed: the ones it was opened on and any other it carries a
+     * commit for, that still exist. A DROP is replayed by this same thread, so the set cannot change meanwhile.
+     */
+    private List<Long> tablesToLockForReplay(TransactionState transactionState, Database db) {
+        Set<Long> tableIds = new TreeSet<>(transactionState.getTableIdList());
+        tableIds.addAll(transactionState.getIdToTableCommitInfos().keySet());
+        List<Long> existing = new ArrayList<>(tableIds.size());
+        for (long tableId : tableIds) {
+            if (globalStateMgr.getLocalMetastore().getTable(db.getId(), tableId) != null) {
+                existing.add(tableId);
+            }
+        }
+        return existing;
     }
 
     public void replayUpsertTransactionStateBatch(TransactionStateBatch transactionStateBatch) {

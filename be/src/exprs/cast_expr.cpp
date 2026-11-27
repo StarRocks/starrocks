@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include "exprs/cast_expr_tpl.hpp"
+#include "exprs/clone_expr.h"
 
 namespace starrocks {
 
@@ -616,6 +617,14 @@ StatusOr<Expr*> VectorizedCastExprFactory::create_cast_expr(ObjectPool* pool, co
             return new CastStructExpr(node, std::move(field_casts), std::move(source_field_indices));
         }
     }
+    if (from_type.is_geo_type() && to_type.is_geo_type()) {
+        if (!from_type.geo_type || from_type != to_type) {
+            return Status::NotSupported(fmt::format("Native GEO cast from {} to {} requires identical descriptors.",
+                                                    from_type.debug_string(), to_type.debug_string()));
+        }
+        return new CloneExpr(node);
+    }
+
     if ((from_type.type == TYPE_NULL || from_type.type == TYPE_BOOLEAN) &&
         (to_type.is_complex_type() || to_type.is_geo_type())) {
         return new MustNullExpr(node);

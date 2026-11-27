@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "ALTER USER modifies user information including password, authentication method, and default roles."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ALTER USER

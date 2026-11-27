@@ -23,6 +23,7 @@
 #include "storage/lake/primary_key_manager.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/types_fwd.h"
+#include "storage/pk_vector_chunk_size.h"
 #include "storage/rows_mapper.h"
 #include "storage/tablet_schema.h"
 
@@ -63,7 +64,8 @@ Status LakePrimaryKeyCompactionConflictResolver::segment_iterator(
                                    const std::function<void(uint32_t, const DelVectorPtr&, uint32_t)>&)>& handler) {
     OlapReaderStatistics stats;
     auto pkey_schema = generate_pkey_schema();
-    ASSIGN_OR_RETURN(auto segment_iters, _rowset->get_each_segment_iterator(pkey_schema, false, &stats));
+    ASSIGN_OR_RETURN(auto segment_iters,
+                     _rowset->get_each_segment_iterator(pkey_schema, false, &stats, get_pk_vector_chunk_size()));
     RETURN_ERROR_IF_FALSE(segment_iters.size() == _rowset->num_segments());
     // init delvec loader
     LakeIOOptions lake_io_opts{.fill_data_cache = true, .skip_disk_cache = false};

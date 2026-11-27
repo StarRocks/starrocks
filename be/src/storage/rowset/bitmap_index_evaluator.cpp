@@ -14,6 +14,8 @@
 
 #include "storage/rowset/bitmap_index_evaluator.h"
 
+#include <algorithm>
+
 #include "column/chunk_schema_helper.h"
 #include "common/config_rowset_fwd.h"
 #include "storage_primitive/predicate_tree/predicate_tree.hpp"
@@ -397,6 +399,72 @@ struct BitmapIndexRetriver {
     BitmapIndexEvaluator* parent;
 };
 
+// Asks for the dictionary pages BitmapIndexSeeker reads: like the seeker, it does not descend into a compound node that
+// cannot use the bitmap indexes, and asks only for the values of the column predicates that can. An AND whose first
+// column turns out ALWAYS_FALSE stops the seek before its other columns, whose pages are still asked for: asking for
+// every value up front cannot know that.
+struct BitmapIndexDictionaryPrefetcher {
+    template <CompoundNodeType Type>
+    void operator()(const PredicateCompoundNode<Type>& node) const {
+        if (!_supports_bitmap(&node)) {
+            return;
+        }
+        const auto it = parent->_ctx.compound_node_to_context.find(&node);
+        if (it != parent->_ctx.compound_node_to_context.end()) {
+            for (const auto& [cid, col_ctx] : it->second.col_contexts) {
+                auto* bitmap_iter = parent->_bitmap_index_iterators[cid];
+                if (bitmap_iter == nullptr) {
+                    continue;
+                }
+                for (const auto* col_node : col_ctx.nodes) {
+                    if (_supports_bitmap(col_node)) {
+                        col_node->col_pred()->visit_bitmap_seek_values(
+                                [bitmap_iter](const void* value) { bitmap_iter->prefetch_dictionary_page(value); });
+                    }
+                }
+            }
+        }
+        for (const auto& child : node.compound_children()) {
+            child.visit(*this);
+        }
+    }
+
+    bool _supports_bitmap(const PredicateBaseNode* node) const {
+        const auto it = parent->_ctx.is_node_support_bitmap.find(node);
+        return it != parent->_ctx.is_node_support_bitmap.end() && it->second;
+    }
+
+    BitmapIndexEvaluator* parent;
+};
+
+// Asks for the bitmap pages BitmapIndexRetriver reads: like the retriever, it does not descend into a compound node
+// the seek did not keep.
+struct BitmapIndexBitmapPrefetcher {
+    template <CompoundNodeType Type>
+    void operator()(const PredicateCompoundNode<Type>& node) const {
+        const auto it = parent->_ctx.compound_node_to_context.find(&node);
+        if (it == parent->_ctx.compound_node_to_context.end() || !it->second.used) {
+            return;
+        }
+        for (const auto& [cid, col_ctx] : it->second.col_contexts) {
+            auto* bitmap_iter = parent->_bitmap_index_iterators[cid];
+            if (bitmap_iter == nullptr) {
+                continue;
+            }
+            bitmap_iter->prefetch_bitmap_pages(col_ctx.bitmap_ranges);
+            if (bitmap_iter->has_null_bitmap() && !col_ctx.has_is_null_pred) {
+                const rowid_t null_ordinal = bitmap_iter->bitmap_nums() - 1;
+                bitmap_iter->prefetch_bitmap_pages(SparseRange<>(null_ordinal, null_ordinal + 1));
+            }
+        }
+        for (const auto& child : node.compound_children()) {
+            child.visit(*this);
+        }
+    }
+
+    BitmapIndexEvaluator* parent;
+};
+
 struct BitmapIndexPredicateEraser {
     template <CompoundNodeType ParentType>
     void operator()(const PredicateColumnNode& node, PredicateCompoundNode<ParentType>& parent_node) const {
@@ -426,7 +494,14 @@ struct BitmapIndexPredicateEraser {
         }
 
         if (!new_node.empty()) {
-            parent_node.add_child(new_node);
+            // Erase an OR all or nothing. If only some children were erased, the remaining ones would reject
+            // the erased children's rows. E.g. in (a = 1 AND (b = 2 OR b = 3)) OR c = 4, if the inner OR can't
+            // use the bitmap index, only (b = 2 OR b = 3) would remain and rows matching c = 4 would be lost.
+            if constexpr (Type == CompoundNodeType::OR) {
+                parent_node.add_child(node);
+            } else {
+                parent_node.add_child(new_node);
+            }
         }
     }
 
@@ -457,7 +532,22 @@ Status BitmapIndexEvaluator::init(BitmapIndexIteratorSupplier&& supplier) {
     return Status::OK();
 }
 
-Status BitmapIndexEvaluator::evaluate(SparseRange<>& dst_scan_range, PredicateTree& dst_pred_tree) {
+void BitmapIndexEvaluator::_prefetch_dictionary_pages() {
+    _pred_tree.visit(BitmapIndexDictionaryPrefetcher{this});
+}
+
+void BitmapIndexEvaluator::_prefetch_bitmap_pages() {
+    _pred_tree.visit(BitmapIndexBitmapPrefetcher{this});
+}
+
+Status BitmapIndexEvaluator::evaluate(SparseRange<>& dst_scan_range, PredicateTree& dst_pred_tree, bool prefetch) {
+    const auto optional_file_missing = [this]() {
+        return std::ranges::any_of(_bitmap_index_iterators,
+                                   [](const auto* iter) { return iter != nullptr && iter->is_file_missing(); });
+    };
+    if (optional_file_missing()) {
+        return Status::OK();
+    }
     // ---------------------------------------------------------
     // Seek bitmap index.
     //  - Seek to the position of predicate's operand within
@@ -465,7 +555,17 @@ Status BitmapIndexEvaluator::evaluate(SparseRange<>& dst_scan_range, PredicateTr
     // ---------------------------------------------------------
     // The root is an AND whose bitmap is intersected into the scan range, so predicates matched at the top
     // level are erasable. Erasability is only revoked while descending through a not-fully-covered OR.
-    ASSIGN_OR_RETURN(const auto seek_res, _pred_tree.visit(BitmapIndexSeeker{this}, /*erasable=*/true));
+    if (prefetch) {
+        _prefetch_dictionary_pages();
+    }
+    auto seek_result = _pred_tree.visit(BitmapIndexSeeker{this}, /*erasable=*/true);
+    // Both dictionary data and row bitmaps are lazy. A file can disappear after iterator construction;
+    // never commit partial pruning or erase predicates in that case. Only the actual optional-file I/O
+    // NotFound sets the marker; ordinary dictionary misses and other I/O errors retain their semantics.
+    if (optional_file_missing()) {
+        return Status::OK();
+    }
+    ASSIGN_OR_RETURN(const auto seek_res, std::move(seek_result));
     switch (seek_res) {
     case BitmapIndexSeeker::ResultType::ALWAYS_FALSE:
         dst_scan_range.clear();
@@ -483,11 +583,18 @@ Status BitmapIndexEvaluator::evaluate(SparseRange<>& dst_scan_range, PredicateTr
     // ---------------------------------------------------------
     // Retrieve the bitmap of each field.
     // ---------------------------------------------------------
+    if (prefetch) {
+        _prefetch_bitmap_pages();
+    }
     Roaring row_bitmap = range2roaring(dst_scan_range);
     const size_t input_rows = row_bitmap.cardinality();
     DCHECK_EQ(input_rows, dst_scan_range.span_size());
 
-    ASSIGN_OR_RETURN(auto roaring, _pred_tree.visit(BitmapIndexRetriver{this}));
+    auto retrieve_result = _pred_tree.visit(BitmapIndexRetriver{this});
+    if (optional_file_missing()) {
+        return Status::OK();
+    }
+    ASSIGN_OR_RETURN(auto roaring, std::move(retrieve_result));
     if (!roaring.has_value()) {
         return Status::OK();
     }

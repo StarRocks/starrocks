@@ -101,7 +101,10 @@ Status LoadSpillBlockManager::init() {
         return Status::InternalError("LoadSpillBlockManager requires local spill dir manager");
     }
     auto local_block_manager = std::make_unique<spill::LogBlockManager>(_load_id, _local_spill_dir_mgr);
-    auto remote_block_manager = std::make_unique<spill::FileBlockManager>(_load_id, _remote_dir_manager.get());
+    // A load reads its spill back as a load, one flow per load.
+    auto remote_block_manager = std::make_unique<spill::FileBlockManager>(
+            _load_id, _remote_dir_manager.get(),
+            RemoteReadContext::for_load(RemoteReadContext::flow_id_of(_load_id.hi, _load_id.lo)));
     _block_manager = std::make_unique<spill::HyBirdBlockManager>(_load_id, std::move(local_block_manager),
                                                                  std::move(remote_block_manager));
     // init block container

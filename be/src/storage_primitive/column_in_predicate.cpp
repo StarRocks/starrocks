@@ -127,6 +127,13 @@ public:
         return Status::OK();
     }
 
+    bool visit_bitmap_seek_values(const std::function<void(const void*)>& visit) const override {
+        for (auto value : _values) {
+            visit(&value);
+        }
+        return true;
+    }
+
     Status seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
                                roaring::Roaring* row_bitmap) const override {
 #ifndef __APPLE__
@@ -314,6 +321,14 @@ public:
             }
         }
         return Status::OK();
+    }
+
+    bool visit_bitmap_seek_values(const std::function<void(const void*)>& visit) const override {
+        for (const std::string& s : _zero_padded_strs) {
+            Slice padded_value(s);
+            visit(&padded_value);
+        }
+        return true;
     }
 
     Status seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,

@@ -1,0 +1,56 @@
+-- name: test_iceberg_min_max_opt_no_stats_partition_source
+create external catalog iceberg_sql_test_${uuid0} PROPERTIES ("type"="iceberg", "iceberg.catalog.type"="hive", "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}","enable_iceberg_metadata_cache"="true");
+-- result:
+-- !result
+create database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0} properties ("location" = "oss://${oss_bucket}/test_iceberg_min_max_opt_no_stats_partition_source/${uuid0}/iceberg_db_${uuid0}");
+-- result:
+-- !result
+set catalog iceberg_sql_test_${uuid0};
+-- result:
+-- !result
+use iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
+-- result:
+-- !result
+create external table t1 (
+    v int,
+    d date
+) partition by (year(d))
+properties ("write.metadata.metrics.column.d" = "none");
+-- result:
+-- !result
+insert into t1 values (1, '2025-12-30'), (2, '2025-12-31'), (3, '2026-01-01'), (4, '2026-01-02');
+-- result:
+-- !result
+select v from t1 order by v;
+-- result:
+1
+2
+3
+4
+-- !result
+set enable_min_max_optimization = true;
+-- result:
+-- !result
+select min(d), max(d) from t1;
+-- result:
+2025-12-30	2026-01-02
+-- !result
+set enable_min_max_optimization = false;
+-- result:
+-- !result
+select min(d), max(d) from t1;
+-- result:
+2025-12-30	2026-01-02
+-- !result
+drop table t1 force;
+-- result:
+-- !result
+drop database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
+-- result:
+-- !result
+set catalog default_catalog;
+-- result:
+-- !result
+drop catalog iceberg_sql_test_${uuid0};
+-- result:
+-- !result

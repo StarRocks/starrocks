@@ -109,6 +109,11 @@ TEST_F(IcebergTableSinkTest, decompose_to_pipeline) {
 
     TDataSink data_sink;
     TIcebergTableSink iceberg_table_sink;
+    iceberg_table_sink.__set_parquet_page_size_bytes(65536);
+    iceberg_table_sink.__set_parquet_dict_size_bytes(131072);
+    iceberg_table_sink.__set_parquet_row_group_size_bytes(1048576);
+    iceberg_table_sink.__set_parquet_compression_level(9);
+    iceberg_table_sink.__set_parquet_data_page_version("v2");
     data_sink.iceberg_table_sink = iceberg_table_sink;
 
     std::vector<starrocks::TExpr> exprs = {};
@@ -122,6 +127,11 @@ TEST_F(IcebergTableSinkTest, decompose_to_pipeline) {
     auto connector_sink_factory = dynamic_cast<pipeline::ConnectorSinkOperatorFactory*>(op_factory);
     auto* sink_ctx = get_iceberg_chunk_sink_context(connector_sink_factory);
     ASSERT_NE(sink_ctx, nullptr);
+    EXPECT_EQ(sink_ctx->options.at("write.parquet.page-size-bytes"), "65536");
+    EXPECT_EQ(sink_ctx->options.at("write.parquet.dict-size-bytes"), "131072");
+    EXPECT_EQ(sink_ctx->options.at("write.parquet.row-group-size-bytes"), "1048576");
+    EXPECT_EQ(sink_ctx->options.at("write.parquet.compression-level"), "9");
+    EXPECT_EQ(sink_ctx->options.at("write.parquet.page-version"), "v2");
     EXPECT_EQ(sink_ctx->sort_ordering->sort_key_idxes.size(), 1);
     EXPECT_EQ(sink_ctx->sort_ordering->sort_descs.descs.size(), 1);
 }
@@ -829,6 +839,11 @@ TEST_F(IcebergTableSinkTest, decompose_to_pipeline_row_delta_update) {
     iceberg_table_sink.__set_data_location("/path/to/table/data");
     iceberg_table_sink.__set_tuple_id(0);
     iceberg_table_sink.__set_write_mode(TIcebergWriteMode::ROW_DELTA_UPDATE);
+    iceberg_table_sink.__set_parquet_page_size_bytes(65536);
+    iceberg_table_sink.__set_parquet_dict_size_bytes(131072);
+    iceberg_table_sink.__set_parquet_row_group_size_bytes(1048576);
+    iceberg_table_sink.__set_parquet_compression_level(9);
+    iceberg_table_sink.__set_parquet_data_page_version("v2");
     data_sink.__set_iceberg_table_sink(iceberg_table_sink);
 
     std::vector<TExpr> exprs = {make_slot_ref_expr(0), make_slot_ref_expr(1), make_slot_ref_expr(2)};
@@ -857,6 +872,11 @@ TEST_F(IcebergTableSinkTest, decompose_to_pipeline_row_delta_update) {
     ASSERT_EQ(row_delta_ctx->data_sink_ctx->column_names.size(), 1);
     EXPECT_EQ(row_delta_ctx->data_sink_ctx->column_names[0], "c1");
     EXPECT_EQ(row_delta_ctx->data_sink_ctx->parquet_field_ids[0].field_id, 1);
+    EXPECT_EQ(row_delta_ctx->data_sink_ctx->options.at("write.parquet.page-size-bytes"), "65536");
+    EXPECT_EQ(row_delta_ctx->data_sink_ctx->options.at("write.parquet.dict-size-bytes"), "131072");
+    EXPECT_EQ(row_delta_ctx->data_sink_ctx->options.at("write.parquet.row-group-size-bytes"), "1048576");
+    EXPECT_EQ(row_delta_ctx->data_sink_ctx->options.at("write.parquet.compression-level"), "9");
+    EXPECT_EQ(row_delta_ctx->data_sink_ctx->options.at("write.parquet.page-version"), "v2");
 }
 
 // UpdatePlanner derives row-delta data slot nullability from the feeding output expression,
@@ -1123,6 +1143,9 @@ TEST_F(IcebergTableSinkTest, decompose_to_pipeline_row_delta) {
     // per slot) so IcebergDeleteSinkProvider's strict 1:1 DCHECK holds, and
     // its column_slot_map covers every non-op_code slot (here _file, _pos, c1).
     EXPECT_EQ(row_delta_ctx->delete_sink_ctx->writer_tag, "delete");
+    // The composite sink counts loaded rows, so neither sub-sink does.
+    EXPECT_FALSE(row_delta_ctx->delete_sink_ctx->count_loaded_rows);
+    EXPECT_FALSE(row_delta_ctx->data_sink_ctx->count_loaded_rows);
     EXPECT_EQ(row_delta_ctx->delete_sink_ctx->output_exprs.size(), 4);
     EXPECT_EQ(row_delta_ctx->delete_sink_ctx->column_slot_map.size(), 3);
     EXPECT_TRUE(row_delta_ctx->delete_sink_ctx->column_slot_map.count("_file") == 1);

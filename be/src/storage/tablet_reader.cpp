@@ -456,7 +456,7 @@ Status TabletReader::_init_collector(const TabletReaderParams& params) {
     const auto select_all_keys = _schema.num_key_fields() == _tablet_schema->num_key_columns();
     DCHECK_LE(_schema.num_key_fields(), _tablet_schema->num_key_columns());
 
-    // Only a compaction merge opts into the parallel prefill / read-ahead pump; see
+    // Only a compaction merge opts into the parallel prefill; see
     // MergeIteratorOptions. Query merges built here stay untouched by the compaction switches.
     const MergeIteratorOptions merge_opts{.compaction_merge = is_compaction(params.reader_type)};
     if (seg_iters.empty()) {

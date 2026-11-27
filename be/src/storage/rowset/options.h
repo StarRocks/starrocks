@@ -72,6 +72,10 @@ public:
 
     std::optional<size_t> segment_rows = std::nullopt;
 
+    // Whether a bitmap index iterator may ask |read_file| to fetch the pages its lookups read next in the background,
+    // ahead of the reads (lake_scan_warm_index).
+    bool prefetch_bitmap_index_pages = false;
+
     // ============================================================
     // Index Delta Group context (lake-only).
     //
@@ -92,6 +96,10 @@ public:
     uint32_t segment_id = 0;
     int64_t query_version = 0;
     int32_t col_unique_id = -1;
+
+    // Set only for an optional IDG bitmap file. Lazy dictionary/bitmap page I/O marks this on NotFound;
+    // semantic dictionary misses do not. The evaluator then retains the complete scan range and predicates.
+    std::shared_ptr<bool> idg_bitmap_file_missing;
 };
 
 } // namespace starrocks

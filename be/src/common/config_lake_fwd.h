@@ -43,6 +43,16 @@ CONF_mBool(lake_replication_enable_light_schema_change, "false");
 // When enabled, segments whose sort key range does not intersect with query predicates will be skipped.
 CONF_mBool(enable_lake_segment_metadata_filter, "true");
 
+// Once a query scan of a lake tablet has opened its segments, split or not, start filling the local cache with the
+// index pages its reads need next -- the short key index of every segment, the zone map, bloom filter and bitmap
+// index roots of the predicate columns and the ordinal index roots of the read columns -- asynchronously, without
+// waiting for them. The reads then join those fills instead of fetching one page after another. The bitmap index
+// lookups of EQ and IN predicates likewise ask for the dictionary pages of all their values at once, and then for the
+// pages of all the bitmaps they selected, before reading them. Takes effect only for queries and only while the remote
+// I/O scheduler is enabled and initialized (remote_io_scheduler_enable); otherwise, and when a file cannot be warmed,
+// the scan reads its index pages as before. Independent of lake_scan_parallel_segment_open.
+CONF_mBool(lake_scan_warm_index, "true");
+
 // When a prepared-split scan's main morsel queue is momentarily empty (its seed page-pruning is still
 // running), it issues an extra PRE_REFINEMENT_COARSE morsel over an un-pruned segment range to keep
 // otherwise-idle drivers busy until the refined ranges land. Set to false to disable that pre-refinement
@@ -50,6 +60,19 @@ CONF_mBool(enable_lake_segment_metadata_filter, "true");
 // range is always a superset that the refined ranges subtract from) -- it only trades early parallelism
 // for less redundant coarse scanning. Only affects the enable_lake_prepared_physical_split_scan path.
 CONF_mBool(enable_lake_prepared_split_pre_refinement, "true");
+
+// While the remote I/O scheduler is enabled (remote_io_scheduler_enable), a lake query scan opens the segments of all
+// rowsets of a tablet at once on the load segment thread pool, one task per segment, instead of one rowset after
+// another, and builds the rowsets' iterators in parallel. Has no effect while the scheduler is off. Loads, compaction
+// and the other readers keep following enable_load_segment_parallel.
+CONF_mBool(lake_scan_parallel_segment_open, "true");
+
+// When a query scan reads a tablet's segments one after another (a tablet not split across scan tasks), the next
+// segments start fetching the first blocks they will read while the current one is still read, once it has asked for
+// all of its own: up to this many segments ahead. A next segment starts only while they all hold fewer than
+// remote_prefetch_window_blocks blocks not read yet, so the segment started last can take that to about twice the
+// window. 0 starts each segment's read-ahead only when its turn comes.
+CONF_mInt32(lake_scan_read_ahead_segments, "16");
 
 // Whether to use accurate row count for lake primary key tablets by reading delete vectors from object storage.
 // When enabled, each rowset's delete vector is fetched from remote storage to deduct deleted rows, which may
@@ -77,11 +100,22 @@ CONF_mBool(lake_tablet_ignore_invalid_delete_predicate, "false");
 // Capacity of the shared-data tablet metadata cache, as a percentage of the process memory limit, clamped to
 // [0, 100]. The cache holds tablet metadata and txn logs, apart from the segment metadata cache, so that segments
 // loaded by queries and compactions cannot evict them. Set to 0 to disable the cache.
-CONF_mInt32(lake_tablet_metadata_cache_limit_percent, "10");
+CONF_mInt32(lake_tablet_metadata_cache_limit_percent, "5");
 
 // Capacity of the shared-data segment metadata cache, as a percentage of the process memory limit, clamped to
 // [0, 100]. The cache holds opened segments, delete vectors and tablet schemas. Set to 0 to disable the cache.
-CONF_mInt32(lake_segment_metadata_cache_limit_percent, "20");
+CONF_mInt32(lake_segment_metadata_cache_limit_percent, "10");
+
+// The capacity, in bytes, that the shared-data tablet metadata cache never shrinks below. While the process memory
+// usage is above memory_high_level, the tablet and segment metadata caches give memory back, and they grow back to the
+// capacities set by lake_tablet_metadata_cache_limit_percent and lake_segment_metadata_cache_limit_percent once it
+// drops below. A value above the configured capacity keeps the cache at the configured capacity.
+CONF_mInt64(lake_tablet_metadata_cache_min_limit, /*1GB=*/"1073741824");
+
+// The capacity, in bytes, that the shared-data segment metadata cache never shrinks below. See
+// lake_tablet_metadata_cache_min_limit. A value above the configured capacity keeps the cache at the configured
+// capacity.
+CONF_mInt64(lake_segment_metadata_cache_min_limit, /*1GB=*/"1073741824");
 
 // Tracked memory budget for synchronously processing one dump_tablet_metadata request. It uses the standard
 // MemTracker accounting granularity. New requests fail closed when the value is non-positive.
@@ -167,6 +201,18 @@ CONF_mBool(lake_enable_del_file_crc_check, "true");
 // the checksummed format, because during a rolling upgrade or a downgrade an older BE/CN uses the
 // legacy reader and cannot parse files written in the new format.
 CONF_mBool(lake_enable_protobuf_file_checksum, "true");
+
+// Write multi-statement version logs as ordered groups instead of the legacy merged TxnLogPB, so that
+// replay applies each statement with its own schema, segments, rewrite metadata and delete positions.
+// Readers accept both formats regardless of this flag. A CN without the group reader cannot read
+// groups, and its retry can write an incomplete legacy log that replay prefers: while such a CN can
+// still publish, replay or clean up these logs (a rolling upgrade from a pre-reader version), set this
+// to false on the upgraded CNs and enable it only after every CN has the reader. Before either
+// enabling or disabling, pause affected schema-change/multi-statement publishers and drain in-flight
+// requests; switching concurrently with publish is not supported. Disabling restores the legacy
+// merged writer and its DELETE-then-INSERT limitation, and does not make existing groups
+// downgrade-readable: drain and verify them before rolling back to a pre-reader CN.
+CONF_mBool(lake_enable_txn_vlog_group, "true");
 
 // clear *.meta cache for lake table
 CONF_mBool(lake_clear_corrupted_cache_meta, "true");

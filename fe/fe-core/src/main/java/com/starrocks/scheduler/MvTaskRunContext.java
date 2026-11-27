@@ -21,8 +21,10 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.scheduler.mv.BaseTableSnapshotInfo;
+import com.starrocks.scheduler.mv.MVRefreshPinState;
 import com.starrocks.scheduler.mv.pct.PCTPartitionTopology;
 import com.starrocks.scheduler.mv.pct.PCTRefreshScope;
+import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.plan.ExecPlan;
 
 import java.util.Map;
@@ -32,8 +34,8 @@ public class MvTaskRunContext extends TaskRunContext {
     public static class MVRefreshRuntimeState {
         private final Map<Long, BaseTableSnapshotInfo> snapshotBaseTables = Maps.newHashMap();
 
-        // Pinned TvrVersionRange per base table, keyed by Table.getTableIdentifier() (stable across
-        // connector getTable() calls, unlike tableId for external tables).
+        // Pinned TvrVersionRange per base table, keyed by Table.getUUID() (cross-database unique and
+        // stable across connector getTable() calls, unlike tableId for external tables).
         private final Map<String, TvrVersionRange> pinnedTvrMap = Maps.newHashMap();
 
         public Map<Long, BaseTableSnapshotInfo> getSnapshotBaseTables() {
@@ -49,6 +51,10 @@ public class MvTaskRunContext extends TaskRunContext {
             return pinnedTvrMap;
         }
 
+        public TvrVersionRange getPinnedRange(Table baseTable) {
+            return pinnedTvrMap.get(baseTable.getUUID());
+        }
+
         public void reset() {
             snapshotBaseTables.clear();
             pinnedTvrMap.clear();
@@ -56,6 +62,7 @@ public class MvTaskRunContext extends TaskRunContext {
     }
 
     private PCTPartitionTopology partitionTopology;
+    private PCellSortedSet retentionRefusedMvCells = PCellSortedSet.of();
     private PCTRefreshScope refreshScope;
 
     private String nextPartitionStart = null;
@@ -72,9 +79,18 @@ public class MvTaskRunContext extends TaskRunContext {
     private boolean partitionLimitExcludedPartitions = false;
     // MaterializedView#getVersionMapResetEpoch as this run saw it before reading anything, -1 when not recorded.
     private long versionMapResetEpoch = -1;
+    private MVRefreshPinState pinState;
 
     public MvTaskRunContext(TaskRunContext context) {
         super(context);
+    }
+
+    public MVRefreshPinState getPinState() {
+        return pinState;
+    }
+
+    public void setPinState(MVRefreshPinState pinState) {
+        this.pinState = pinState;
     }
 
     public long getVersionMapResetEpoch() {
@@ -95,6 +111,18 @@ public class MvTaskRunContext extends TaskRunContext {
 
     public void setPartitionTopology(PCTPartitionTopology partitionTopology) {
         this.partitionTopology = partitionTopology;
+    }
+
+    /**
+     * Mv cells the base tables imply but retention refuses to create, so a row landing in one has no mv
+     * partition to go to. Published by partition sync; empty when the mv has no retention.
+     */
+    public PCellSortedSet getRetentionRefusedMvCells() {
+        return retentionRefusedMvCells;
+    }
+
+    public void setRetentionRefusedMvCells(PCellSortedSet retentionRefusedMvCells) {
+        this.retentionRefusedMvCells = retentionRefusedMvCells;
     }
 
     public PCTRefreshScope getRefreshScope() {

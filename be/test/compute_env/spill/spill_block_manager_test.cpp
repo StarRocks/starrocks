@@ -29,6 +29,7 @@
 #include "compute_env/spill/log_block_manager.h"
 #include "fmt/format.h"
 #include "fs/fs_memory.h"
+#include "fs/remote_read_context.h"
 #include "gen_cpp/Types_types.h"
 
 namespace starrocks::vectorized {
@@ -236,6 +237,56 @@ TEST_F(SpillBlockManagerTest, file_block_allocation_test) {
                                            print_id(dummy_query_id), "node1-1-2");
         ASSERT_EQ(block->debug_string(), expected);
     }
+}
+
+namespace {
+// Stands in for starlet: records the read context a file is opened with, as passed in its options.
+class StarletLikeFileSystem final : public MemoryFileSystem {
+public:
+    Type type() const override { return STARLET; }
+
+    using MemoryFileSystem::new_sequential_file;
+
+    StatusOr<std::unique_ptr<SequentialFile>> new_sequential_file(const SequentialFileOptions& opts,
+                                                                  const std::string& url) override {
+        opened_with.push_back(opts.remote_read);
+        return MemoryFileSystem::new_sequential_file(opts, url);
+    }
+
+    std::vector<RemoteReadContext> opened_with;
+};
+} // namespace
+
+// Starlet schedules the reads of a spill in its storage as reads of whoever opened the file: a load's spill block is
+// opened with the load's context.
+TEST_F(SpillBlockManagerTest, starlet_file_block_is_opened_as_its_spiller) {
+    StarletLikeFileSystem starlet_fs;
+    std::shared_ptr<FileSystem> starlet_fs_handle(&starlet_fs, [](FileSystem*) {});
+    ASSERT_OK(starlet_fs.create_dir_recursive(remote_path));
+    auto remote_store = std::make_shared<spill::RemoteDir>(remote_path, starlet_fs_handle, nullptr, INT64_MAX);
+    auto remote_store_mgr = create_spill_dir_manager({remote_store});
+    const auto load = RemoteReadContext::for_load(RemoteReadContext::flow_id_of(dummy_query_id.hi, dummy_query_id.lo));
+    spill::FileBlockManager block_mgr(dummy_query_id, remote_store_mgr.get(), load);
+    ASSERT_OK(block_mgr.open());
+    spill::AcquireBlockOptions opts{.query_id = dummy_query_id,
+                                    .fragment_instance_id = dummy_query_id,
+                                    .plan_node_id = 1,
+                                    .name = "node1",
+                                    .block_size = 4};
+    ASSIGN_OR_ABORT(auto block, block_mgr.acquire_block(opts));
+    ASSERT_TRUE(block->is_remote());
+    ASSERT_OK(block->append({Slice("abcd")}));
+    ASSERT_OK(block_mgr.release_block(block));
+    ASSIGN_OR_ABORT(auto stream, block->get_readable());
+    char buf[4];
+    ASSERT_OK(stream->read_fully(buf, sizeof(buf)));
+    ASSERT_EQ("abcd", std::string(buf, sizeof(buf)));
+
+    ASSERT_EQ(1u, starlet_fs.opened_with.size());
+    const auto& opened = starlet_fs.opened_with[0];
+    EXPECT_TRUE(opened.is_set);
+    EXPECT_EQ(RemoteReadContext::Workload::LOAD, opened.workload);
+    EXPECT_EQ(load.flow_id, opened.flow_id);
 }
 
 TEST_F(SpillBlockManagerTest, hybird_block_allocation_test) {

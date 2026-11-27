@@ -3,6 +3,7 @@ sidebar_position: 30
 displayed_sidebar: docs
 sidebar_label: "Statistics and Storage"
 description: "FE configuration parameters for statistics collection and storage settings."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # FE Configuration - Statistics and Storage
@@ -124,7 +125,16 @@ This topic introduces the following types of FE configurations:
 - Unit: Seconds
 - Is mutable: Yes
 - Description: Minimum interval between two min/max statistics collections for the same column. Min/max stats (used to constant-fold `min()`/`max()` and to build compressed group-by keys) are collected on demand via a `[_META_]` MetaScan that reads every segment's zone-map metadata; without throttling a frequently loaded column re-scans on every load, contending on the segment metadata cache the same way global-dictionary re-collection does. Within the interval the min/max optimization is skipped rather than re-collected -- a stale value is never served, so this only affects the optimization, never correctness. Set to `0` to disable throttling.
-- Introduced in: v4.2.0
+- Introduced in: v4.0.17, v4.1.7
+
+### `min_max_stats_collect_max_tablets`
+
+- Default: 100000
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: Maximum number of tablets a table can have for its min/max statistics to be collected. The `[_META_]` MetaScan that collects min/max stats always reads the whole table, so its planning (tablet locations, scan ranges) and execution cost grow with the tablet count. For a table with more tablets than this value, min/max stats are not collected, and the optimizations that depend on them (constant-folding `min()`/`max()`, compressed group-by keys) are skipped for that table; values already cached for the table's current data version are still used. A skip is not cached, so a raised or disabled limit takes effect on the next collection allowed by `min_max_stats_collect_interval_sec`. This only affects the optimizations, never correctness. Set to `0` or a negative value to disable the limit.
+- Introduced in: v4.0.17, v4.1.7
 
 ### `enable_external_predicate_columns_collection`
 
@@ -697,7 +707,7 @@ This topic introduces the following types of FE configurations:
 - Type: Long
 - Unit: Bytes
 - Is mutable: Yes
-- Description: The minimum size of a tablet produced by tablet pre-split. It bounds compute-node alignment during pre-split so that a small load on a large cluster is not split into many tiny tablets. It is also the smallest target size automatic splitting will aim at: while a materialized index holds fewer tablets than its warehouse has compute nodes (capped by `tablet_reshard_max_split_count`), splitting aims at the size that would give it one tablet per such slot, no larger than the table's target size (its table property `tablet_reshard_target_size` if it has one, otherwise the FE configuration `tablet_reshard_target_size`) and floored at this value, so a tablet splits once it is worth at least two of that target. While that target is still below the table's target size, slots the index has left after those splits go to the largest of the tablets those splits left alone, as long as every resulting tablet is at least this value. Raising this value therefore also delays that splitting, and setting it at or above a table's target size turns it off for that table, leaving only the size-based rule. Should be no larger than `tablet_reshard_target_size`.
+- Description: The minimum size of a tablet produced by tablet pre-split. It bounds compute-node alignment during pre-split so that a small load on a large cluster is not split into many tiny tablets. It is also the smallest tablet automatic splitting produces while it widens an index: while a materialized index holds fewer tablets than its warehouse has compute nodes (capped by `tablet_reshard_max_split_count`) and less data than that many times the table's target size (its table property `tablet_reshard_target_size` if it has one, otherwise the FE configuration `tablet_reshard_target_size`), the tablets that size-based splitting does not already split are split one more tablet at a time, largest pieces first, until the index has one tablet per such slot or no further split can keep every resulting tablet at or above this value. No tablet is split into more tablets than one split allows. Raising this value therefore also delays that splitting, and setting it at or above a table's target size turns it off for that table, leaving only the size-based rule. Should be no larger than `tablet_reshard_target_size`.
 - Introduced in: v4.1.0
 
 ### `tablet_reshard_history_job_max_keep_ms`

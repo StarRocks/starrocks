@@ -144,6 +144,8 @@ public:
     bool enable_cache() const { return _fragment_runtime_state.enable_cache(); }
 
     void set_fragment_attachments(std::vector<std::unique_ptr<FragmentAttachment>>&& attachments);
+    // Like set_fragment_attachments, but keeps the attachments that are already set.
+    void append_fragment_attachments(std::vector<std::unique_ptr<FragmentAttachment>>&& attachments);
 
     void set_enable_adaptive_dop(bool val) { _fragment_runtime_state.set_enable_adaptive_dop(val); }
     bool enable_adaptive_dop() const { return _fragment_runtime_state.enable_adaptive_dop(); }

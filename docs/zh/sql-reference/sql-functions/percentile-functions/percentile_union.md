@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "聚合 PERCENTILE 数据。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # percentile_union

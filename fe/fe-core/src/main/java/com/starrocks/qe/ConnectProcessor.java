@@ -40,6 +40,7 @@ import com.starrocks.authentication.AuthenticationException;
 import com.starrocks.authentication.AuthenticationProvider;
 import com.starrocks.authentication.UserIdentityUtils;
 import com.starrocks.authentication.UserProperty;
+import com.starrocks.authorization.SecurityPolicyRewriteRule;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
@@ -81,13 +82,12 @@ import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.ast.AstTraverser;
+import com.starrocks.sql.ast.CreateTableAsSelectStmt;
 import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.ExecuteStmt;
 import com.starrocks.sql.ast.OriginStatement;
 import com.starrocks.sql.ast.PrepareStmt;
 import com.starrocks.sql.ast.QueryStatement;
-import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.expression.Expr;
@@ -97,7 +97,6 @@ import com.starrocks.sql.common.AuditEncryptionChecker;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.LargeInPredicateException;
 import com.starrocks.sql.common.StarRocksPlannerException;
-import com.starrocks.sql.formatter.FormatOptions;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.staros.StarMgrServer;
@@ -137,6 +136,8 @@ public class ConnectProcessor {
     private ByteBuffer packetBuf;
 
     protected StmtExecutor executor = null;
+    // Set only by callers that audit a statement another executor ran; see setScanStatsExecutor.
+    private StmtExecutor scanStatsExecutor = null;
     // Whether StmtExecutor.execute() was entered for the statement currently being processed.
     // execute() owns the session diagnostics area: it clears the previous statement's entries on
     // entry and records its own failure on exit. The failure paths below must therefore do that
@@ -383,7 +384,10 @@ public class ConnectProcessor {
         }
 
         ctx.getAuditEventBuilder().setFeIp(FrontendOptions.getLocalHostAddress());
-        ctx.getAuditEventBuilder().setQueriedRelations(queriedRelationsForAudit(executor, parsedStmt));
+        List<String> queriedRelations = queriedRelationsForAudit(executor, parsedStmt);
+        ctx.getAuditEventBuilder().setQueriedRelations(queriedRelations);
+        ctx.getAuditEventBuilder().setScanStats(scanStatsForAudit(scanStatsExecutor != null ? scanStatsExecutor : executor,
+                parsedStmt, statistics, queriedRelations));
 
         ctx.getAuditEventBuilder().setStmt(formatStmt(origStmt, parsedStmt));
 
@@ -413,7 +417,6 @@ public class ConnectProcessor {
         if (!Config.enable_audit_sql) {
             return "?";
         }
-        boolean needEncrypt = AuditEncryptionChecker.needEncrypt(parsedStmt);
         if (parsedStmt == null) {
             // invalid sql, record the original statement to avoid audit log can't replay
             // but redact sensitive credentials first
@@ -421,15 +424,10 @@ public class ConnectProcessor {
                 return "this is a desensitized invalid sql";
             }
             return SqlCredentialRedactor.redact(origStmt);
+        } else if (Config.enable_sql_desensitize_in_log) {
+            return AstToSQLBuilder.toDesensitizedSQL(parsedStmt);
         } else if (AuditEncryptionChecker.needEncrypt(parsedStmt)) {
             return SqlCredentialRedactor.redact(origStmt);
-        } else if (Config.enable_sql_desensitize_in_log) {
-            // Some information like username, password in the stmt should not be printed.
-            return AstToSQLBuilder.toSQL(parsedStmt, FormatOptions.allEnable()
-                            .setColumnSimplifyTableName(false)
-                            .setHideCredential(needEncrypt)
-                            .setEnableDigest(Config.enable_sql_desensitize_in_log))
-                    .orElse("this is a desensitized sql");
         } else {
             // Always redact credentials as defense in depth - raw SQL may contain
             // credentials that AuditEncryptionChecker does not yet recognize
@@ -513,6 +511,46 @@ public class ConnectProcessor {
     // the statement ran locally or the Leader did not provide them (e.g. an older version).
     // Package-private (would otherwise be private) so ConnectProcessorTest can exercise it directly.
     @VisibleForTesting
+    // The ScanStats audit JSON of a query, DML or CTAS: the one the Leader built when the statement was forwarded,
+    // else built from the executor that ran it.
+    private String scanStatsForAudit(StmtExecutor stmtExecutor, StatementBase parsedStmt, PQueryStatistics statistics,
+                                     List<String> queriedRelations) {
+        if (stmtExecutor == null || !(ctx.getState().isQuery() || parsedStmt instanceof DmlStmt ||
+                parsedStmt instanceof CreateTableAsSelectStmt)) {
+            return null;
+        }
+        if (stmtExecutor.getIsForwardToLeaderOrInit(false)) {
+            LeaderOpExecutor leaderOpExecutor = stmtExecutor.getLeaderOpExecutor();
+            TMasterOpResult leaderResult = leaderOpExecutor == null ? null : leaderOpExecutor.getResult();
+            return leaderResult != null && leaderResult.isSetAudit_scan_stats() ? leaderResult.getAudit_scan_stats()
+                    : null;
+        }
+        return stmtExecutor.getScanStatsForAuditLog(statistics, scanStatsAttemptState(stmtExecutor),
+                queriedRelations != null && !queriedRelations.isEmpty());
+    }
+
+    /**
+     * The executor whose ScanStats an audit reports, for a caller that audits a statement without being the
+     * processor that ran it (task runs).
+     */
+    public void setScanStatsExecutor(StmtExecutor scanStatsExecutor) {
+        this.scanStatsExecutor = scanStatsExecutor;
+    }
+
+    // The state of the attempt a statement ended with, from how the statement ended.
+    private ScanStatsRecorder.AttemptState scanStatsAttemptState(StmtExecutor stmtExecutor) {
+        if (ctx.getState().getStateType() != QueryState.MysqlStateType.ERR) {
+            return ScanStatsRecorder.AttemptState.OK;
+        }
+        if (ctx.getState().getErrType() == QueryState.ErrType.EXEC_TIME_OUT) {
+            return ScanStatsRecorder.AttemptState.TIMEOUT;
+        }
+        if (stmtExecutor.isCancelled()) {
+            return ScanStatsRecorder.AttemptState.CANCELLED;
+        }
+        return ScanStatsRecorder.AttemptState.ERR;
+    }
+
     List<String> queriedRelationsForAudit(StmtExecutor stmtExecutor, StatementBase parsedStmt) {
         List<String> relationsFromLeader = getQueriedRelationsFromLeader(stmtExecutor);
         if (relationsFromLeader != null) {
@@ -521,18 +559,21 @@ public class ConnectProcessor {
         return AnalyzerUtils.collectAllTableAndViewRelationNamesForAudit(parsedStmt);
     }
 
-    private void setStmtFailure(Throwable e, String auditSql) {
+    private void setStmtFailure(Throwable e, String auditSql, StatementBase parsedStmt) {
         if (e instanceof AnalysisException || e instanceof ErrorReportException
                 || e instanceof SemanticException
                 || (e instanceof StarRocksPlannerException
                 && ((StarRocksPlannerException) e).getType() == ErrorType.USER_ERROR)) {
             LOG.info("Process one statement failed. SQL: {}, error: {}",
-                    SqlCredentialRedactor.redact(auditSql), e.getMessage());
+                    LogUtil.redactSqlForLog(auditSql, parsedStmt),
+                    LogUtil.desensitizeMessage(e));
             ctx.getState().setError(e.getMessage());
             ctx.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
             return;
         }
-        LOG.warn("Process one statement failed. SQL: {}", SqlCredentialRedactor.redact(auditSql), e);
+        LOG.warn("Process one statement failed. SQL: {}",
+                LogUtil.redactSqlForLog(auditSql, parsedStmt),
+                LogUtil.desensitize(e));
         ctx.getState().setError(e.getMessage());
         ctx.getState().setErrType(QueryState.ErrType.INTERNAL_ERR);
     }
@@ -547,7 +588,7 @@ public class ConnectProcessor {
     }
 
     private void auditStmtFailure(Throwable e, StatementBase parsedStmt, String auditSql) {
-        setStmtFailure(e, auditSql);
+        setStmtFailure(e, auditSql, parsedStmt);
         auditCurrentStmt(auditSql, parsedStmt);
     }
 
@@ -653,14 +694,7 @@ public class ConnectProcessor {
             executor = new StmtExecutor(ctx, parsedStmt);
             ctx.setExecutor(executor);
 
-            //Build View SQL without Policy Rewrite
-            new AstTraverser<Void, Void>() {
-                @Override
-                public Void visitRelation(Relation relation, Void context) {
-                    relation.setNeedRewrittenByPolicy(true);
-                    return null;
-                }
-            }.visit(parsedStmt);
+            SecurityPolicyRewriteRule.markRelationsForRewrite(parsedStmt);
 
             if (ctx.getQueryDetail() == null) {
                 executor.addRunningQueryDetail(parsedStmt);
@@ -747,7 +781,8 @@ public class ConnectProcessor {
             }
         } catch (AnalysisException e) {
             if (!parseSucceeded) {
-                LOG.warn("Failed to parse SQL: " + SqlCredentialRedactor.redact(originStmt) + ", because.", e);
+                LOG.warn("Failed to parse SQL: " + LogUtil.redactSqlForLog(originStmt, null)
+                        + ", because.", LogUtil.desensitize(e));
             }
             ctx.getState().setError(e.getMessage());
             ctx.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
@@ -761,8 +796,8 @@ public class ConnectProcessor {
         } catch (Throwable e) {
             // Catch all throwable.
             // If reach here, maybe StarRocks bug.
-            LOG.warn("Process one query failed. SQL: " + SqlCredentialRedactor.redact(originStmt) +
-                    ", because unknown reason: ", e);
+            LOG.warn("Process one query failed. SQL: " + LogUtil.redactSqlForLog(originStmt, null) +
+                    ", because unknown reason: ", LogUtil.desensitize(e));
             ctx.getState().setError(e.getMessage());
             ctx.getState().setErrType(QueryState.ErrType.INTERNAL_ERR);
             if (!executeInvoked) {
@@ -1446,14 +1481,7 @@ public class ConnectProcessor {
             List<StatementBase> stmts = SqlParser.parse(request.getSql(), ctx.getSessionVariable());
             ctx.setMultiStmt(stmts.size() > 1);
             StatementBase statement = stmts.get(idx);
-            //Build View SQL without Policy Rewrite
-            new AstTraverser<Void, Void>() {
-                @Override
-                public Void visitRelation(Relation relation, Void context) {
-                    relation.setNeedRewrittenByPolicy(true);
-                    return null;
-                }
-            }.visit(statement);
+            SecurityPolicyRewriteRule.markRelationsForRewrite(statement);
             statement.setOrigStmt(new OriginStatement(request.getSql(), idx));
 
             executor = doProxyExecute(result, request, statement, requestFE);
@@ -1523,8 +1551,14 @@ public class ConnectProcessor {
         // field -- an older leader, or no executor at all -- which makes the follower fall back.
         StmtExecutor executedStmt = ctx.getExecutor();
         if (executedStmt != null) {
-            result.setQueried_relations(AnalyzerUtils.collectAllTableAndViewRelationNamesForAudit(
-                    executedStmt.getParsedStmt()));
+            List<String> queriedRelations =
+                    AnalyzerUtils.collectAllTableAndViewRelationNamesForAudit(executedStmt.getParsedStmt());
+            result.setQueried_relations(queriedRelations);
+            String scanStats = scanStatsForAudit(executedStmt, executedStmt.getParsedStmt(),
+                    executedStmt.getQueryStatisticsForAuditLog(), queriedRelations);
+            if (scanStats != null) {
+                result.setAudit_scan_stats(scanStats);
+            }
         }
         return result;
     }

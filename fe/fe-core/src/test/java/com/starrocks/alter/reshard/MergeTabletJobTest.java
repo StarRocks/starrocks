@@ -48,6 +48,8 @@ import com.starrocks.metric.LongCounterMetric;
 import com.starrocks.metric.Metric.MetricUnit;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.EditLog;
+import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.proto.AggregatePublishVersionRequest;
 import com.starrocks.proto.PublishVersionRequest;
 import com.starrocks.proto.PublishVersionResponse;
@@ -66,7 +68,10 @@ import com.starrocks.sql.ast.TabletGroupList;
 import com.starrocks.sql.ast.TabletList;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageMedium;
+import com.starrocks.transaction.DatabaseTransactionMgr;
 import com.starrocks.transaction.GlobalTransactionMgr;
+import com.starrocks.transaction.LakeTableTxnStateListener;
+import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionStatus;
 import com.starrocks.type.IntegerType;
@@ -83,6 +88,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -358,6 +364,25 @@ public class MergeTabletJobTest {
         Assertions.assertEquals(TabletReshardJob.JobState.FINISHED, mergeJob.getJobState());
     }
 
+    /**
+     * A load committed right above the merge's version finishes as soon as the merge makes its version visible, so the
+     * merge's CLEANING record, which makes that version visible on replay, has to be journaled first. Otherwise every FE
+     * replaying the journal fails on the load's VISIBLE record.
+     */
+    @Test
+    public void testCleaningJournaledBeforeNextLoadIsVisible() throws Exception {
+        MergeTabletJob mergeJob = createMergeTabletReshardJob();
+
+        ReshardJournalReplay.checkCleaningJournaledBeforeNextLoadIsVisible(db, table, mergeJob);
+    }
+
+    @Test
+    public void testFailedCleaningJournalLeavesLayoutUnchanged() throws Exception {
+        MergeTabletJob mergeJob = createMergeTabletReshardJob();
+        ReshardJournalReplay.checkFailedCleaningJournalLeavesLayoutUnchanged(mergeJob,
+                table.getAllPhysicalPartitions().iterator().next());
+    }
+
 
     @Test
     public void testRunMergeBumpsOptimisticVersion() throws Exception {
@@ -375,6 +400,18 @@ public class MergeTabletJobTest {
         mergeJob.run();
         Assertions.assertEquals(TabletReshardJob.JobState.RUNNING, mergeJob.getJobState());
 
+        // The plan invalidation has to be in place when the merged index is installed, not only once the job
+        // is done: a lock-free plan reads the visible version its table copy recorded and the layout later.
+        long beforeInstall = table.lastSchemaUpdateTime.get();
+        List<Long> invalidationAtInstall = new ArrayList<>();
+        new MockUp<PhysicalPartition>() {
+            @Mock
+            public void addMaterializedIndex(Invocation invocation, MaterializedIndex index, boolean isBaseIndex) {
+                invalidationAtInstall.add(table.lastSchemaUpdateTime.get());
+                invocation.proceed(index, isBaseIndex);
+            }
+        };
+
         // runRunningJob() -> addNewMaterializedIndexes() installs the merged index and changes the
         // partition tablet layout. It must bump lastSchemaUpdateTime so a query planned concurrently
         // is re-planned by StatementPlanner's retry loop against the new layout, instead of failing with
@@ -385,6 +422,10 @@ public class MergeTabletJobTest {
         long afterMerge = table.lastSchemaUpdateTime.get();
         Assertions.assertTrue(afterMerge > beforeMerge,
                 "merge must bump lastSchemaUpdateTime (before=" + beforeMerge + ", after=" + afterMerge + ")");
+        Assertions.assertFalse(invalidationAtInstall.isEmpty(), "the merge installed no index");
+        Assertions.assertTrue(invalidationAtInstall.stream().allMatch(time -> time > beforeInstall),
+                "plans must be invalidated before the merged index is installed (before=" + beforeInstall
+                        + ", at install=" + invalidationAtInstall + ")");
     }
 
     @Test
@@ -2036,5 +2077,135 @@ public class MergeTabletJobTest {
         mergeJob.createShardsOnStarOS();
         Assertions.assertTrue(cacheInfoReadUnderLock.get());
         Assertions.assertTrue(starOSCalledWithoutLock.get());
+    }
+
+    /**
+     * The inverted index is not in the image: an FE that starts from one rebuilds it from the tablets
+     * installed on partitions, and a merge job installs its merged tablets only at CLEANING. When that FE
+     * then replays the CLEANING record, loads start writing into the merged tablets, so a commit that
+     * cannot resolve them records no partition at all and the transaction turns VISIBLE without its
+     * rows.
+     *
+     * <p>The fixture's tablets exist only in FE memory, so StarOS would reject them as placement
+     * targets and this replay-only path does not call createShardsOnStarOS; it touches FE metadata only.
+     */
+    @Test
+    public void testImageAtRunningThenReplayedCleaningCommitsIntoMergedTablets() throws Exception {
+        // The 10 ms leader daemon would drive the replayed job on between the steps below.
+        new MockUp<TabletReshardJobMgr>() {
+            @Mock
+            protected void runAfterLeaseValid() {
+            }
+        };
+        TabletReshardJobMgr tabletReshardJobMgr = GlobalStateMgr.getCurrentState().getTabletReshardJobMgr();
+        MergeCandidateFixture fx = newMergeCandidateFixture(2);
+        MergeTabletJob origin = createMergeTabletReshardJob(fx.table());
+        try {
+            tabletReshardJobMgr.replayUpdateTabletReshardJob(mergeJobCopy(origin));
+            origin.setJobState(TabletReshardJob.JobState.PREPARING);
+            // Replaying PREPARING reserves the commit version on the replayed object, so the later records
+            // are copies of that one, as a leader's journal entries would carry it.
+            MergeTabletJob preparingRecord = mergeJobCopy(origin);
+            tabletReshardJobMgr.replayUpdateTabletReshardJob(preparingRecord);
+
+            MergeTabletJob runningRecord = mergeJobCopy(preparingRecord);
+            runningRecord.setJobState(TabletReshardJob.JobState.RUNNING);
+            forgetMergeAsImageLoadedFe(runningRecord);
+
+            recoverMergeFromImage(runningRecord);
+            ReshardingPhysicalPartition reshardingPartition =
+                    runningRecord.getReshardingPhysicalPartitions().values().iterator().next();
+            ReshardingMaterializedIndex reshardingIndex =
+                    reshardingPartition.getReshardingIndexes().values().iterator().next();
+            MergingTablet family = reshardingIndex.getReshardingTablets().get(0).getMergingTablet();
+            Assertions.assertEquals(family.getNewTabletIds(), tabletReshardJobMgr.getReshardingTablet(
+                    family.getFirstOldTabletId(), reshardingPartition.getCommitVersion()).getNewTabletIds());
+
+            MergeTabletJob cleaningRecord = mergeJobCopy(runningRecord);
+            cleaningRecord.setJobState(TabletReshardJob.JobState.CLEANING);
+            tabletReshardJobMgr.replayUpdateTabletReshardJob(cleaningRecord);
+
+            long physicalPartitionId = reshardingPartition.getPhysicalPartitionId();
+            long newIndexId = reshardingIndex.getMaterializedIndex().getId();
+            PhysicalPartition physicalPartition = fx.table().getPhysicalPartition(physicalPartitionId);
+            Assertions.assertEquals(newIndexId, physicalPartition.getLatestBaseIndex().getId());
+
+            DatabaseTransactionMgr dbTxnMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                    .getDatabaseTransactionMgr(db.getId());
+            long txnId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionIDGenerator()
+                    .getNextTransactionId();
+            TransactionState txnState = new TransactionState(db.getId(), List.of(fx.table().getId()), txnId,
+                    "image_recovery_merge_load_" + txnId, null,
+                    TransactionState.LoadJobSourceType.BACKEND_STREAMING, null, 0, 60_000);
+            List<TabletCommitInfo> finishedTablets = new ArrayList<>();
+            for (Tablet tablet : physicalPartition.getLatestBaseIndex().getTablets()) {
+                finishedTablets.add(new TabletCommitInfo(tablet.getId(), 1));
+            }
+            LakeTableTxnStateListener listener = new LakeTableTxnStateListener(dbTxnMgr, fx.table());
+            listener.prePrepared(txnState, finishedTablets, Collections.emptyList());
+            txnState.setTransactionStatus(TransactionStatus.COMMITTED);
+            listener.preWriteCommitLog(txnState);
+            Assertions.assertTrue(txnState.getTableCommitInfo(fx.table().getId()).getIdToPartitionCommitInfo()
+                            .containsKey(physicalPartitionId),
+                    "a load into the merged tablets must commit their partition, not an empty transaction");
+
+            TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
+            for (long tabletId : mergeNewTabletIds(runningRecord)) {
+                TabletMeta tabletMeta = invertedIndex.getTabletMeta(tabletId);
+                Assertions.assertNotNull(tabletMeta, "tablet " + tabletId + " is not in the inverted index");
+                Assertions.assertEquals(physicalPartitionId, tabletMeta.getPhysicalPartitionId());
+                Assertions.assertEquals(newIndexId, tabletMeta.getIndexId());
+            }
+        } finally {
+            tabletReshardJobMgr.getTabletReshardJobs().remove(origin.getJobId());
+            origin.unregisterReshardingTablets();
+        }
+    }
+
+    private static MergeTabletJob mergeJobCopy(MergeTabletJob job) {
+        return (MergeTabletJob) GsonUtils.GSON.fromJson(GsonUtils.GSON.toJson(job, TabletReshardJob.class),
+                TabletReshardJob.class);
+    }
+
+    private static List<Long> mergeNewTabletIds(MergeTabletJob record) {
+        List<Long> tabletIds = new ArrayList<>();
+        for (ReshardingPhysicalPartition reshardingPartition : record.getReshardingPhysicalPartitions().values()) {
+            for (ReshardingMaterializedIndex reshardingIndex : reshardingPartition.getReshardingIndexes().values()) {
+                for (Tablet tablet : reshardingIndex.getMaterializedIndex().getTablets()) {
+                    tabletIds.add(tablet.getId());
+                }
+            }
+        }
+        return tabletIds;
+    }
+
+    /**
+     * Turn this process into an FE that starts from an image written by an FE which replayed up to
+     * record: it shares this process's catalog, but its job manager and inverted index know neither the
+     * job, its registry entries nor its new tablets.
+     */
+    private static void forgetMergeAsImageLoadedFe(MergeTabletJob record) {
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
+        GlobalStateMgr.getCurrentState().getTabletReshardJobMgr().getTabletReshardJobs().remove(record.getJobId());
+        record.unregisterReshardingTablets();
+        List<Long> newTabletIds = mergeNewTabletIds(record);
+        invertedIndex.deleteTablets(newTabletIds);
+        for (long tabletId : newTabletIds) {
+            Assertions.assertNull(invertedIndex.getTabletMeta(tabletId));
+        }
+    }
+
+    // Write record into a TabletReshardJobMgr image block and load it the way FE startup does:
+    // TabletReshardJobMgr.load -> readJson -> gsonPostProcess.
+    private static MergeTabletJob recoverMergeFromImage(MergeTabletJob record) throws Exception {
+        TabletReshardJobMgr imageSide = new TabletReshardJobMgr();
+        imageSide.getTabletReshardJobs().put(record.getJobId(), mergeJobCopy(record));
+        UtFrameUtils.PseudoImage image = new UtFrameUtils.PseudoImage();
+        imageSide.save(image.getImageWriter());
+        SRMetaBlockReader reader = image.getMetaBlockReader();
+        TabletReshardJobMgr tabletReshardJobMgr = GlobalStateMgr.getCurrentState().getTabletReshardJobMgr();
+        tabletReshardJobMgr.load(reader);
+        reader.close();
+        return (MergeTabletJob) tabletReshardJobMgr.getTabletReshardJob(record.getJobId());
     }
 }

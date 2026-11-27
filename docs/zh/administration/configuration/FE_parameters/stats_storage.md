@@ -3,6 +3,7 @@ sidebar_position: 30
 displayed_sidebar: docs
 description: "FE configuration parameters for statistics collection and storage settings."
 sidebar_label: "统计报告和存储"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # FE 配置 - 统计报告和存储
@@ -124,7 +125,16 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 单位: 秒
 - 是否可变: Yes
 - 描述: 同一列两次 min/max 统计采集之间的最小间隔。min/max 统计（用于将 `min()`/`max()` 折叠为常量、以及构建压缩 group-by key）通过读取每个 segment zone-map 元数据的 `[_META_]` MetaScan 按需采集；若不节流，频繁导入的列会在每次导入后重扫，和全局字典重采集一样争用 segment 元数据缓存。间隔窗口内跳过 min/max 优化而非重新采集——绝不返回陈旧值，因此只影响优化、不影响正确性。设置为 `0` 可禁用节流。
-- 引入版本: v4.2.0
+- 引入版本: v4.0.17, v4.1.7
+
+### `min_max_stats_collect_max_tablets`
+
+- 默认值: 100000
+- 类型: Int
+- 单位: -
+- 是否可变: Yes
+- 描述: 允许采集 min/max 统计的表的最大 tablet 数。采集 min/max 统计的 `[_META_]` MetaScan 总是扫描整张表，其规划（获取 tablet 位置、构造扫描范围）和执行开销随 tablet 数增长。tablet 数超过该值的表不采集 min/max 统计，依赖它的优化（将 `min()`/`max()` 折叠为常量、压缩 group-by key）对该表跳过；已为该表当前数据版本缓存的值仍会使用。跳过不会被缓存，因此调大或取消该限制后，在 `min_max_stats_collect_interval_sec` 允许的下一次采集时即生效。只影响优化、不影响正确性。设置为 `0` 或负数可取消该限制。
+- 引入版本: v4.0.17, v4.1.7
 
 ### `enable_external_predicate_columns_collection`
 
@@ -697,7 +707,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Long
 - 单位: Bytes
 - 是否可变: Yes
-- 描述: Tablet 预分裂（pre-split）产生的 Tablet 的最小大小。该参数同时也是自动分裂所能采用的最小目标大小：当物化索引的 Tablet 数量少于其所属仓库的计算节点数（并受 `tablet_reshard_max_split_count` 上限约束）时，分裂会以“每个此类槽位一个 Tablet”对应的大小为目标，该目标不超过表的目标大小（表设置了表属性 `tablet_reshard_target_size` 时为该属性值，否则为 FE 配置项 `tablet_reshard_target_size`），并以该参数为下限，Tablet 达到该目标的两倍即会分裂。在该目标仍小于表的目标大小时，如果这些分裂之后仍有剩余槽位，会把它们分给这些分裂没有涉及的 Tablet 中最大的几个继续分裂，前提是分裂出的每个 Tablet 都不小于该参数。因此调大该参数也会推迟此类分裂；将其设置为大于或等于某张表的目标大小，即可对该表关闭该行为，只保留基于大小的分裂规则。该参数还用于约束预分裂时按计算节点数对齐的行为，避免在节点较多的集群上将数据量较小的导入分裂成大量过小的 Tablet。其值不应大于 `tablet_reshard_target_size`。
+- 描述: Tablet 预分裂（pre-split）产生的 Tablet 的最小大小。该参数同时也是自动分裂扩充索引时所产生 Tablet 的最小大小：当物化索引的 Tablet 数量少于其所属仓库的计算节点数（并受 `tablet_reshard_max_split_count` 上限约束），且索引数据量小于该数量与表的目标大小（表设置了表属性 `tablet_reshard_target_size` 时为该属性值，否则为 FE 配置项 `tablet_reshard_target_size`）之积时，空余的槽位会逐个分配给未被按大小分裂的 Tablet，每次都分给按当前分裂份数计算、每份数据量最大的那个 Tablet，直到每个此类槽位都有一个 Tablet，或者任何 Tablet 再分裂都会产生小于该参数的 Tablet 为止。单个 Tablet 分裂出的数量不会超过单次分裂的上限。因此调大该参数也会推迟此类分裂；将其设置为大于或等于某张表的目标大小，即可对该表关闭该行为，只保留基于大小的分裂规则。该参数还用于约束预分裂时按计算节点数对齐的行为，避免在节点较多的集群上将数据量较小的导入分裂成大量过小的 Tablet。其值不应大于 `tablet_reshard_target_size`。
 - 引入版本: v4.1.0
 
 ### `tablet_reshard_history_job_max_keep_ms`

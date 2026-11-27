@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Broker Load 支持从 HDFS 或云存储异步批量导入数据至 StarRocks，提供作业管理功能。"
+products: [oss, enterprise, anywhere]
 ---
 
 # 从 HDFS 或外部云存储系统导入数据

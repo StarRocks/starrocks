@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "RESUME ROUTINE LOAD resumes a Routine load job."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # RESUME ROUTINE LOAD

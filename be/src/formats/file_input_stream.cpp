@@ -55,8 +55,12 @@ public:
     }
 
     StatusOr<std::string_view> peek(int64_t count) override {
-        auto st = _stream->peek(count);
-        return st;
+        // peek() can do real IO below this wrapper: CacheInputStream::peek() writes the peeked blocks to the
+        // datacache, synchronously unless async populate is on. Time it as IO, otherwise the scanner's
+        // cpu_time_spent() (total time - io_ns) charges that wait as CPU, which feeds the query cpu cost and the
+        // resource group big_query_cpu_second_limit check. io_count and bytes_read are unchanged.
+        SCOPED_RAW_TIMER(&_stats->io_ns);
+        return _stream->peek(count);
     }
 
     StatusOr<int64_t> read_at(int64_t offset, void* out, int64_t count) override {

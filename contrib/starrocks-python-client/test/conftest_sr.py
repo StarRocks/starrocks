@@ -13,13 +13,15 @@
 # limitations under the License.
 
 import os
+import re
 from typing import Optional
 
 import pytest
 from sqlalchemy import create_engine
-from sqlalchemy.engine import Engine
+from sqlalchemy.engine import Connection, Engine
 
 from starrocks.alembic.compare import logger
+from starrocks.common.utils import render_refresh_for_server
 
 
 def get_starrocks_url() -> Optional[str]:
@@ -57,3 +59,16 @@ def sr_root_engine() -> Engine:
 # Default for local runs; override via environment
 os.environ.setdefault("STARROCKS_URL", "starrocks://root@127.0.0.1:9030/test_sqla")
 test_default_schema = "test_sqla"
+
+
+_REFRESH_PREFIX = re.compile(r"^\s*REFRESH\s+", re.IGNORECASE)
+
+
+def refresh_clause_for_server(connection: Connection, clause: str) -> str:
+    """Spell a literal REFRESH clause the way the connected server accepts it.
+
+    DDL written out in a test bypasses the dialect, so the untimed asynchronous mode has to be
+    spelled per release here: ON_CHANGE from 26.2 on, which rejects bare ASYNC, ASYNC before it.
+    """
+    body = _REFRESH_PREFIX.sub("", clause)
+    return "REFRESH " + render_refresh_for_server(body, connection.dialect.server_version_info or ())

@@ -66,7 +66,7 @@ struct EngineOptions {
 struct LakeIOOptions {
     // Cache remote file locally on read requests.
     // This options can be ignored if the underlying filesystem does not support local cache.
-    bool fill_data_cache = false;
+    bool fill_data_cache = true;
 
     bool skip_disk_cache = false;
     // Specify different buffer size for different read scenarios
@@ -85,6 +85,10 @@ struct LakeIOOptions {
     std::shared_ptr<std::atomic<bool>> sst_warmup_done;
     std::shared_ptr<FileSystem> fs;
     std::shared_ptr<starrocks::lake::LocationProvider> location_provider;
+    // Who the remote reads are for (query, load, compaction), handed to every file opened for the read.
+    RemoteReadContext remote_read;
+    // Share of the compaction task's read-ahead budget assigned to one input segment.
+    int32_t compaction_prefetch_blocks = 0;
 };
 
 } // namespace starrocks

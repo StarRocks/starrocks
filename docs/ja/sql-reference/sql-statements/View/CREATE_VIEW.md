@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "CREATE VIEW creates a logical view derived from queries on existing tables."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # CREATE VIEW

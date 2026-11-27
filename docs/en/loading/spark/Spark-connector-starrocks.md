@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "How to use the StarRocks Spark connector to load data from Apache Spark (DataFrames or SQL) into StarRocks via Stream Load, supporting batch and structured..."
+products: [oss, enterprise, anywhere]
 ---
 
 # Load data using Spark connector (recommended)
@@ -15,12 +16,11 @@ StarRocks provides a self-developed connector named StarRocks Connector for Apac
 
 | Spark connector | Spark              | StarRocks     | Java | Scala |
 | --------------- | ------------------ | ------------- | ---- | ----- |
+| 1.1.5           | 4.0, 4.1           | 2.5 and later | 17   | 2.13  |
+| 1.1.5           | 3.3, 3.4, 3.5      | 2.5 and later | 8    | 2.12  |
 | 1.1.4           | 4.0, 4.1           | 2.5 and later | 17   | 2.13  |
 | 1.1.4           | 3.3, 3.4, 3.5      | 2.5 and later | 8    | 2.12  |
 | 1.1.3           | 3.2, 3.3, 3.4, 3.5 | 2.5 and later | 8    | 2.12  |
-| 1.1.2           | 3.2, 3.3, 3.4, 3.5 | 2.5 and later | 8    | 2.12  |
-| 1.1.1           | 3.2, 3.3, or 3.4   | 2.5 and later | 8    | 2.12  |
-| 1.1.0           | 3.2, 3.3, or 3.4   | 2.5 and later | 8    | 2.12  |
 
 > **NOTICE**
 >

@@ -59,6 +59,7 @@ import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.hive.IcebergHiveCatalog;
 import com.starrocks.http.rest.RestBaseAction;
+import com.starrocks.load.pipe.PipeManager;
 import com.starrocks.load.pipe.PipeManagerTest;
 import com.starrocks.load.routineload.RoutineLoadMgr;
 import com.starrocks.mysql.MysqlChannel;
@@ -101,6 +102,8 @@ import com.starrocks.sql.ast.UserRef;
 import com.starrocks.sql.ast.expression.ArithmeticExpr;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprUtils;
+import com.starrocks.sql.ast.expression.Subquery;
+import com.starrocks.sql.ast.pipe.PipeName;
 import com.starrocks.sql.ast.warehouse.cngroup.AlterCnGroupStmt;
 import com.starrocks.sql.ast.warehouse.cngroup.CreateCnGroupStmt;
 import com.starrocks.sql.ast.warehouse.cngroup.DropCnGroupStmt;
@@ -3770,6 +3773,36 @@ public class PrivilegeCheckerTest extends StarRocksTestBase {
                 "Access denied; you need (at least one of) the ALTER privilege(s) on PIPE db1.p1 " +
                         "for this operation");
 
+        // create or replace pipe: replacing an existing pipe also requires DROP on it
+        {
+            String replaceSql = "create or replace pipe p1 " +
+                    "as insert into tbl_pipe select * from files('path'='fake://dir/', 'format'='parquet', " +
+                    "'auto_ingest'='false') ";
+            String replaceNewSql = "create or replace pipe p_not_exist " +
+                    "as insert into tbl_pipe select * from files('path'='fake://dir/', 'format'='parquet', " +
+                    "'auto_ingest'='false') ";
+            grantRevokeSqlAsRoot(String.format("grant CREATE PIPE on DATABASE %s to test", dbName));
+            verifyGrantRevoke(
+                    replaceSql,
+                    "grant DROP on PIPE db1.p1 to test",
+                    "revoke DROP on PIPE db1.p1 from test",
+                    "Access denied; you need (at least one of) the DROP privilege(s) on PIPE db1.p1 " +
+                            "for this operation");
+            // the denied replace leaves the old pipe in place
+            PipeManager pipeManager = GlobalStateMgr.getCurrentState().getPipeManager();
+            long oldPipeId = pipeManager.mayGetPipe(new PipeName(dbName, "p1")).get().getId();
+            ctxToTestUser();
+            new StmtExecutor(ctx, SqlParser.parseSingleStatement(replaceSql,
+                    ctx.getSessionVariable().getSqlMode())).execute();
+            Assertions.assertTrue(ctx.getState().getErrorMessage().contains(
+                    "the DROP privilege(s) on PIPE db1.p1"), ctx.getState().getErrorMessage());
+            Assertions.assertEquals(oldPipeId, pipeManager.mayGetPipe(new PipeName(dbName, "p1")).get().getId());
+            // no existing pipe to replace, so CREATE PIPE alone is enough
+            ctxToTestUser();
+            Authorizer.check(UtFrameUtils.parseStmtWithNewParser(replaceNewSql, ctx), ctx);
+            grantRevokeSqlAsRoot(String.format("revoke CREATE PIPE on DATABASE %s from test", dbName));
+        }
+
         // drop pipe
         verifyGrantRevoke(
                 "drop pipe p1",
@@ -3969,6 +4002,101 @@ public class PrivilegeCheckerTest extends StarRocksTestBase {
         }
 
         Config.access_control = "native";
+    }
+
+    /**
+     * Regression test for the pre-analysis SELECT projection traversal gap: a table referenced only
+     * inside a scalar SELECT-list subquery must still receive the policy-marking visitor's
+     * {@code setNeedRewrittenByPolicy(true)} and the subsequent row-filter / column-mask rewrite, even
+     * though the policy-marking visitor runs on the raw, not-yet-analyzed AST (where
+     * {@code SelectRelation#getOutputExpression()} is null and the subquery is only reachable through the
+     * parser-populated {@code selectList}).
+     */
+    @Test
+    public void testPolicyRewriteProtectedTableInSelectListSubquery() throws Exception {
+        String originalAccessControl = Config.access_control;
+        Config.access_control = "ranger";
+        ConnectContext context = starRocksAssert.getCtx();
+
+        final String testDbName = "db_for_ranger_projection";
+        starRocksAssert.withDatabase(testDbName);
+        try {
+            starRocksAssert.withTable("create table " + testDbName +
+                    ".protected_table(k1 varchar(32), k2 varchar(32)) " +
+                    "DUPLICATE KEY(k1) distributed by hash(k1) buckets 3 properties('replication_num' = '1');");
+            starRocksAssert.withTable("create table " + testDbName +
+                    ".outer_table(k1 varchar(32), k2 varchar(32)) " +
+                    "DUPLICATE KEY(k1) distributed by hash(k1) buckets 3 properties('replication_num' = '1');");
+
+            TableName protectedTableName = new TableName("default_catalog", testDbName, "protected_table");
+
+            Expr rowFilter = SqlParser.parseSqlToExpr(
+                    "exists (select * from " + testDbName + ".outer_table)", SqlModeHelper.MODE_DEFAULT);
+            Map<String, Expr> columnMask = new HashMap<>();
+            columnMask.put("k1", SqlParser.parseSqlToExpr("k1+1", SqlModeHelper.MODE_DEFAULT));
+
+            try (MockedStatic<Authorizer> authorizerMockedStatic =
+                         Mockito.mockStatic(Authorizer.class)) {
+                authorizerMockedStatic
+                        .when(() -> Authorizer.getRowAccessPolicy(Mockito.any(), eq(protectedTableName)))
+                        .thenReturn(rowFilter);
+                authorizerMockedStatic
+                        .when(() -> Authorizer.getColumnMaskingPolicy(
+                                Mockito.any(), eq(protectedTableName), Mockito.any()))
+                        .thenReturn(columnMask);
+                authorizerMockedStatic.when(Authorizer::getInstance)
+                        .thenCallRealMethod();
+                authorizerMockedStatic
+                        .when(() -> Authorizer.check(Mockito.any(), Mockito.any()))
+                        .thenCallRealMethod();
+                authorizerMockedStatic.when(() -> Authorizer.checkTableAction(Mockito.any(),
+                                Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any()))
+                        .thenCallRealMethod();
+                authorizerMockedStatic.when(() -> Authorizer.checkColumnAction(Mockito.any(),
+                                Mockito.any(), Mockito.any(), Mockito.any()))
+                        .thenCallRealMethod();
+
+                String sql = "select (select count(*) from " + testDbName + ".protected_table) from " +
+                        testDbName + ".outer_table";
+
+                // Raw parse only -- do NOT analyze before marking. The policy-marking visitor must run on the
+                // not-yet-analyzed AST, where getOutputExpression() is null and protected_table is only
+                // reachable through the parser-populated selectList of the inner SelectRelation.
+                StatementBase stmt = SqlParser.parse(sql, context.getSessionVariable().getSqlMode()).get(0);
+
+                //Build View SQL without Policy Rewrite
+                new AstTraverser<Void, Void>() {
+                    @Override
+                    public Void visitRelation(Relation relation, Void context) {
+                        relation.setNeedRewrittenByPolicy(true);
+                        return null;
+                    }
+                }.visit(stmt);
+
+                Analyzer.analyze(stmt, context);
+
+                QueryStatement queryStatement = (QueryStatement) stmt;
+                SelectRelation outerSelectRelation = (SelectRelation) queryStatement.getQueryRelation();
+                Expr projectionExpr = outerSelectRelation.getOutputExpression().get(0);
+                Assertions.assertInstanceOf(Subquery.class, projectionExpr,
+                        "the select-list item must still be the scalar subquery over protected_table");
+                QueryStatement innerQueryStatement = ((Subquery) projectionExpr).getQueryStatement();
+                SelectRelation innerSelectRelation = (SelectRelation) innerQueryStatement.getQueryRelation();
+
+                Assertions.assertInstanceOf(SubqueryRelation.class, innerSelectRelation.getRelation(),
+                        "protected_table referenced from the projection subquery must be wrapped into a "
+                                + "SubqueryRelation by the policy rewrite, proving the policy-marking visitor "
+                                + "reached it through the pre-analysis selectList");
+                SubqueryRelation rewrittenRelation = (SubqueryRelation) innerSelectRelation.getRelation();
+                SelectRelation rewriteSelectRelation =
+                        (SelectRelation) rewrittenRelation.getQueryStatement().getQueryRelation();
+                Assertions.assertInstanceOf(ArithmeticExpr.class, rewriteSelectRelation.getOutputExpression().get(0),
+                        "column mask rewrite (k1+1) must be applied to protected_table");
+            }
+        } finally {
+            Config.access_control = originalAccessControl;
+            starRocksAssert.dropDatabase(testDbName);
+        }
     }
 
     @Test

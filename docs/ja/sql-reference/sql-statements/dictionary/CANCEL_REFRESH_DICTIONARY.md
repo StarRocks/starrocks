@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "CANCEL REFRESH DICTIONARY は、辞書オブジェクトのリフレッシュをキャンセルします。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # CANCEL REFRESH DICTIONARY

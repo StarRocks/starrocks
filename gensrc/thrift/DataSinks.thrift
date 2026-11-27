@@ -50,6 +50,7 @@ include "PlanNodes.thrift"
 // Rules for this enum:
 //   - append new members with the next free value; never renumber or reuse one;
 //   - values >= 300 are reserved for extension fields and must not be used here.
+// REMOTE_SCAN_RESULT_SINK reserves the value used by the enterprise build.
 enum TDataSinkType {
     DATA_STREAM_SINK = 0,
     RESULT_SINK = 1,
@@ -69,7 +70,9 @@ enum TDataSinkType {
     SPLIT_DATA_STREAM_SINK = 15,
     NOOP_SINK = 16,
     ICEBERG_DELETE_SINK = 17,
-    ICEBERG_ROW_DELTA_SINK = 18
+    ICEBERG_ROW_DELTA_SINK = 18,
+    REMOTE_SCAN_RESULT_SINK = 19,
+    PAIMON_TABLE_SINK = 20
 }
 
 enum TResultSinkType {
@@ -315,6 +318,14 @@ struct TIcebergTableSink {
     12: optional TIcebergTableSinkExt ext
     // Parquet encryption info for encrypted Iceberg tables
     13: optional PlanNodes.TParquetEncryptionInfo parquet_encryption_info
+    // Explicit data-file Parquet writer sizes. Unset preserves BE defaults.
+    14: optional i32 parquet_page_size_bytes
+    15: optional i32 parquet_dict_size_bytes
+    16: optional i32 parquet_row_group_size_bytes
+    // Explicit compression level for Parquet data files. Unset uses the codec default.
+    17: optional i32 parquet_compression_level
+    // Explicit data-page version for Parquet data files. Unset uses the BE default (v1).
+    18: optional string parquet_data_page_version
 }
 
 struct THiveTableSink {
@@ -338,6 +349,42 @@ struct TSplitDataStreamSink {
     1: optional list<TDataStreamSink> sinks;
     2: optional list< list<TPlanFragmentDestination> > destinations;
     3: optional list<Exprs.TExpr> splitExprs;
+}
+
+enum TPaimonOverwriteMode {
+    APPEND = 0,
+    FULL = 1,
+    STATIC = 2,
+    DYNAMIC = 3
+}
+
+// Frozen write contract. Native schema JSON retains field ids, nested nullability and
+// timestamp precision that cannot be reconstructed from the scan tuple alone.
+struct TPaimonTableSink {
+    1: optional i64 target_table_id
+    2: optional i32 tuple_id
+    3: optional string location
+    4: optional string table_identity
+    5: optional i64 schema_id
+    6: optional string schema_json
+    7: optional list<string> column_names
+    8: optional list<string> partition_columns
+    9: optional list<string> bucket_columns
+    10: optional list<string> primary_key_columns
+    11: optional i32 bucket_count
+    12: optional map<string, string> options
+    13: optional string commit_user
+    // Field 14 is reserved.
+    15: optional string operation_id
+    // Legacy field for compatibility with backends that predate write_mode.
+    16: optional string overwrite_mode
+    17: optional map<string, string> static_partition
+    18: optional CloudConfiguration.TCloudConfiguration cloud_configuration
+    19: optional string time_zone
+    20: optional i32 writer_protocol_version
+    21: optional i32 routing_bucket_slot_id
+    22: optional bool bucket_routed
+    23: optional TPaimonOverwriteMode write_mode
 }
 
 // Extension point for TDataSink. DO NOT MODIFY: do not add fields here, and do
@@ -366,4 +413,5 @@ struct TDataSink {
   16: optional i64 sink_id
   17: optional TSplitDataStreamSink split_stream_sink
   18: optional TDataSinkExt ext
+  19: optional TPaimonTableSink paimon_table_sink
 }

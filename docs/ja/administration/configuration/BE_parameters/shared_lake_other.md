@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "BE 設定パラメーター：共有データクラスタ、データレイク統合、その他の設定項目。"
 sidebar_label: "共有データ、データレイク、その他"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 import BEConfigMethod from '../../../_assets/commonMarkdown/BE_config_method.mdx'
@@ -113,6 +114,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: ノード上で同時実行されるすべてのコンパクションタスクの並列マージプリフィル読み取りを実行する共有プールのスレッド数。タスクごとの同時発行上限より大きく設定されており、同時実行するタスクが互いの性能を薄め合わないようになっています。アイドルスレッドは 10 秒後に回収されるため、アイドル状態のノードにこの余裕分のコストは発生しません。読み取りのデコードもこのプールで行われるため、値を大きくすると IO の同時実行数だけでなく CPU とメモリの使用量も増加します。
 - 導入バージョン: v4.2
 
+### enable_lake_compaction_range_split
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: 共有データクラスタで、並列コンパクションが入力をソートキーの範囲で分割するかどうか。`true` に設定すると、並列コンパクションの各サブタスクは、すべての入力 Rowset のうち 1 つのソートキー範囲に含まれるデータを読み取り、サブタスク全体で Segment が互いに重ならない 1 つの Rowset を書き出します。範囲分割は、すべての入力 Segment がソートキーの上下限を記録している場合にのみ適用されます。それ以外の場合、または `false` に設定した場合、並列コンパクションは Rowset 単位でグループ化するか、大きな Rowset を Segment のインデックスで分割し、サブタスクの出力は互いに重なることがあります。タブレットあたりのサブタスクの最大数は、テーブルプロパティ `lake_compaction_max_parallel` で設定します。
+- 導入バージョン: v4.2
+
 ### lake_compaction_stream_buffer_size_bytes
 
 - デフォルト: 1048576
@@ -164,7 +174,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - タイプ: Boolean
 - 単位: -
 - 変更可能: はい
-- 説明: 共有データクラスタの主キーテーブルにおいて、1 つのトランザクション内での UPSERT と DELETE の順序を保持するかどうか。1 つのロードトランザクションに同一キーの `DELETE` とそれ以降の再 `UPSERT` が含まれる場合、有効にすると再 UPSERT が優先されます（共有なしクラスタの動作と一致）。デフォルトで有効です。ダウングレードの安全性のため、この修正をサポートしない BE バージョンにロールバックする（または混在クラスタで実行する）前に `false` に設定してください。有効にすると、この修正をサポートしないバージョンにロールバックした BE が誤って解釈しうるオンディスクメタデータをロードが永続化し、主キーの重複を引き起こす可能性があります。無効の場合、DELETE は従来の動作（トランザクション内のすべての UPSERT の後に適用）にフォールバックします。
+- 説明: 共有データクラスタの主キーテーブルにおいて、1 つのトランザクション内での UPSERT と DELETE の順序を保持するかどうか。1 つのロードトランザクションに同一キーの `DELETE` とそれ以降の再 `UPSERT` が含まれる場合、有効にすると再 UPSERT が優先されます（共有なしクラスタの動作と一致）。デフォルトで有効です。ダウングレードの安全性のため、この修正をサポートしない BE バージョンにロールバックする（または混在クラスタで実行する）前に `false` に設定してください。有効にすると、この修正をサポートしないバージョンにロールバックした BE が誤って解釈しうるオンディスクメタデータをロードが永続化し、主キーの重複を引き起こす可能性があります。無効の場合、DELETE は従来の動作（トランザクション内のすべての UPSERT の後に適用）にフォールバックします。1 つのロードで同じキーを DELETE してから再度 UPSERT し、その DELETE と UPSERT が別々にフラッシュされる場合（大量データのロードなど）、そのキーは最終的に削除され、UPSERT は失われます。ソートキー（`ORDER BY`）が主キーと異なる主キーテーブルでは、この設定にかかわらず常に順序が保持されます。
 - 導入バージョン: v4.1.4
 
 ### lake_enable_protobuf_file_checksum
@@ -196,6 +206,21 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: File Bundling を有効にした共有データテーブルの Publish で、アグリゲーターが受け取れなかった可能性のある各 Tablet の結果を保持するかどうか。リクエスト到着から Publish の RPC タイムアウトに 3 秒を加えた時間を過ぎて完了した Tablet、またはリトライの Publish で処理された Tablet は、その結果をオブジェクトストレージではなく、そのノードのローカル Data Cache に保持します。以降、そのノードでのリトライはトランザクションを再適用せずにこの結果を読み取るため、遅いパーティションのリトライのたびに、完了済みの Tablet が再実行されることはありません。これらのエントリは他の Data Cache のデータと同様に退避されます。Data Cache が有効な場合にのみ機能します。すべての BE ノードと CN ノードで同じ値を設定してください。
 - 導入バージョン: v4.2
 
+### lake_enable_txn_vlog_group
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: 共有データクラスタの Schema Change Publish で、複数ステートメントからなるトランザクションを、ステートメント順のロググループとして独立した `{tablet}_{version}.group.vlog` ファイルに書き込むかどうか。従来の単一ログは `{tablet}_{version}.vlog` ファイルを使用します。この項目の設定にかかわらず、本バージョンの読み取り側は従来の単一ログ形式と新しいステートメントグループ形式の両方に対応します。デフォルトの `true` では、各ステートメントが自身のスキーマ、セグメント、書き換えメタデータ、削除位置を保持するため、同一トランザクション内で DELETE の後に INSERT を実行しても、部分更新メタデータの不一致により Shadow Publish が失敗することはありません。`false` に設定すると、従来のログをマージする書き込み処理に戻り、この既知の問題も再び発生します。この項目を変更しても、既に書き込まれたバージョン付きトランザクションログは変換されません。
+
+  グループ形式の読み取りに対応していないバージョンの CN は、ステートメントグループを読み取れません。この項目が存在しない、またはデフォルトが `false` の以前のバージョンからアップグレードする場合は、アップグレードした各 CN を起動する前に `cn.conf` で `lake_enable_txn_vlog_group = false` を設定し、Publish、リプレイ、またはクリーンアップを実行する可能性のあるすべての CN のアップグレードが完了するまで `false` のままにしてください。これには、バックグラウンドのワーカーノードや、交換用ノードに使用するイメージも含まれます。その後、以下の手順で有効にしてください。以前のバージョンがグループ形式を読み取れない場合、この手順は必須です。旧バージョンの CN が残っている状態でグループ形式の書き込みを有効にすると、コミット済みトランザクションのステートメントがエラーなく失われる可能性があります。グループの書き込み側が一部のソースログを削除した後、旧 CN が残りのソースログだけでリトライして不完全な従来形式のログを書き込み、リプレイではグループファイルよりもそのログが優先されるためです。
+
+  有効化と無効化のどちらの場合も、切り替える前に関連する Schema Change と複数ステートメントの Publish 処理を一時停止し、実行中のリクエストが完了するのを待ち、すべての対象 CN の設定を同じ値に更新してから処理を再開してください。この項目は読み取り機能の対応状況をネゴシエーションせず、クラスタ全体でのアトミックな切り替えも提供しません。
+
+  `false` に設定すると、それ以降のグループ形式での書き込みのみが停止します。既存のグループ形式のログは変換、消費、または削除されません。グループ形式の読み取りに対応していないバージョンにダウングレードする前に、すべての対象ストレージルートの `txnlog` ディレクトリを一覧し、`*.group.vlog` ファイルが一つも残っていないことを確認してください。有効な従来形式のログと共存する未使用のグループファイルも対象です。旧バージョンの Tablet クリーンアップもこれらのファイルを走査しますが、デコードできません。ALTER が `FINISHED` になったこと、トランザクションが `VISIBLE` になったこと、または通常の Vacuum が完了したことだけでは、ファイルが残っていないとは確認できません。File Bundling が有効な場合、リプレイが成功してもこれらのログは保持され、通常の Vacuum もバージョン付きログを回収しません。残っている場合は、安全なクリーンアップが完了するまでグループ形式を読み取れるバージョンを使用し続けてください。この項目を無効にするだけでは、安全にダウングレードできません。
+- 導入バージョン: -
+
 ### lake_pk_compaction_max_input_rowsets
 
 - デフォルト: 500
@@ -220,8 +245,8 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - タイプ: Boolean
 - 単位: -
 - 変更可能: はい
-- 説明: 共有データクラスタで、主キーテーブルの tablet の削除量が `lake_pk_compaction_base_delete_ratio_threshold` または `lake_pk_compaction_base_delete_rows_threshold` に達したときに、累積コンパクションからベースコンパクションへ自動的に切り替えるかどうか。`lake_pk_compaction_base_delete_rows_threshold` は絶対行数であるため、デフォルトでは無効です。既存の行が継続的に更新または削除される大きなテーブルでは、tablet はベースコンパクションのたびにすぐ再びこの値に達し、各ベースコンパクションは tablet のデータのうち最大 `update_compaction_ratio_threshold` (デフォルト 0.5) の割合を書き換えます。手動の `ALTER TABLE ... COMPACT` は、この項目の設定に関係なくベースコンパクションを実行します。
-- 導入バージョン: v4.1.6, v26.2.1
+- 説明: 共有データの主キータブレットに対する自動 Compaction で、削除率または削除行数がしきい値に達したときに Base Compaction を選択できるかどうか。このスイッチは削除量による自動 Base Compaction だけを制御し、通常の Cumulative Compaction には影響しません。継続的な更新や削除がある大きなタブレットでは、絶対削除行数のしきい値に頻繁に達し、データが繰り返し書き換えられる可能性があるため、デフォルトでは無効です。手動の `ALTER TABLE ... COMPACT` はこのスイッチと 2 つの削除しきい値を回避します。削除行がなければ通常の Compaction 選択にフォールバックします。自動と手動のいずれも、1 回でタブレット全体がマージされるとは限りません。[主キーテーブルの Base Compaction](../../management/compaction.md#primary-key-base-compaction)を参照してください。
+- 導入バージョン: v4.1.7, v26.2.1
 
 ### lake_pk_compaction_base_delete_ratio_threshold
 
@@ -229,8 +254,8 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - タイプ: Double
 - 単位: -
 - 変更可能: はい
-- 説明: 共有データクラスタで、主キーテーブルの tablet を累積コンパクション (サイズ階層型の小ファイルマージ) からベースコンパクションに切り替える 2 つのトリガーの 1 つ。ベースコンパクションは削除を含む rowset を (削除行数の多いものから優先して) 書き換え、削除された行を物理的に除去して delete vector を縮小します。`lake_pk_compaction_base_enable_delete_trigger` が `true` の場合、tablet の集約削除率 (各 rowset の `sum(num_dels) / sum(num_rows)`) がこの値に達したとき、または絶対削除行数が `lake_pk_compaction_base_delete_rows_threshold` に達したときに実行されます。手動の `ALTER TABLE ... COMPACT` は、これらの設定に関係なくベースコンパクションを強制します。
-- 導入バージョン: v4.2
+- 説明: 共有データの主キータブレットで、削除量による自動 Base Compaction の選択を判定する 2 つのしきい値の一方です。現在のすべての Rowset の合計削除率 `sum(num_dels) / sum(num_rows)` がこの値に達するか、合計削除行数が `lake_pk_compaction_base_delete_rows_threshold` に達すると選択対象になります。v4.1.4～v4.1.6 は両方のしきい値を直接確認します。v4.1.7 以降は `lake_pk_compaction_base_enable_delete_trigger = true` も必要です。手動の `ALTER TABLE ... COMPACT` は両方のしきい値を回避します。しきい値に達しても FE による即時スケジュールは保証されません。[自動トリガー](../../management/compaction.md#automatic-base-compaction)を参照してください。
+- 導入バージョン: v4.1.4
 
 ### lake_pk_compaction_base_delete_rows_threshold
 
@@ -238,8 +263,8 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - タイプ: Int
 - 単位: -
 - 変更可能: はい
-- 説明: 共有データクラスタでの主キーテーブルのベースコンパクションの 2 つのトリガーの 1 つ (`lake_pk_compaction_base_delete_ratio_threshold` を参照)。`lake_pk_compaction_base_enable_delete_trigger` が `true` の場合、tablet の絶対削除行数 (各 rowset の `sum(num_dels)`) がこの値に達したときにベースコンパクションが実行されます。この絶対数トリガーは比率トリガーを補完します。高頻度の更新/削除テーブルでは、delete vector が肥大化して領域が無駄になる一方、集約削除率は多数のほぼ生存している rowset によって希釈されて低いままになるため、比率トリガーだけでは発火しません。この値を大きくするとベースコンパクションの頻度が下がり、小さくすると delete vector をより早く回収できます。
-- 導入バージョン: v4.2
+- 説明: 共有データの主キータブレットで、削除量による自動 Base Compaction を選択する絶対行数のしきい値です。`lake_pk_compaction_base_delete_ratio_threshold` と OR 条件で組み合わせます。削除行数はタブレット内の現在のすべての Rowset の `sum(num_dels)` です。v4.1.4～v4.1.6 はこのしきい値を直接確認します。v4.1.7 以降は `lake_pk_compaction_base_enable_delete_trigger = true` も必要です。手動要求はこのしきい値を回避します。全体の削除率が低くても Delete Vector の削除マークが多い場合を補います。値を大きくすると自動 Base Compaction の頻度が下がり、小さくすると削除データ回収の選択対象に早くなります。[自動トリガー](../../management/compaction.md#automatic-base-compaction)を参照してください。
+- 導入バージョン: v4.1.4
 
 ### enable_lake_pk_compaction_score_gate
 
@@ -347,13 +372,48 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 変更可能: はい
 - 説明: 共有データクラスタでの主キーテーブル軽量コンパクション publish 時、`RowsMapperIterator` のパイプライン化された `.lcrm` 読み取りにおける sub-chunk の粒度。各出力 segment は `ceil(segment_bytes / lake_rows_mapper_sub_chunk_bytes)` 個の sub-chunk に分割され、独立してパイプライン化されます。値を小さくするほど、少数の大きな出力 segment で達成可能な並列度が上がりますが、その代わりに範囲読み取りが増え、consume 時に追加の memcpy が発生します。デフォルトは 4 MiB で、starcache のディスク層 block サイズと一致させています。
 
-### lake_segment_metadata_cache_limit_percent
+### lake_scan_parallel_segment_open
 
-- デフォルト: 20
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: 共有データクラスタのクエリスキャンで、タブレットのすべての Rowset の Segment を Rowset ごとに順番に開くのではなく、Segment ロードスレッドプール上で Segment ごとに 1 タスクとして一度に開き、各 Rowset のイテレータを並列に構築するかどうか。クエリスキャンにのみ適用されます。`remote_io_scheduler_enable` が `true` の場合にのみ有効です。ロード、コンパクション、その他の読み取りは引き続き `enable_load_segment_parallel` に従います。フッターが Segment メタデータキャッシュですでに開かれている Segment は、タスクを使わずにそのまま使用されます。クエリプロファイルでは、これらは `TabletPrepareCachedSegments` に、フッターの読み取りはその他の `TabletPrepare*` カウンタに報告されます。
+- 導入バージョン: -
+
+### lake_scan_warm_index
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: 共有データクラスタのクエリスキャン（分割の有無を問わない）が Tablet の Segment を開いた後、次に読むインデックスページを非同期でウォームアップするかどうか。対象は各 Segment の短キーインデックス、述語列の zone map、bloom filter、bitmap インデックスのルートページ、読み取り列の ordinal index のルートページです。同様に、等値述語と `IN` 述語の bitmap インデックス検索では、すべての値の辞書ページをまとめて要求し、続いて選択したすべての bitmap のページをまとめて要求してから読み取ります。スキャンはウォームアップの完了を待たず、失敗した場合は通常どおり読み取ります。Segment メタデータフィルター（`enable_lake_segment_metadata_filter`）によってスキャン対象から除外された Segment はウォームアップしません。この項目はクエリにのみ適用され、リモート I/O スケジューラー（`remote_io_scheduler_enable`）が有効な場合にのみ効果があります。`lake_scan_parallel_segment_open` とは独立しています。ウォームアップの状況はクエリプロファイルの `TabletPrepareIndexWarmSegments`、`TabletPrepareIndexWarmRanges`、`TabletPrepareIndexWarmBlocks`、`TabletPrepareIndexWarmSkipped`、`TabletPrepareIndexWarmPrunedSegments` に、bitmap インデックスページの要求状況は `BitmapIndexPrefetchPages` と `BitmapIndexPrefetchBlocks` に記録されます。
+
+### lake_scan_read_ahead_segments
+
+- デフォルト: 16
 - タイプ: Int
 - 単位: -
 - 変更可能: はい
-- 説明: 共有データクラスタにおける Segment メタデータキャッシュの容量で、BE プロセスメモリ上限に対する割合（パーセント）で指定します。このキャッシュは、オープン済みの Segment（フッター、インデックス、カラムリーダー）、delete vector、および Tablet スキーマを保持します。Tablet メタデータキャッシュ（`lake_tablet_metadata_cache_limit_percent` を参照）とは独立しているため、大量の Segment をロードしても Tablet メタデータやトランザクションログが追い出されることはありません。0–100 の範囲外の値は 0 または 100 として扱われます。`0` に設定するとこのキャッシュを無効にします。この項目は `lake_tablet_metadata_cache_limit_percent` とともに `lake_metadata_cache_limit` を置き換えます。
+- 説明: リモート IO スケジューラーが有効な場合、Tablet の Segment を順番に読む lake クエリスキャン（Tablet が複数のスキャンタスクに分割されていない場合）は、現在の Segment が自身のブロックをすべて要求し終えると、現在の Segment を読みながら後続の Segment の先頭ブロックの取得を開始します。先読みする Segment はこの値までです。それらが要求済みで未読のブロックの合計が `remote_prefetch_window_blocks` 個のキャッシュブロック未満のときにのみ次の Segment の先読みを開始するため、最後に開始した Segment によって合計がウィンドウの約 2 倍に達することがあります。`0` を指定すると無効になり、各 Segment は自分の順番が来たときに先読みを開始します。分割スキャン、取り込み、Compaction には影響しません。クエリプロファイルの SegmentReadAheadStarted に記録されます。
+- 導入バージョン: -
+
+### lake_segment_metadata_cache_limit_percent
+
+- デフォルト: 10
+- タイプ: Int
+- 単位: -
+- 変更可能: はい
+- 説明: 共有データクラスタにおける Segment メタデータキャッシュの容量で、BE プロセスメモリ上限に対する割合（パーセント）で指定します。このキャッシュは、オープン済みの Segment（フッター、インデックス、カラムリーダー）、delete vector、および Tablet スキーマを保持します。Tablet メタデータキャッシュ（`lake_tablet_metadata_cache_limit_percent` を参照）とは独立しているため、大量の Segment をロードしても Tablet メタデータやトランザクションログが追い出されることはありません。0–100 の範囲外の値は 0 または 100 として扱われます。`0` に設定するとこのキャッシュを無効にします。この項目は `lake_tablet_metadata_cache_limit_percent` とともに `lake_metadata_cache_limit` を置き換えます。この値はキャッシュ容量の上限であり、BE プロセスのメモリが逼迫するとキャッシュはこの値より小さく縮小されます（`lake_tablet_metadata_cache_min_limit` を参照）。
+- 導入バージョン: -
+
+### lake_segment_metadata_cache_min_limit
+
+- デフォルト: 1073741824
+- タイプ: Long
+- 単位: Bytes
+- 変更可能: はい
+- 説明: 共有データクラスタにおいて、メモリ逼迫時に Segment メタデータキャッシュがメモリを解放する際（`lake_tablet_metadata_cache_min_limit` を参照）の容量の下限。この値が `lake_segment_metadata_cache_limit_percent` で設定された容量より大きい場合、キャッシュはその容量のまま縮小しません。
 - 導入バージョン: -
 
 ### lake_shard_info_cache_ttl_sec
@@ -367,11 +427,20 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ### lake_tablet_metadata_cache_limit_percent
 
-- デフォルト: 10
+- デフォルト: 5
 - タイプ: Int
 - 単位: -
 - 変更可能: はい
-- 説明: 共有データクラスタにおける Tablet メタデータキャッシュの容量で、BE プロセスメモリ上限に対する割合（パーセント）で指定します。このキャッシュは Tablet メタデータとトランザクションログを保持します。Segment メタデータキャッシュ（`lake_segment_metadata_cache_limit_percent` を参照）とは独立しているため、大量の Segment をロードしてもこれらが追い出されることはありません。0–100 の範囲外の値は 0 または 100 として扱われます。`0` に設定するとこのキャッシュを無効にします。この項目は `lake_segment_metadata_cache_limit_percent` とともに `lake_metadata_cache_limit` を置き換えます。
+- 説明: 共有データクラスタにおける Tablet メタデータキャッシュの容量で、BE プロセスメモリ上限に対する割合（パーセント）で指定します。このキャッシュは Tablet メタデータとトランザクションログを保持します。Segment メタデータキャッシュ（`lake_segment_metadata_cache_limit_percent` を参照）とは独立しているため、大量の Segment をロードしてもこれらが追い出されることはありません。0–100 の範囲外の値は 0 または 100 として扱われます。`0` に設定するとこのキャッシュを無効にします。この項目は `lake_segment_metadata_cache_limit_percent` とともに `lake_metadata_cache_limit` を置き換えます。この値はキャッシュ容量の上限であり、BE プロセスのメモリが逼迫するとキャッシュはこの値より小さく縮小されます（`lake_tablet_metadata_cache_min_limit` を参照）。
+- 導入バージョン: -
+
+### lake_tablet_metadata_cache_min_limit
+
+- デフォルト: 1073741824
+- タイプ: Long
+- 単位: Bytes
+- 変更可能: はい
+- 説明: 共有データクラスタにおける Tablet メタデータキャッシュの容量の下限。BE プロセスのメモリ使用量が `memory_high_level` を超えると、Tablet メタデータキャッシュと Segment メタデータキャッシュは容量を現在の使用量より小さくし、最も長く使われていないエントリを追い出します。解放するメモリ量は、各キャッシュの使用量が下限（この項目と `lake_segment_metadata_cache_min_limit`）を超えている分に比例して両キャッシュに配分されます。`memory_high_level` を超えた分は約 50 秒かけて段階的に解放されます。使用量が `memory_urgent_level` も超えた場合は、`memory_urgent_level` を超えた分が即座に解放されます。使用量が `memory_high_level` を下回ると、容量は約 200 秒かけて `lake_tablet_metadata_cache_limit_percent` と `lake_segment_metadata_cache_limit_percent` で設定された値まで段階的に戻ります。チェックは 10 秒ごとに行われます。この値が `lake_tablet_metadata_cache_limit_percent` で設定された容量より大きい場合、キャッシュはその容量のまま縮小しません。
 - 導入バージョン: -
 
 ### lake_vacuum_enable_task_timeout
@@ -433,6 +502,141 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 単位: -
 - 変更可能: Yes
 - 説明: 共有データクラスタにおける主キーインデックスキャッシュの使用量の上限で、キャッシュ容量に対するパーセンテージで指定します。各 Publish の終了時（メモリ制限超過で失敗した場合を除く）に確認され、使用量がこの割合を超えている場合は、使用中でない主キーインデックスを最も長く使われていないものから順に追い出し、この割合以内に収めます。バックグラウンドスレッドが `primary_key_index_memory_high_percent` まで縮小するよりも速くキャッシュが増えた場合の歯止めとなるため、その値より大きい値を設定してください。
+- 導入バージョン: -
+
+### remote_io_scheduler_enable
+
+- デフォルト: false
+- タイプ: Boolean
+- 単位: -
+- 変更可能: いいえ
+- 説明: 共有データクラスタでリモート I/O スケジューラを有効にするかどうか。有効にすると、Data Cache にヒットせずにオブジェクトストレージへ発行される GET リクエストは、CN ごとに 1 つのスケジューラで待機し、重みに従って許可されます。クエリ、ロード、Compaction、その他のバックグラウンドタスクは `remote_read_query_weight`、`remote_read_load_weight`、`remote_read_compaction_weight`、`remote_read_background_weight` に従ってオブジェクトストレージの読み取り能力を分け合います。クエリ同士はリソースグループの `cpu_weight` に従って分け合い、同じリソースグループ内では読み取り量が多いクエリほど割り当てが減るため、大きなスキャンは新しい小さなクエリに譲ります。クエリのスキャンは、これから読むページのキャッシュブロックも先読みします（`remote_prefetch_window_blocks` を参照）。スケジューラには `datacache_enable` と `starlet_use_star_cache` の両方が `true` である必要があります。そうでない場合、CN は警告ログを出力し、スケジューラが無効な場合と同じように読み取ります。有効な間は、`io_coalesce_lake_read_enable` が起動時に `false` に設定され、`starlet_fs_read_prefetch_enable` は設定値を変えずに強制的に無効になります。これらを動的に有効にする操作は拒否されます。設定ファイルは変更されないため、スケジューラを無効にして CN を再起動すると両方とも元に戻ります。スケジューラのパラメータに不正な値がある場合、CN は起動を拒否します。
+- 導入バージョン: -
+
+### remote_prefetch_late_read_ahead_ratio
+
+- デフォルト: 0.5
+- タイプ: Double
+- 単位: -
+- 変更可能: はい
+- 説明: 遅延マテリアライゼーションでは、述語を満たす行のためだけに読む列は、それらの行が確定した後にチャンクごとに取得されます。Segment Reader の 4 番目のチャンク以降、それらの行が範囲内のページのうちこの割合以上に触れた場合、これらの列は述語列と同様に先読みされるようになります。1 より大きい値では切り替わりません。変更は以降に開かれる Segment Reader に反映されます。`remote_io_scheduler_enable` が `true` の場合にのみ有効です。
+- 導入バージョン: -
+
+### lake_compaction_prefetch_window_blocks
+
+- デフォルト: 32
+- タイプ: Int
+- 単位: -
+- 変更可能: はい
+- 説明: 実験用。lake compaction タスクが入力セグメント全体で先読みして Data Cache に格納する目標ブロック数です。ワーカーのメモリ上限が設定されている場合、予算はその 8 分の 1 に制限され、物理入力セグメント数で割って切り捨てられます。ただし、各セグメントは少なくとも 1 ブロックを先読みするため、セグメント数が予算より多い入力では各セグメントが 1 ブロックずつ先読みし、合計が予算とメモリ上限を超えます。0 で無効になります。remote I/O scheduler、テーブルのキャッシュ、対象の compaction モードのキャッシュ書き込みを有効にする必要があります。対象のスカラーページは COMPACTION ワークロードを使用します。
+- 導入バージョン: -
+
+### remote_prefetch_window_blocks
+
+- デフォルト: 128
+- タイプ: Int
+- 単位: -
+- 変更可能: はい
+- 説明: クエリの Segment Reader が、消費中の位置より先に要求する Data Cache ブロックの最大数。キュー中、取得中、取得済みで未読のブロックを含みます。Reader がどこまで先行するかを制限するもので、ブロックをいつ取得するかはスケジューラが決めます。ロードなどのその他のバックグラウンド読み取りは先読みしません。Compaction の先読みは `lake_compaction_prefetch_window_blocks` で制御します。`0` で先読みを無効にします。変更は以降に開かれる Segment Reader に反映されます。`remote_io_scheduler_enable` が `true` の場合にのみ有効です。
+- 導入バージョン: -
+
+### remote_read_adaptive_limit
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: いいえ
+- 説明: リモート I/O スケジューラが、実行中の GET リクエスト数を `remote_read_io_threads` 以下で、オブジェクトストレージへの経路が処理できる量に合わせるかどうか。収まらないリクエストはネットワークではなくスケジューラで待機し、重みに従って次に実行するものが決まります。`false` の場合、実行中のリクエストは最大 `remote_read_io_threads` 個です。`remote_io_scheduler_enable` が `true` の場合にのみ有効です。
+- 導入バージョン: -
+
+### remote_read_adaptive_min_inflight
+
+- デフォルト: 16
+- タイプ: Int
+- 単位: -
+- 変更可能: いいえ
+- 説明: 適応的な上限の最小値で、スケジューラが負荷のないリクエストのレイテンシを測定する際に一時的に保持する同時実行数でもあります。正の値である必要があります。`remote_io_scheduler_enable` と `remote_read_adaptive_limit` の両方が `true` の場合にのみ有効です。
+- 導入バージョン: -
+
+### remote_read_background_weight
+
+- デフォルト: 1
+- タイプ: Int
+- 単位: -
+- 変更可能: いいえ
+- 説明: すべてが待機している場合の、Compaction 以外のバックグラウンドタスクによるオブジェクトストレージ読み取りの割り当て。`remote_read_query_weight`、`remote_read_load_weight`、`remote_read_compaction_weight` に対する相対値です。正の値である必要があります。`remote_io_scheduler_enable` が `true` の場合にのみ有効です。
+- 導入バージョン: -
+
+### remote_read_compaction_weight
+
+- デフォルト: 1
+- タイプ: Int
+- 単位: -
+- 変更可能: いいえ
+- 説明: すべてが待機している場合の、Compaction によるオブジェクトストレージ読み取りの割り当て。`remote_read_query_weight`、`remote_read_load_weight`、`remote_read_background_weight` に対する相対値です。正の値である必要があります。`remote_io_scheduler_enable` が `true` の場合にのみ有効です。
+- 導入バージョン: -
+
+### remote_read_io_threads
+
+- デフォルト: 0
+- タイプ: Int
+- 単位: -
+- 変更可能: いいえ
+- 説明: スケジュールされた GET リクエストを発行するスレッド数。CN 上で実行中の GET リクエスト数の上限になります。`0` の場合、共有データのスキャンスレッド数、つまり `pipeline_connector_scan_thread_num_per_cpu` と CPU コア数の積になります。負の値は指定できません。`remote_io_scheduler_enable` が `true` の場合にのみ有効です。
+- 導入バージョン: -
+
+### remote_read_load_weight
+
+- デフォルト: 5
+- タイプ: Int
+- 単位: -
+- 変更可能: いいえ
+- 説明: すべてが待機している場合の、ロードによるオブジェクトストレージ読み取りの割り当て。Publish、主キーインデックス、削除ファイル、ロードのスピルを含みます。`remote_read_query_weight`、`remote_read_compaction_weight`、`remote_read_background_weight` に対する相対値です。正の値である必要があります。`remote_io_scheduler_enable` が `true` の場合にのみ有効です。
+- 導入バージョン: -
+
+### remote_read_query_weight
+
+- デフォルト: 9
+- タイプ: Int
+- 単位: -
+- 変更可能: いいえ
+- 説明: すべてが待機している場合の、クエリによるオブジェクトストレージ読み取りの割り当て。`remote_read_load_weight`、`remote_read_compaction_weight`、`remote_read_background_weight` に対する相対値です。正の値である必要があります。`remote_io_scheduler_enable` が `true` の場合にのみ有効です。
+- 導入バージョン: -
+
+### remote_read_retain_prefetched_bytes
+
+- デフォルト: 2147483648
+- タイプ: Int
+- 単位: Bytes
+- 変更可能: はい
+- 説明: 共有データクラスタで、ノードがメモリ上に保持する Segment ファイルの先読み済み Block の合計サイズの上限。リモート I/O スケジューラ（`remote_io_scheduler_enable`）がクエリのスキャンのために先読みした Block は、読み取り完了後もスキャンがその Block を対象としている間はメモリ上に保持され、スキャンは Data Cache から読み直す代わりにメモリから Page をコピーします。Block は引き続き Data Cache にも書き込まれます。メモリ上に保持した Block の合計がこの値に達すると、それ以降に完了した Block は保持されません。`0` に設定するとこの機能は無効になります。リモート I/O スケジューラが無効な場合、この項目は効果がありません。保持の対象は上書きされることのない Segment ファイルのみで、メタデータなどその他のファイルは保持されません。このメモリはプロセスに計上され、どのクエリにも計上されません。値を大きくすると、その後に完了した Block から適用されます。値を小さくすると、合計が新しい値を下回るまで新しい Block は保持されず、保持済みの Block は、次に読み取られた時点で合計がまだ新しい値を超えていれば読み取り後に解放され、スキャンの対象外になったときにも解放されます。バックグラウンドでの追い出しは行われません。負の値は指定できません。リモート I/O スケジューラが有効な場合、負の値が設定されていると CN は起動を拒否し、負の値への動的な変更は拒否されます。
+- 導入バージョン: v4.2
+
+### remote_read_skip_contended_cache_writes
+
+- デフォルト: false
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: 共有データクラスタで、キャッシュディスクが混雑しているときに、リモート IO スケジューラーが取得したブロックの Data Cache への書き込みを省略できるかどうか。混雑とは、250 ms ごとのサンプリングで 2 回連続して、ディスク使用率が 90% 以上かつ読み取りがサービス時間の 20% 以上を占める状態を指します。対象は大規模なクエリスキャンの後半で取得されたブロックのみで、さらにそのブロックが `remote_read_retain_prefetched_bytes` の範囲でメモリに保持され、読み取り側にメモリから提供される場合に限ります。書き込みを省略したブロックを後で読み取る場合は、オブジェクトストレージから再取得します。キャッシュディスクがネットワークより遅く、後続のスキャンが直前のスキャンでキャッシュしたブロックを読み戻す場合に効果があります。`remote_io_scheduler_enable` が `false` の場合、または `remote_read_retain_prefetched_bytes` が `0` の場合は効果がありません。変更はその後に取得されるブロックに反映されます。
+- 導入バージョン: -
+
+### remote_read_weight_decay_ios
+
+- デフォルト: 1024
+- タイプ: Int
+- 単位: -
+- 変更可能: いいえ
+- 説明: 読み取りに応じてクエリのリソースグループ内の割り当てが減る速さ。クエリまたはバックグラウンドタスクが読む n 番目のキャッシュブロックの重みは `max(remote_read_weight_decay_min, 2^(-n / remote_read_weight_decay_ios))` で、大きなスキャンは同じリソースグループの新しいクエリにますます譲ります。`0` で減衰を無効にします。負の値は指定できません。`remote_io_scheduler_enable` が `true` の場合にのみ有効です。
+- 導入バージョン: -
+
+### remote_read_weight_decay_min
+
+- デフォルト: 0.03125
+- タイプ: Double
+- 単位: -
+- 変更可能: いいえ
+- 説明: `remote_read_weight_decay_ios` によって下がる重みの最小値。0 より大きく 1 以下である必要があります。`remote_io_scheduler_enable` が `true` の場合にのみ有効です。
 - 導入バージョン: -
 
 ### s3_multipart_equal_part_size
@@ -507,6 +711,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: 共有データクラスタにおいて、S3 または S3 互換オブジェクトストレージへのマルチパートアップロードで使用するパートサイズです。パートのアップロードまで、出力ストリームごとに最大このサイズまでメモリにバッファリングされるため、値を大きくするとメモリ使用量が増加し、同時実行される出力ストリーム数に比例して増加します。値を小さくしすぎるとリクエスト数が増加し、AWS S3 の 10,000 パート上限を超えたり、最小パートサイズ 5 MB を下回ったりする可能性があります。他の S3 互換ストレージでは制限が異なります。変更は進行中のアップロードにも反映されます。値は 0 より大きい必要があり、0 以下の値は拒否されます。有効な値は、BE のコマンドラインで渡された対応する `--fslib_*` gflag を上書きします。BE 起動時に拒否された値は適用されず、BE は以前に有効だった値を保持して警告ログを出力するため、この項目が表示する値が実際に有効な値と異なる場合があります。この項目は共有データクラスタの starlet アップロードを制御するもので、`experimental_s3_*` 項目とは無関係です。
 - 導入バージョン: v4.1.5, v4.2
 
+### starlet_grpc_client_enable_http_proxy
+
+- デフォルト: false
+- タイプ: Boolean
+- 単位: -
+- 変更可能: いいえ
+- 説明: 共有データクラスタで、この CN が StarMgr および他の CN に対して開始する gRPC 接続が、CN プロセスの環境変数で設定された HTTP プロキシを経由するかどうか。これらの接続は、tablet 情報の照会（GetShard）、worker ハートビート、tablet レプリカ情報の更新、および CN 間の Data Cache のレプリケーションに使用されます。CN は小文字の `grpc_proxy`、`https_proxy`、`http_proxy` 環境変数からのみプロキシを取得し、小文字の `no_grpc_proxy` または `no_proxy` に記載されたホストに対してのみプロキシをバイパスします。デフォルト値の `false` では、これらの環境変数を無視して直接接続します。そのため、CN プロセスが他の外部通信用のプロキシ設定を継承しており、そのバイパスリストにクラスタノードのアドレスが含まれていない場合でも、クラスタノード間の通信がプロキシに送られることはありません。これらの接続がプロキシを経由する必要がある場合にのみ `true` に設定してください。これは以前のバージョンの動作です。この項目は、オブジェクトストレージへのアクセスなど、CN の他の外部通信には影響しません。CN はこの項目を起動時に一度だけ読み取るため、変更は CN の再起動後にのみ有効になります。FE 側の接続については、FE パラメータ `starmgr_grpc_client_enable_http_proxy` を参照してください。
+- 導入バージョン: v26.3
+
 ### starlet_port
 
 - デフォルト: 9070
@@ -533,6 +746,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 変更可能: いいえ
 - 説明: 共有データクラスタで、この CN プロセスが書き込み、その後追い出されていない Data Cache のディスクブロックについて、後続のリクエストが最初にアクセスする際にブロック全体のチェックサム読み取りをスキップするかどうか。この検証はブロック全体をディスクから読み直して、プロセスが書き込んだばかりでまだメモリ上で追跡しているデータを検査するため、新しくキャッシュされたすべてのブロックの初回アクセスでディスク読み取りが 1 回余分に発生します。この項目を `false` に設定すると初回アクセス時にすべてのブロックを検証します。これはキャッシュディスクが保存済みデータを破損させている疑いがある場合にのみ、そのコストに見合います。この項目の設定にかかわらず、プロセスの前回の実行から引き継いだブロックは常に検証されます。現在のプロセスはその書き込みを見ていないためです。この項目は Data Cache の初期化時に一度だけ読み取られます。
 - 導入バージョン: v4.2.0
+
+### starlet_star_cache_write_overwrite
+
+- デフォルト: false
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: 共有データクラスタで、Data Cache への書き込みが同じキーで既にキャッシュされているオブジェクトを置き換えるかどうか。この項目が `false` の場合、既存のオブジェクトを保持し、その書き込みは成功として報告されます。これは、書き込むバイト列が既にキャッシュされている内容と同じであるリードスルーのフィル経路に適しています。`true` に設定すると、古い、または破損している疑いのあるブロックを再読み取りで更新できます。Data Cache は書き込みのたびにこの項目を読み取るため、変更はキャッシュを再初期化することなく次の書き込みから有効になります。
+- 導入バージョン: -
 
 ### starlet_starmgr_client_compression_type
 
@@ -601,11 +823,11 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ### datacache_disk_size
 
-- デフォルト: 0
+- デフォルト: 100%
 - タイプ: String
 - 単位: -
 - 変更可能: はい
-- 説明: 単一ディスクにキャッシュできるデータの最大量。パーセンテージ (例: `80%`) または物理的な制限 (例: `2T`、`500G`) として設定できます。たとえば、2 つのディスクを使用し、`datacache_disk_size` パラメータの値を `21474836480` (20 GB) に設定した場合、これらの 2 つのディスクに最大 40 GB のデータをキャッシュできます。デフォルト値は `0` で、これはメモリのみがデータをキャッシュするために使用されることを示します。
+- 説明: 単一ディスクにキャッシュできるデータの最大量。パーセンテージ (例: `80%`) または物理的な制限 (例: `2T`、`500G`) として設定できます。たとえば、2 つのディスクを使用し、`datacache_disk_size` パラメータの値を `21474836480` (20 GB) に設定した場合、これらの 2 つのディスクに最大 40 GB のデータをキャッシュできます。パーセンテージは、各 `storage_root_path` が存在するディスクの容量に対する割合です。デフォルト値は `100%` です。`enable_datacache_disk_auto_adjust` が `true` (デフォルト) の場合、システムはディスク使用率に基づいて実際のディスクキャッシュ容量を自動調整し、この項目はその容量の上限のみを設定します。`0` はディスクキャッシュを無効にします。
 - 導入バージョン: -
 
 ### datacache_enable
@@ -634,6 +856,33 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 変更可能: いいえ
 - 説明: Data Cache のインラインキャッシュアイテムの最大数。特に小さいキャッシュブロックの場合、Data Cache はそれらを `inline` モードで保存し、ブロックデータとメタデータをメモリに一緒にキャッシュします。
 - 導入バージョン: v3.4.0
+
+### datacache_lru_shard_evict_fallback_enable
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: Data Cache の LRU シャードが補充中、または自身で十分な空きを確保できない場合に、他のシャードのエントリを削除できるかどうか。`false` に設定すると、シャードが自身のエントリのみを削除する動作に戻り、`datacache_lru_shard_refill_low_watermark_percent` と `datacache_lru_shard_refill_high_watermark_percent` は無視されます。
+- 導入バージョン: -
+
+### datacache_lru_shard_refill_low_watermark_percent
+
+- デフォルト: 50
+- タイプ: Int
+- 単位: -
+- 変更可能: はい
+- 説明: Data Cache の LRU シャードの使用量が容量のこの割合を下回ると、自身のエントリを削除する代わりに最大のシャードから補充され、`datacache_lru_shard_refill_high_watermark_percent` に達するまで続きます。この値は `datacache_lru_shard_refill_high_watermark_percent` を超えてはいけません。両方のパラメータを `0` に設定すると補充は無効になります。
+- 導入バージョン: -
+
+### datacache_lru_shard_refill_high_watermark_percent
+
+- デフォルト: 70
+- タイプ: Int
+- 単位: -
+- 変更可能: はい
+- 説明: Data Cache の LRU シャードの補充を停止する容量の割合。有効な値: `datacache_lru_shard_refill_low_watermark_percent` から `100`。両方のパラメータを `0` に設定すると補充は無効になります。
+- 導入バージョン: -
 
 ### datacache_mem_size
 
@@ -903,8 +1152,8 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - デフォルト: 0
 - タイプ: Int
 - 単位: -
-- 変更可能: はい
-- 説明: リソースグループ `default_mv_wg` のマテリアライズドビューリフレッシュタスクの最大同時実行数 (BE ノードごと)。デフォルト値 `0` は制限がないことを示します。
+- 変更可能: いいえ
+- 説明: リソースグループ `default_mv_wg` のマテリアライズドビューリフレッシュタスクの最大同時実行数 (BE ノードごと)。デフォルト値 `0` は制限がないことを示します。非推奨: v3.4 以降、FE が `default_mv_wg` を永続化して BE に送信するため、この項目は効果がありません。代わりに `ALTER RESOURCE GROUP default_mv_wg WITH (...)` を使用してください。
 - 導入バージョン: v3.1
 
 ### default_mv_resource_group_cpu_limit
@@ -912,8 +1161,8 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - デフォルト: 1
 - タイプ: Int
 - 単位: -
-- 変更可能: はい
-- 説明: リソースグループ `default_mv_wg` のマテリアライズドビューリフレッシュタスクで使用できる最大 CPU コア数 (BE ノードごと)。
+- 変更可能: いいえ
+- 説明: リソースグループ `default_mv_wg` のマテリアライズドビューリフレッシュタスクで使用できる最大 CPU コア数 (BE ノードごと)。非推奨: v3.4 以降、FE が `default_mv_wg` を永続化して BE に送信するため、この項目は効果がありません。代わりに `ALTER RESOURCE GROUP default_mv_wg WITH (...)` を使用してください。
 - 導入バージョン: v3.1
 
 ### default_mv_resource_group_memory_limit
@@ -921,8 +1170,8 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - デフォルト: 0.8
 - タイプ: Double
 - 単位: 
-- 変更可能: はい
-- 説明: リソースグループ `default_mv_wg` のマテリアライズドビューリフレッシュタスクで使用できる最大メモリ比率 (BE ノードごと)。デフォルト値はメモリの 80% を示します。
+- 変更可能: いいえ
+- 説明: リソースグループ `default_mv_wg` のマテリアライズドビューリフレッシュタスクで使用できる最大メモリ比率 (BE ノードごと)。デフォルト値はメモリの 80% を示します。非推奨: v3.4 以降、FE が `default_mv_wg` を永続化して BE に送信するため、この項目は効果がありません。代わりに `ALTER RESOURCE GROUP default_mv_wg WITH (...)` を使用してください。
 - 導入バージョン: v3.1
 
 ### default_mv_resource_group_spill_mem_limit_threshold
@@ -930,8 +1179,8 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - デフォルト: 0.8
 - タイプ: Double
 - 単位: -
-- 変更可能: はい
-- 説明: リソースグループ `default_mv_wg` のマテリアライズドビューリフレッシュタスクで中間結果のスピリングをトリガーする前のメモリ使用量のしきい値。デフォルト値はメモリの 80% を示します。
+- 変更可能: いいえ
+- 説明: リソースグループ `default_mv_wg` のマテリアライズドビューリフレッシュタスクで中間結果のスピリングをトリガーする前のメモリ使用量のしきい値。デフォルト値はメモリの 80% を示します。非推奨: v3.4 以降、FE が `default_mv_wg` を永続化して BE に送信するため、この項目は効果がありません。代わりに `ALTER RESOURCE GROUP default_mv_wg WITH (...)` を使用してください。
 - 導入バージョン: v3.1
 
 ### enable_resolve_hostname_to_ip_in_load_error_url
@@ -1005,8 +1254,17 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - タイプ: Long
 - 単位: Percent
 - 変更可能: Yes
-- 説明: プロセスのメモリ上限に対する割合で表されるハイウォーターメモリ閾値。総メモリ使用量がこの割合を超えると、BE はメモリ圧力を緩和するために徐々にメモリを解放し始めます（現在はデータキャッシュと更新キャッシュの追い出しで実施）。モニタはこの値を用いて memory_high = mem_limit * memory_high_level / 100 を計算し、消費量が `>` memory_high の場合は GC アドバイザに導かれた制御されたエビクションを行います；消費量が別の設定である memory_urgent_level を超えると、より攻撃的な即時削減が行われます。この値は閾値超過時に一部のメモリ集約的な操作（例えば primary-key preload）を無効化するかどうかの判断にも使われます。memory_urgent_level と合わせた検証を満たす必要があります（memory_urgent_level `>` memory_high_level、memory_high_level `>=` 1、memory_urgent_level `<=` 100）。
+- 説明: プロセスのメモリ上限に対する割合で表されるハイウォーターメモリ閾値。総メモリ使用量がこの割合を超えると、BE はメモリ圧力を緩和するために徐々にメモリを解放し始めます（現在はデータキャッシュと更新キャッシュの追い出し、および共有データのメタデータキャッシュの縮小で実施）。モニタはこの値を用いて memory_high = mem_limit * memory_high_level / 100 を計算し、消費量が `>` memory_high の場合は GC アドバイザに導かれた制御されたエビクションを行います；消費量が別の設定である memory_urgent_level を超えると、より攻撃的な即時削減が行われます。この値は閾値超過時に一部のメモリ集約的な操作（例えば primary-key preload）を無効化するかどうかの判断にも使われます。memory_urgent_level と合わせた検証を満たす必要があります（memory_urgent_level `>` memory_high_level、memory_high_level `>=` 1、memory_urgent_level `<=` 100）。
 - 導入バージョン: v3.2.0
+
+### olap_string_max_length
+
+- デフォルト: 1048576
+- タイプ: Int
+- 単位: バイト
+- 変更可能: はい
+- 説明: `repeat` や `concat` などの BE 文字列関数が、各結果のサイズを制限するために使用する文字列の最大長です。デフォルトは 1 MiB です。結果がこの上限を超えると、これらの関数は `NULL` を返します。上限は文字数ではなくバイト数で計算されます。
+- 導入バージョン: -
 
 ### report_exec_rpc_request_retry_num
 

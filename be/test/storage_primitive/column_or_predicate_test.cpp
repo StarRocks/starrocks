@@ -16,6 +16,7 @@
 
 #include <gtest/gtest.h>
 
+#include "common/object_pool.h"
 #include "storage_primitive/column_predicate_factory.h"
 #include "testutil/column_test_helper.h"
 
@@ -39,6 +40,7 @@ protected:
     std::unique_ptr<ColumnPredicate> _right;
     std::unique_ptr<ColumnOrPredicate> _pred;
     ColumnPtr _col;
+    ObjectPool _pool;
 };
 
 TEST_F(ColumnOrPredicateTest, basic) {
@@ -72,6 +74,16 @@ TEST_F(ColumnOrPredicateTest, evaluate_or) {
 
     std::vector<uint8_t> result = {1, 1, 1, 1, 0};
     ASSERT_EQ(buff, result);
+}
+
+TEST_F(ColumnOrPredicateTest, convert_to) {
+    auto target = get_type_info(TYPE_INT);
+    const ColumnPredicate* new_pred = nullptr;
+    Status st = _pred->convert_to(&new_pred, target, &_pool);
+    ASSERT_TRUE(st.ok());
+    ASSERT_EQ(new_pred->debug_string(), "OR(0:(columnId(0)=100), 1:(columnId(0)=200))");
+    // The converted predicate shares the target type instead of a copy.
+    ASSERT_EQ(target.get(), new_pred->type_info());
 }
 
 } // namespace starrocks

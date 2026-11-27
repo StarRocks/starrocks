@@ -4,6 +4,7 @@ displayed_sidebar: docs
 description: "StarRocks Iceberg catalog 支持 DML 操作，包括向 Iceberg 表插入数据。"
 toc_max_heading_level: 5
 keywords: ['iceberg', 'dml', 'insert', 'sink data', 'overwrite']
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Iceberg DML 操作
@@ -20,6 +21,10 @@ keywords: ['iceberg', 'dml', 'insert', 'sink data', 'overwrite']
 
 与 StarRocks 的内部表类似，如果您在 Iceberg 表上具有 [INSERT](../../../administration/user_privs/authorization/privilege_item.md#table) 权限，您可以使用 [INSERT](../../../sql-reference/sql-statements/loading_unloading/INSERT.md) 语句将 StarRocks 表的数据下沉到该 Iceberg 表（目前仅支持 Parquet 格式的 Iceberg 表）。
 
+对于 Parquet 数据文件，StarRocks 支持 Iceberg 表属性 `write.parquet.page-size-bytes`、`write.parquet.dict-size-bytes` 和 `write.parquet.row-group-size-bytes`。每个值必须是大于 0 且不超过 2,147,483,647 字节的整数；无效值会导致写入失败。未设置属性时，StarRocks 使用写入器默认值：数据页和字典页均为 1 MiB，行组为 128 MiB。这些属性不用于配置位置删除文件。
+
+对于 Parquet 数据文件，可以通过 Iceberg 表属性 `write.parquet.compression-level` 设置整数压缩级别。ZSTD 支持 -131072 至 22，GZIP 支持 -1 至 9，Brotli 支持 0 至 11。其他压缩算法不支持显式设置级别。无效值会导致写入失败。未设置该属性时，Parquet 写入器使用所选压缩算法的默认级别。此级别不适用于位置删除文件。
+
 ### 语法
 
 ```SQL
@@ -35,7 +40,7 @@ PARTITION (par_col1=<value> [, par_col2=<value>...])
 
 :::note
 
-分区列不允许 `NULL` 值。因此，您必须确保没有空值被加载到 Iceberg 表的分区列中。
+分区列允许 `NULL` 值。分区值为 `NULL` 的行会写入分区值为 `NULL` 的分区。
 
 :::
 
@@ -47,7 +52,7 @@ PARTITION (par_col1=<value> [, par_col2=<value>...])
 
 #### OVERWRITE
 
-用 StarRocks 表的数据覆盖 Iceberg 表的现有数据。
+用 StarRocks 表的数据覆盖 Iceberg 表的现有数据。仅覆盖写入了新数据的分区，其他分区保持不变。该行为与变量 `dynamic_overwrite` 无关，该变量对 Iceberg 表不生效。对于非分区表，所有现有数据都会被替换。如果查询未返回任何行，则不会覆盖任何数据，非分区表也是如此。
 
 #### column_name
 
@@ -67,7 +72,7 @@ PARTITION (par_col1=<value> [, par_col2=<value>...])
 
 #### PARTITION
 
-要加载数据的分区。您必须在此属性中指定 Iceberg 表的所有分区列。您在此属性中指定的分区列可以与您在表创建语句中定义的分区列顺序不同。如果指定此属性，则不能指定 `column_name` 属性。
+要加载数据的分区。您必须在此属性中指定 Iceberg 表的所有分区列。您在此属性中指定的分区列可以与您在表创建语句中定义的分区列顺序不同。如果 Iceberg 表的分区规范包含非 identity 转换（例如 `day()` 或 `bucket()`），则不支持 PARTITION 子句。如果指定此属性，则不能指定 `column_name` 属性。
 
 ### 示例
 
@@ -119,9 +124,13 @@ PARTITION (par_col1=<value> [, par_col2=<value>...])
    INSERT OVERWRITE partition_tbl_1 partition(dt='2023-09-01',id=1) SELECT 'close';
    ```
 
+### Parquet 数据页版本
+
+对于 Parquet 数据文件，Iceberg 表属性 `write.parquet.page-version` 支持 `v1` 或 `v2`（不区分大小写）。未设置时，StarRocks 写入 DataPage V1。无效值会导致写入失败。如果数据文件的列中包含 BOOLEAN 类型（包括嵌套在数组、映射或结构中的 BOOLEAN），DataPage V2 写入会被拒绝，因为 StarRocks 读取器目前无法解码其 RLE 编码的值。此属性不用于配置位置删除文件。Parquet 数据页版本与 Iceberg 表格式版本不同。
+
 ## DELETE
 
-您可以使用 DELETE 语句根据指定条件从 Iceberg 表中删除数据。此功能在 StarRocks v4.1 及更高版本中受支持。
+您可以使用 DELETE 语句根据指定条件从 Iceberg 表中删除数据。此功能在 StarRocks v4.1 及更高版本中受支持。`WITH` 子句、`USING` 子句和 `FOR VERSION AS OF` 自 v4.2 起支持。必须指定 WHERE 子句，且不支持 PARTITION 子句。
 
 ### 语法
 
@@ -459,7 +468,7 @@ WHEN NOT MATCHED THEN INSERT *;
 
 ## TRUNCATE
 
-您可以使用 TRUNCATE TABLE 语句快速删除 Iceberg 表中的所有数据。
+您可以使用 TRUNCATE TABLE 语句快速删除 Iceberg 表中的所有数据。Iceberg 表不支持清空指定分区（`TRUNCATE TABLE ... PARTITION`）。
 
 ### 语法
 

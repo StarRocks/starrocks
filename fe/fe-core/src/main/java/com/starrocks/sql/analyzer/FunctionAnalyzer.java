@@ -68,6 +68,7 @@ import com.starrocks.type.BooleanType;
 import com.starrocks.type.DateType;
 import com.starrocks.type.FileType;
 import com.starrocks.type.FloatType;
+import com.starrocks.type.GeoType;
 import com.starrocks.type.GeoTypeDescriptor;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.NullType;
@@ -291,9 +292,7 @@ public class FunctionAnalyzer {
             FunctionCallExpr functionCallWithoutIf =
                     new FunctionCallExpr(argFuncNameWithoutIf, functionParamsWithOutIf);
             analyzeBuiltinAggFunction(argFuncNameWithoutIf, functionParamsWithOutIf, functionCallWithoutIf);
-        }
-
-        if (fn != null && fn.isAI()) {
+        } else if (fn != null && fn.isAI()) {
             AIFunctionAnalyzer.analyze(functionCallExpr);
         }
     }
@@ -301,9 +300,27 @@ public class FunctionAnalyzer {
     private static void checkGeoFunctionArguments(FunctionCallExpr call) {
         String name = call.getFunctionName();
         switch (name) {
+            case FunctionSet.ARRAY_SORT:
+            case FunctionSet.ARRAY_SORT_LAMBDA:
+            case FunctionSet.ARRAY_MAX:
+            case FunctionSet.ARRAY_MIN:
+            case FunctionSet.ARRAY_SORTBY:
+            case FunctionSet.ARRAY_TOP_N:
+            case FunctionSet.ARRAY_DISTINCT:
+            case FunctionSet.ARRAY_CONTAINS:
+            case FunctionSet.ARRAY_CONTAINS_ALL:
+            case FunctionSet.ARRAY_CONTAINS_SEQ:
+            case FunctionSet.ARRAY_POSITION:
+            case FunctionSet.ARRAY_REMOVE:
+            case FunctionSet.ARRAY_INTERSECT:
+            case FunctionSet.ARRAYS_OVERLAP:
+            case FunctionSet.ARRAY_UNIQUE_AGG:
+            case FunctionSet.NULLIF:
+            case FunctionSet.CRC32_HASH:
             case FunctionSet.ENCODE_SORT_KEY:
             case FunctionSet.ENCODE_FINGERPRINT_SHA256:
             case FunctionSet.ENCODE_FINGERPRINT_SHA256_V2:
+            case FunctionSet.TO_JSON:
                 break;
             default:
                 return;
@@ -326,6 +343,12 @@ public class FunctionAnalyzer {
                                                   FunctionCallExpr functionCallExpr) {
         if (fnParams.isStar() && !fnName.equals(FunctionSet.COUNT)) {
             throw new SemanticException("'*' can only be used in conjunction with COUNT: " + ExprToSql.toSql(functionCallExpr),
+                    functionCallExpr.getPos());
+        }
+
+        Type resultType = functionCallExpr.getType();
+        if (fnParams.getOrderByElemNum() > 0 && (resultType.isGeoType() || resultType.hasNestedGeoType())) {
+            throw new SemanticException("ORDER BY aggregation is not supported for geo results: " + resultType.toSql(),
                     functionCallExpr.getPos());
         }
 
@@ -449,6 +472,10 @@ public class FunctionAnalyzer {
                 throw new SemanticException(
                         fnName + " requires two parameters: " + ExprToSql.toSql(functionCallExpr),
                         functionCallExpr.getPos());
+            }
+
+            if (functionCallExpr.getChild(0).getType().hasNestedGeoType()) {
+                throw new SemanticException(fnName + " does not support nested geo values", functionCallExpr.getPos());
             }
 
             if (functionCallExpr.getChild(0).isConstant() || functionCallExpr.getChild(1).isConstant()) {
@@ -1027,6 +1054,12 @@ public class FunctionAnalyzer {
         if (fn != null) {
             return fn;
         }
+        // get fn from the presign builtins, which are bound to the storage volume they sign with
+        fn = AnalyzerUtils.getPresignedFunction(session, node, argumentTypes);
+        if (fn != null) {
+            return fn;
+        }
+
         // get fn from builtin functions
         fn = getAnalyzedBuiltInFunction(session, fnName, params, argumentTypes, node.getPos());
         if (fn != null) {
@@ -1165,8 +1198,7 @@ public class FunctionAnalyzer {
                 node.getParams().exprs().set(1, target);
                 node.setChild(1, target);
                 fn = fn.copy();
-                fn.setRetType(ScalarType.createGeoType(PrimitiveType.GEOMETRY,
-                        GeoTypeDescriptor.geometry("EPSG:" + targetSrid)));
+                fn.setRetType(GeoType.createGeometryType("EPSG:" + targetSrid));
             }
         } else if ("st_geogfromtext".equalsIgnoreCase(fnName) || "st_geogfromwkb".equalsIgnoreCase(fnName) ||
                 FunctionSet.H3_TOBOUNDARY.equalsIgnoreCase(fnName)) {
@@ -1174,10 +1206,7 @@ public class FunctionAnalyzer {
             fn = ExprUtils.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             if (fn != null) {
                 fn = fn.copy();
-                fn.setRetType(ScalarType.createGeoType(PrimitiveType.GEOGRAPHY,
-                        new GeoTypeDescriptor(GeoTypeDescriptor.LogicalType.GEOGRAPHY,
-                                GeoTypeDescriptor.CoordinateSystem.SPHERICAL,
-                                GeoTypeDescriptor.EdgeAlgorithm.SPHERICAL, "OGC:CRS84", 4326)));
+                fn.setRetType(GeoType.createGeographyType("OGC:CRS84"));
             }
         } else if (FunctionSet.ST_CENTROID.equalsIgnoreCase(fnName) && argumentTypes.length == 1 &&
                 (argumentTypes[0].getPrimitiveType() == PrimitiveType.GEOGRAPHY ||
@@ -1200,7 +1229,7 @@ public class FunctionAnalyzer {
                     Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             if (fn != null) {
                 fn = fn.copy();
-                fn.setRetType(ScalarType.createGeoType(PrimitiveType.GEOMETRY, GeoTypeDescriptor.geometry(crs)));
+                fn.setRetType(GeoType.createGeometryType(crs));
             }
         } else if (FunctionSet.CONCAT.equals(fnName) && node.getChildren().stream().anyMatch(child ->
                 child.getType().isArrayType())) {
@@ -1591,7 +1620,10 @@ public class FunctionAnalyzer {
         if (fnName.equals(FunctionSet.COUNT) && isDistinct) {
             // Compatible with the logic of the original search function "count distinct"
             // TODO: fix how we equal count distinct.
-            fn = ExprUtils.getBuiltinFunction(FunctionSet.COUNT, new Type[] { argumentTypes[0] },
+            // count(VARIANT) is only for plain counting: there is no distinct aggregate over VARIANT, so count
+            // distinct keeps casting a VARIANT argument to VARCHAR as it did before the VARIANT overload existed.
+            Type distinctArgType = argumentTypes[0].isVariantType() ? VarcharType.VARCHAR : argumentTypes[0];
+            fn = ExprUtils.getBuiltinFunction(FunctionSet.COUNT, new Type[] { distinctArgType },
                     Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
         } else if (fnName.equals(FunctionSet.EXCHANGE_BYTES) || fnName.equals(FunctionSet.EXCHANGE_SPEED)) {
             fn = ExprUtils.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);

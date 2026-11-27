@@ -39,6 +39,13 @@ inline bool is_compaction(ReaderType reader_type) {
 
 // ReaderStatistics used to collect statistics when scan data from storage
 struct OlapReaderStatistics {
+    // Bytes read from remote storage, including those a lake reader read while preparing its splits, which are kept
+    // apart from compressed_bytes_read_remote.
+    int64_t remote_bytes_read_with_prepare() const {
+        return compressed_bytes_read_remote + lake_prepared_tablet_bytes_read_remote +
+               lake_prepared_seed_bytes_read_remote;
+    }
+
     int64_t create_segment_iter_ns = 0;
     int64_t io_ns = 0;
     int64_t compressed_bytes_read = 0;
@@ -121,6 +128,8 @@ struct OlapReaderStatistics {
     int64_t rows_vector_index_filtered = 0;
     int64_t rows_bf_filtered = 0;
     int64_t rows_del_filtered = 0;
+    // The part of rows_del_filtered removed after the rows were read, so counted in raw_rows_read.
+    int64_t rows_del_filtered_after_read = 0;
     int64_t del_filter_ns = 0;
     // Rows a vector (ANN) query skipped from the row-level delete-predicate evaluation because their page's
     // zone map proved they match no delete predicate (see SegmentIterator::_apply_del_predicate).
@@ -131,6 +140,10 @@ struct OlapReaderStatistics {
 
     int64_t rows_bitmap_index_filtered = 0;
     int64_t bitmap_index_filter_timer = 0;
+    // lake_scan_warm_index: the bitmap index pages the lookups asked for all at once ahead of reading them, and the
+    // cache blocks those requests newly queued or joined.
+    int64_t bitmap_index_prefetch_pages = 0;
+    int64_t bitmap_index_prefetch_blocks = 0;
     int64_t vector_index_load_ns = 0;
     int64_t get_row_ranges_by_vector_index_timer = 0;
     int64_t vector_index_cache_lookup_ns = 0;
@@ -194,6 +207,28 @@ struct OlapReaderStatistics {
     int64_t prefetch_wait_finish_ns = 0;
     int64_t prefetch_pending_ns = 0;
 
+    // Shared-data remote read scheduler, while it runs: time the reads of this scan waited for their remote reads to be
+    // admitted, time they waited for a cache block fill another read had started, and how many joined such a fill.
+    // The fill wait overlaps the remote read time of the read that started the fill; neither wait is remote IO.
+    int64_t remote_io_queue_wait_ns = 0;
+    int64_t remote_io_fill_wait_ns = 0;
+    int64_t remote_io_fill_joins = 0;
+    // Read-ahead of the segment readers while the remote I/O scheduler is enabled (see SegmentPrefetchWindow): cache
+    // blocks queued for fetching, blocks the scheduler refused because its queue was full, and page ranges handed to
+    // warm_cache_async().
+    int64_t remote_prefetch_blocks = 0;
+    int64_t remote_prefetch_rejected_blocks = 0;
+    int64_t remote_prefetch_ranges = 0;
+    // Segment readers that started to read their late-materialized columns ahead.
+    int64_t remote_prefetch_late_read_ahead = 0;
+    // The first chunk of each segment reader, from its first get_next after it was opened or reused: how many, and
+    // their wall time, so that starting readers cold shows apart from the steady read.
+    int64_t segment_first_chunks = 0;
+    int64_t segment_first_chunk_ns = 0;
+    // Segment readers that started fetching their first blocks while the reader before them was still read
+    // (ChunkIterator::start_read_ahead).
+    int64_t segment_read_ahead_started = 0;
+
     // Segments whose footer was read on behalf of this reader, i.e. that were not already open. Only the
     // callers that pass their statistics to Segment::open count them.
     int64_t segments_opened = 0;
@@ -245,6 +280,22 @@ struct OlapReaderStatistics {
     int64_t lake_prepared_tablet_io_remote_ns = 0;
     int64_t lake_prepared_tablet_io_count_remote = 0;
     int64_t lake_prepared_tablet_bytes_read_remote = 0;
+    // lake_scan_parallel_segment_open: segments whose footer was already open in the metadata cache, so the
+    // tablet preparation took them as they are without a load task.
+    int64_t lake_prepared_tablet_cached_segments = 0;
+    // lake_scan_warm_index, for split and non-split query scans: segments with at least one warmed range, the
+    // block-aligned ranges handed to warm_cache_async(), the cache blocks those calls newly queued or joined, and the
+    // index roots skipped because the segment already holds them in memory.
+    int64_t lake_prepared_tablet_warm_index_segments = 0;
+    int64_t lake_prepared_tablet_warm_index_ranges = 0;
+    int64_t lake_prepared_tablet_warm_index_blocks = 0;
+    int64_t lake_prepared_tablet_warm_index_skipped = 0;
+    // Segments the segment metadata filter excludes from the scan, so they were not warmed, nor, when the non-split
+    // path opened the segments in parallel, opened.
+    int64_t lake_prepared_tablet_warm_index_pruned_segments = 0;
+    // Rowsets of a non-split query scan whose iterators were built inline instead of on the rowset thread pool,
+    // because every segment of the tablet was already open in the metadata cache.
+    int64_t lake_prepared_tablet_inline_rowsets = 0;
     // ------ for lake tablet ------
 
     // ------ for json type, to count flat column ------
@@ -453,6 +504,35 @@ struct OlapReaderStatistics {
         sample_build_histogram_count += current.sample_build_histogram_count - previous.sample_build_histogram_count;
         sample_build_histogram_time_ns +=
                 current.sample_build_histogram_time_ns - previous.sample_build_histogram_time_ns;
+        rows_del_filtered_after_read += current.rows_del_filtered_after_read - previous.rows_del_filtered_after_read;
+        bitmap_index_prefetch_pages += current.bitmap_index_prefetch_pages - previous.bitmap_index_prefetch_pages;
+        bitmap_index_prefetch_blocks += current.bitmap_index_prefetch_blocks - previous.bitmap_index_prefetch_blocks;
+        remote_io_queue_wait_ns += current.remote_io_queue_wait_ns - previous.remote_io_queue_wait_ns;
+        remote_io_fill_wait_ns += current.remote_io_fill_wait_ns - previous.remote_io_fill_wait_ns;
+        remote_io_fill_joins += current.remote_io_fill_joins - previous.remote_io_fill_joins;
+        remote_prefetch_blocks += current.remote_prefetch_blocks - previous.remote_prefetch_blocks;
+        remote_prefetch_rejected_blocks +=
+                current.remote_prefetch_rejected_blocks - previous.remote_prefetch_rejected_blocks;
+        remote_prefetch_ranges += current.remote_prefetch_ranges - previous.remote_prefetch_ranges;
+        remote_prefetch_late_read_ahead +=
+                current.remote_prefetch_late_read_ahead - previous.remote_prefetch_late_read_ahead;
+        segment_first_chunks += current.segment_first_chunks - previous.segment_first_chunks;
+        segment_first_chunk_ns += current.segment_first_chunk_ns - previous.segment_first_chunk_ns;
+        segment_read_ahead_started += current.segment_read_ahead_started - previous.segment_read_ahead_started;
+        lake_prepared_tablet_cached_segments +=
+                current.lake_prepared_tablet_cached_segments - previous.lake_prepared_tablet_cached_segments;
+        lake_prepared_tablet_warm_index_segments +=
+                current.lake_prepared_tablet_warm_index_segments - previous.lake_prepared_tablet_warm_index_segments;
+        lake_prepared_tablet_warm_index_ranges +=
+                current.lake_prepared_tablet_warm_index_ranges - previous.lake_prepared_tablet_warm_index_ranges;
+        lake_prepared_tablet_warm_index_blocks +=
+                current.lake_prepared_tablet_warm_index_blocks - previous.lake_prepared_tablet_warm_index_blocks;
+        lake_prepared_tablet_warm_index_skipped +=
+                current.lake_prepared_tablet_warm_index_skipped - previous.lake_prepared_tablet_warm_index_skipped;
+        lake_prepared_tablet_warm_index_pruned_segments += current.lake_prepared_tablet_warm_index_pruned_segments -
+                                                           previous.lake_prepared_tablet_warm_index_pruned_segments;
+        lake_prepared_tablet_inline_rowsets +=
+                current.lake_prepared_tablet_inline_rowsets - previous.lake_prepared_tablet_inline_rowsets;
         const auto add_map_delta = [](auto& destination, const auto& now, const auto& before) {
             for (const auto& [key, value] : now) {
                 const auto it = before.find(key);
@@ -463,6 +543,14 @@ struct OlapReaderStatistics {
         add_map_delta(merge_json_hits, current.merge_json_hits, previous.merge_json_hits);
         add_map_delta(dynamic_json_hits, current.dynamic_json_hits, previous.dynamic_json_hits);
         add_map_delta(extract_json_hits, current.extract_json_hits, previous.extract_json_hits);
+    }
+
+    // Adds the remote read scheduler waits of |other|. Every path that moves the IO of one statistics object into
+    // another adds these as well, or the waits of those reads never reach the profile.
+    void add_remote_io_waits(const OlapReaderStatistics& other) {
+        remote_io_queue_wait_ns += other.remote_io_queue_wait_ns;
+        remote_io_fill_wait_ns += other.remote_io_fill_wait_ns;
+        remote_io_fill_joins += other.remote_io_fill_joins;
     }
 
     // Merge task-local reader statistics after parallel rowset reads. Include every counter so
@@ -519,12 +607,15 @@ struct OlapReaderStatistics {
         rows_vector_index_filtered += other.rows_vector_index_filtered;
         rows_bf_filtered += other.rows_bf_filtered;
         rows_del_filtered += other.rows_del_filtered;
+        rows_del_filtered_after_read += other.rows_del_filtered_after_read;
         del_filter_ns += other.del_filter_ns;
         rows_del_predicate_zone_map_pruned += other.rows_del_predicate_zone_map_pruned;
         total_pages_num += other.total_pages_num;
         cached_pages_num += other.cached_pages_num;
         rows_bitmap_index_filtered += other.rows_bitmap_index_filtered;
         bitmap_index_filter_timer += other.bitmap_index_filter_timer;
+        bitmap_index_prefetch_pages += other.bitmap_index_prefetch_pages;
+        bitmap_index_prefetch_blocks += other.bitmap_index_prefetch_blocks;
         vector_index_load_ns += other.vector_index_load_ns;
         get_row_ranges_by_vector_index_timer += other.get_row_ranges_by_vector_index_timer;
         vector_index_cache_lookup_ns += other.vector_index_cache_lookup_ns;
@@ -570,6 +661,14 @@ struct OlapReaderStatistics {
         prefetch_hit_count += other.prefetch_hit_count;
         prefetch_wait_finish_ns += other.prefetch_wait_finish_ns;
         prefetch_pending_ns += other.prefetch_pending_ns;
+        add_remote_io_waits(other);
+        remote_prefetch_blocks += other.remote_prefetch_blocks;
+        remote_prefetch_rejected_blocks += other.remote_prefetch_rejected_blocks;
+        remote_prefetch_ranges += other.remote_prefetch_ranges;
+        remote_prefetch_late_read_ahead += other.remote_prefetch_late_read_ahead;
+        segment_first_chunks += other.segment_first_chunks;
+        segment_first_chunk_ns += other.segment_first_chunk_ns;
+        segment_read_ahead_started += other.segment_read_ahead_started;
         lake_prepared_rowsets += other.lake_prepared_rowsets;
         lake_prepared_segments += other.lake_prepared_segments;
         lake_prepared_scan_rows += other.lake_prepared_scan_rows;
@@ -591,6 +690,13 @@ struct OlapReaderStatistics {
         lake_prepared_tablet_io_remote_ns += other.lake_prepared_tablet_io_remote_ns;
         lake_prepared_tablet_io_count_remote += other.lake_prepared_tablet_io_count_remote;
         lake_prepared_tablet_bytes_read_remote += other.lake_prepared_tablet_bytes_read_remote;
+        lake_prepared_tablet_cached_segments += other.lake_prepared_tablet_cached_segments;
+        lake_prepared_tablet_warm_index_segments += other.lake_prepared_tablet_warm_index_segments;
+        lake_prepared_tablet_warm_index_ranges += other.lake_prepared_tablet_warm_index_ranges;
+        lake_prepared_tablet_warm_index_blocks += other.lake_prepared_tablet_warm_index_blocks;
+        lake_prepared_tablet_warm_index_skipped += other.lake_prepared_tablet_warm_index_skipped;
+        lake_prepared_tablet_warm_index_pruned_segments += other.lake_prepared_tablet_warm_index_pruned_segments;
+        lake_prepared_tablet_inline_rowsets += other.lake_prepared_tablet_inline_rowsets;
         lake_prepared_seed_segment_init_ns += other.lake_prepared_seed_segment_init_ns;
         lake_prepared_seed_vector_index_load_ns += other.lake_prepared_seed_vector_index_load_ns;
         lake_prepared_seed_get_row_ranges_by_vector_index_ns +=
@@ -651,5 +757,10 @@ const char* const kIONsWriteRemote = "io_ns_write_remote";
 const char* const kPrefetchHitCount = "prefetch_hit_count";
 const char* const kPrefetchWaitFinishNs = "prefetch_wait_finish_ns";
 const char* const kPrefetchPendingNs = "prefetch_pending_ns";
+const char* const kRemoteQueueWaitNs = "remote_queue_wait_ns";
+const char* const kRemoteFillWaitNs = "remote_fill_wait_ns";
+const char* const kRemoteFillJoins = "remote_fill_joins";
+const char* const kPrefetchBlocksSubmitted = "prefetch_blocks_submitted";
+const char* const kPrefetchBlocksRejected = "prefetch_blocks_rejected";
 
 } // namespace starrocks

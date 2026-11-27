@@ -17,7 +17,11 @@ package com.starrocks.load.pipe;
 import com.google.common.base.Stopwatch;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
+import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.UserIdentity;
+import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.StarRocksException;
@@ -51,6 +55,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.ExecuteEnv;
 import com.starrocks.service.FrontendServiceImpl;
+import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.BrokerDesc;
 import com.starrocks.sql.ast.pipe.AlterPipeClauseRetry;
@@ -93,12 +98,15 @@ import org.mockito.Mockito;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
 import java.util.concurrent.FutureTask;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
@@ -148,7 +156,7 @@ public class PipeManagerTest {
     private void createPipe(String sql) throws Exception {
         PipeManager pm = ctx.getGlobalStateMgr().getPipeManager();
         CreatePipeStmt createStmt = (CreatePipeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        pm.createPipe(createStmt);
+        pm.createPipe(ctx, createStmt);
     }
 
     private void alterPipe(String sql) throws Exception {
@@ -244,7 +252,7 @@ public class PipeManagerTest {
         String sql = "create pipe p1 properties ('AUTO_INGEST'='FALSE') as " +
                 "insert into tbl select * from files('path'='fake://pipe', 'format'='parquet')";
         CreatePipeStmt createStmt = (CreatePipeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        pm.createPipe(createStmt);
+        pm.createPipe(ctx, createStmt);
         UtFrameUtils.PseudoImage image1 = new UtFrameUtils.PseudoImage();
         pm.getRepo().save(image1.getImageWriter());
 
@@ -259,7 +267,7 @@ public class PipeManagerTest {
         // pause pipe 1
         sql = "create pipe p2 as insert into tbl select * from files('path'='fake://pipe', 'format'='parquet')";
         CreatePipeStmt createStmt1 = (CreatePipeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        pm.createPipe(createStmt1);
+        pm.createPipe(ctx, createStmt1);
         sql = "alter pipe p1 suspend";
         AlterPipeStmt alterPipeStmt = (AlterPipeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         pm.alterPipe(alterPipeStmt);
@@ -384,6 +392,45 @@ public class PipeManagerTest {
         return submit;
     }
 
+    /** An accepted submission whose task run has already finished as SUCCESS. */
+    private static SubmitResult submittedWithSucceededRun() {
+        SubmitResult submit = new SubmitResult("queryid", SubmitResult.SubmitStatus.SUBMITTED);
+        FutureTask<Constants.TaskRunState> future = new FutureTask<>(() -> Constants.TaskRunState.SUCCESS);
+        submit.setFuture(future);
+        future.run();
+        return submit;
+    }
+
+    /**
+     * Makes every listing of the pipe source return one new file, so a continuous pipe gets a new
+     * batch each time it polls with nothing left to load.
+     */
+    private void mockNewFileOnEachPoll() {
+        new MockUp<HdfsUtil>() {
+            private int seq = 0;
+
+            @Mock
+            public List<FileStatus> listFileMeta(String path, Map<String, String> properties, boolean skipDir) {
+                seq++;
+                return Lists.newArrayList(new FileStatus(1024, false, 1, 1024, seq, new Path("file-" + seq)));
+            }
+        };
+    }
+
+    /**
+     * Runs the pipe's single task through {@code attempts} failed attempts in a row. Expects the task
+     * to be RUNNABLE, or not built yet, and leaves it in ERROR after the last attempt.
+     */
+    private static void failCurrentTask(Pipe pipe, int attempts) {
+        for (int i = 0; i < attempts; i++) {
+            if (i > 0) {
+                pipe.schedule(); // clear the error -> RUNNABLE
+            }
+            pipe.schedule(); // submit -> RUNNING
+            pipe.schedule(); // execution failed -> ERROR
+        }
+    }
+
     private void mockPollError(int errorCount) {
         // poll error
         new MockUp<HdfsUtil>() {
@@ -494,7 +541,7 @@ public class PipeManagerTest {
         String sql = "create pipe p3 as insert into tbl1 select * from files('path'='fake://pipe', 'format'='parquet')";
         CreatePipeStmt createStmt = (CreatePipeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         PipeManager pm = ctx.getGlobalStateMgr().getPipeManager();
-        pm.createPipe(createStmt);
+        pm.createPipe(ctx, createStmt);
 
         mockTaskExecution(Constants.TaskRunState.SUCCESS);
         Pipe p1 = pm.mayGetPipe(new PipeName(PIPE_TEST_DB, "p3")).get();
@@ -612,6 +659,9 @@ public class PipeManagerTest {
                     p3.getPipeSource().getFileListRepo().listFilesByState(FileListRepo.PipeFileState.UNLOADED, 0);
             Assertions.assertEquals(1, unloadedFiles.size());
         }
+
+        // RETRY restarts the pipe with a clean failure count, as RESUME does.
+        Assertions.assertEquals(0, p3.getFailedTaskExecutionCount());
     }
 
     private Pipe preparePipe(String pipeName) throws Exception {
@@ -832,6 +882,165 @@ public class PipeManagerTest {
         dropPipe(pipeName);
     }
 
+    /**
+     * A continuous pipe whose batches each fail once and then load on the retry keeps running. The
+     * pipe stops only when task executions fail many times in a row, and a task that loads ends the
+     * streak, so short object-store stalls hours apart do not add up to stopping the pipe (POST-2003).
+     */
+    @Test
+    public void testTransientTaskFailuresDoNotStopPipe() throws Exception {
+        mockRepoExecutor();
+        mockNewFileOnEachPoll();
+        // Every batch fails its first attempt and loads on the retry.
+        AtomicInteger submissions = new AtomicInteger();
+        mockTaskSubmission(() -> submissions.getAndIncrement() % 2 == 0
+                ? submittedWithFailedRun() : submittedWithSucceededRun());
+
+        final String pipeName = "p_transient_failures";
+        Pipe pipe = preparePipe(pipeName);
+
+        int batches = 3 * (Pipe.FAILED_TASK_THRESHOLD + 1);
+        for (int batch = 0; batch < batches; batch++) {
+            pipe.setLastPolledTime(0);
+            pipe.poll(); // stage the next file once the previous batch has loaded
+            failCurrentTask(pipe, 1);
+            Assertions.assertEquals(Pipe.State.RUNNING, pipe.getState(), "batch " + batch);
+
+            pipe.schedule(); // clear the error -> RUNNABLE
+            pipe.schedule(); // resubmit -> RUNNING
+            pipe.schedule(); // the retry loaded -> FINISHED, task removed
+            Assertions.assertEquals(Pipe.State.RUNNING, pipe.getState(), "batch " + batch);
+            Assertions.assertTrue(pipe.getRunningTasks().isEmpty(), "batch " + batch + ": " + pipe.getRunningTasks());
+        }
+        Assertions.assertEquals(0, pipe.getFailedTaskExecutionCount());
+        Assertions.assertEquals(batches, pipe.getPipeSource().getFileListRepo()
+                .listFilesByState(FileListRepo.PipeFileState.FINISHED, 0).size());
+
+        dropPipe(pipeName);
+    }
+
+    /**
+     * RETRY on a pipe stopped by too many failures restarts it with a clean failure count, as RESUME
+     * does. With the old count, still over the limit, the next single failure stopped it again.
+     */
+    @Test
+    public void testRetryAfterErrorStartsNewFailureStreak() throws Exception {
+        mockRepoExecutor();
+        mockTaskSubmission(PipeManagerTest::submittedWithFailedRun);
+
+        final String pipeName = "p_retry_after_error";
+        Pipe pipe = preparePipe(pipeName);
+        failCurrentTask(pipe, Pipe.FAILED_TASK_THRESHOLD + 1);
+        Assertions.assertEquals(Pipe.State.ERROR, pipe.getState());
+
+        alterPipe("alter pipe " + pipeName + " retry all");
+        Assertions.assertEquals(Pipe.State.RUNNING, pipe.getState());
+        Assertions.assertEquals(0, pipe.getFailedTaskExecutionCount());
+
+        failCurrentTask(pipe, 1);
+        Assertions.assertEquals(Pipe.State.RUNNING, pipe.getState());
+        Assertions.assertEquals(1, pipe.getFailedTaskExecutionCount());
+
+        dropPipe(pipeName);
+    }
+
+    /**
+     * The pipe-level limit is pipe_max_consecutive_failed_task_executions, separate from the per-task
+     * retry limit. Raised above it, a batch that keeps failing is given up on, its files are left in
+     * ERROR for ALTER PIPE RETRY, and the pipe moves on. Lowered below it, the pipe stops before the
+     * task has used up its retries.
+     */
+    @Test
+    public void testConsecutiveFailureLimitIsConfigurable() throws Exception {
+        mockRepoExecutor();
+        mockNewFileOnEachPoll();
+        AtomicBoolean fail = new AtomicBoolean(true);
+        mockTaskSubmission(() -> fail.get() ? submittedWithFailedRun() : submittedWithSucceededRun());
+
+        int defaultLimit = Config.pipe_max_consecutive_failed_task_executions;
+        try {
+            Config.pipe_max_consecutive_failed_task_executions = 100;
+            Pipe raised = preparePipe("p_limit_raised");
+            failCurrentTask(raised, Pipe.FAILED_TASK_THRESHOLD + 1);
+            Assertions.assertEquals(Pipe.State.RUNNING, raised.getState());
+            Assertions.assertTrue(raised.getRunningTasks().isEmpty(), raised.getRunningTasks().toString());
+            Assertions.assertEquals(1, raised.getPipeSource().getFileListRepo()
+                    .listFilesByState(FileListRepo.PipeFileState.ERROR, 0).size());
+            Assertions.assertEquals(Pipe.FAILED_TASK_THRESHOLD + 1, raised.getFailedTaskExecutionCount());
+
+            // The next batch loads and ends the streak.
+            fail.set(false);
+            raised.setLastPolledTime(0);
+            raised.poll();
+            raised.schedule(); // build the task and submit it -> RUNNING
+            raised.schedule(); // loaded -> FINISHED
+            Assertions.assertEquals(Pipe.State.RUNNING, raised.getState());
+            Assertions.assertEquals(0, raised.getFailedTaskExecutionCount());
+            dropPipe("p_limit_raised");
+
+            fail.set(true);
+            Config.pipe_max_consecutive_failed_task_executions = 1;
+            Pipe lowered = preparePipe("p_limit_lowered");
+            failCurrentTask(lowered, 2);
+            Assertions.assertEquals(Pipe.State.ERROR, lowered.getState());
+            Assertions.assertEquals(2, lowered.getFailedTaskExecutionCount());
+            Assertions.assertEquals(1, lowered.getRunningTasks().size(), "the task still has retries left");
+            dropPipe("p_limit_lowered");
+        } finally {
+            Config.pipe_max_consecutive_failed_task_executions = defaultLimit;
+        }
+    }
+
+    /**
+     * The ERROR state a pipe enters after too many failed task executions goes to the edit log.
+     * Kept only in the leader's memory, it was lost on FE restart or leader change, which brought the
+     * pipe back as RUNNING, and followers replaying the journal never saw it.
+     */
+    @Test
+    public void testTooManyFailuresErrorStateIsPersisted() throws Exception {
+        mockRepoExecutor();
+        mockTaskSubmission(PipeManagerTest::submittedWithFailedRun);
+
+        final String pipeName = "p_error_persisted";
+        Pipe pipe = preparePipe(pipeName);
+
+        // A follower that holds the pipe as RUNNING and follows the leader's journal from here on.
+        PipeManager pm = ctx.getGlobalStateMgr().getPipeManager();
+        UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
+        UtFrameUtils.PseudoImage image = new UtFrameUtils.PseudoImage();
+        pm.getRepo().save(image.getImageWriter());
+        PipeManager follower = new PipeManager();
+        SRMetaBlockReader reader = new SRMetaBlockReaderV2(image.getJsonReader());
+        follower.getRepo().load(reader);
+        reader.close();
+        Pipe followerPipe = follower.mayGetPipe(new PipeName(PIPE_TEST_DB, pipeName)).get();
+        Assertions.assertEquals(Pipe.State.RUNNING, followerPipe.getState());
+
+        failCurrentTask(pipe, Pipe.FAILED_TASK_THRESHOLD + 1);
+        Assertions.assertEquals(Pipe.State.ERROR, pipe.getState());
+
+        replayAlterPipeLogs(follower);
+        Assertions.assertEquals(Pipe.State.ERROR, followerPipe.getState());
+
+        dropPipe(pipeName);
+    }
+
+    /** Replays every queued ALTER PIPE journal entry into {@code follower}. */
+    private static void replayAlterPipeLogs(PipeManager follower) throws Exception {
+        while (true) {
+            AlterPipeLog log;
+            try {
+                log = (AlterPipeLog) UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_ALTER_PIPE);
+            } catch (Exception e) {
+                if (StringUtils.contains(e.getMessage(), "queue is empty")) {
+                    return;
+                }
+                throw e;
+            }
+            follower.getRepo().replayAlterPipe(log);
+        }
+    }
+
     @Test
     public void testTaskExecution() {
         PipeTaskDesc task = new PipeTaskDesc(1, "task", "test", "sql", null);
@@ -955,6 +1164,68 @@ public class PipeManagerTest {
         Assertions.assertEquals(Pipe.State.RUNNING, pipe.getState());
     }
 
+    private static final String CREATE_P_REPLACE_SQL =
+            "create pipe p_replace as insert into tbl1 select * from files('path'='fake://pipe', 'format'='parquet')";
+    private static final String REPLACE_P_REPLACE_SQL =
+            "create or replace pipe p_replace as insert into tbl1 " +
+                    "select * from files('path'='fake://pipe', 'format'='parquet')";
+
+    @Test
+    public void testReplaceChecksDropAtExecution() throws Exception {
+        mockRepoExecutor();
+        // the pipe appeared after the statement was authorized, and the user has no DROP on it
+        createPipe(CREATE_P_REPLACE_SQL);
+        long id = getPipe("p_replace").getId();
+        new MockUp<Authorizer>() {
+            @Mock
+            public void checkPipeAction(ConnectContext context, PipeName name, PrivilegeType privilegeType)
+                    throws AccessDeniedException {
+                throw new AccessDeniedException();
+            }
+        };
+        ErrorReportException e = Assertions.assertThrows(ErrorReportException.class,
+                () -> createPipe(REPLACE_P_REPLACE_SQL));
+        Assertions.assertTrue(e.getMessage().contains("DROP"), e.getMessage());
+        Assertions.assertEquals(id, getPipe("p_replace").getId());
+    }
+
+    @Test
+    public void testReplaceRejectsPipeReplacedAfterCheck() throws Exception {
+        mockRepoExecutor();
+        createPipe(CREATE_P_REPLACE_SQL);
+        // DROP was checked on the old pipe, then another session replaces it before the write lock
+        new MockUp<Authorizer>() {
+            @Mock
+            public void checkPipeAction(ConnectContext context, PipeName name, PrivilegeType privilegeType) {
+                try {
+                    dropPipe("p_replace");
+                    createPipe(CREATE_P_REPLACE_SQL);
+                } catch (Exception e) {
+                    throw new RuntimeException(e);
+                }
+            }
+        };
+        DdlException e = Assertions.assertThrows(DdlException.class, () -> createPipe(REPLACE_P_REPLACE_SQL));
+        Assertions.assertTrue(e.getMessage().contains("changed concurrently"), e.getMessage());
+        long id = getPipe("p_replace").getId();
+        // a pipe that did not exist at the check but exists at the lock is not replaced either
+        new MockUp<PipeManager>() {
+            boolean hidden = false;
+
+            @Mock
+            public Optional<Pipe> mayGetPipe(Invocation inv, PipeName name) {
+                if (!hidden) {
+                    hidden = true;
+                    return Optional.empty();
+                }
+                return inv.proceed();
+            }
+        };
+        e = Assertions.assertThrows(DdlException.class, () -> createPipe(REPLACE_P_REPLACE_SQL));
+        Assertions.assertTrue(e.getMessage().contains("changed concurrently"), e.getMessage());
+        Assertions.assertEquals(id, getPipe("p_replace").getId());
+    }
+
     @Test
     public void pipeCRUD() throws Exception {
         mockRepoExecutor();
@@ -967,32 +1238,32 @@ public class PipeManagerTest {
         String sql =
                 "create pipe p_crud as insert into tbl1 select * from files('path'='fake://pipe', 'format'='parquet')";
         CreatePipeStmt createStmt = (CreatePipeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        pm.createPipe(createStmt);
+        pm.createPipe(ctx, createStmt);
 
         Pipe pipe = pm.mayGetPipe(name).get();
         Assertions.assertEquals(Pipe.State.RUNNING, pipe.getState());
 
         // create if not exists
         CreatePipeStmt createAgain = createStmt;
-        Assertions.assertThrows(SemanticException.class, () -> pm.createPipe(createAgain));
+        Assertions.assertThrows(SemanticException.class, () -> pm.createPipe(ctx, createAgain));
         sql = "create pipe if not exists p_crud as insert into tbl1 " +
                 "select * from files('path'='fake://pipe', 'format'='parquet')";
         createStmt = (CreatePipeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        pm.createPipe(createStmt);
+        pm.createPipe(ctx, createStmt);
 
         // create or replace
         String createOrReplaceSql = "create or replace pipe p_crud as insert into tbl1 " +
                 "select * from files('path'='fake://pipe', 'format'='parquet')";
         CreatePipeStmt createOrReplace = (CreatePipeStmt) UtFrameUtils.parseStmtWithNewParser(createOrReplaceSql, ctx);
         long previousId = getPipe("p_crud").getId();
-        pm.createPipe(createOrReplace);
+        pm.createPipe(ctx, createOrReplace);
         Assertions.assertNotEquals(previousId, getPipe("p_crud").getId());
         pipe = pm.mayGetPipe(name).get();
 
         // create or replace when not exists
         previousId = pipe.getId();
         dropPipe(name.getPipeName());
-        pm.createPipe(createOrReplace);
+        pm.createPipe(ctx, createOrReplace);
         pipe = pm.mayGetPipe(name).get();
         Assertions.assertNotEquals(previousId, pipe.getId());
 
@@ -1035,10 +1306,10 @@ public class PipeManagerTest {
         // drop database
         sql = "create pipe p_crud as insert into tbl1 select * from files('path'='fake://pipe', 'format'='parquet')";
         createStmt = (CreatePipeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        pm.createPipe(createStmt);
+        pm.createPipe(ctx, createStmt);
         sql = "create pipe p_crud1 as insert into tbl1 select * from files('path'='fake://pipe', 'format'='parquet')";
         createStmt = (CreatePipeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        pm.createPipe(createStmt);
+        pm.createPipe(ctx, createStmt);
         long dbId = ctx.getGlobalStateMgr().getLocalMetastore().getDb(PIPE_TEST_DB).getId();
         pm.dropPipesOfDb(PIPE_TEST_DB, dbId);
         Assertions.assertEquals(0, pm.getPipesUnlock().size());
@@ -1051,12 +1322,12 @@ public class PipeManagerTest {
         String createSql =
                 "create pipe show_1 as insert into tbl1 select * from files('path'='fake://pipe', 'format'='parquet')";
         CreatePipeStmt createStmt = (CreatePipeStmt) UtFrameUtils.parseStmtWithNewParser(createSql, ctx);
-        pm.createPipe(createStmt);
+        pm.createPipe(ctx, createStmt);
 
         createSql =
                 "create pipe show_2 as insert into tbl1 select * from files('path'='fake://pipe', 'format'='parquet')";
         createStmt = (CreatePipeStmt) UtFrameUtils.parseStmtWithNewParser(createSql, ctx);
-        pm.createPipe(createStmt);
+        pm.createPipe(ctx, createStmt);
 
         // show
         String sql = "show pipes where name like 'show%'";
@@ -1106,6 +1377,26 @@ public class PipeManagerTest {
     }
 
     @Test
+    public void testDescPipeRedactsCredentials() throws Exception {
+        String name = "desc_redact";
+        createPipe("create pipe " + name + " as insert into tbl1 select * from files('path'='fake://pipe', " +
+                "'format'='parquet', 'aws.s3.access_key'='PROBEAK123', 'aws.s3.secret_key'='PROBESECRET123')");
+        try {
+            DescPipeStmt stmt = (DescPipeStmt) UtFrameUtils.parseStmtWithNewParser("desc pipe " + name, ctx);
+            ShowResultSet result = ShowExecutor.execute(stmt, ctx);
+            String sql = result.getResultRows().get(0).get(6);
+            Assertions.assertFalse(sql.contains("PROBEAK123"), sql);
+            Assertions.assertFalse(sql.contains("PROBESECRET123"), sql);
+            Assertions.assertTrue(sql.contains("'aws.s3.secret_key' = ***"), sql);
+
+            // The stored SQL keeps the credentials: every batch reads its files with it.
+            Assertions.assertTrue(getPipe(name).getOriginSql().contains("PROBESECRET123"));
+        } finally {
+            dropPipe(name);
+        }
+    }
+
+    @Test
     public void testListPipes() throws Exception {
         mockRepoExecutor();
         ExecuteEnv env = Mockito.mock(ExecuteEnv.class);
@@ -1116,6 +1407,7 @@ public class PipeManagerTest {
         Assertions.assertThrows(TException.class, () -> impl.listPipes(params));
         TUserIdentity identity = new TUserIdentity();
         identity.setUsername("root");
+        identity.setHost("%");
         params.setUser_ident(identity);
 
         // normal
@@ -1123,7 +1415,7 @@ public class PipeManagerTest {
         String createSql =
                 "create pipe list_p1 as insert into tbl1 select * from files('path'='fake://pipe', 'format'='parquet')";
         CreatePipeStmt createStmt = (CreatePipeStmt) UtFrameUtils.parseStmtWithNewParser(createSql, ctx);
-        pm.createPipe(createStmt);
+        pm.createPipe(ctx, createStmt);
 
         Assertions.assertFalse(impl.listPipes(params).pipes.isEmpty());
 
@@ -1141,12 +1433,13 @@ public class PipeManagerTest {
         String createSql =
                 "create pipe list_p2 as insert into tbl1 select * from files('path'='fake://pipe', 'format'='parquet')";
         CreatePipeStmt createStmt = (CreatePipeStmt) UtFrameUtils.parseStmtWithNewParser(createSql, ctx);
-        pm.createPipe(createStmt);
+        pm.createPipe(ctx, createStmt);
+        long pipeId = getPipe("list_p2").getPipeId().getId();
 
         List<PipeFileRecord> records = Arrays.asList(
-                new PipeFileRecord(1, "file1", "version1", 1024),
-                new PipeFileRecord(1, "file2", "version1", 1024),
-                new PipeFileRecord(1, "file3", "version1", 1024)
+                new PipeFileRecord(pipeId, "file1", "version1", 1024),
+                new PipeFileRecord(pipeId, "file2", "version1", 1024),
+                new PipeFileRecord(pipeId + 100000, "orphan", "version1", 1024)
         );
         new Expectations(RepoAccessor.getInstance()) {
             {
@@ -1163,9 +1456,55 @@ public class PipeManagerTest {
         // normal
         TUserIdentity identity = new TUserIdentity();
         identity.setUsername("root");
+        identity.setHost("%");
         params.setUser_ident(identity);
         TListPipeFilesResult result = impl.listPipeFiles(params);
-        Assertions.assertFalse(result.pipe_files.isEmpty());
+        Assertions.assertEquals(2, result.getPipe_filesSize());
+    }
+
+    @Test
+    public void testListPipesAndFilesCheckPrivilege() throws Exception {
+        ExecuteEnv env = Mockito.mock(ExecuteEnv.class);
+        FrontendServiceImpl impl = new FrontendServiceImpl(env);
+        createPipe("create pipe list_priv as insert into tbl1 select * from files('path'='fake://pipe', 'format'='parquet')");
+        long pipeId = getPipe("list_priv").getPipeId().getId();
+        List<PipeFileRecord> records = Arrays.asList(
+                new PipeFileRecord(pipeId, "file1", "version1", 1024),
+                new PipeFileRecord(pipeId, "file2", "version1", 1024));
+        new Expectations(RepoAccessor.getInstance()) {
+            {
+                RepoAccessor.getInstance().listAllFiles();
+                result = records;
+                minTimes = 0;
+            }
+        };
+
+        String noPriv = "list_pipe_no_priv";
+        String granted = "list_pipe_granted";
+        starRocksAssert.ddl("create user " + noPriv);
+        starRocksAssert.ddl("grant create pipe on database " + PIPE_TEST_DB + " to " + noPriv);
+        starRocksAssert.ddl("grant insert on table " + PIPE_TEST_DB + ".tbl1 to " + noPriv);
+        starRocksAssert.ddl("create user " + granted);
+        starRocksAssert.ddl("grant usage on pipe " + PIPE_TEST_DB + ".list_priv to " + granted);
+        try {
+            for (String user : Arrays.asList(noPriv, granted, "root")) {
+                TUserIdentity identity = new TUserIdentity();
+                identity.setUsername(user);
+                identity.setHost("%");
+                TListPipesParams pipesParams = new TListPipesParams();
+                pipesParams.setUser_ident(identity);
+                TListPipeFilesParams filesParams = new TListPipeFilesParams();
+                filesParams.setUser_ident(identity);
+
+                int expectPipes = user.equals(noPriv) ? 0 : 1;
+                int expectFiles = user.equals(noPriv) ? 0 : 2;
+                Assertions.assertEquals(expectPipes, impl.listPipes(pipesParams).getPipesSize(), user);
+                Assertions.assertEquals(expectFiles, impl.listPipeFiles(filesParams).getPipe_filesSize(), user);
+            }
+        } finally {
+            starRocksAssert.ddl("drop user " + noPriv);
+            starRocksAssert.ddl("drop user " + granted);
+        }
     }
 
     @Test

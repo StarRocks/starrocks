@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "verbose_session_variables provides session variable details including default values and whether they have been modified."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # verbose_session_variables

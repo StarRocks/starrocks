@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 sidebar_position: 50
 description: "ネイティブ GEOMETRY の descriptor に記録された数値 EPSG SRID を返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ST_SRID

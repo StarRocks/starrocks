@@ -17,12 +17,17 @@
 #include <atomic>
 #include <chrono>
 #include <future>
+#include <map>
+#include <numeric>
+#include <tuple>
 
 #include "common/thread/threadpool.h"
 #include "storage/lake/compaction_scheduler.h"
+#include "storage/lake/sort_key_bounds_test_util.h"
 #include "storage/lake/tablet_merge_admission.h"
 #include "storage/lake/tablet_parallel_compaction_manager.h"
 #include "storage/lake/tablet_reshard_test_base.h"
+#include "storage/tablet_range.h"
 
 namespace starrocks {
 
@@ -591,6 +596,217 @@ TEST_F(LakeTabletReshardTest, test_tablet_splitting_capacity_limit_uses_identica
     expect_split_fallback_after_flush(m);
 }
 
+namespace {
+// Ways a segment's sort key bounds can be missing or unreadable.
+enum class BoundDamage {
+    kBothAbsent,
+    kBothEmpty,
+    kMinAbsent,
+    kMaxAbsent,
+    kMinEmpty,
+    kMaxEmpty,
+    // The bounds rewritten into the encoded pair, then one bound in a format version this binary does not know.
+    kMinUnknownVersion,
+    kMaxUnknownVersion,
+    // The bounds rewritten into the encoded pair, then one bound in format version 1 with a damaged header.
+    kMinBadHeader,
+    kMaxBadHeader,
+    // The bounds rewritten into the encoded pair, then one bound with a valid header and a damaged value.
+    kMinBadValue,
+    kMaxBadValue,
+};
+constexpr BoundDamage kAllBoundDamages[] = {
+        BoundDamage::kBothAbsent,        BoundDamage::kBothEmpty,         BoundDamage::kMinAbsent,
+        BoundDamage::kMaxAbsent,         BoundDamage::kMinEmpty,          BoundDamage::kMaxEmpty,
+        BoundDamage::kMinUnknownVersion, BoundDamage::kMaxUnknownVersion, BoundDamage::kMinBadHeader,
+        BoundDamage::kMaxBadHeader,      BoundDamage::kMinBadValue,       BoundDamage::kMaxBadValue};
+
+// True for the damage that leaves the segment with bounds that do not decode, rather than with no bounds.
+bool leaves_unreadable_bounds(BoundDamage damage) {
+    return damage == BoundDamage::kMinBadHeader || damage == BoundDamage::kMaxBadHeader ||
+           damage == BoundDamage::kMinBadValue || damage == BoundDamage::kMaxBadValue;
+}
+
+// Rewrites the segment's bounds into the encoded pair, as the current writer stores them, and sets byte `pos` of one
+// bound to `value`. The fixture's single INT sort key column encodes as the format version (byte 0), the column count
+// (bytes 1-2), the type byte (byte 3), the value marker (byte 4) and the 4-byte payload.
+void damage_encoded_bound(SegmentMetadataPB* sm, bool min, size_t pos, uint8_t value) {
+    VariantTuple lo;
+    VariantTuple hi;
+    CHECK_OK(decode_segment_sort_key_bounds(*sm, &lo, &hi));
+    set_segment_sort_key_bounds(lo, hi, sm);
+    CHECK(sm->has_sort_key_min_encoded() && sm->has_sort_key_max_encoded());
+    CHECK(!sm->has_deprecated_sort_key_min() && !sm->has_deprecated_sort_key_max());
+    auto* bytes = min ? sm->mutable_sort_key_min_encoded() : sm->mutable_sort_key_max_encoded();
+    CHECK_EQ(9u, bytes->size());
+    (*bytes)[pos] = static_cast<char>(value);
+}
+
+void strip_segment_bounds(SegmentMetadataPB* sm, BoundDamage damage) {
+    switch (damage) {
+    case BoundDamage::kBothAbsent:
+        sm->clear_deprecated_sort_key_min();
+        sm->clear_deprecated_sort_key_max();
+        break;
+    case BoundDamage::kBothEmpty:
+        sm->mutable_deprecated_sort_key_min()->clear_values();
+        sm->mutable_deprecated_sort_key_max()->clear_values();
+        break;
+    case BoundDamage::kMinAbsent:
+        sm->clear_deprecated_sort_key_min();
+        break;
+    case BoundDamage::kMaxAbsent:
+        sm->clear_deprecated_sort_key_max();
+        break;
+    case BoundDamage::kMinEmpty:
+        sm->mutable_deprecated_sort_key_min()->clear_values();
+        break;
+    case BoundDamage::kMaxEmpty:
+        sm->mutable_deprecated_sort_key_max()->clear_values();
+        break;
+    case BoundDamage::kMinUnknownVersion:
+        damage_encoded_bound(sm, /*min=*/true, 0, 0x03);
+        break;
+    case BoundDamage::kMaxUnknownVersion:
+        damage_encoded_bound(sm, /*min=*/false, 0, 0x03);
+        break;
+    case BoundDamage::kMinBadHeader:
+        damage_encoded_bound(sm, /*min=*/true, 3, 0xFF);
+        break;
+    case BoundDamage::kMaxBadHeader:
+        damage_encoded_bound(sm, /*min=*/false, 3, 0xFF);
+        break;
+    case BoundDamage::kMinBadValue:
+        damage_encoded_bound(sm, /*min=*/true, 4, 0x02);
+        break;
+    case BoundDamage::kMaxBadValue:
+        damage_encoded_bound(sm, /*min=*/false, 4, 0x02);
+        break;
+    }
+}
+} // namespace
+
+// A segment with rows but without bounds, or with bounds that do not decode, cannot be placed in a child range: the
+// FE-supplied and the data-driven split both fall back to an identical child instead of failing.
+TEST_F(LakeTabletReshardTest, test_tablet_splitting_boundless_segment_uses_identical_fallback) {
+    for (BoundDamage damage : kAllBoundDamages) {
+        const int mode = static_cast<int>(damage);
+        auto m = split_source();
+        strip_segment_bounds(m->mutable_rowsets(0)->mutable_segment_metas(1), damage);
+        EXPECT_EQ(leaves_unreadable_bounds(damage), has_segment_sort_key_bounds(m->rowsets(0).segment_metas(1)))
+                << mode;
+        expect_split_fallback_after_flush(m);
+        ASSIGN_OR_ABORT(auto children, split_source_into_children(m, /*external=*/false));
+        ASSERT_EQ(1, children.size()) << mode;
+        EXPECT_EQ(m->rowsets(0).SerializeAsString(), children.begin()->second->rowsets(0).SerializeAsString()) << mode;
+    }
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_splitting_boundless_segment_colocate_uses_identical_fallback) {
+    auto m = split_source();
+    strip_segment_bounds(m->mutable_rowsets(0)->mutable_segment_metas(1), BoundDamage::kBothAbsent);
+    CHECK_OK(_tablet_manager->put_tablet_metadata(m));
+    SplittingTabletInfoPB splitting;
+    splitting.set_old_tablet_id(m->id());
+    splitting.add_new_tablet_ids(m->id() + 100000);
+    splitting.add_new_tablet_ids(m->id() + 200000);
+    TxnInfoPB txn_info;
+    txn_info.set_colocate_column_count(1);
+    ASSIGN_OR_ABORT(auto children, lake::split_tablet(_tablet_manager.get(), m, splitting, 2, txn_info));
+    ASSERT_EQ(1, children.size());
+    EXPECT_EQ(m->rowsets(0).SerializeAsString(), children.begin()->second->rowsets(0).SerializeAsString());
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_splitting_boundless_rowset_beside_bounded_uses_identical_fallback) {
+    auto m = split_source();
+    *m->mutable_range()->mutable_lower_bound() = generate_sort_key(0);
+    m->mutable_range()->set_lower_bound_included(true);
+    *m->mutable_range()->mutable_upper_bound() = generate_sort_key(1000);
+    m->mutable_range()->set_upper_bound_included(false);
+    auto* r = m->add_rowsets();
+    r->set_id(10);
+    lake::tablet_reshard_helper::set_rowset_uid(r);
+    r->set_num_rows(30);
+    r->set_data_size(300);
+    auto* sm = r->add_segment_metas();
+    sm->set_filename("boundless.dat");
+    sm->set_segment_idx(0);
+    sm->set_num_rows(30);
+    sm->set_size(300);
+    CHECK_OK(_tablet_manager->put_tablet_metadata(m));
+
+    for (bool external : {true, false}) {
+        SplittingTabletInfoPB splitting;
+        splitting.set_old_tablet_id(m->id());
+        splitting.add_new_tablet_ids(m->id() + 100000);
+        splitting.add_new_tablet_ids(m->id() + 200000);
+        if (external) {
+            auto* first = splitting.add_new_tablet_ranges();
+            *first->mutable_lower_bound() = m->range().lower_bound();
+            first->set_lower_bound_included(m->range().lower_bound_included());
+            *first->mutable_upper_bound() = generate_sort_key(50);
+            first->set_upper_bound_included(false);
+            auto* second = splitting.add_new_tablet_ranges();
+            *second->mutable_lower_bound() = generate_sort_key(50);
+            second->set_lower_bound_included(true);
+            *second->mutable_upper_bound() = m->range().upper_bound();
+            second->set_upper_bound_included(m->range().upper_bound_included());
+        }
+        ASSIGN_OR_ABORT(auto children, lake::split_tablet(_tablet_manager.get(), m, splitting, 2, TxnInfoPB()));
+        ASSERT_EQ(1, children.size()) << external;
+        const auto& child = children.begin()->second;
+        ASSERT_EQ(2, child->rowsets_size()) << external;
+        EXPECT_EQ(m->rowsets(0).SerializeAsString(), child->rowsets(0).SerializeAsString()) << external;
+        EXPECT_EQ(m->rowsets(1).SerializeAsString(), child->rowsets(1).SerializeAsString()) << external;
+    }
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_splitting_zero_row_boundless_segment_still_splits) {
+    auto m = split_source();
+    auto* r = m->mutable_rowsets(0);
+    // Only segment 0 (50 rows, 500 bytes) keeps rows, so the rowset totals shrink to match it.
+    r->set_num_rows(50);
+    r->set_data_size(500);
+    auto* sm = r->mutable_segment_metas(1);
+    sm->set_num_rows(0);
+    strip_segment_bounds(sm, BoundDamage::kBothAbsent);
+    ASSIGN_OR_ABORT(auto children, split_source_into_children(m));
+    EXPECT_EQ(2, children.size());
+}
+
+// Segments that carry their bounds in the encoded pair, as the current writer stores them, or in a mix of both pairs
+// are not bound-less: the source splits into the same two children as with the deprecated pair, each child owning
+// one of the two segments.
+TEST_F(LakeTabletReshardTest, test_tablet_splitting_encoded_bounds_are_not_boundless) {
+    const auto base = split_source();
+    for (const bool external : {true, false}) {
+        SCOPED_TRACE(external ? "FE-supplied boundaries" : "data-driven boundaries");
+        std::map<int64_t, std::string> expected;
+        for (const auto repr :
+             {SortKeyBoundsRepr::kDeprecated, SortKeyBoundsRepr::kEncoded, SortKeyBoundsRepr::kMixed}) {
+            SCOPED_TRACE(fmt::format("representation {}", static_cast<int>(repr)));
+            auto m = std::make_shared<TabletMetadataPB>(*base);
+            convert_sort_key_bounds(m.get(), repr);
+            ASSIGN_OR_ABORT(auto children, split_source_into_children(m, external));
+            ASSERT_EQ(2, children.size());
+            std::map<int64_t, std::string> normalized;
+            for (const auto& [id, child] : children) {
+                ASSERT_EQ(1, child->rowsets_size());
+                ASSERT_EQ(1, child->rowsets(0).segment_metas_size());
+                EXPECT_FALSE(child->rowsets(0).segment_metas(0).shared());
+                TabletMetadataPB copy(*child);
+                normalize_sort_key_bounds(&copy);
+                normalized.emplace(id, copy.SerializeAsString());
+            }
+            if (repr == SortKeyBoundsRepr::kDeprecated) {
+                expected = std::move(normalized);
+            } else {
+                EXPECT_EQ(expected, normalized);
+            }
+        }
+    }
+}
+
 TEST_F(LakeTabletReshardTest, test_tablet_splitting_corruption_does_not_use_identical_fallback) {
     for (int malformed = 0; malformed < 7; ++malformed) {
         auto m = split_source();
@@ -819,8 +1035,8 @@ TEST_F(LakeTabletReshardTest, test_tablet_splitting) {
         auto* sm = rowset_meta_pb->add_segment_metas();
         sm->set_filename("test_0.dat");
         sm->set_size(512);
-        sm->mutable_sort_key_min()->CopyFrom(generate_sort_key(0));
-        sm->mutable_sort_key_max()->CopyFrom(generate_sort_key(49));
+        sm->mutable_deprecated_sort_key_min()->CopyFrom(generate_sort_key(0));
+        sm->mutable_deprecated_sort_key_max()->CopyFrom(generate_sort_key(49));
         sm->set_num_rows(3);
     }
 
@@ -828,8 +1044,8 @@ TEST_F(LakeTabletReshardTest, test_tablet_splitting) {
         auto* sm = rowset_meta_pb->add_segment_metas();
         sm->set_filename("test_1.dat");
         sm->set_size(512);
-        sm->mutable_sort_key_min()->CopyFrom(generate_sort_key(50));
-        sm->mutable_sort_key_max()->CopyFrom(generate_sort_key(100));
+        sm->mutable_deprecated_sort_key_min()->CopyFrom(generate_sort_key(50));
+        sm->mutable_deprecated_sort_key_max()->CopyFrom(generate_sort_key(100));
         sm->set_num_rows(2);
     }
     rowset_meta_pb->add_del_files()->set_name("test.del");
@@ -948,8 +1164,8 @@ TEST_F(LakeTabletReshardTest, test_identical_tablet_flush_failure_propagates) {
         auto* sm = rowset_meta_pb->add_segment_metas();
         sm->set_filename("test_0.dat");
         sm->set_size(512);
-        sm->mutable_sort_key_min()->CopyFrom(generate_sort_key(0));
-        sm->mutable_sort_key_max()->CopyFrom(generate_sort_key(49));
+        sm->mutable_deprecated_sort_key_min()->CopyFrom(generate_sort_key(0));
+        sm->mutable_deprecated_sort_key_max()->CopyFrom(generate_sort_key(49));
         sm->set_num_rows(3);
     }
     rowset_meta_pb->set_data_size(512);
@@ -1012,8 +1228,8 @@ TEST_F(LakeTabletReshardTest, test_identical_reshard_failpoint_after_pk_flush) {
             auto* sm = rowset_meta_pb->add_segment_metas();
             sm->set_filename("test_0.dat");
             sm->set_size(512);
-            sm->mutable_sort_key_min()->CopyFrom(generate_sort_key(0));
-            sm->mutable_sort_key_max()->CopyFrom(generate_sort_key(49));
+            sm->mutable_deprecated_sort_key_min()->CopyFrom(generate_sort_key(0));
+            sm->mutable_deprecated_sort_key_max()->CopyFrom(generate_sort_key(49));
             sm->set_num_rows(3);
         }
         rowset_meta_pb->set_data_size(512);
@@ -1062,8 +1278,8 @@ TEST_F(LakeTabletReshardTest, test_reshard_failpoint_between_metadata_writes) {
             auto* sm = rowset_meta_pb->add_segment_metas();
             sm->set_filename("test_0.dat");
             sm->set_size(512);
-            sm->mutable_sort_key_min()->CopyFrom(generate_sort_key(0));
-            sm->mutable_sort_key_max()->CopyFrom(generate_sort_key(49));
+            sm->mutable_deprecated_sort_key_min()->CopyFrom(generate_sort_key(0));
+            sm->mutable_deprecated_sort_key_max()->CopyFrom(generate_sort_key(49));
             sm->set_num_rows(3);
         }
         rowset_meta_pb->set_data_size(512);
@@ -1134,16 +1350,16 @@ TEST_F(LakeTabletReshardTest, test_tablet_split_per_segment_shared_invariants) {
         auto* m0 = rs->add_segment_metas();
         m0->set_filename("seg_lo.dat");
         m0->set_size(512);
-        m0->mutable_sort_key_min()->CopyFrom(generate_sort_key(0));
-        m0->mutable_sort_key_max()->CopyFrom(generate_sort_key(49));
+        m0->mutable_deprecated_sort_key_min()->CopyFrom(generate_sort_key(0));
+        m0->mutable_deprecated_sort_key_max()->CopyFrom(generate_sort_key(49));
         m0->set_num_rows(50);
     }
     {
         auto* m1 = rs->add_segment_metas();
         m1->set_filename("seg_hi.dat");
         m1->set_size(512);
-        m1->mutable_sort_key_min()->CopyFrom(generate_sort_key(50));
-        m1->mutable_sort_key_max()->CopyFrom(generate_sort_key(99));
+        m1->mutable_deprecated_sort_key_min()->CopyFrom(generate_sort_key(50));
+        m1->mutable_deprecated_sort_key_max()->CopyFrom(generate_sort_key(99));
         m1->set_num_rows(50);
     }
     rs->set_overlapped(true);
@@ -1279,8 +1495,8 @@ TEST_F(LakeTabletReshardTest, test_tablet_split_keeps_pre_trailing_key_add_segme
         sm->set_size(5000);
         sm->set_num_rows(500);
         // Arity 1: written before the trailing `ADD COLUMN k2`.
-        sm->mutable_sort_key_min()->CopyFrom(generate_sort_key(lo));
-        sm->mutable_sort_key_max()->CopyFrom(generate_sort_key(hi));
+        sm->mutable_deprecated_sort_key_min()->CopyFrom(generate_sort_key(lo));
+        sm->mutable_deprecated_sort_key_max()->CopyFrom(generate_sort_key(hi));
     };
     add_pre_add_rowset(2, 0, 400, "seg_lo.dat");
     add_pre_add_rowset(3, 600, 999, "seg_hi.dat");
@@ -1347,16 +1563,16 @@ TEST_F(LakeTabletReshardTest, test_tablet_split_propagates_ownership_to_delvec_d
         auto* m0 = rs->add_segment_metas();
         m0->set_filename("seg_lo.dat");
         m0->set_size(512);
-        m0->mutable_sort_key_min()->CopyFrom(generate_sort_key(0));
-        m0->mutable_sort_key_max()->CopyFrom(generate_sort_key(49));
+        m0->mutable_deprecated_sort_key_min()->CopyFrom(generate_sort_key(0));
+        m0->mutable_deprecated_sort_key_max()->CopyFrom(generate_sort_key(49));
         m0->set_num_rows(50);
     }
     {
         auto* m1 = rs->add_segment_metas();
         m1->set_filename("seg_hi.dat");
         m1->set_size(512);
-        m1->mutable_sort_key_min()->CopyFrom(generate_sort_key(50));
-        m1->mutable_sort_key_max()->CopyFrom(generate_sort_key(99));
+        m1->mutable_deprecated_sort_key_min()->CopyFrom(generate_sort_key(50));
+        m1->mutable_deprecated_sort_key_max()->CopyFrom(generate_sort_key(99));
         m1->set_num_rows(50);
     }
     rs->set_overlapped(true);
@@ -1437,8 +1653,8 @@ TEST_F(LakeTabletReshardTest, test_tablet_split_removes_fully_pruned_rowset) {
         auto* ma = rs_a->add_segment_metas();
         ma->set_filename("a_seg.dat");
         ma->set_size(512);
-        ma->mutable_sort_key_min()->CopyFrom(generate_sort_key(0));
-        ma->mutable_sort_key_max()->CopyFrom(generate_sort_key(49));
+        ma->mutable_deprecated_sort_key_min()->CopyFrom(generate_sort_key(0));
+        ma->mutable_deprecated_sort_key_max()->CopyFrom(generate_sort_key(49));
         ma->set_num_rows(50);
     }
     rs_a->set_data_size(512);
@@ -1451,8 +1667,8 @@ TEST_F(LakeTabletReshardTest, test_tablet_split_removes_fully_pruned_rowset) {
         auto* mb = rs_b->add_segment_metas();
         mb->set_filename("b_seg.dat");
         mb->set_size(512);
-        mb->mutable_sort_key_min()->CopyFrom(generate_sort_key(50));
-        mb->mutable_sort_key_max()->CopyFrom(generate_sort_key(99));
+        mb->mutable_deprecated_sort_key_min()->CopyFrom(generate_sort_key(50));
+        mb->mutable_deprecated_sort_key_max()->CopyFrom(generate_sort_key(99));
         mb->set_num_rows(50);
     }
     rs_b->set_data_size(512);
@@ -1526,8 +1742,8 @@ TEST_F(LakeTabletReshardTest, test_tablet_split_keeps_del_files_rowset) {
         auto* ma = rs_a->add_segment_metas();
         ma->set_filename("a_seg.dat");
         ma->set_size(512);
-        ma->mutable_sort_key_min()->CopyFrom(generate_sort_key(0));
-        ma->mutable_sort_key_max()->CopyFrom(generate_sort_key(49));
+        ma->mutable_deprecated_sort_key_min()->CopyFrom(generate_sort_key(0));
+        ma->mutable_deprecated_sort_key_max()->CopyFrom(generate_sort_key(49));
         ma->set_num_rows(50);
     }
     rs_a->set_data_size(512);
@@ -1541,8 +1757,8 @@ TEST_F(LakeTabletReshardTest, test_tablet_split_keeps_del_files_rowset) {
         auto* mb = rs_b->add_segment_metas();
         mb->set_filename("b_seg.dat");
         mb->set_size(512);
-        mb->mutable_sort_key_min()->CopyFrom(generate_sort_key(50));
-        mb->mutable_sort_key_max()->CopyFrom(generate_sort_key(99));
+        mb->mutable_deprecated_sort_key_min()->CopyFrom(generate_sort_key(50));
+        mb->mutable_deprecated_sort_key_max()->CopyFrom(generate_sort_key(99));
         mb->set_num_rows(50);
     }
     rs_b->set_data_size(512);
@@ -1605,16 +1821,16 @@ TEST_F(LakeTabletReshardTest, test_tablet_split_keeps_delete_predicate_rowset) {
         auto* dm0 = data_lo->add_segment_metas();
         dm0->set_filename("lo.dat");
         dm0->set_size(512);
-        dm0->mutable_sort_key_min()->CopyFrom(generate_sort_key(0));
-        dm0->mutable_sort_key_max()->CopyFrom(generate_sort_key(49));
+        dm0->mutable_deprecated_sort_key_min()->CopyFrom(generate_sort_key(0));
+        dm0->mutable_deprecated_sort_key_max()->CopyFrom(generate_sort_key(49));
         dm0->set_num_rows(50);
     }
     {
         auto* dm1 = data_lo->add_segment_metas();
         dm1->set_filename("hi.dat");
         dm1->set_size(512);
-        dm1->mutable_sort_key_min()->CopyFrom(generate_sort_key(50));
-        dm1->mutable_sort_key_max()->CopyFrom(generate_sort_key(99));
+        dm1->mutable_deprecated_sort_key_min()->CopyFrom(generate_sort_key(50));
+        dm1->mutable_deprecated_sort_key_max()->CopyFrom(generate_sort_key(99));
         dm1->set_num_rows(50);
     }
     data_lo->set_overlapped(true);
@@ -1730,8 +1946,8 @@ TEST_F(LakeTabletReshardTest, test_tablet_splitting_fewer_ranges_than_requested_
         auto* sm = rowset_meta_pb->add_segment_metas();
         sm->set_filename("seg_0.dat");
         sm->set_size(1024);
-        sm->mutable_sort_key_min()->CopyFrom(generate_sort_key(0));
-        sm->mutable_sort_key_max()->CopyFrom(generate_sort_key(300));
+        sm->mutable_deprecated_sort_key_min()->CopyFrom(generate_sort_key(0));
+        sm->mutable_deprecated_sort_key_max()->CopyFrom(generate_sort_key(300));
         sm->set_num_rows(300);
     }
     rowset_meta_pb->set_num_rows(300);
@@ -1780,8 +1996,8 @@ TEST_F(LakeTabletReshardTest, test_tablet_splitting_with_gap_boundary) {
         auto* sm = rowset_meta_pb->add_segment_metas();
         sm->set_filename("test_0.dat");
         sm->set_size(512);
-        sm->mutable_sort_key_min()->CopyFrom(generate_sort_key(0));
-        sm->mutable_sort_key_max()->CopyFrom(generate_sort_key(299999));
+        sm->mutable_deprecated_sort_key_min()->CopyFrom(generate_sort_key(0));
+        sm->mutable_deprecated_sort_key_max()->CopyFrom(generate_sort_key(299999));
         sm->set_num_rows(100);
     }
 
@@ -1789,8 +2005,8 @@ TEST_F(LakeTabletReshardTest, test_tablet_splitting_with_gap_boundary) {
         auto* sm = rowset_meta_pb->add_segment_metas();
         sm->set_filename("test_1.dat");
         sm->set_size(512);
-        sm->mutable_sort_key_min()->CopyFrom(generate_sort_key(300000));
-        sm->mutable_sort_key_max()->CopyFrom(generate_sort_key(599999));
+        sm->mutable_deprecated_sort_key_min()->CopyFrom(generate_sort_key(300000));
+        sm->mutable_deprecated_sort_key_max()->CopyFrom(generate_sort_key(599999));
         sm->set_num_rows(100);
     }
 
@@ -1884,8 +2100,8 @@ TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_keeps_raw_rowset_stats) {
         auto* sm = rowset->add_segment_metas();
         sm->set_filename("segment_0.dat");
         sm->set_size(400);
-        sm->mutable_sort_key_min()->CopyFrom(generate_sort_key(0));
-        sm->mutable_sort_key_max()->CopyFrom(generate_sort_key(49));
+        sm->mutable_deprecated_sort_key_min()->CopyFrom(generate_sort_key(0));
+        sm->mutable_deprecated_sort_key_max()->CopyFrom(generate_sort_key(49));
         sm->set_num_rows(4);
     }
 
@@ -1893,8 +2109,8 @@ TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_keeps_raw_rowset_stats) {
         auto* sm = rowset->add_segment_metas();
         sm->set_filename("segment_1.dat");
         sm->set_size(400);
-        sm->mutable_sort_key_min()->CopyFrom(generate_sort_key(50));
-        sm->mutable_sort_key_max()->CopyFrom(generate_sort_key(99));
+        sm->mutable_deprecated_sort_key_min()->CopyFrom(generate_sort_key(50));
+        sm->mutable_deprecated_sort_key_max()->CopyFrom(generate_sort_key(99));
         sm->set_num_rows(4);
     }
 
@@ -1963,8 +2179,8 @@ TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_scales_num_dels) {
         auto* sm = rowset->add_segment_metas();
         sm->set_filename("segment_0.dat");
         sm->set_size(500);
-        sm->mutable_sort_key_min()->CopyFrom(generate_sort_key(0));
-        sm->mutable_sort_key_max()->CopyFrom(generate_sort_key(49));
+        sm->mutable_deprecated_sort_key_min()->CopyFrom(generate_sort_key(0));
+        sm->mutable_deprecated_sort_key_max()->CopyFrom(generate_sort_key(49));
         sm->set_num_rows(5);
     }
 
@@ -1972,8 +2188,8 @@ TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_scales_num_dels) {
         auto* sm = rowset->add_segment_metas();
         sm->set_filename("segment_1.dat");
         sm->set_size(500);
-        sm->mutable_sort_key_min()->CopyFrom(generate_sort_key(50));
-        sm->mutable_sort_key_max()->CopyFrom(generate_sort_key(99));
+        sm->mutable_deprecated_sort_key_min()->CopyFrom(generate_sort_key(50));
+        sm->mutable_deprecated_sort_key_max()->CopyFrom(generate_sort_key(99));
         sm->set_num_rows(5);
     }
 
@@ -2039,8 +2255,8 @@ TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_explicit_num_dels_conserv
         auto* sm = rowset->add_segment_metas();
         sm->set_filename("segment_0.dat");
         sm->set_size(400);
-        sm->mutable_sort_key_min()->CopyFrom(generate_sort_key(0));
-        sm->mutable_sort_key_max()->CopyFrom(generate_sort_key(49));
+        sm->mutable_deprecated_sort_key_min()->CopyFrom(generate_sort_key(0));
+        sm->mutable_deprecated_sort_key_max()->CopyFrom(generate_sort_key(49));
         sm->set_num_rows(4);
     }
 
@@ -2048,8 +2264,8 @@ TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_explicit_num_dels_conserv
         auto* sm = rowset->add_segment_metas();
         sm->set_filename("segment_1.dat");
         sm->set_size(400);
-        sm->mutable_sort_key_min()->CopyFrom(generate_sort_key(50));
-        sm->mutable_sort_key_max()->CopyFrom(generate_sort_key(99));
+        sm->mutable_deprecated_sort_key_min()->CopyFrom(generate_sort_key(50));
+        sm->mutable_deprecated_sort_key_max()->CopyFrom(generate_sort_key(99));
         sm->set_num_rows(4);
     }
 
@@ -2120,8 +2336,8 @@ TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_anchor_per_rowset_conserv
         auto* sm = rs_a->add_segment_metas();
         sm->set_filename("rs_a_0.dat");
         sm->set_size(10000);
-        sm->mutable_sort_key_min()->CopyFrom(generate_sort_key(0));
-        sm->mutable_sort_key_max()->CopyFrom(generate_sort_key(99));
+        sm->mutable_deprecated_sort_key_min()->CopyFrom(generate_sort_key(0));
+        sm->mutable_deprecated_sort_key_max()->CopyFrom(generate_sort_key(99));
         sm->set_num_rows(100);
     }
 
@@ -2136,8 +2352,8 @@ TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_anchor_per_rowset_conserv
         auto* sm = rs_b->add_segment_metas();
         sm->set_filename("rs_b_0.dat");
         sm->set_size(6000);
-        sm->mutable_sort_key_min()->CopyFrom(generate_sort_key(50));
-        sm->mutable_sort_key_max()->CopyFrom(generate_sort_key(199));
+        sm->mutable_deprecated_sort_key_min()->CopyFrom(generate_sort_key(50));
+        sm->mutable_deprecated_sort_key_max()->CopyFrom(generate_sort_key(199));
         sm->set_num_rows(60);
     }
 
@@ -2152,8 +2368,8 @@ TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_anchor_per_rowset_conserv
         auto* sm = rs_c->add_segment_metas();
         sm->set_filename("rs_c_0.dat");
         sm->set_size(3000);
-        sm->mutable_sort_key_min()->CopyFrom(generate_sort_key(100));
-        sm->mutable_sort_key_max()->CopyFrom(generate_sort_key(199));
+        sm->mutable_deprecated_sort_key_min()->CopyFrom(generate_sort_key(100));
+        sm->mutable_deprecated_sort_key_max()->CopyFrom(generate_sort_key(199));
         sm->set_num_rows(30);
     }
 
@@ -2238,8 +2454,8 @@ TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_accepts_dels_above_zero_e
         auto* sm = rowset->add_segment_metas();
         sm->set_filename("seg_0.dat");
         sm->set_size(500);
-        sm->mutable_sort_key_min()->CopyFrom(generate_sort_key(0));
-        sm->mutable_sort_key_max()->CopyFrom(generate_sort_key(49));
+        sm->mutable_deprecated_sort_key_min()->CopyFrom(generate_sort_key(0));
+        sm->mutable_deprecated_sort_key_max()->CopyFrom(generate_sort_key(49));
         sm->set_num_rows(50);
     }
 
@@ -2247,8 +2463,8 @@ TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_accepts_dels_above_zero_e
         auto* sm = rowset->add_segment_metas();
         sm->set_filename("seg_1.dat");
         sm->set_size(500);
-        sm->mutable_sort_key_min()->CopyFrom(generate_sort_key(50));
-        sm->mutable_sort_key_max()->CopyFrom(generate_sort_key(99));
+        sm->mutable_deprecated_sort_key_min()->CopyFrom(generate_sort_key(50));
+        sm->mutable_deprecated_sort_key_max()->CopyFrom(generate_sort_key(99));
         sm->set_num_rows(50);
     }
 
@@ -2335,8 +2551,8 @@ TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_zero_active_weights_omit_
     segment->set_num_rows(2);
     segment->set_segment_idx(0);
     segment->set_shared(true);
-    segment->mutable_sort_key_min()->CopyFrom(generate_sort_key(0));
-    segment->mutable_sort_key_max()->CopyFrom(generate_sort_key(100));
+    segment->mutable_deprecated_sort_key_min()->CopyFrom(generate_sort_key(0));
+    segment->mutable_deprecated_sort_key_max()->CopyFrom(generate_sort_key(100));
 
     SplittingTabletInfoPB splitting;
     splitting.set_old_tablet_id(source->id());
@@ -2408,8 +2624,8 @@ TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_anchor_falls_back_to_segm
         auto* sm = rowset->add_segment_metas();
         sm->set_filename("seg_0.dat");
         sm->set_size(400);
-        sm->mutable_sort_key_min()->CopyFrom(generate_sort_key(0));
-        sm->mutable_sort_key_max()->CopyFrom(generate_sort_key(49));
+        sm->mutable_deprecated_sort_key_min()->CopyFrom(generate_sort_key(0));
+        sm->mutable_deprecated_sort_key_max()->CopyFrom(generate_sort_key(49));
         sm->set_num_rows(4);
     }
 
@@ -2417,8 +2633,8 @@ TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_anchor_falls_back_to_segm
         auto* sm = rowset->add_segment_metas();
         sm->set_filename("seg_1.dat");
         sm->set_size(400);
-        sm->mutable_sort_key_min()->CopyFrom(generate_sort_key(50));
-        sm->mutable_sort_key_max()->CopyFrom(generate_sort_key(99));
+        sm->mutable_deprecated_sort_key_min()->CopyFrom(generate_sort_key(50));
+        sm->mutable_deprecated_sort_key_max()->CopyFrom(generate_sort_key(99));
         sm->set_num_rows(4);
     }
 
@@ -2484,8 +2700,8 @@ TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_anchor_three_level_chain_
         // conservation of the numbers the parent metadata records, and keeping them makes the
         // arithmetic below unchanged by this fixture switching to real segments.
         sm->set_size(data_size);
-        sm->mutable_sort_key_min()->CopyFrom(generate_sort_key(min_v));
-        sm->mutable_sort_key_max()->CopyFrom(generate_sort_key(max_v));
+        sm->mutable_deprecated_sort_key_min()->CopyFrom(generate_sort_key(min_v));
+        sm->mutable_deprecated_sort_key_max()->CopyFrom(generate_sort_key(max_v));
         sm->set_num_rows(num_rows);
     };
 
@@ -2851,17 +3067,20 @@ TEST_F(LakeTabletReshardTest, test_split_cross_publish_multi_stmt_batch_keeps_sc
 
 // CORE-001: split cross-publish deliberately retains every shared physical segment and apportions
 // rowset stats. A child can therefore have positive approximate stats even when the shared segment
-// is wholly outside its range. A later SPLIT must take the typed identical fallback after its flush,
-// rather than treating current-producer metadata as corruption.
-TEST_F(LakeTabletReshardTest, test_cross_published_off_range_stats_split_falls_back_identical) {
+// is wholly outside its range. That is valid current-producer metadata, not corruption, and it must
+// not block a later SPLIT: the rowset is carried to every child it is emitted to, still shared and
+// still reading empty, with its approximate stats shared out among them. Refusing the split instead
+// leaves the tablet unsplittable until a compaction rewrites the rowset, while every refused split
+// aborts that compaction.
+TEST_F(LakeTabletReshardTest, test_cross_published_off_range_rowset_splits) {
     constexpr int64_t kBaseVersion = 1;
     constexpr int64_t kCrossVersion = 2;
     constexpr int64_t kSplitVersion = 3;
     const int64_t old_tablet = next_id();
     const int64_t right_child = next_id();
-    const int64_t fallback_child = next_id();
-    const int64_t unused_child = next_id();
-    for (int64_t id : {old_tablet, right_child, fallback_child, unused_child}) prepare_tablet_dirs(id);
+    const int64_t left_new = next_id();
+    const int64_t right_new = next_id();
+    for (int64_t id : {old_tablet, right_child, left_new, right_new}) prepare_tablet_dirs(id);
 
     auto set_range = [&](TabletRangePB* range, int lower, int upper) {
         *range->mutable_lower_bound() = generate_sort_key(lower);
@@ -2895,8 +3114,8 @@ TEST_F(LakeTabletReshardTest, test_cross_published_off_range_stats_split_falls_b
     segment->set_size(segment_size);
     segment->set_num_rows(50);
     segment->set_segment_idx(0);
-    *segment->mutable_sort_key_min() = generate_sort_key(0);
-    *segment->mutable_sort_key_max() = generate_sort_key(49);
+    *segment->mutable_deprecated_sort_key_min() = generate_sort_key(0);
+    *segment->mutable_deprecated_sort_key_max() = generate_sort_key(49);
     ASSERT_OK(_tablet_manager->put_txn_log(cross_log));
 
     lake::PublishTabletInfo cross_info(lake::PublishTabletInfo::SPLITTING_TABLET, old_tablet, right_child,
@@ -2920,8 +3139,8 @@ TEST_F(LakeTabletReshardTest, test_cross_published_off_range_stats_split_falls_b
     ReshardingTabletInfoPB request;
     auto* split = request.mutable_splitting_tablet_info();
     split->set_old_tablet_id(right_child);
-    split->add_new_tablet_ids(fallback_child);
-    split->add_new_tablet_ids(unused_child);
+    split->add_new_tablet_ids(left_new);
+    split->add_new_tablet_ids(right_new);
     set_range(split->add_new_tablet_ranges(), 50, 75);
     set_range(split->add_new_tablet_ranges(), 75, 100);
     TxnInfoPB split_txn;
@@ -2943,13 +3162,354 @@ TEST_F(LakeTabletReshardTest, test_cross_published_off_range_stats_split_falls_b
                                               false, published, ranges));
     EXPECT_EQ(1, flushes);
     ASSERT_TRUE(published.contains(right_child));
-    ASSERT_TRUE(published.contains(fallback_child));
-    EXPECT_FALSE(published.contains(unused_child));
-    EXPECT_EQ(cross_published->range().SerializeAsString(), published.at(fallback_child)->range().SerializeAsString());
-    EXPECT_EQ(cross_published->rowsets(0).SerializeAsString(),
-              published.at(fallback_child)->rowsets(0).SerializeAsString());
-    ASSIGN_OR_ABORT(auto after_rows, read_two_column_rows(published.at(fallback_child)));
-    EXPECT_EQ(before_rows, after_rows);
+    // A real split: both new tablets are published and report their ranges.
+    ASSERT_TRUE(published.contains(left_new));
+    ASSERT_TRUE(published.contains(right_new));
+    EXPECT_TRUE(ranges.contains(left_new));
+    EXPECT_TRUE(ranges.contains(right_new));
+
+    int64_t total_rows = 0;
+    int64_t total_data_size = 0;
+    std::vector<int64_t> child_rows;
+    for (int64_t id : {left_new, right_new}) {
+        const auto& child = published.at(id);
+        ASSERT_EQ(1, child->rowsets_size()) << id;
+        const auto& rowset = child->rowsets(0);
+        // Still the same off-range rowset: shared, clipped to the child's range, and reading empty.
+        EXPECT_EQ(published_rowset.uid().SerializeAsString(), rowset.uid().SerializeAsString()) << id;
+        ASSERT_EQ(1, rowset.segment_metas_size()) << id;
+        EXPECT_TRUE(rowset.segment_metas(0).shared()) << id;
+        EXPECT_EQ(child->range().SerializeAsString(), rowset.range().SerializeAsString()) << id;
+        ASSIGN_OR_ABORT(auto child_read, read_two_column_rows(child));
+        EXPECT_EQ(before_rows, child_read) << id;
+        total_rows += rowset.num_rows();
+        total_data_size += rowset.data_size();
+        child_rows.push_back(rowset.num_rows());
+    }
+    // The approximate stats are conserved and shared out evenly.
+    EXPECT_EQ(published_rowset.num_rows(), total_rows);
+    EXPECT_EQ(published_rowset.data_size(), total_data_size);
+    EXPECT_LE(std::abs(child_rows[0] - child_rows[1]), 1);
+}
+
+// The same off-range rowset next to real data: the tablet splits on its real rows, the rowset rides along
+// to every child, and the children split again -- the rowset never turns a split into a no-op, however
+// many generations it is carried through.
+TEST_F(LakeTabletReshardTest, test_off_range_rowset_with_real_data_splits_across_generations) {
+    constexpr int64_t kBaseVersion = 1;
+    constexpr int64_t kCrossVersion = 2;
+    const int64_t old_tablet = next_id();
+    const int64_t child = next_id();
+    for (int64_t id : {old_tablet, child}) prepare_tablet_dirs(id);
+
+    // The child [50, 100) holds its own rows 50..99 ...
+    auto metadata = std::make_shared<TabletMetadataPB>();
+    metadata->set_id(child);
+    metadata->set_version(kBaseVersion);
+    metadata->set_next_rowset_id(2);
+    set_two_column_pk_schema(metadata.get(), /*schema_id=*/4001);
+    metadata->mutable_schema()->set_keys_type(DUP_KEYS);
+    *metadata->mutable_range()->mutable_lower_bound() = generate_sort_key(50);
+    metadata->mutable_range()->set_lower_bound_included(true);
+    *metadata->mutable_range()->mutable_upper_bound() = generate_sort_key(100);
+    metadata->mutable_range()->set_upper_bound_included(false);
+    const std::string own_name = fmt::format("own_rows_{}.dat", child);
+    const uint64_t own_size = write_two_column_segment(
+            child, own_name, 50, [](int key) { return key * 10; }, /*key_start=*/50);
+    auto* own = metadata->add_rowsets();
+    own->set_id(1);
+    own->set_overlapped(false);
+    own->set_num_rows(50);
+    own->set_data_size(own_size);
+    lake::tablet_reshard_helper::set_rowset_uid(own);
+    auto* own_segment = own->add_segment_metas();
+    own_segment->set_filename(own_name);
+    own_segment->set_size(own_size);
+    own_segment->set_num_rows(50);
+    own_segment->set_segment_idx(0);
+    *own_segment->mutable_deprecated_sort_key_min() = generate_sort_key(50);
+    *own_segment->mutable_deprecated_sort_key_max() = generate_sort_key(99);
+    ASSERT_OK(put_tablet_metadata(metadata));
+
+    // ... and is handed a load its parent took for keys 0..49, which a split cross-publishes to it whole.
+    const std::string off_name = fmt::format("off_range_{}.dat", old_tablet);
+    const uint64_t off_size = write_two_column_segment(old_tablet, off_name, 50, [](int key) { return key * 10; });
+    const int64_t cross_txn = next_id();
+    TxnLogPB cross_log;
+    cross_log.set_tablet_id(old_tablet);
+    cross_log.set_txn_id(cross_txn);
+    auto* cross_rowset = cross_log.mutable_op_write()->mutable_rowset();
+    cross_rowset->set_num_rows(50);
+    cross_rowset->set_data_size(off_size);
+    lake::tablet_reshard_helper::set_rowset_uid(cross_rowset);
+    auto* off_segment = cross_rowset->add_segment_metas();
+    off_segment->set_filename(off_name);
+    off_segment->set_size(off_size);
+    off_segment->set_num_rows(50);
+    off_segment->set_segment_idx(0);
+    *off_segment->mutable_deprecated_sort_key_min() = generate_sort_key(0);
+    *off_segment->mutable_deprecated_sort_key_max() = generate_sort_key(49);
+    ASSERT_OK(_tablet_manager->put_txn_log(cross_log));
+    lake::PublishTabletInfo cross_info(lake::PublishTabletInfo::SPLITTING_TABLET, old_tablet, child,
+                                       /*split_count=*/2, /*split_index=*/1);
+    TxnInfoPB cross_txn_info;
+    cross_txn_info.set_txn_id(cross_txn);
+    cross_txn_info.set_txn_type(TXN_NORMAL);
+    cross_txn_info.set_commit_time(1);
+    ASSIGN_OR_ABORT(auto source, lake::publish_version(_tablet_manager.get(), cross_info, kBaseVersion, kCrossVersion,
+                                                       std::span<const TxnInfoPB>(&cross_txn_info, 1), false));
+    ASSERT_EQ(2, source->rowsets_size());
+    const RowsetMetadataPB off_range = source->rowsets(1);
+    ASSERT_TRUE(off_range.segment_metas(0).shared());
+    ASSERT_GT(off_range.num_rows(), 0);
+    ASSIGN_OR_ABORT(auto source_rows, read_two_column_rows(source));
+    ASSERT_EQ(50, source_rows.size());
+
+    // Splits |from| at |boundaries|, which fails on an identical fallback, and checks that every child holds exactly
+    // the source rows in its range and a copy of the off-range rowset whose shares add back up to the source's.
+    auto split = [&](const TabletMetadataPtr& from, const std::vector<int>& boundaries) {
+        auto children_or = try_split_fixed_point_source(from, boundaries);
+        EXPECT_TRUE(children_or.ok()) << "tablet " << from->id() << " was not split: " << children_or.status();
+        if (!children_or.ok()) return std::vector<TabletMetadataPtr>{};
+        ASSIGN_OR_ABORT(auto from_rows, read_two_column_rows(from));
+        int64_t from_off_range_rows = 0;
+        int64_t from_off_range_bytes = 0;
+        for (const auto& rowset : from->rowsets()) {
+            if (rowset.uid().SerializeAsString() != off_range.uid().SerializeAsString()) continue;
+            from_off_range_rows += rowset.num_rows();
+            from_off_range_bytes += rowset.data_size();
+        }
+        size_t row_count = 0;
+        int64_t off_range_rows = 0;
+        int64_t off_range_bytes = 0;
+        for (size_t i = 0; i < children_or->size(); ++i) {
+            const auto& child_metadata = (*children_or)[i];
+            ASSIGN_OR_ABORT(auto rows, read_two_column_rows(child_metadata));
+            for (const auto& [key, value] : rows) {
+                EXPECT_GE(key, boundaries[i]);
+                EXPECT_LT(key, boundaries[i + 1]);
+                EXPECT_EQ(key * 10, value);
+            }
+            row_count += rows.size();
+            int carried = 0;
+            for (const auto& rowset : child_metadata->rowsets()) {
+                if (rowset.uid().SerializeAsString() != off_range.uid().SerializeAsString()) continue;
+                ++carried;
+                EXPECT_TRUE(rowset.segment_metas(0).shared());
+                off_range_rows += rowset.num_rows();
+                off_range_bytes += rowset.data_size();
+            }
+            EXPECT_EQ(1, carried) << child_metadata->id();
+        }
+        EXPECT_EQ(from_rows.size(), row_count);
+        EXPECT_EQ(from_off_range_rows, off_range_rows);
+        EXPECT_EQ(from_off_range_bytes, off_range_bytes);
+        return std::move(children_or).value();
+    };
+
+    auto first = split(source, {50, 75, 100});
+    ASSERT_EQ(2, first.size());
+    auto second = split(first[0], {50, 62, 75});
+    ASSERT_EQ(2, second.size());
+}
+
+// The background split picks its own boundaries from the tablet's data, with no FE-supplied ranges. An off-range
+// rowset beside the real data does not stop that split either: the boundaries come from the real rows, and the
+// rowset rides along to both children with its stats shared out.
+TEST_F(LakeTabletReshardTest, test_off_range_rowset_data_driven_split) {
+    auto m = split_source();
+    *m->mutable_range()->mutable_lower_bound() = generate_sort_key(0);
+    m->mutable_range()->set_lower_bound_included(true);
+    *m->mutable_range()->mutable_upper_bound() = generate_sort_key(1000);
+    m->mutable_range()->set_upper_bound_included(false);
+    const int64_t real_rows = m->rowsets(0).num_rows();
+    auto* off_range = m->add_rowsets();
+    off_range->set_id(10);
+    lake::tablet_reshard_helper::set_rowset_uid(off_range);
+    *off_range->mutable_range() = m->range();
+    off_range->set_num_rows(25);
+    off_range->set_data_size(250);
+    auto* segment = off_range->add_segment_metas();
+    segment->set_filename("off-range.dat");
+    segment->set_segment_idx(0);
+    segment->set_num_rows(50);
+    segment->set_size(500);
+    segment->set_shared(true);
+    *segment->mutable_deprecated_sort_key_min() = generate_sort_key(2000);
+    *segment->mutable_deprecated_sort_key_max() = generate_sort_key(2049);
+    const auto off_range_uid = off_range->uid().SerializeAsString();
+
+    ASSIGN_OR_ABORT(auto children, split_source_into_children(m, /*external=*/false));
+    ASSERT_EQ(2, children.size()) << "the split fell back to an identical tablet";
+    int64_t child_real_rows = 0;
+    int64_t off_range_rows = 0;
+    int64_t off_range_bytes = 0;
+    for (const auto& [id, child] : children) {
+        int carried = 0;
+        for (const auto& rowset : child->rowsets()) {
+            if (rowset.uid().SerializeAsString() != off_range_uid) {
+                child_real_rows += rowset.num_rows();
+                continue;
+            }
+            ++carried;
+            EXPECT_TRUE(rowset.segment_metas(0).shared()) << id;
+            EXPECT_EQ(child->range().SerializeAsString(), rowset.range().SerializeAsString()) << id;
+            off_range_rows += rowset.num_rows();
+            off_range_bytes += rowset.data_size();
+        }
+        EXPECT_EQ(1, carried) << id;
+    }
+    EXPECT_EQ(real_rows, child_real_rows);
+    EXPECT_EQ(25, off_range_rows);
+    EXPECT_EQ(250, off_range_bytes);
+}
+
+// A primary-key load cross-published to a split child can upsert only keys outside the child's range and still
+// delete a key inside it. The child then holds an off-range rowset that carries a delete file it depends on: the
+// split must go ahead, keep that rowset (and its delete file) on the children, conserve the delete counts, and
+// the children must serve the same rows through a cold primary-key index and keep accepting writes.
+TEST_F(LakeTabletReshardTest, test_pk_off_range_rowset_with_in_range_delete_splits) {
+    ScopedPkIndexFlush pk_index_flush;
+    const int64_t parent = next_id();
+    const int64_t child = next_id();
+    const int64_t left = next_id();
+    const int64_t right = next_id();
+    for (int64_t id : {parent, child, left, right}) prepare_tablet_dirs(id);
+
+    // The child [50, 100) holds 55, 60, 70 and 90.
+    ASSERT_OK(create_lifecycle_source(parent, /*lower=*/0, /*upper=*/100, /*key=*/10, /*value=*/100,
+                                      /*include_delete=*/false)
+                      .status());
+    ASSIGN_OR_ABORT(auto metadata, create_lifecycle_source(child, /*lower=*/50, /*upper=*/100, /*key=*/55,
+                                                           /*value=*/550, /*include_delete=*/false));
+    for (int32_t key : {60, 70, 90}) {
+        ASSIGN_OR_ABORT(metadata, publish_followup_upsert_delete(child, metadata->version(), key, key * 10,
+                                                                 /*delete_key=*/0, /*include_delete=*/false));
+    }
+
+    // The parent took a load upserting keys 1..4 and deleting key 60, and a split cross-publishes it to the child
+    // whole: its rows all fall in the sibling's range, its delete in this one.
+    const int64_t txn_id = next_id();
+    {
+        std::vector<SlotDescriptor> slots;
+        slots.emplace_back(0, "c0", TYPE_INT_DESC);
+        slots.emplace_back(1, "c1", TYPE_INT_DESC);
+        slots.emplace_back(2, "__op", TYPE_INT_DESC);
+        std::vector<SlotDescriptor*> slot_pointers = {&slots[0], &slots[1], &slots[2]};
+        Chunk::SlotHashMap slot_cid_map = {{0, 0}, {1, 1}, {2, 2}};
+        const std::vector<int32_t> keys = {1, 2, 3, 4, 60};
+        const std::vector<int32_t> values = {10, 20, 30, 40, 0};
+        const std::vector<uint8_t> operations = {TOpType::UPSERT, TOpType::UPSERT, TOpType::UPSERT, TOpType::UPSERT,
+                                                 TOpType::DELETE};
+        auto key_column = Int32Column::create();
+        auto value_column = Int32Column::create();
+        auto operation_column = Int8Column::create();
+        key_column->append_numbers(keys.data(), sizeof(int32_t) * keys.size());
+        value_column->append_numbers(values.data(), sizeof(int32_t) * values.size());
+        operation_column->append_numbers(operations.data(), sizeof(uint8_t) * operations.size());
+        Chunk chunk(Columns{std::move(key_column), std::move(value_column), std::move(operation_column)}, slot_cid_map);
+        const uint32_t indexes[] = {0, 1, 2, 3, 4};
+        ASSIGN_OR_ABORT(auto parent_metadata, _tablet_manager->get_tablet_metadata(parent, 2));
+        RuntimeProfile profile("off-range-delete-cross-publish");
+        ASSIGN_OR_ABORT(auto delta_writer, lake::DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_manager.get())
+                                                   .set_tablet_id(parent)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(next_id())
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(parent_metadata->schema().id())
+                                                   .set_tablet_schema(TabletSchema::create(parent_metadata->schema()))
+                                                   .set_slot_descriptors(&slot_pointers)
+                                                   .set_profile(&profile)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk, indexes, keys.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+    }
+    TxnInfoPB txn_info;
+    txn_info.set_txn_id(txn_id);
+    txn_info.set_txn_type(TXN_NORMAL);
+    txn_info.set_commit_time(1);
+    lake::PublishTabletInfo cross_info(lake::PublishTabletInfo::SPLITTING_TABLET, parent, child,
+                                       /*split_count=*/2, /*split_index=*/0);
+    ASSIGN_OR_ABORT(auto source,
+                    lake::publish_version(_tablet_manager.get(), cross_info, metadata->version(),
+                                          metadata->version() + 1, std::span<const TxnInfoPB>(&txn_info, 1), false));
+    const RowsetMetadataPB off_range = source->rowsets(source->rowsets_size() - 1);
+    ASSERT_TRUE(off_range.has_range());
+    ASSERT_GT(off_range.segment_metas_size(), 0);
+    for (const auto& segment : off_range.segment_metas()) ASSERT_TRUE(segment.shared());
+    ASSERT_EQ(1, off_range.del_files_size());
+    ASSERT_GT(off_range.num_rows(), 0);
+    expect_lifecycle_oracle(source, {{55, 550}, {70, 700}, {90, 900}}, {60});
+    // num_dels counts a rowset's own rows deleted later: the delete of 60 is charged to the rowset holding 60.
+    auto total_num_dels = [](const TabletMetadataPtr& metadata) {
+        int64_t total = 0;
+        for (const auto& rowset : metadata->rowsets()) total += rowset.num_dels();
+        return total;
+    };
+    ASSERT_GT(total_num_dels(source), 0);
+
+    ReshardingTabletInfoPB request;
+    auto* split = request.mutable_splitting_tablet_info();
+    split->set_old_tablet_id(child);
+    split->add_new_tablet_ids(left);
+    split->add_new_tablet_ids(right);
+    for (const auto& [lower, upper] : std::vector<std::pair<int, int>>{{50, 75}, {75, 100}}) {
+        auto* range = split->add_new_tablet_ranges();
+        *range->mutable_lower_bound() = generate_sort_key(lower);
+        range->set_lower_bound_included(true);
+        *range->mutable_upper_bound() = generate_sort_key(upper);
+        range->set_upper_bound_included(false);
+    }
+    TxnInfoPB split_txn;
+    split_txn.set_txn_id(next_id());
+    split_txn.set_commit_time(1);
+    split_txn.set_gtid(1);
+    const int64_t split_version = source->version() + 1;
+    std::unordered_map<int64_t, TabletMetadataPtr> published;
+    std::unordered_map<int64_t, TabletRangePB> ranges;
+    ASSERT_OK(lake::publish_resharding_tablet(_tablet_manager.get(), request, source->version(), split_version,
+                                              split_txn, false, published, ranges));
+    ASSERT_TRUE(published.contains(left)) << "the split fell back to an identical tablet";
+    ASSERT_TRUE(published.contains(right)) << "the split fell back to an identical tablet";
+
+    int64_t num_dels = 0;
+    for (int64_t id : {left, right}) {
+        const auto& metadata_of_child = published.at(id);
+        // The split flushed the index first, and both children inherit it.
+        EXPECT_GT(metadata_of_child->sstable_meta().sstables_size(), 0) << id;
+        int carried = 0;
+        for (const auto& rowset : metadata_of_child->rowsets()) {
+            if (rowset.uid().SerializeAsString() != off_range.uid().SerializeAsString()) continue;
+            ++carried;
+            EXPECT_EQ(1, rowset.del_files_size()) << id;
+        }
+        EXPECT_EQ(1, carried) << id;
+        num_dels += total_num_dels(metadata_of_child);
+    }
+    EXPECT_EQ(total_num_dels(source), num_dels);
+
+    auto expect_children = [&](const std::unordered_map<int64_t, TabletMetadataPtr>& children) {
+        expect_lifecycle_oracle(children.at(left), {{55, 550}, {70, 700}}, {60});
+        expect_lifecycle_oracle(children.at(right), {{90, 900}}, {});
+    };
+    ASSERT_NO_FATAL_FAILURE(expect_children(published));
+
+    // Cold: drop the in-memory indexes and metadata so both children rebuild from what they inherited.
+    for (int64_t id : {left, right}) _primary_key_manager->unload_and_remove_primary_index(id);
+    _tablet_manager->prune_metacache();
+    std::unordered_map<int64_t, TabletMetadataPtr> cold;
+    for (int64_t id : {left, right}) {
+        ASSIGN_OR_ABORT(cold[id], _tablet_manager->get_tablet_metadata(id, split_version));
+    }
+    ASSERT_NO_FATAL_FAILURE(expect_children(cold));
+
+    // And they keep taking writes: overwrite 70 and delete 55 on the left child after the cold load.
+    ASSIGN_OR_ABORT(auto after_dml, publish_followup_upsert_delete(left, split_version, /*upsert_key=*/70,
+                                                                   /*upsert_value=*/7000, /*delete_key=*/55));
+    expect_lifecycle_oracle(after_dml, {{70, 7000}}, {55, 60});
 }
 
 // CORE-002: MetaFileBuilder reserves a virtual operation slot for a pure DELETE statement in a
@@ -3001,8 +3561,8 @@ TEST_F(LakeTabletReshardTest, test_batch_virtual_self_del_offset_survives_split_
             segment->set_size(size);
             segment->set_num_rows(1);
             segment->set_segment_idx(0);
-            *segment->mutable_sort_key_min() = generate_sort_key(10);
-            *segment->mutable_sort_key_max() = generate_sort_key(10);
+            *segment->mutable_deprecated_sort_key_min() = generate_sort_key(10);
+            *segment->mutable_deprecated_sort_key_max() = generate_sort_key(10);
             return rowset;
         };
         builder.add_rowset(make_upsert(first_name, first_size), {}, {}, {}, {}, {});
@@ -3135,8 +3695,7 @@ TEST_F(LakeTabletReshardTest, test_delete_only_zero_row_segment_survives_split_m
     EXPECT_GT(delete_rowset->data_size(), 0);
     ASSERT_EQ(1, delete_rowset->segment_metas_size());
     EXPECT_EQ(0, delete_rowset->segment_metas(0).num_rows());
-    EXPECT_EQ(0, delete_rowset->segment_metas(0).sort_key_min().values_size());
-    EXPECT_EQ(0, delete_rowset->segment_metas(0).sort_key_max().values_size());
+    EXPECT_FALSE(has_segment_sort_key_bounds(delete_rowset->segment_metas(0)));
     ASSERT_EQ(1, delete_rowset->del_files_size());
     EXPECT_GT(delete_rowset->del_files(0).num_rows(), 0);
     const RowsetMetadataPB original_delete(*delete_rowset);
@@ -3536,8 +4095,8 @@ TEST_F(LakeTabletReshardTest, test_skewed_child_exact_deletes_survive_resplit_me
     segment->set_size(segment_size);
     segment->set_num_rows(100);
     segment->set_segment_idx(0);
-    *segment->mutable_sort_key_min() = generate_sort_key(0);
-    *segment->mutable_sort_key_max() = generate_sort_key(1009);
+    *segment->mutable_deprecated_sort_key_min() = generate_sort_key(0);
+    *segment->mutable_deprecated_sort_key_max() = generate_sort_key(1009);
     ASSERT_EQ(0, segment->deprecated_sort_key_samples_size());
     ASSERT_OK(put_tablet_metadata(source));
 
@@ -3765,8 +4324,8 @@ TEST_F(LakeTabletReshardTest, test_convert_txn_log_shares_disjoint_sibling_and_c
     auto* segment = rowset->add_segment_metas();
     segment->set_filename("right_child_segment.dat");
     segment->set_size(10000);
-    segment->mutable_sort_key_min()->CopyFrom(generate_sort_key(70));
-    segment->mutable_sort_key_max()->CopyFrom(generate_sort_key(80));
+    segment->mutable_deprecated_sort_key_min()->CopyFrom(generate_sort_key(70));
+    segment->mutable_deprecated_sort_key_max()->CopyFrom(generate_sort_key(80));
 
     auto make_child_metadata = [&](int lower, int upper) {
         auto metadata = std::make_shared<TabletMetadataPB>();
@@ -4246,16 +4805,16 @@ TEST_F(LakeTabletReshardTest, test_tablet_split_propagates_ownership_to_idg) {
         auto* m0 = rs->add_segment_metas();
         m0->set_filename("seg_lo.dat");
         m0->set_size(512);
-        m0->mutable_sort_key_min()->CopyFrom(generate_sort_key(0));
-        m0->mutable_sort_key_max()->CopyFrom(generate_sort_key(49));
+        m0->mutable_deprecated_sort_key_min()->CopyFrom(generate_sort_key(0));
+        m0->mutable_deprecated_sort_key_max()->CopyFrom(generate_sort_key(49));
         m0->set_num_rows(50);
     }
     {
         auto* m1 = rs->add_segment_metas();
         m1->set_filename("seg_hi.dat");
         m1->set_size(512);
-        m1->mutable_sort_key_min()->CopyFrom(generate_sort_key(50));
-        m1->mutable_sort_key_max()->CopyFrom(generate_sort_key(99));
+        m1->mutable_deprecated_sort_key_min()->CopyFrom(generate_sort_key(50));
+        m1->mutable_deprecated_sort_key_max()->CopyFrom(generate_sort_key(99));
         m1->set_num_rows(50);
     }
     rs->set_overlapped(true);
@@ -4449,8 +5008,8 @@ TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_conserves_stats_and_tiles
     sm->set_filename(seg_name);
     sm->set_size(seg_size);
     sm->set_num_rows(kNumRows);
-    sm->mutable_sort_key_min()->CopyFrom(generate_sort_key(0));
-    sm->mutable_sort_key_max()->CopyFrom(generate_sort_key(kNumRows - 1));
+    sm->mutable_deprecated_sort_key_min()->CopyFrom(generate_sort_key(0));
+    sm->mutable_deprecated_sort_key_max()->CopyFrom(generate_sort_key(kNumRows - 1));
     // The only source of split-boundary precision beyond the coarse [min, max] pair is the sort
     // key sampler reading this segment. This fixture's schema (set_two_column_pk_schema) carries
     // index_length, so it samples the free short key index path (A), not the data pages; see the
@@ -4615,8 +5174,8 @@ TEST_F(LakeTabletReshardTest, split_a_varchar_sort_key_tablet_end_to_end) {
     sm->set_filename(seg_name);
     sm->set_size(seg_size);
     sm->set_num_rows(kNumRows);
-    sm->mutable_sort_key_min()->CopyFrom(generate_varchar_sort_key(0));
-    sm->mutable_sort_key_max()->CopyFrom(generate_varchar_sort_key(kNumRows - 1));
+    sm->mutable_deprecated_sort_key_min()->CopyFrom(generate_varchar_sort_key(0));
+    sm->mutable_deprecated_sort_key_max()->CopyFrom(generate_varchar_sort_key(kNumRows - 1));
 
     EXPECT_OK(put_tablet_metadata(metadata));
 
@@ -4660,6 +5219,327 @@ TEST_F(LakeTabletReshardTest, split_a_varchar_sort_key_tablet_end_to_end) {
                 << "child " << child_id << " holds a disproportionate share of the rows";
     }
     EXPECT_EQ(kNumRows, total) << "the split must conserve every row across its children";
+}
+
+namespace {
+// k1, k2, v of a row of the long-key fixture below.
+using LongKeyRow = std::tuple<std::string, int64_t, int32_t>;
+
+// A 50-byte k1: 40 bytes every row shares, then the zero-padded row number. The value budget of a stored sort key
+// bound is 36 bytes, so every bound a writer stores for such rows is cut inside the shared prefix.
+std::string long_shared_prefix_key(int64_t n) {
+    return std::string(40, 'p') + fmt::format("{:010d}", n);
+}
+
+// DUP_KEYS, sort key (k1 VARCHAR(64), k2 BIGINT), value v INT.
+void set_long_varchar_sort_key_schema(TabletMetadataPB* metadata, int64_t schema_id) {
+    auto* schema = metadata->mutable_schema();
+    schema->set_keys_type(DUP_KEYS);
+    schema->set_id(schema_id);
+    schema->set_num_short_key_columns(1);
+    schema->set_num_rows_per_row_block(65535);
+    auto* k1 = schema->add_column();
+    k1->set_unique_id(1);
+    k1->set_name("k1");
+    k1->set_type("VARCHAR");
+    k1->set_is_key(true);
+    k1->set_is_nullable(false);
+    k1->set_length(64);
+    k1->set_index_length(4);
+    auto* k2 = schema->add_column();
+    k2->set_unique_id(2);
+    k2->set_name("k2");
+    k2->set_type("BIGINT");
+    k2->set_is_key(true);
+    k2->set_is_nullable(false);
+    k2->set_length(8);
+    k2->set_index_length(8);
+    auto* v = schema->add_column();
+    v->set_unique_id(3);
+    v->set_name("v");
+    v->set_type("INT");
+    v->set_is_key(false);
+    v->set_is_nullable(false);
+    v->set_aggregation("NONE");
+    schema->add_sort_key_idxes(0);
+    schema->add_sort_key_idxes(1);
+}
+
+// Writes `rows` to the tablet as one load through a delta writer and publishes it on top of *version, which is
+// then the published version.
+Status load_long_key_rows(lake::TabletManager* tablet_manager, MemTracker* mem_tracker,
+                          const TabletMetadataPB& metadata, const TabletSchemaCSPtr& tablet_schema,
+                          const std::shared_ptr<Schema>& schema, const std::vector<LongKeyRow>& rows,
+                          int64_t* version) {
+    auto k1 = BinaryColumn::create();
+    auto k2 = Int64Column::create();
+    auto v = Int32Column::create();
+    for (const auto& [key1, key2, value] : rows) {
+        k1->append(Slice(key1));
+        k2->append(key2);
+        v->append(value);
+    }
+    Chunk chunk({std::move(k1), std::move(k2), std::move(v)}, schema);
+    std::vector<uint32_t> indexes(rows.size());
+    std::iota(indexes.begin(), indexes.end(), 0);
+    const int64_t txn_id = next_id();
+    RuntimeProfile profile("truncated-sort-key-bounds-load");
+    ASSIGN_OR_RETURN(auto delta_writer, lake::DeltaWriterBuilder()
+                                                .set_tablet_manager(tablet_manager)
+                                                .set_tablet_id(metadata.id())
+                                                .set_txn_id(txn_id)
+                                                .set_partition_id(next_id())
+                                                .set_mem_tracker(mem_tracker)
+                                                .set_schema_id(metadata.schema().id())
+                                                .set_tablet_schema(tablet_schema)
+                                                .set_profile(&profile)
+                                                .build());
+    RETURN_IF_ERROR(delta_writer->open());
+    RETURN_IF_ERROR(delta_writer->write(chunk, indexes.data(), indexes.size()));
+    RETURN_IF_ERROR(delta_writer->finish_with_txnlog());
+    delta_writer->close();
+    TxnInfoPB txn_info;
+    txn_info.set_txn_id(txn_id);
+    txn_info.set_txn_type(TXN_NORMAL);
+    txn_info.set_commit_time(1);
+    ASSIGN_OR_RETURN(auto published,
+                     lake::publish_version(tablet_manager, lake::PublishTabletInfo(metadata.id()), *version,
+                                           *version + 1, std::span<const TxnInfoPB>(&txn_info, 1), false));
+    *version = published->version();
+    return Status::OK();
+}
+
+// Every row of the tablet, sorted.
+std::vector<LongKeyRow> read_long_key_rows(lake::TabletManager* tablet_manager, const TabletMetadataPtr& tablet,
+                                           const Schema& schema) {
+    auto reader = std::make_shared<lake::TabletReader>(tablet_manager, tablet, schema);
+    CHECK_OK(reader->prepare());
+    CHECK_OK(reader->open(TabletReaderParams()));
+    std::vector<LongKeyRow> rows;
+    auto chunk = ChunkFactory::new_chunk(schema, 128);
+    while (true) {
+        chunk->reset();
+        auto st = reader->get_next(chunk.get());
+        if (st.is_end_of_file()) break;
+        CHECK_OK(st);
+        for (size_t i = 0; i < chunk->num_rows(); ++i) {
+            auto row = chunk->get(i);
+            rows.emplace_back(row[0].get_slice().to_string(), row[1].get_int64(), row[2].get_int32());
+        }
+    }
+    std::sort(rows.begin(), rows.end());
+    return rows;
+}
+
+// Metadata of an empty tablet with the long-key schema.
+TabletMetadataPtr make_long_key_metadata(int64_t tablet_id, int64_t schema_id) {
+    auto metadata = std::make_shared<TabletMetadataPB>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(1);
+    metadata->set_next_rowset_id(1);
+    set_long_varchar_sort_key_schema(metadata.get(), schema_id);
+    return metadata;
+}
+
+// Three loads of 100 rows each, one segment per load, written on top of `metadata`: load L holds the rows
+// n = 100 * L .. 100 * L + 99, whose k1 is make_k1(L, n). Returns the schema through *schema and the published
+// version through *version.
+constexpr int kLongKeyRowsPerLoad = 100;
+void load_three_long_key_loads(lake::TabletManager* tablet_manager, MemTracker* mem_tracker,
+                               const TabletMetadataPB& metadata,
+                               const std::function<std::string(int, int64_t)>& make_k1, std::shared_ptr<Schema>* schema,
+                               int64_t* version) {
+    auto tablet_schema = TabletSchema::create(metadata.schema());
+    *schema = std::make_shared<Schema>(ChunkHelper::convert_schema(tablet_schema));
+    *version = 1;
+    for (int load = 0; load < 3; ++load) {
+        std::vector<LongKeyRow> rows;
+        for (int i = 0; i < kLongKeyRowsPerLoad; ++i) {
+            const int64_t n = load * kLongKeyRowsPerLoad + i;
+            rows.emplace_back(make_k1(load, n), n, static_cast<int32_t>(n * 10));
+        }
+        ASSERT_OK(load_long_key_rows(tablet_manager, mem_tracker, metadata, tablet_schema, *schema, rows, version));
+    }
+}
+
+// Reads the source and both children: the source holds all its rows, every row a child holds is in the child's range
+// (`in_range(child, k1, k2)`), neither child is empty, and the children together hold the source rows exactly once.
+void check_split_children_hold_source_rows(lake::TabletManager* tablet_manager, const TabletMetadataPtr& source,
+                                           const Schema& schema,
+                                           const std::unordered_map<int64_t, TabletMetadataPtr>& published,
+                                           const std::vector<int64_t>& children,
+                                           const std::function<bool(int64_t, const std::string&, int64_t)>& in_range) {
+    const auto source_rows = read_long_key_rows(tablet_manager, source, schema);
+    ASSERT_EQ(3 * kLongKeyRowsPerLoad, source_rows.size());
+    std::vector<LongKeyRow> union_rows;
+    for (int64_t child : children) {
+        const auto rows = read_long_key_rows(tablet_manager, published.at(child), schema);
+        EXPECT_FALSE(rows.empty()) << child;
+        for (const auto& [k1, k2, v] : rows) {
+            EXPECT_TRUE(in_range(child, k1, k2))
+                    << "child " << child << " holds a row outside its range: " << k1 << ", " << k2;
+        }
+        union_rows.insert(union_rows.end(), rows.begin(), rows.end());
+    }
+    std::sort(union_rows.begin(), union_rows.end());
+    EXPECT_EQ(source_rows, union_rows) << "the children must hold every row of the source exactly once";
+}
+} // namespace
+
+// Rows written by the real writer with keys over the value budget get truncated stored bounds: every segment's
+// stored range is [36-byte prefix, its successor], which straddles a boundary inside the data even for the loads
+// whose rows all lie on one side of it. The split must still give every row to exactly one child.
+TEST_F(LakeTabletReshardTest, SplitWithTruncatedSortKeyBoundsKeepsAllRows) {
+    const int64_t tablet_id = next_id();
+    const int64_t left = next_id();
+    const int64_t right = next_id();
+    for (int64_t id : {tablet_id, left, right}) prepare_tablet_dirs(id);
+
+    auto metadata = make_long_key_metadata(tablet_id, next_id());
+    ASSERT_OK(put_tablet_metadata(metadata));
+
+    // Three loads, one segment each: rows 0-99, 100-199 and 200-299.
+    std::shared_ptr<Schema> schema;
+    int64_t version = 1;
+    ASSERT_NO_FATAL_FAILURE(load_three_long_key_loads(
+            _tablet_manager.get(), _mem_tracker.get(), *metadata,
+            [](int, int64_t n) { return long_shared_prefix_key(n); }, &schema, &version));
+
+    // The FE-supplied boundary lies inside the second load: (key 150, 150).
+    const std::pair<std::string, int64_t> boundary_key{long_shared_prefix_key(150), 150};
+    VariantTuple boundary;
+    boundary.append(DatumVariant(get_type_info(LogicalType::TYPE_VARCHAR), Datum(Slice(boundary_key.first))));
+    boundary.append(DatumVariant(get_type_info(LogicalType::TYPE_BIGINT), Datum(boundary_key.second)));
+    TuplePB boundary_pb;
+    boundary.to_proto(&boundary_pb);
+
+    ASSIGN_OR_ABORT(auto source, _tablet_manager->get_tablet_metadata(tablet_id, version));
+    ASSERT_EQ(3, source->rowsets_size());
+    for (const auto& rowset : source->rowsets()) {
+        ASSERT_EQ(1, rowset.segment_metas_size());
+        const auto& segment = rowset.segment_metas(0);
+        // The writer stored both bounds in format version 2, cut to the budget ...
+        ASSERT_FALSE(segment.sort_key_min_encoded().empty());
+        ASSERT_FALSE(segment.sort_key_max_encoded().empty());
+        EXPECT_EQ(2, segment.sort_key_min_encoded()[0]);
+        EXPECT_EQ(2, segment.sort_key_max_encoded()[0]);
+        VariantTuple min;
+        VariantTuple max;
+        SortKeyBoundsExactness exactness;
+        ASSERT_OK(decode_segment_sort_key_bounds(segment, &min, &max, &exactness));
+        EXPECT_TRUE(exactness.min_truncated);
+        EXPECT_TRUE(exactness.max_truncated);
+        // ... so every segment's stored range straddles the boundary, whatever side its rows are on.
+        EXPECT_LT(min.compare(boundary), 0);
+        EXPECT_GT(max.compare(boundary), 0);
+    }
+
+    ReshardingTabletInfoPB request;
+    auto* split = request.mutable_splitting_tablet_info();
+    split->set_old_tablet_id(tablet_id);
+    split->add_new_tablet_ids(left);
+    split->add_new_tablet_ids(right);
+    auto* lower_range = split->add_new_tablet_ranges();
+    *lower_range->mutable_upper_bound() = boundary_pb;
+    lower_range->set_upper_bound_included(false);
+    auto* upper_range = split->add_new_tablet_ranges();
+    *upper_range->mutable_lower_bound() = boundary_pb;
+    upper_range->set_lower_bound_included(true);
+    TxnInfoPB split_txn;
+    split_txn.set_txn_id(next_id());
+    split_txn.set_commit_time(1);
+    split_txn.set_gtid(1);
+    std::unordered_map<int64_t, TabletMetadataPtr> published;
+    std::unordered_map<int64_t, TabletRangePB> ranges;
+    ASSERT_OK(lake::publish_resharding_tablet(_tablet_manager.get(), request, version, version + 1, split_txn, false,
+                                              published, ranges));
+    ASSERT_TRUE(published.contains(left)) << "the split fell back to an identical tablet";
+    ASSERT_TRUE(published.contains(right)) << "the split fell back to an identical tablet";
+
+    check_split_children_hold_source_rows(_tablet_manager.get(), source, *schema, published, {left, right},
+                                          [&](int64_t child, const std::string& k1, int64_t k2) {
+                                              const bool below_boundary = child == left;
+                                              return below_boundary == (std::make_pair(k1, k2) < boundary_key);
+                                          });
+}
+
+// The data-driven split (no FE boundaries) can take its boundary from a truncated stored bound. Each load's k1 starts
+// with its own letter and then follows the 50-byte key above, so each segment's bounds are cut inside its own keys
+// and lie between the segments' data: [a..., a...q] [b..., b...q] [c..., c...q]. Sampling is turned off, which leaves
+// the segment bounds as the only boundary candidates; the planner then cuts at the third segment's stored minimum,
+// a 36-byte prefix padded with NULL that is no row's key. The children must still hold every row exactly once, each
+// row in its child's range.
+TEST_F(LakeTabletReshardTest, DataDrivenSplitAtTruncatedSortKeyBoundKeepsAllRows) {
+    const int32_t saved_max_samples = config::sort_key_max_samples_per_tablet;
+    DeferOp restore_max_samples([&] { config::sort_key_max_samples_per_tablet = saved_max_samples; });
+    config::sort_key_max_samples_per_tablet = 0;
+
+    const int64_t tablet_id = next_id();
+    const int64_t left = next_id();
+    const int64_t right = next_id();
+    for (int64_t id : {tablet_id, left, right}) prepare_tablet_dirs(id);
+
+    auto metadata = make_long_key_metadata(tablet_id, next_id());
+    ASSERT_OK(put_tablet_metadata(metadata));
+
+    std::shared_ptr<Schema> schema;
+    int64_t version = 1;
+    ASSERT_NO_FATAL_FAILURE(load_three_long_key_loads(
+            _tablet_manager.get(), _mem_tracker.get(), *metadata,
+            [](int load, int64_t n) { return static_cast<char>('a' + load) + long_shared_prefix_key(n); }, &schema,
+            &version));
+    ASSIGN_OR_ABORT(auto source, _tablet_manager->get_tablet_metadata(tablet_id, version));
+    ASSERT_EQ(3, source->rowsets_size());
+    VariantTuple third_min;
+    {
+        VariantTuple third_max;
+        SortKeyBoundsExactness exactness;
+        ASSERT_OK(decode_segment_sort_key_bounds(source->rowsets(2).segment_metas(0), &third_min, &third_max,
+                                                 &exactness));
+        ASSERT_TRUE(exactness.min_truncated);
+        ASSERT_EQ(1u, third_min.size());
+        ASSERT_EQ("c" + std::string(35, 'p'), third_min[0].value().get_slice().to_string());
+    }
+
+    ReshardingTabletInfoPB request;
+    auto* split = request.mutable_splitting_tablet_info();
+    split->set_old_tablet_id(tablet_id);
+    split->add_new_tablet_ids(left);
+    split->add_new_tablet_ids(right);
+    TxnInfoPB split_txn;
+    split_txn.set_txn_id(next_id());
+    split_txn.set_commit_time(1);
+    split_txn.set_gtid(1);
+    std::unordered_map<int64_t, TabletMetadataPtr> published;
+    std::unordered_map<int64_t, TabletRangePB> ranges;
+    ASSERT_OK(lake::publish_resharding_tablet(_tablet_manager.get(), request, version, version + 1, split_txn, false,
+                                              published, ranges));
+    ASSERT_TRUE(published.contains(left)) << "the split fell back to an identical tablet";
+    ASSERT_TRUE(published.contains(right)) << "the split fell back to an identical tablet";
+
+    // The boundary is the third segment's stored minimum, padded with NULL to the sort key.
+    const TabletRangePB& left_range = published.at(left)->range();
+    ASSERT_TRUE(left_range.has_upper_bound());
+    EXPECT_EQ(left_range.upper_bound().SerializeAsString(),
+              published.at(right)->range().lower_bound().SerializeAsString());
+    VariantTuple boundary;
+    ASSERT_OK(boundary.from_proto(left_range.upper_bound()));
+    ASSERT_EQ(2u, boundary.size());
+    EXPECT_EQ(0, boundary[0].compare(third_min[0]));
+    EXPECT_TRUE(boundary[1].value().is_null());
+
+    std::unordered_map<int64_t, TabletRange> child_ranges;
+    for (int64_t child : {left, right}) {
+        ASSERT_OK(child_ranges[child].from_proto(published.at(child)->range()));
+    }
+    check_split_children_hold_source_rows(
+            _tablet_manager.get(), source, *schema, published, {left, right},
+            [&](int64_t child, const std::string& k1, int64_t k2) {
+                VariantTuple key;
+                key.append(DatumVariant(get_type_info(LogicalType::TYPE_VARCHAR), Datum(Slice(k1))));
+                key.append(DatumVariant(get_type_info(LogicalType::TYPE_BIGINT), Datum(k2)));
+                return child_ranges.at(child).contains(key);
+            });
 }
 
 // ---------------------------------------------------------------------------
@@ -6021,6 +6901,12 @@ TEST_F(LakeTabletReshardTest, test_compact_runs_a_parallel_manual_compaction_whe
     }
     ASSERT_GE(tablet->rowsets_size(), 7);
     ASSERT_FALSE(lake::tablet_reshard_helper::has_shared_files(*tablet));
+
+    // The rowsets carry sort key bounds, so range split, on by default, would take precedence over the ordinary planner
+    // this case is sized for.
+    const bool old_range_split = config::enable_lake_compaction_range_split;
+    config::enable_lake_compaction_range_split = false;
+    DeferOp restore_range_split([&] { config::enable_lake_compaction_range_split = old_range_split; });
 
     // The ordinary planner groups whole small rowsets up to this size: two groups that cover every rowset.
     int64_t total_bytes = 0;

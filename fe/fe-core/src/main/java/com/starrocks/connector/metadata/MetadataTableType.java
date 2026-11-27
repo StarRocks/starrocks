@@ -16,6 +16,7 @@ package com.starrocks.connector.metadata;
 
 public enum MetadataTableType {
     LOGICAL_ICEBERG_METADATA("logical_iceberg_metadata"),
+    PAIMON_GLOBAL_INDEX("paimon_global_index"),
     REFS("refs"),
     HISTORY("history"),
     METADATA_LOG_ENTRIES("metadata_log_entries"),

@@ -73,6 +73,8 @@ public:
     int64_t get_last_scan_rows_num() override { return 0; }
     int64_t get_last_scan_bytes() override { return 0; }
     int64_t get_scan_table_id() const override { return 0; }
+    int32_t get_scan_plan_node_id() const override { return get_plan_node_id(); }
+    ScanAuditCounters take_scan_audit_counters() override { return {}; }
 
     void begin_driver_process() override {}
     void end_driver_process(DriverState driver_state) override {}

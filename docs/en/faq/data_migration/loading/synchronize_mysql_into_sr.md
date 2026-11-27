@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "FAQ for synchronizing MySQL data into StarRocks in real time using Flink CDC, including troubleshooting common errors."
+products: [oss, enterprise]
 ---
 
 # Synchronize data from MySQL in real time

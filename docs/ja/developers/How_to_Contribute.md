@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "StarRocks への貢献方法（コード・ドキュメント・テスト等）。"
+products: [oss]
 ---
 
 # Contribute to StarRocks

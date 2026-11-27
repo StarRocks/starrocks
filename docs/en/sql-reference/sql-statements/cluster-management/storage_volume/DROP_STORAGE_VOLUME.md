@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "DROP STORAGE VOLUME drops a storage volume."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # DROP STORAGE VOLUME

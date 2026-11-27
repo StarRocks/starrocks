@@ -60,7 +60,9 @@
 #include "storage/compaction_manager.h"
 #include "storage/index/vector/vector_index_cache.h"
 #include "storage/lake/local_pk_index_manager.h"
+#include "storage/lake/metacache_adjuster.h"
 #include "storage/lake/primary_key_manager.h"
+#include "storage/lake/tablet_manager.h"
 #include "storage/olap_common.h"
 #include "storage/persistent_index_compaction_manager.h"
 #include "storage/replication_txn_manager.h"
@@ -95,6 +97,9 @@ Status StorageEngine::start_bg_threads() {
 
     _update_cache_evict_thread = std::thread([this] { _update_cache_evict_thread_callback(nullptr); });
     Thread::set_thread_name(_update_cache_evict_thread, "evict_upd_cache");
+
+    _lake_metacache_adjust_thread = std::thread([this] { _lake_metacache_adjust_thread_callback(nullptr); });
+    Thread::set_thread_name(_lake_metacache_adjust_thread, "adj_lake_meta");
 
     _unused_rowset_monitor_thread = std::thread([this] { _unused_rowset_monitor_thread_callback(nullptr); });
     Thread::set_thread_name(_unused_rowset_monitor_thread, "rowset_monitor");
@@ -714,6 +719,24 @@ void* StorageEngine::_update_cache_evict_thread_callback(void* arg) {
             continue;
         }
         _update_manager->evict_cache(memory_urgent_level, memory_high_level);
+    }
+    return nullptr;
+}
+
+void* StorageEngine::_lake_metacache_adjust_thread_callback(void* arg) {
+#ifdef GOOGLE_PROFILER
+    ProfilerRegisterThread();
+#endif
+    lake::MetacacheAdjuster adjuster(MonoTime::Now());
+    while (!_bg_worker_stopped.load(std::memory_order_consume)) {
+        SLEEP_IN_BG_WORKER(lake::MetacacheAdjuster::kIntervalSeconds);
+        auto* tablet_mgr = StorageEnv::GetInstance()->lake_tablet_manager();
+        auto* process_mem_tracker = RuntimeEnv::GetInstance()->process_mem_tracker();
+        if (tablet_mgr == nullptr || process_mem_tracker == nullptr || !process_mem_tracker->has_limit()) {
+            continue;
+        }
+        adjuster.adjust(tablet_mgr->metacache(), MonoTime::Now(), process_mem_tracker->limit(),
+                        process_mem_tracker->consumption());
     }
     return nullptr;
 }

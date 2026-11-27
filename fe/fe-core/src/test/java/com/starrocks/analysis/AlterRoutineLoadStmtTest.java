@@ -35,6 +35,7 @@
 package com.starrocks.analysis;
 
 import com.google.common.collect.Maps;
+import com.starrocks.load.routineload.RoutineLoadPropertyNames;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.AlterRoutineLoadAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -228,6 +229,49 @@ public class AlterRoutineLoadStmtTest {
             Assertions.assertTrue(stmt.getDataSourceProperties().getCustomKafkaProperties().containsKey("group.id"));
             Assertions.assertTrue(stmt.getDataSourceProperties().getCustomKafkaProperties().containsKey("client.id"));
             Assertions.assertEquals(3, stmt.getDataSourceProperties().getKafkaPartitionOffsets().size());
+        }
+    }
+
+    @Test
+    public void testDescriptivePropertyNames() {
+        {
+            Map<String, String> jobProperties = Maps.newHashMap();
+            jobProperties.put(RoutineLoadPropertyNames.LOAD_INTERVAL, "6500ms");
+            jobProperties.put(RoutineLoadPropertyNames.MAX_CONCURRENCY, "4");
+            AlterRoutineLoadStmt stmt = new AlterRoutineLoadStmt(new LabelName("db1", "label1"), null,
+                    jobProperties, new RoutineLoadDataSourceProperties());
+            AlterRoutineLoadAnalyzer.analyze(stmt, connectContext);
+
+            // the change carries both names: the legacy one for the job, the descriptive one for reporting
+            Assertions.assertEquals(Map.of(
+                    CreateRoutineLoadStmt.MAX_BATCH_INTERVAL_SEC_PROPERTY, "7",
+                    RoutineLoadPropertyNames.LOAD_INTERVAL, "6500ms",
+                    CreateRoutineLoadStmt.DESIRED_CONCURRENT_NUMBER_PROPERTY, "4",
+                    RoutineLoadPropertyNames.MAX_CONCURRENCY, "4"), stmt.getAnalyzedJobProperties());
+        }
+
+        {
+            // the timeout is derived from the consume duration, as it is for task_consume_second
+            Map<String, String> jobProperties = Maps.newHashMap();
+            jobProperties.put(RoutineLoadPropertyNames.MAX_CONSUME_DURATION, "3s");
+            AlterRoutineLoadStmt stmt = new AlterRoutineLoadStmt(new LabelName("db1", "label1"), null,
+                    jobProperties, new RoutineLoadDataSourceProperties());
+            AlterRoutineLoadAnalyzer.analyze(stmt, connectContext);
+            Assertions.assertEquals(Map.of(
+                    CreateRoutineLoadStmt.TASK_CONSUME_SECOND, "3",
+                    CreateRoutineLoadStmt.TASK_TIMEOUT_SECOND, "12",
+                    RoutineLoadPropertyNames.MAX_CONSUME_DURATION, "3s"), stmt.getAnalyzedJobProperties());
+        }
+
+        {
+            Map<String, String> jobProperties = Maps.newHashMap();
+            jobProperties.put(RoutineLoadPropertyNames.MAX_ERROR_ROWS, "10");
+            jobProperties.put(CreateRoutineLoadStmt.MAX_ERROR_NUMBER_PROPERTY, "10");
+            AlterRoutineLoadStmt stmt = new AlterRoutineLoadStmt(new LabelName("db1", "label1"), null,
+                    jobProperties, new RoutineLoadDataSourceProperties());
+            SemanticException e = Assertions.assertThrows(SemanticException.class,
+                    () -> AlterRoutineLoadAnalyzer.analyze(stmt, connectContext));
+            Assertions.assertTrue(e.getMessage().contains("cannot be set together"), e.getMessage());
         }
     }
 

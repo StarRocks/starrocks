@@ -16,6 +16,7 @@ package com.starrocks.connector.metadata;
 
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SimpleExecutor;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.sql.StatementPlanner;
@@ -27,7 +28,7 @@ import org.apache.logging.log4j.Logger;
 
 public class MetadataExecutor {
     private static final Logger LOG = LogManager.getLogger(MetadataExecutor.class);
-    private StmtExecutor executor;
+    private volatile StmtExecutor executor;
 
     public void asyncExecuteSQL(MetadataCollectJob job) {
         ConnectContext context = job.getContext();
@@ -36,6 +37,7 @@ public class MetadataExecutor {
             ExecPlan execPlan;
             StatementBase parsedStmt;
             try {
+                SimpleExecutor.checkInternalQueryState(context);
                 parsedStmt = SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable());
                 execPlan = StatementPlanner.plan(parsedStmt, context, job.getSinkType());
             } catch (Exception e) {
@@ -46,12 +48,16 @@ public class MetadataExecutor {
 
             this.executor = StmtExecutor.newInternalExecutor(context, parsedStmt);
             context.setExecutor(executor);
+            ConnectContext parent = context.getParent();
+            if (parent != null && parent.getExecutor() != null) {
+                parent.getExecutor().registerSubStmtExecutor(executor);
+            }
             context.setQueryId(UUIDUtil.genUUID());
             context.getSessionVariable().setEnableMaterializedViewRewrite(false);
 
             LOG.info("Start to execute metadata collect job on {}.{}.{}", job.getCatalogName(), job.getDbName(),
                     job.getTableName());
-            executor.executeStmtWithResultQueue(context, execPlan, job.getResultQueue());
+            executor.executeStmtWithResultConsumer(context, execPlan, job.getResultConsumer());
         }
     }
 

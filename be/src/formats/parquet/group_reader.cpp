@@ -199,6 +199,7 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
 
         auto r = _range_iter.next(*row_count);
         _param.stats->raw_rows_read += r.span_size();
+        _param.stats->physical_rows_read += r.span_size();
 
         _column_materializer->reset_read_chunk();
         _variant->reset_iteration_state();
@@ -212,6 +213,8 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
 
         // 1. Prune deleted rows
         ASSIGN_OR_RETURN(bool rows_survive, _prune_deleted_rows(r, state));
+        _param.stats->logical_rows_read +=
+                state.has_filter ? SIMD::count_nonzero(state.chunk_filter.data(), state.row_count) : state.row_count;
         if (!rows_survive) continue;
 
         // 2. Read & filter active columns

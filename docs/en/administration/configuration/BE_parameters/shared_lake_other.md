@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 sidebar_label: "Shared-data, Data Lake, and Others"
 description: "BE configuration parameters for shared-data clusters, data lake integration, and miscellaneous settings."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 import BEConfigMethod from '../../../_assets/commonMarkdown/BE_config_method.mdx'
@@ -113,6 +114,15 @@ This topic introduces the following types of BE configurations:
 - Description: The thread count of the shared pool that runs parallel merge prefill reads for all concurrent compaction tasks on the node. It is sized above the per-task in-flight limit so that concurrent tasks do not dilute each other; idle threads are reclaimed after 10 seconds, so an idle node pays nothing for the headroom. The reads also decode on this pool, so a larger value increases CPU and memory use as well as IO concurrency.
 - Introduced in: v4.2
 
+### enable_lake_compaction_range_split
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether parallel compaction in a shared-data cluster splits its input by sort key range. When this item is set to `true`, each subtask of a parallel compaction reads the data of all input rowsets within one sort key range, and the subtasks together write one rowset whose segments do not overlap. Range split applies only when every input segment records its sort key bounds. Otherwise, or when this item is set to `false`, parallel compaction groups whole rowsets or splits a large rowset by segment index, and the outputs of the subtasks may overlap. The maximum number of subtasks per tablet is set by the table property `lake_compaction_max_parallel`.
+- Introduced in: v4.2
+
 ### lake_compaction_stream_buffer_size_bytes
 
 - Default: 1048576
@@ -164,7 +174,7 @@ This topic introduces the following types of BE configurations:
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: Whether to preserve the in-transaction upsert/delete order for Primary Key tables in a shared-data cluster. When a single load transaction contains both a `DELETE` and a later re-`UPSERT` of the same key, enabling this makes the re-upsert win (consistent with shared-nothing clusters). It is enabled by default. For downgrade safety, set it to `false` before rolling back to (or running a mixed cluster with) a BE version without this fix: when enabled, a load can persist on-disk metadata that a pre-fix BE would misinterpret, potentially producing duplicate primary keys. When disabled, deletes fall back to the legacy behavior (applied after all upserts in the transaction).
+- Description: Whether to preserve the in-transaction upsert/delete order for Primary Key tables in a shared-data cluster. When a single load transaction contains both a `DELETE` and a later re-`UPSERT` of the same key, enabling this makes the re-upsert win (consistent with shared-nothing clusters). It is enabled by default. For downgrade safety, set it to `false` before rolling back to (or running a mixed cluster with) a BE version without this fix: when enabled, a load can persist on-disk metadata that a pre-fix BE would misinterpret, potentially producing duplicate primary keys. When disabled, deletes fall back to the legacy behavior (applied after all upserts in the transaction): if a load deletes a key and then upserts it again, and the delete and the upsert are flushed separately (for example, in a large load), the key ends up deleted and the upsert is lost. A Primary Key table whose sort key (`ORDER BY`) differs from its primary key always preserves the order, whatever this item is set to.
 - Introduced in: v4.1.4
 
 ### lake_enable_protobuf_file_checksum
@@ -196,6 +206,21 @@ Enable this option only after **all target CNs** support it. A normalized replic
 - Description: Whether a publish of a shared-data table with file bundling keeps the result of each tablet that the aggregator may not have received. A tablet whose publish finishes more than the publish RPC timeout plus 3 seconds after the request arrived, or whose publish is a retry, keeps its result in the local Data Cache of the node, never in object storage. A later retry on that node reads it back instead of applying the transactions again, so tablets that already finished are not redone on every retry of a slow partition. The entries are evicted like any other Data Cache entry. Takes effect only when Data Cache is enabled. Set the same value on all BE and CN nodes.
 - Introduced in: v4.2
 
+### lake_enable_txn_vlog_group
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether schema-change publish in a shared-data cluster writes an ordered statement group into a separate `{tablet}_{version}.group.vlog` file for a multi-statement transaction. Legacy single logs use `{tablet}_{version}.vlog`. Readers in this version always support both legacy single-log files and statement groups, regardless of this setting. With the default `true`, each statement keeps its own schema, segments, rewrite metadata, and delete positions, so a DELETE followed by an INSERT in one transaction no longer causes mismatched partial-update metadata during shadow publish. Setting it to `false` restores the legacy merged-log writer, including that known failure. Changing the setting does not convert versioned transaction logs that have already been written.
+
+  CNs of versions without group readers cannot read statement groups. When you upgrade from an earlier version in which this setting does not exist or defaults to `false`, set `lake_enable_txn_vlog_group = false` in `cn.conf` before you start each upgraded CN, and keep it `false` until every CN that may perform publish, replay, or cleanup has been upgraded, including background workers and images used for replacement nodes. Then enable it as described below. If the earlier version cannot read statement groups, this step is required: enabling group writes while older CNs remain can silently lose committed statements. After a group writer deletes some source logs, an older CN can retry using only the remaining sources and write an incomplete legacy log, which replay prefers over the group file.
+
+  Before changing this setting in either direction, pause the relevant schema-change and multi-statement publish work, drain in-flight requests, update all affected CNs consistently, and then resume the work. The setting does not negotiate reader capabilities or provide an atomic cluster-wide switch.
+
+  Setting it to `false` only stops subsequent group writes; it does not convert, drain, or remove existing grouped logs. Before downgrading to a version without group readers, list every affected storage root's `txnlog` directory and verify that no `*.group.vlog` files remain, including unused group files next to valid legacy logs: older tablet cleanup also scans these files and cannot decode them. ALTER reaching `FINISHED`, transactions becoming `VISIBLE`, or routine vacuum completing does not establish this. With file bundling, successful replay leaves these logs in place, and routine vacuum does not reclaim version logs. If any remain, keep group-capable readers until safe cleanup has been completed. Disabling this setting alone does not make a downgrade safe.
+- Introduced in: -
+
 ### lake_pk_compaction_max_input_rowsets
 
 - Default: 500
@@ -220,8 +245,8 @@ Enable this option only after **all target CNs** support it. A normalized replic
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: Whether a Primary Key tablet in a shared-data cluster switches from cumulative compaction to base compaction on its own when its deletes reach `lake_pk_compaction_base_delete_ratio_threshold` or `lake_pk_compaction_base_delete_rows_threshold`. It is disabled by default because `lake_pk_compaction_base_delete_rows_threshold` is an absolute count: on a large table whose existing rows keep being updated or deleted, a tablet reaches it again soon after each base compaction, and each base compaction rewrites up to `update_compaction_ratio_threshold` (0.5 by default) of the tablet's data. A manual `ALTER TABLE ... COMPACT` runs base compaction regardless of this item.
-- Introduced in: v4.1.6, v26.2.1
+- Description: Whether automatic compaction of a shared-data Primary Key tablet can select Base Compaction when its delete ratio or delete-row count reaches a threshold. This switch only controls automatic Base Compaction triggered by deletes and does not affect ordinary Cumulative Compaction. It is disabled by default because large tablets under continuous updates or deletes can frequently reach the absolute delete-row threshold and repeatedly rewrite data. Manual `ALTER TABLE ... COMPACT` requests bypass this switch and both delete thresholds; tablets without deleted rows fall back to ordinary compaction selection. Neither automatic nor manual requests guarantee a full-tablet merge in one execution. See [Base Compaction for Primary Key tables](../../management/compaction.md#primary-key-base-compaction).
+- Introduced in: v4.1.7, v26.2.1
 
 ### lake_pk_compaction_base_delete_ratio_threshold
 
@@ -229,8 +254,8 @@ Enable this option only after **all target CNs** support it. A normalized replic
 - Type: Double
 - Unit: -
 - Is mutable: Yes
-- Description: One of two triggers that switch a Primary Key tablet in a shared-data cluster from cumulative compaction (size-tiered small-file merges) to base compaction, which rewrites the delete-bearing rowsets (the ones with the most deleted rows first) to drop deleted rows and shrink their delete vectors. When `lake_pk_compaction_base_enable_delete_trigger` is `true`, base compaction runs when the tablet's aggregate delete ratio (`sum(num_dels) / sum(num_rows)` across rowsets) reaches this value or when its absolute delete-row count reaches `lake_pk_compaction_base_delete_rows_threshold`. A manual `ALTER TABLE ... COMPACT` forces a base compaction regardless of these items.
-- Introduced in: v4.2
+- Description: One of the two thresholds for automatically selecting Base Compaction by deletes for a shared-data Primary Key tablet. Base Compaction can be selected when the aggregate delete ratio across all current Rowsets, `sum(num_dels) / sum(num_rows)`, reaches this value, or when the total delete-row count reaches `lake_pk_compaction_base_delete_rows_threshold`. In v4.1.4–v4.1.6, both thresholds are checked directly. From v4.1.7, `lake_pk_compaction_base_enable_delete_trigger = true` is also required. Manual `ALTER TABLE ... COMPACT` requests bypass both thresholds. Reaching a threshold does not guarantee immediate FE scheduling. See [Automatic triggering](../../management/compaction.md#automatic-base-compaction).
+- Introduced in: v4.1.4
 
 ### lake_pk_compaction_base_delete_rows_threshold
 
@@ -238,8 +263,8 @@ Enable this option only after **all target CNs** support it. A normalized replic
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: One of two triggers for Primary Key base compaction in a shared-data cluster (see `lake_pk_compaction_base_delete_ratio_threshold`). When `lake_pk_compaction_base_enable_delete_trigger` is `true`, base compaction runs when a tablet's absolute delete-row count (`sum(num_dels)` across rowsets) reaches this value. This absolute-count trigger complements the ratio trigger: on hot update/delete tables the delete vectors bloat and space is wasted while the aggregate delete ratio stays low (diluted by many mostly-live rowsets), so the ratio trigger alone would not fire. Raise it to make base compaction less frequent, or lower it to reclaim delete vectors sooner.
-- Introduced in: v4.2
+- Description: The absolute delete-row threshold for automatically selecting Base Compaction by deletes for a shared-data Primary Key tablet. It is combined with `lake_pk_compaction_base_delete_ratio_threshold` using OR. The delete-row count is `sum(num_dels)` across all current Rowsets in the tablet. In v4.1.4–v4.1.6, this threshold is checked directly. From v4.1.7, `lake_pk_compaction_base_enable_delete_trigger = true` is also required. Manual requests bypass this threshold. This condition covers tablets with a low aggregate delete ratio but many delete marks in delete vectors. Raise it to make automatic Base Compaction less frequent, or lower it to select delete reclamation sooner. See [Automatic triggering](../../management/compaction.md#automatic-base-compaction).
+- Introduced in: v4.1.4
 
 ### enable_lake_pk_compaction_score_gate
 
@@ -347,13 +372,48 @@ Enable this option only after **all target CNs** support it. A normalized replic
 - Is mutable: Yes
 - Description: Sub-chunk granularity for `RowsMapperIterator` pipelined reads of `.lcrm` files during light Primary Key compaction publish in a shared-data cluster. Each output segment is split into `ceil(segment_bytes / lake_rows_mapper_sub_chunk_bytes)` sub-chunks pipelined independently. Smaller values raise the achievable parallelism for few-but-large output segments at the cost of more range reads and an extra memcpy on consume. Defaults to 4 MiB to align with the starcache disk-tier block size.
 
-### lake_segment_metadata_cache_limit_percent
+### lake_scan_parallel_segment_open
 
-- Default: 20
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether a query scan in a shared-data cluster opens the segments of all rowsets of a tablet at once, one task per segment on the segment loading thread pool, instead of one rowset after another, and builds the iterators of the rowsets in parallel. It applies only to query scans. Takes effect only when `remote_io_scheduler_enable` is `true`. Loads, compaction, and other reads keep following `enable_load_segment_parallel`. Segments whose footers are already open in the segment metadata cache are used without a task. The query profile reports them in `TabletPrepareCachedSegments`, and the footer reads in the other `TabletPrepare*` counters.
+- Introduced in: -
+
+### lake_scan_warm_index
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether a query scan in a shared-data cluster, split or not, asynchronously warms the index pages it reads next once it has opened the tablet's segments: the short key index of every segment, the zone map, bloom filter, and bitmap index root pages of the predicate columns, and the ordinal index root pages of the read columns. In the same way, the bitmap index lookups of equality and `IN` predicates request the dictionary pages of all their values at once, and then the pages of all the bitmaps they select, before reading them. Scans do not wait for the warming, and read as usual if it fails. Segments that the segment metadata filter (`enable_lake_segment_metadata_filter`) excludes from the scan are not warmed. This item takes effect only for queries, and only when the remote I/O scheduler is enabled (`remote_io_scheduler_enable`). It is independent of `lake_scan_parallel_segment_open`. The query profile reports the warming in `TabletPrepareIndexWarmSegments`, `TabletPrepareIndexWarmRanges`, `TabletPrepareIndexWarmBlocks`, `TabletPrepareIndexWarmSkipped`, and `TabletPrepareIndexWarmPrunedSegments`, and the bitmap index page requests in `BitmapIndexPrefetchPages` and `BitmapIndexPrefetchBlocks`.
+
+### lake_scan_read_ahead_segments
+
+- Default: 16
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: The capacity of the segment metadata cache in a shared-data cluster, as a percentage of the BE process memory limit. This cache holds opened segments (their footers, indexes, and column readers), delete vectors, and tablet schemas. It is separate from the tablet metadata cache (see `lake_tablet_metadata_cache_limit_percent`), so loading many segments does not evict tablet metadata or transaction logs. Values outside the range 0–100 are treated as 0 or 100. Set this item to `0` to disable the cache. Together with `lake_tablet_metadata_cache_limit_percent`, this item replaces `lake_metadata_cache_limit`.
+- Description: With the remote I/O scheduler active, a lake query scan that reads a tablet's segments one after another (the tablet is not split across scan tasks) starts fetching the first blocks of the next segments while it is still reading the current one, once the current segment has asked for all of its own blocks. At most this many segments are read ahead. A next segment starts only while the blocks that all of them have asked for and not yet read are fewer than `remote_prefetch_window_blocks` cache blocks, so the segment started last can take that total to about twice the window. `0` disables it: each segment starts its read-ahead only when its turn comes. Split scans, loads, and compaction are not affected. The query profile reports SegmentReadAheadStarted.
+- Introduced in: -
+
+### lake_segment_metadata_cache_limit_percent
+
+- Default: 10
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The capacity of the segment metadata cache in a shared-data cluster, as a percentage of the BE process memory limit. This cache holds opened segments (their footers, indexes, and column readers), delete vectors, and tablet schemas. It is separate from the tablet metadata cache (see `lake_tablet_metadata_cache_limit_percent`), so loading many segments does not evict tablet metadata or transaction logs. Values outside the range 0–100 are treated as 0 or 100. Set this item to `0` to disable the cache. Together with `lake_tablet_metadata_cache_limit_percent`, this item replaces `lake_metadata_cache_limit`. This value is the largest capacity of the cache: the cache shrinks below it when the BE process runs short of memory (see `lake_tablet_metadata_cache_min_limit`).
+- Introduced in: -
+
+### lake_segment_metadata_cache_min_limit
+
+- Default: 1073741824
+- Type: Long
+- Unit: Bytes
+- Is mutable: Yes
+- Description: The capacity below which the segment metadata cache in a shared-data cluster does not shrink when it gives memory back under memory pressure (see `lake_tablet_metadata_cache_min_limit`). If this value is larger than the capacity set by `lake_segment_metadata_cache_limit_percent`, the cache stays at that capacity.
 - Introduced in: -
 
 ### lake_shard_info_cache_ttl_sec
@@ -367,11 +427,20 @@ Enable this option only after **all target CNs** support it. A normalized replic
 
 ### lake_tablet_metadata_cache_limit_percent
 
-- Default: 10
+- Default: 5
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: The capacity of the tablet metadata cache in a shared-data cluster, as a percentage of the BE process memory limit. This cache holds tablet metadata and transaction logs. It is separate from the segment metadata cache (see `lake_segment_metadata_cache_limit_percent`), so loading many segments does not evict them. Values outside the range 0–100 are treated as 0 or 100. Set this item to `0` to disable the cache. Together with `lake_segment_metadata_cache_limit_percent`, this item replaces `lake_metadata_cache_limit`.
+- Description: The capacity of the tablet metadata cache in a shared-data cluster, as a percentage of the BE process memory limit. This cache holds tablet metadata and transaction logs. It is separate from the segment metadata cache (see `lake_segment_metadata_cache_limit_percent`), so loading many segments does not evict them. Values outside the range 0–100 are treated as 0 or 100. Set this item to `0` to disable the cache. Together with `lake_segment_metadata_cache_limit_percent`, this item replaces `lake_metadata_cache_limit`. This value is the largest capacity of the cache: the cache shrinks below it when the BE process runs short of memory (see `lake_tablet_metadata_cache_min_limit`).
+- Introduced in: -
+
+### lake_tablet_metadata_cache_min_limit
+
+- Default: 1073741824
+- Type: Long
+- Unit: Bytes
+- Is mutable: Yes
+- Description: The capacity below which the tablet metadata cache in a shared-data cluster does not shrink. When the BE process memory usage exceeds `memory_high_level`, the tablet metadata cache and the segment metadata cache lower their capacities below their current usage and evict their least recently used entries. The memory to give back is shared between the two caches in proportion to how far each cache's usage is above its floor (this item and `lake_segment_metadata_cache_min_limit`). The usage above `memory_high_level` is released gradually over about 50 seconds. If the usage also exceeds `memory_urgent_level`, the part above `memory_urgent_level` is released at once. After the usage drops below `memory_high_level`, the capacities grow back over about 200 seconds to the values set by `lake_tablet_metadata_cache_limit_percent` and `lake_segment_metadata_cache_limit_percent`. The check runs every 10 seconds. If this value is larger than the capacity set by `lake_tablet_metadata_cache_limit_percent`, the cache stays at that capacity.
 - Introduced in: -
 
 ### lake_vacuum_enable_task_timeout
@@ -442,6 +511,141 @@ Enable this option only after **all target CNs** support it. A normalized replic
 - Unit: -
 - Is mutable: Yes
 - Description: The upper limit of the primary key index cache in a shared-data cluster, expressed as a percentage of the cache capacity. It is checked after every publish that does not fail because it exceeds the memory limit: when the cache holds more than this percentage, the least recently used primary key indexes that are not in use are evicted until the cache is within this percentage. It is a backstop for when the cache grows faster than the background thread brings it down to `primary_key_index_memory_high_percent`, so set it to a value higher than that item.
+- Introduced in: -
+
+### remote_io_scheduler_enable
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: Whether to enable the remote I/O scheduler in a shared-data cluster. When it is enabled, every GET request that a read issues to the object store after a Data Cache miss waits in one scheduler per CN, which grants the requests by weight: queries, loads, compaction, and other background tasks share the object store by `remote_read_query_weight`, `remote_read_load_weight`, `remote_read_compaction_weight`, and `remote_read_background_weight`, the resource groups of the queries share by their `cpu_weight`, and within a resource group a query's share decreases as it reads more, so that a large scan yields to newer, smaller queries. Query scans also read ahead the cache blocks of the pages they are about to read (see `remote_prefetch_window_blocks`). The scheduler requires `datacache_enable` and `starlet_use_star_cache` to be `true`; otherwise the CN logs a warning and reads as if the scheduler were disabled. While the scheduler is enabled, `io_coalesce_lake_read_enable` is set to `false` at startup, `starlet_fs_read_prefetch_enable` is forced off without changing its value, and dynamically enabling either of them is rejected. The configuration file is not changed, so restarting the CN with the scheduler disabled restores both. If a scheduler parameter has an invalid value, the CN refuses to start.
+- Introduced in: -
+
+### remote_prefetch_late_read_ahead_ratio
+
+- Default: 0.5
+- Type: Double
+- Unit: -
+- Is mutable: Yes
+- Description: With late materialization, the columns that are read only for the rows passing the predicates are fetched chunk by chunk once those rows are known. From the fourth chunk of a segment reader onwards, once those rows have touched at least this fraction of the pages they span, these columns are read ahead like the predicate columns. A value greater than 1 disables the switch. A change applies to segment readers opened afterwards. Takes effect only when `remote_io_scheduler_enable` is `true`.
+- Introduced in: -
+
+### lake_compaction_prefetch_window_blocks
+
+- Default: 32
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: Experimental. Target number of Data Cache blocks a lake compaction task prefetches across its input segments. The budget is capped at one eighth of the configured per-worker memory limit and divided among the physical input segments, rounding down. Each segment still prefetches at least one block, so an input with more segments than the budget prefetches one block per segment and exceeds both the budget and the memory cap. Zero disables prefetch. Requires the remote I/O scheduler, a cache-enabled table, and data cache fills for the compaction mode. Eligible scalar pages use the COMPACTION workload.
+- Introduced in: -
+
+### remote_prefetch_window_blocks
+
+- Default: 128
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of Data Cache blocks that a query's segment reader requests ahead of what it is consuming, including blocks that are queued, being fetched, or fetched but not read yet. It limits how far a reader runs ahead of itself; when the blocks are fetched is decided by the scheduler. Loads and other background reads do not read ahead; compaction reads ahead under `lake_compaction_prefetch_window_blocks`. `0` disables the read-ahead. A change applies to segment readers opened afterwards. Takes effect only when `remote_io_scheduler_enable` is `true`.
+- Introduced in: -
+
+### remote_read_adaptive_limit
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: Whether the remote I/O scheduler keeps the number of GET requests in flight, below `remote_read_io_threads`, at what the path to the object store can deliver. Requests that do not fit wait in the scheduler, where the weights decide which goes next, instead of in the network. `false` allows up to `remote_read_io_threads` requests in flight. Takes effect only when `remote_io_scheduler_enable` is `true`.
+- Introduced in: -
+
+### remote_read_adaptive_min_inflight
+
+- Default: 16
+- Type: Int
+- Unit: -
+- Is mutable: No
+- Description: The minimum number of GET requests in flight under the adaptive limit, which is also the limit the scheduler holds briefly to measure the latency of an unloaded request. It must be positive. Takes effect only when `remote_io_scheduler_enable` and `remote_read_adaptive_limit` are both `true`.
+- Introduced in: -
+
+### remote_read_background_weight
+
+- Default: 1
+- Type: Int
+- Unit: -
+- Is mutable: No
+- Description: The share of the object store reads of background tasks other than compaction, relative to `remote_read_query_weight`, `remote_read_load_weight`, and `remote_read_compaction_weight` while all of them wait. It must be positive. Takes effect only when `remote_io_scheduler_enable` is `true`.
+- Introduced in: -
+
+### remote_read_compaction_weight
+
+- Default: 1
+- Type: Int
+- Unit: -
+- Is mutable: No
+- Description: The share of the object store reads of compaction relative to `remote_read_query_weight`, `remote_read_load_weight`, and `remote_read_background_weight` while all of them wait. It must be positive. Takes effect only when `remote_io_scheduler_enable` is `true`.
+- Introduced in: -
+
+### remote_read_io_threads
+
+- Default: 0
+- Type: Int
+- Unit: -
+- Is mutable: No
+- Description: The number of threads that issue the scheduled GET requests. It caps the number of GET requests in flight on the CN. `0` sets it to the number of lake scan threads, that is, `pipeline_connector_scan_thread_num_per_cpu` multiplied by the number of CPU cores. It must not be negative. Takes effect only when `remote_io_scheduler_enable` is `true`.
+- Introduced in: -
+
+### remote_read_load_weight
+
+- Default: 5
+- Type: Int
+- Unit: -
+- Is mutable: No
+- Description: The share of the object store reads of loads, including publish, primary key indexes, delete files, and the spill of a load, relative to `remote_read_query_weight`, `remote_read_compaction_weight`, and `remote_read_background_weight` while all of them wait. It must be positive. Takes effect only when `remote_io_scheduler_enable` is `true`.
+- Introduced in: -
+
+### remote_read_query_weight
+
+- Default: 9
+- Type: Int
+- Unit: -
+- Is mutable: No
+- Description: The share of the object store reads of queries relative to `remote_read_load_weight`, `remote_read_compaction_weight`, and `remote_read_background_weight` while all of them wait. It must be positive. Takes effect only when `remote_io_scheduler_enable` is `true`.
+- Introduced in: -
+
+### remote_read_retain_prefetched_bytes
+
+- Default: 2147483648
+- Type: Int
+- Unit: Bytes
+- Is mutable: Yes
+- Description: The maximum total size of finished read-ahead blocks of segment files that a node keeps in memory in a shared-data cluster. When the remote I/O scheduler (`remote_io_scheduler_enable`) reads blocks ahead for a query scan, a finished block stays in memory while the scan still covers it, and the scan copies its pages from memory instead of reading them back from the Data Cache. The block is still written to the Data Cache. Once the blocks kept in memory reach this size, later blocks are not kept. `0` disables this feature. This item has no effect while the remote I/O scheduler is disabled. Only segment files, which are never overwritten, are kept; other files such as metadata are not. The memory is counted toward the process, not toward any query. A raised value applies to the blocks finished afterwards. After the value is lowered, no new blocks are kept until the total falls below it, and a block already kept is released when it is next read while the total is still above the new value, or when the scan no longer covers it. Nothing is evicted in the background. The value must not be negative: with the remote I/O scheduler enabled, the CN refuses to start with a negative value, and a dynamic update to a negative value is rejected.
+- Introduced in: v4.2
+
+### remote_read_skip_contended_cache_writes
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether the remote I/O scheduler in a shared-data cluster may skip writing a fetched block to Data Cache while the cache disk is contended, that is, at least 90% busy with reads taking at least 20% of its service time for two consecutive 250 ms samples. Only blocks fetched for the later part of a large query scan qualify, and only after the block is retained in memory under `remote_read_retain_prefetched_bytes`, from which its readers are served. A later read of a skipped block fetches it from object storage again. Enabling this item can help when the cache disk is slower than the network and scans read back blocks that earlier scans have just cached. It has no effect when `remote_io_scheduler_enable` is `false` or `remote_read_retain_prefetched_bytes` is `0`. A change takes effect on blocks fetched afterwards.
+- Introduced in: -
+
+### remote_read_weight_decay_ios
+
+- Default: 1024
+- Type: Int
+- Unit: -
+- Is mutable: No
+- Description: How fast a query's share of its resource group decreases as it reads. The n-th cache block that a query or a background task reads weighs `max(remote_read_weight_decay_min, 2^(-n / remote_read_weight_decay_ios))`, so a large scan yields more and more to newer queries of its resource group. `0` disables the decrease. It must not be negative. Takes effect only when `remote_io_scheduler_enable` is `true`.
+- Introduced in: -
+
+### remote_read_weight_decay_min
+
+- Default: 0.03125
+- Type: Double
+- Unit: -
+- Is mutable: No
+- Description: The lowest weight that `remote_read_weight_decay_ios` can lower a query's share to. It must be greater than 0 and not greater than 1. Takes effect only when `remote_io_scheduler_enable` is `true`.
 - Introduced in: -
 
 ### s3_multipart_equal_part_size
@@ -516,6 +720,15 @@ Enable this option only after **all target CNs** support it. A normalized replic
 - Description: In a shared-data cluster, the part size used for multipart uploads to S3 or an S3-compatible object store. BE buffers up to this many bytes in memory per output stream between part uploads, so raising it raises memory usage, multiplied by the number of concurrent output streams. Setting it very low increases request count and can exceed the 10,000-part limit or fall below the 5 MB minimum part size that AWS S3 enforces; the limits of other S3-compatible stores differ. Changing it takes effect on uploads already in progress. The value must be greater than 0; a non-positive value is rejected. A valid value here overrides an equivalent `--fslib_*` gflag passed on the BE command line. A value rejected at BE startup is not applied at all: BE keeps the previously effective value and logs a warning, so this item can report a value that is not the one in effect. This item controls starlet uploads in a shared-data cluster and is unrelated to the `experimental_s3_*` items.
 - Introduced in: v4.1.5, v4.2
 
+### starlet_grpc_client_enable_http_proxy
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: In a shared-data cluster, whether the gRPC connections that this CN opens to StarMgr and to other CNs go through the HTTP proxy set in the environment of the CN process. These connections carry tablet information lookups (GetShard), the worker heartbeat, tablet replica information updates, and Data Cache replication between CNs. The CN takes the proxy only from the lowercase `grpc_proxy`, `https_proxy`, and `http_proxy` environment variables, and bypasses it only for the hosts listed in the lowercase `no_grpc_proxy` or `no_proxy` environment variables. The default value `false` ignores these variables and connects directly, so a proxy that the CN process inherits for other outbound traffic cannot capture the traffic between cluster nodes, even when its bypass list does not include the cluster addresses. Set this item to `true` only if these connections must go through the proxy, as they did in earlier versions. This item does not affect other outbound traffic of the CN, such as access to object storage. The CN reads this item once at startup, so a change takes effect only after the CN restarts. For the connections that the FE opens, see the FE parameter `starmgr_grpc_client_enable_http_proxy`.
+- Introduced in: v26.3
+
 ### starlet_port
 
 - Default: 9070
@@ -542,6 +755,15 @@ Enable this option only after **all target CNs** support it. A normalized replic
 - Is mutable: No
 - Description: In a shared-data cluster, whether a Data Cache disk block that this CN process wrote and has not evicted since skips the first full-block checksum read when a later request touches it. That verification re-reads the whole block from disk to check data that the process has just written and still tracks in memory, which costs one extra disk read on the first access to every freshly cached block. Set this item to `false` to verify every block on first access, which is only worth its cost where the cache disk is suspected of corrupting data at rest. Blocks inherited from a previous run of the process are always verified regardless of this item, because nothing in the current process witnessed their write. This item is read once when Data Cache initializes.
 - Introduced in: v4.2.0
+
+### starlet_star_cache_write_overwrite
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: In a shared-data cluster, whether a Data Cache write replaces an object that is already cached under the same key. When this item is `false`, the existing object is kept and the write is reported as successful, which suits the read-through fill path, where the bytes being written are the ones already cached. Set this item to `true` to let a re-read refresh a block that is suspected to be stale or damaged. Data Cache reads this item on every write, so a change takes effect on the next write without re-initializing the cache.
+- Introduced in: -
 
 ### starlet_starmgr_client_compression_type
 
@@ -614,7 +836,7 @@ Enable this option only after **all target CNs** support it. A normalized replic
 - Type: String
 - Unit: -
 - Is mutable: Yes
-- Description: The maximum amount of data that can be cached on a single disk. You can set it as a percentage (for example, `80%`) or a physical limit (for example, `2T`, `500G`). For example, if you use two disks and set the value of the `datacache_disk_size` parameter as `21474836480` (20 GB), a maximum of 40 GB data can be cached on these two disks. The default value is `0`, which indicates that only memory is used to cache data.
+- Description: The maximum amount of data that can be cached on a single disk. You can set it as a percentage (for example, `80%`) or a physical limit (for example, `2T`, `500G`). For example, if you use two disks and set the value of the `datacache_disk_size` parameter as `21474836480` (20 GB), a maximum of 40 GB data can be cached on these two disks. A percentage is relative to the capacity of the disk that holds each `storage_root_path`. The default value is `100%`. When `enable_datacache_disk_auto_adjust` is `true` (default), the system adjusts the actual disk cache quota based on disk usage, and this item only sets the upper limit of that quota. `0` disables the disk cache.
 - Introduced in: -
 
 ### datacache_enable
@@ -643,6 +865,33 @@ Enable this option only after **all target CNs** support it. A normalized replic
 - Is mutable: Yes
 - Description: The maximum number of inline cache items in Data Cache. For some particularly small cache blocks, Data Cache stores them in `inline` mode, which caches the block data and metadata together in memory.
 - Introduced in: v3.4.0
+
+### datacache_lru_shard_evict_fallback_enable
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether an LRU shard of Data Cache can evict entries from the other shards when it is being refilled or cannot supply the whole charge by itself. `false` restores the behavior that a shard only evicts its own entries, and `datacache_lru_shard_refill_low_watermark_percent` and `datacache_lru_shard_refill_high_watermark_percent` are ignored.
+- Introduced in: -
+
+### datacache_lru_shard_refill_low_watermark_percent
+
+- Default: 50
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: An LRU shard of Data Cache is refilled from the largest shards instead of evicting its own entries once its usage drops below this percentage of its capacity, until it reaches `datacache_lru_shard_refill_high_watermark_percent`. The value must not exceed `datacache_lru_shard_refill_high_watermark_percent`. Setting both parameters to `0` disables the refill.
+- Introduced in: -
+
+### datacache_lru_shard_refill_high_watermark_percent
+
+- Default: 70
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The percentage of the shard capacity at which the refill of an LRU shard of Data Cache stops. Valid values: `datacache_lru_shard_refill_low_watermark_percent` to `100`. Setting both parameters to `0` disables the refill.
+- Introduced in: -
 
 ### datacache_mem_size
 
@@ -913,7 +1162,7 @@ Enable this option only after **all target CNs** support it. A normalized replic
 - Type: Int
 - Unit: -
 - Is mutable: No
-- Description: The maximum concurrency (per BE node) of the materialized view refresh tasks in the resource group `default_mv_wg`. The default value `0` indicates no limits.
+- Description: The maximum concurrency (per BE node) of the materialized view refresh tasks in the resource group `default_mv_wg`. The default value `0` indicates no limits. Deprecated: from v3.4 onwards, this item no longer takes effect because the FE stores `default_mv_wg` and sends it to the BEs. Use `ALTER RESOURCE GROUP default_mv_wg WITH (...)` instead.
 - Introduced in: v3.1
 
 ### default_mv_resource_group_cpu_limit
@@ -922,7 +1171,7 @@ Enable this option only after **all target CNs** support it. A normalized replic
 - Type: Int
 - Unit: -
 - Is mutable: No
-- Description: The maximum number of CPU cores (per BE node) that can be used by the materialized view refresh tasks in the resource group `default_mv_wg`.
+- Description: The maximum number of CPU cores (per BE node) that can be used by the materialized view refresh tasks in the resource group `default_mv_wg`. Deprecated: from v3.4 onwards, this item no longer takes effect because the FE stores `default_mv_wg` and sends it to the BEs. Use `ALTER RESOURCE GROUP default_mv_wg WITH (...)` instead.
 - Introduced in: v3.1
 
 ### default_mv_resource_group_memory_limit
@@ -931,7 +1180,7 @@ Enable this option only after **all target CNs** support it. A normalized replic
 - Type: Double
 - Unit:
 - Is mutable: No
-- Description: The maximum memory proportion (per BE node) that can be used by the materialized view refresh tasks in the resource group `default_mv_wg`. The default value indicates 80% of the memory.
+- Description: The maximum memory proportion (per BE node) that can be used by the materialized view refresh tasks in the resource group `default_mv_wg`. The default value indicates 80% of the memory. Deprecated: from v3.4 onwards, this item no longer takes effect because the FE stores `default_mv_wg` and sends it to the BEs. Use `ALTER RESOURCE GROUP default_mv_wg WITH (...)` instead.
 - Introduced in: v3.1
 
 ### default_mv_resource_group_spill_mem_limit_threshold
@@ -940,7 +1189,7 @@ Enable this option only after **all target CNs** support it. A normalized replic
 - Type: Double
 - Unit: -
 - Is mutable: No
-- Description: The memory usage threshold before a materialized view refresh task in the resource group `default_mv_wg` triggers intermediate result spilling. The default value indicates 80% of the memory.
+- Description: The memory usage threshold before a materialized view refresh task in the resource group `default_mv_wg` triggers intermediate result spilling. The default value indicates 80% of the memory. Deprecated: from v3.4 onwards, this item no longer takes effect because the FE stores `default_mv_wg` and sends it to the BEs. Use `ALTER RESOURCE GROUP default_mv_wg WITH (...)` instead.
 - Introduced in: v3.1
 
 ### enable_resolve_hostname_to_ip_in_load_error_url
@@ -1023,8 +1272,17 @@ Enable this option only after **all target CNs** support it. A normalized replic
 - Type: Long
 - Unit: Percent
 - Is mutable: Yes
-- Description: High water memory threshold expressed as a percentage of the process memory limit. When total memory consumption rises above this percentage, BE begins to free memory gradually (currently by evicting data cache and update cache) to relieve pressure. The monitor uses this value to compute memory_high = mem_limit * memory_high_level / 100 and, if consumption `>` memory_high, performs controlled eviction guided by the GC advisor; if consumption exceeds memory_urgent_level (a separate config), more aggressive immediate reductions occur. This value is also consulted to disable certain memory‑intensive operations (for example, primary-key preload) when the threshold is exceeded. Must satisfy validation with memory_urgent_level (memory_urgent_level `>` memory_high_level, memory_high_level `>=` 1, memory_urgent_level `<=` 100).
+- Description: High water memory threshold expressed as a percentage of the process memory limit. When total memory consumption rises above this percentage, BE begins to free memory gradually (currently by evicting data cache and update cache, and by shrinking the shared-data metadata caches) to relieve pressure. The monitor uses this value to compute memory_high = mem_limit * memory_high_level / 100 and, if consumption `>` memory_high, performs controlled eviction guided by the GC advisor; if consumption exceeds memory_urgent_level (a separate config), more aggressive immediate reductions occur. This value is also consulted to disable certain memory‑intensive operations (for example, primary-key preload) when the threshold is exceeded. Must satisfy validation with memory_urgent_level (memory_urgent_level `>` memory_high_level, memory_high_level `>=` 1, memory_urgent_level `<=` 100).
 - Introduced in: v3.2.0
+
+### olap_string_max_length
+
+- Default: 1048576
+- Type: Int
+- Unit: Bytes
+- Is mutable: Yes
+- Description: Maximum string length used by BE string functions, such as `repeat` and `concat`, to limit the size of each result. The default is 1 MiB. These functions return `NULL` when a result exceeds this limit. The limit is measured in bytes, not characters.
+- Introduced in: -
 
 ### report_exec_rpc_request_retry_num
 

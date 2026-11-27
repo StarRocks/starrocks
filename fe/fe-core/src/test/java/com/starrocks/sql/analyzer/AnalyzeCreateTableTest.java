@@ -396,13 +396,21 @@ public class AnalyzeCreateTableTest {
                 metadata.getDb((ConnectContext) any, "hive_catalog", "hive_db");
                 result = new Database();
                 minTimes = 0;
+
+                metadata.tableExists((ConnectContext) any, "hive_catalog", "hive_db", anyString);
+                result = false;
+                minTimes = 0;
             }
         };
 
         AnalyzeTestUtil.getConnectContext().setCurrentCatalog(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
         AnalyzeTestUtil.getConnectContext().setDatabase("test");
 
-        analyzeSuccess("create external table iceberg_catalog.iceberg_db.iceberg_table" 
+        analyzeFail("create external table hive_catalog.hive_db.hive_table"
+                        + "(k1 int, k2 int) partition by range(k1) (partition p1 values less than ('100'))",
+                "Create hive table only supports PARTITION BY (column, ...)");
+
+        analyzeSuccess("create external table iceberg_catalog.iceberg_db.iceberg_table"
                         + "(k1 int, k2 date) partition by year(k2)");
         analyzeSuccess("create external table iceberg_catalog.iceberg_db.iceberg_table" 
                         + "(k1 int, k2 date) partition by month(k2)");
@@ -503,6 +511,12 @@ public class AnalyzeCreateTableTest {
         analyzeFail("create external table iceberg_catalog.iceberg_db.iceberg_table"
                         + "(k1 int, k2 varchar(10)) partition by truncate(4, k2)",
                 "No matching function with signature: truncate(tinyint(4), varchar(10))");
+        analyzeFail("create external table iceberg_catalog.iceberg_db.iceberg_table"
+                        + "(k1 int, k2 int) partition by range(k1) (partition p1 values less than ('100'))",
+                "Create iceberg table only supports PARTITION BY (column or transform, ...)");
+        analyzeFail("create table iceberg_catalog.iceberg_db.iceberg_table"
+                        + " partition by range(k1) (partition p1 values less than ('100')) as select 1 as k1, 2 as k2",
+                "Create iceberg table only supports PARTITION BY (column or transform, ...)");
         AnalyzeTestUtil.getStarRocksAssert().dropCatalog("iceberg_catalog");
     }
 

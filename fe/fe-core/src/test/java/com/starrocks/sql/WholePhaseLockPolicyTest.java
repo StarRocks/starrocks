@@ -14,6 +14,7 @@
 
 package com.starrocks.sql;
 
+import com.starrocks.authorization.NativeAccessController;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
@@ -78,20 +79,17 @@ public class WholePhaseLockPolicyTest extends PlanTestBase {
     @BeforeEach
     public void installPolicy() {
         // A row access policy on the guarded table that reads the mapping table, as an access controller returns it.
-        new MockUp<Authorizer>() {
+        // Installed on the controller, not on Authorizer, so that every Authorizer lookup sees it -- including the
+        // unaudited ones the planner's lock-set pre-pass uses, which reach the controller without going through
+        // Authorizer#getRowAccessPolicy.
+        new MockUp<NativeAccessController>() {
             @Mock
-            public Expr getRowAccessPolicy(ConnectContext context, TableName tableName) {
+            public Expr getRowAccessPolicy(Invocation invocation, ConnectContext context, TableName tableName) {
                 if (!"t_policy_lock".equalsIgnoreCase(tableName.getTbl())) {
-                    return null;
+                    return invocation.proceed(context, tableName);
                 }
                 return SqlParser.parseSqlToExpr("EXISTS (SELECT 1 FROM " + MAP_DB + ".t_map m WHERE m.k = k1)",
                         context.getSessionVariable().getSqlMode());
-            }
-
-            @Mock
-            public Map<String, Expr> getColumnMaskingPolicy(ConnectContext context, TableName tableName,
-                                                                   List<Column> columns) {
-                return null;
             }
         };
     }
@@ -192,6 +190,24 @@ public class WholePhaseLockPolicyTest extends PlanTestBase {
             @Mock
             public Map<String, Expr> getColumnMaskingPolicy(Invocation invocation, ConnectContext session,
                                                             TableName name, List<Column> columns) {
+                if (Thread.currentThread() == planner) {
+                    lookups.merge("mask:" + name.getTbl(), 1, Integer::sum);
+                }
+                return invocation.proceed(session, name, columns);
+            }
+
+            // the lock-set pre-pass asks through the unaudited lookups
+            @Mock
+            public Expr getRowAccessPolicyWithoutAudit(Invocation invocation, ConnectContext session, TableName name) {
+                if (Thread.currentThread() == planner) {
+                    lookups.merge("row:" + name.getTbl(), 1, Integer::sum);
+                }
+                return invocation.proceed(session, name);
+            }
+
+            @Mock
+            public Map<String, Expr> getColumnMaskingPolicyWithoutAudit(Invocation invocation, ConnectContext session,
+                                                                        TableName name, List<Column> columns) {
                 if (Thread.currentThread() == planner) {
                     lookups.merge("mask:" + name.getTbl(), 1, Integer::sum);
                 }

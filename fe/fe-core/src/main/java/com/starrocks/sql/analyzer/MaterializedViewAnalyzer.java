@@ -147,6 +147,7 @@ import static com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter.DEFAULT
 
 public class MaterializedViewAnalyzer {
     private static final Logger LOG = LogManager.getLogger(MaterializedViewAnalyzer.class);
+    private static final ThreadLocal<Boolean> REANALYZING_EXISTING_MV = ThreadLocal.withInitial(() -> false);
 
     private static final Set<JDBCTable.ProtocolType> SUPPORTED_JDBC_PARTITION_TYPE =
             ImmutableSet.of(JDBCTable.ProtocolType.MYSQL, JDBCTable.ProtocolType.MARIADB);
@@ -168,6 +169,17 @@ public class MaterializedViewAnalyzer {
 
     public static void analyze(StatementBase stmt, ConnectContext session) {
         new MaterializedViewAnalyzerVisitor().visit(stmt, session);
+    }
+
+    /** Runs {@code analysis} as the re-analysis of an existing mv's reconstructed DDL (ALTER ... ACTIVE). */
+    public static void reanalyzeExistingMv(Runnable analysis) {
+        boolean previous = REANALYZING_EXISTING_MV.get();
+        REANALYZING_EXISTING_MV.set(true);
+        try {
+            analysis.run();
+        } finally {
+            REANALYZING_EXISTING_MV.set(previous);
+        }
     }
 
     public static Set<BaseTableInfo> getBaseTableInfos(QueryStatement queryStatement) {
@@ -361,6 +373,22 @@ public class MaterializedViewAnalyzer {
             SECOND
         }
 
+        private static void rejectCurrentTimeFunction(CreateMaterializedViewStatement statement) {
+            // Rejecting a re-analysis would leave an mv created before this check unable to reactivate.
+            if (REANALYZING_EXISTING_MV.get()) {
+                return;
+            }
+            Optional<FunctionCallExpr> timeFunction =
+                    AnalyzerUtils.findCurrentTimeFunction(statement.getQueryStatement());
+            if (timeFunction.isEmpty()) {
+                return;
+            }
+            throw new SemanticException(String.format("Incremental refresh does not support %s in the materialized "
+                    + "view definition: rows already in the materialized view are not re-evaluated as time passes. "
+                    + "Use refresh_mode = 'pct', or keep a time window with the partition_retention_condition "
+                    + "property", ExprToSql.toSql(timeFunction.get())), timeFunction.get().getPos());
+        }
+
         @Override
         public Void visitCreateMaterializedViewStatement(CreateMaterializedViewStatement statement,
                                                          ConnectContext context) {
@@ -404,6 +432,7 @@ public class MaterializedViewAnalyzer {
 
             // analyze query statement, can check whether tables and columns exist in catalog
             Analyzer.analyze(queryStatement, context);
+            SavedSqlGeoValidator.validate(queryStatement);
             AnalyzerUtils.checkNondeterministicFunction(queryStatement);
             AnalyzerUtils.prohibitTimeTravelQuery(queryStatement, "create materialized view");
 
@@ -423,6 +452,9 @@ public class MaterializedViewAnalyzer {
                     statement.getQueryStopIndex()));
 
             MaterializedView.RefreshMode refreshMode = IVMAnalyzer.getRefreshMode(statement);
+            if (refreshMode.isIncremental()) {
+                rejectCurrentTimeFunction(statement);
+            }
             if (refreshMode.isIncrementalOrAuto()) {
                 IVMAnalyzer ivmAnalyzer = new IVMAnalyzer(context, statement, statement.getQueryStatement());
                 Optional<IVMAnalyzer.IVMAnalyzeResult> ivmAnalyzeResult = ivmAnalyzer.rewrite(refreshMode);
@@ -521,10 +553,11 @@ public class MaterializedViewAnalyzer {
                 checkPartitionColumnExprs(statement, columnExprMap, changedPartitionByExprs, aliasTableMap, context);
                 // check whether partition expression functions are allowed if it exists
                 checkPartitionExpPatterns(statement);
+                // check window function can be used in partitioned mv; must run before the table names in
+                // partition exprs are replaced with the base table's, which may differ in case from the query's
+                checkWindowFunctions(statement);
                 // check partition column must be base table's partition column
                 checkPartitionColumnWithBaseTable(statement, changedPartitionByExprs, aliasTableMap);
-                // check window function can be used in partitioned mv
-                checkWindowFunctions(statement);
                 // determine mv partition 's type: list or range
                 checkMVPartitionInfoType(statement, aliasTableMap);
                 // deduce generate partition infos for list partition expressions
@@ -682,7 +715,7 @@ public class MaterializedViewAnalyzer {
                 }
                 for (int i = 0; i < colWithComments.size(); ++i) {
                     String colName = colWithComments.get(i).getColName();
-                    // An IVM MV's re-parsed DDL lists the internal columns this analyzer generated
+                    // An IVM MV's column list includes the internal columns this analyzer generated
                     // (__ROW_ID__, __AGG_STATE_*), whose names may hold characters a user-typed name
                     // may not -- e.g. __AGG_STATE_count(*). Exempt only a name identical to the one
                     // generated for that position, so a user-authored name is still checked.
@@ -690,8 +723,12 @@ public class MaterializedViewAnalyzer {
                             && colName.equals(columnNames.get(i))) {
                         continue;
                     }
-                    FeNameFormat.checkColumnName(colName);
                     FeNameFormat.checkVirtualColumnNameNotUsed(colName);
+                    // An existing mv's DDL lists the names it was created with, including generated ones such as
+                    // count(*) that the shared-nothing column name format rejects.
+                    if (!REANALYZING_EXISTING_MV.get()) {
+                        FeNameFormat.checkColumnName(colName);
+                    }
                 }
             }
             List<Column> mvColumns = Lists.newArrayList();
@@ -1664,12 +1701,6 @@ public class MaterializedViewAnalyzer {
             if (hasSpecifiedPartitions && refreshMode.isIncrementalOrAuto()) {
                 throw new SemanticException("Partition refresh is not supported for materialized views with " +
                         "refresh_mode=" + refreshMode.name() + ". Please refresh the whole materialized view instead.",
-                        tableRef.getPos());
-            }
-            if (statement.isForceRefresh() && refreshMode.isIncrementalOrAuto()) {
-                throw new SemanticException("FORCE refresh is not supported for materialized views with " +
-                        "refresh_mode=" + refreshMode.name() +
-                        ". Please drop and re-create the materialized view instead.",
                         tableRef.getPos());
             }
             PartitionInfo partitionInfo = mv.getPartitionInfo();

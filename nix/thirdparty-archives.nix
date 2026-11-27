@@ -329,10 +329,10 @@ let
       md5 = "bdc1dfcb2a89dc0c09e8370808a946f5";
       sha256 = "0byazknlr5x941n9ba3j14prf29yk2dw7nwh3a4wbqd11zh3pwcv";
     };
-    "simdutf-9.1.0.tar.gz" = {
-      url = "https://github.com/simdutf/simdutf/archive/refs/tags/v9.1.0.tar.gz";
-      md5 = "e55123960edadb8d9987fa30f877e588";
-      sha256 = "14yihiaalw4nxmjbbn6b64r7f4qdcpm7x8ml1zmydacm9h553qr4";
+    "simdutf-9.4.0.tar.gz" = {
+      url = "https://github.com/simdutf/simdutf/archive/refs/tags/v9.4.0.tar.gz";
+      md5 = "d10e794f96eb7522b87aeb0a36521454";
+      sha256 = "0skqln07vzph9ycqaqry6fq255x16lpx9izkg1fiwflnkh2ma59n";
     };
     "snappy-1.2.1.tar.gz" = {
       url = "https://github.com/google/snappy/archive/1.2.1.tar.gz";
@@ -379,10 +379,10 @@ let
       md5 = "72337e6a7d2662af50a4ed0274c61b7e";
       sha256 = "1l87r6h8qccba1yjx6n13q36yh0wrq3rzz9nnraq5ssjr2lmmipr";
     };
-    "zstd-1.5.7.tar.gz" = {
-      url = "https://github.com/facebook/zstd/releases/download/v1.5.7/zstd-1.5.7.tar.gz";
-      md5 = "780fc1896922b1bc52a4e90980cdda48";
-      sha256 = "18vgkvh7w6zw4jn2aj1mp0yv98m4fk52ay6da0wh4pm194gyaczb";
+    "zstd-1.6.0.tar.gz" = {
+      url = "https://github.com/facebook/zstd/releases/download/v1.6.0/zstd-1.6.0.tar.gz";
+      md5 = "b9ed8b476cd65a9c0122d630684237fc";
+      sha256 = "1f79yn25vz99h9kphyxa33ypnf1s8fcfjwbyiqkpcy955ap9k99b";
     };
   };
 
@@ -503,7 +503,7 @@ let
       "flatbuffers-v1.10.0.tar.gz"
       "arrow-apache-arrow-24.0.0.tar.gz"
       "brotli-1.0.9.tar.gz"
-      "zstd-1.5.7.tar.gz"
+      "zstd-1.6.0.tar.gz"
       "s2geometry-0.9.0.tar.gz"
       "h3-4.5.0-1b536c34225191ba24a75a840f634d4a48c3b206.tar.gz"
       "bitshuffle-0.5.1.tar.gz"
@@ -534,7 +534,7 @@ let
       "abseil-cpp-20220623.0.tar.gz"
       "cares-1_19_1.tar.gz"
       "grpc-1.43.0.tar.gz"
-      "simdutf-9.1.0.tar.gz"
+      "simdutf-9.4.0.tar.gz"
       "poco-1.12.5-release.tar.gz"
       "icu4c-76_1-src.zip"
       "xsimd-14.0.0.tar.gz"
@@ -578,7 +578,7 @@ let
       "flatbuffers-v1.10.0.tar.gz"
       "arrow-apache-arrow-24.0.0.tar.gz"
       "brotli-1.0.9.tar.gz"
-      "zstd-1.5.7.tar.gz"
+      "zstd-1.6.0.tar.gz"
       "s2geometry-0.9.0.tar.gz"
       "h3-4.5.0-1b536c34225191ba24a75a840f634d4a48c3b206.tar.gz"
       "bitshuffle-0.5.1.tar.gz"
@@ -608,7 +608,7 @@ let
       "abseil-cpp-20220623.0.tar.gz"
       "cares-1_19_1.tar.gz"
       "grpc-1.43.0.tar.gz"
-      "simdutf-9.1.0.tar.gz"
+      "simdutf-9.4.0.tar.gz"
       "poco-1.12.5-release.tar.gz"
       "icu4c-76_1-src.zip"
       "xsimd-14.0.0.tar.gz"
@@ -652,7 +652,7 @@ let
       "flatbuffers-v1.10.0.tar.gz"
       "arrow-apache-arrow-24.0.0.tar.gz"
       "brotli-1.0.9.tar.gz"
-      "zstd-1.5.7.tar.gz"
+      "zstd-1.6.0.tar.gz"
       "s2geometry-0.9.0.tar.gz"
       "h3-4.5.0-1b536c34225191ba24a75a840f634d4a48c3b206.tar.gz"
       "bitshuffle-0.5.1.tar.gz"
@@ -682,7 +682,7 @@ let
       "abseil-cpp-20220623.0.tar.gz"
       "cares-1_19_1.tar.gz"
       "grpc-1.43.0.tar.gz"
-      "simdutf-9.1.0.tar.gz"
+      "simdutf-9.4.0.tar.gz"
       "poco-1.12.5-release.tar.gz"
       "icu4c-76_1-src.zip"
       "xsimd-14.0.0.tar.gz"

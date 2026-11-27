@@ -165,6 +165,11 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     std::string process_name = as_cn ? "CN" : "BE";
 
     int start_step = 1;
+#ifdef USE_STAROS
+    // Before any cache or thread exists, so that refusing an invalid value is a clean exit: an exit() once the
+    // data cache is up aborts in its static destructor.
+    EXIT_IF_ERROR(validate_remote_io_scheduler_config());
+#endif
     // Metric singletons keep registry back-pointers, so the process registry must outlive shutdown.
     static auto* process_metrics_registry = new ProcessMetricsRegistry("starrocks_be");
 

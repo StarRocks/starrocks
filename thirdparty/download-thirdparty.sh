@@ -749,6 +749,14 @@ if [[ -d $TP_SOURCE_DIR/$VPACK_SOURCE ]] ; then
         apply_patch -p1 $TP_PATCH_DIR/velocypack-XYZ1.0-nesting-depth.patch
         touch $PATCHED_MARK
     fi
+    # Keep this fix independent of the mark on previously patched sources.
+    if [ ! -f $PATCHED_MARK.append_double_buffer ] && [ $VPACK_SOURCE = "velocypack-XYZ1.0" ]; then
+        # Earlier revisions included this fix in velocypack-XYZ1.0.patch.
+        if ! patch --dry-run --force --reverse -p1 < "$TP_PATCH_DIR/velocypack-XYZ1.0-append-double-buffer.patch" >/dev/null 2>&1; then
+            apply_patch -p1 $TP_PATCH_DIR/velocypack-XYZ1.0-append-double-buffer.patch
+        fi
+        touch $PATCHED_MARK.append_double_buffer
+    fi
     cd -
     echo "Finished patching $VPACK_SOURCE"
 fi
@@ -824,11 +832,16 @@ if [[ -d $TP_SOURCE_DIR/$ARROW_SOURCE ]] ; then
     cd $TP_SOURCE_DIR/$ARROW_SOURCE
     if [ ! -f $PATCHED_MARK ] && [ $ARROW_SOURCE = "arrow-apache-arrow-24.0.0" ] ; then
         # Allow reading parquet files with Hive-style optional MAP keys.
-        # The other arrow-19.0.1 patches are obsolete on 24.0.0: zstd 1.5.7 is
-        # already upstream; thrift is provided via the system build (-DThrift_SOURCE=SYSTEM);
-        # the flight-types reorder and the macOS libtool-version check are fixed upstream.
+        # The remaining arrow-19.0.1 patches are obsolete on 24.0.0: thrift is provided
+        # via the system build (-DThrift_SOURCE=SYSTEM); the flight-types reorder and
+        # the macOS libtool-version check are fixed upstream.
         apply_patch -p1 $TP_PATCH_DIR/arrow-24.0.0-parquet-map-key.patch
         touch $PATCHED_MARK
+    fi
+    if [ ! -f $PATCHED_MARK.zstd_1_6_0 ] && [ $ARROW_SOURCE = "arrow-apache-arrow-24.0.0" ] ; then
+        # Bump Arrow's bundled zstd from 1.5.7 to 1.6.0 (CVE-2026-124851).
+        apply_patch -p1 $TP_PATCH_DIR/arrow-24.0.0-use-zstd-1.6.0.patch
+        touch $PATCHED_MARK.zstd_1_6_0
     fi
     cd -
     echo "Finished patching $ARROW_SOURCE"

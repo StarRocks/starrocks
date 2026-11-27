@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "System view showing the privileges granted to each user-defined role in StarRocks."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # grants_to_roles

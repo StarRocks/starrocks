@@ -65,6 +65,7 @@ import com.starrocks.sql.analyzer.AlterMVClauseAnalyzerVisitor;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.MaterializedViewAnalyzer;
+import com.starrocks.sql.analyzer.SavedSqlGeoValidator;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.analyzer.SetStmtAnalyzer;
 import com.starrocks.sql.ast.AddColumnsClause;
@@ -964,6 +965,7 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
         // analyze this ast
         ConnectContext connectContext = context == null ? ConnectContext.buildInner() : context;
         Analyzer.analyze(queryStatement, connectContext);
+        SavedSqlGeoValidator.validate(queryStatement);
 
         List<SlotRef> slots = Lists.newArrayList();
         addColumnExpr.collect(SlotRef.class, slots);
@@ -1228,6 +1230,7 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
 
         ConnectContext connectContext = context == null ? ConnectContext.buildInner() : context;
         Analyzer.analyze(queryStatement, connectContext);
+        SavedSqlGeoValidator.validate(queryStatement);
 
         // fast schema evolution
         SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
@@ -1429,17 +1432,41 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                 // Analyzed in resolveBeforeLock.
                 PreResolvedActivate activate = takePreResolvedActivate(materializedView);
                 AlterJobMgr.AlterMaterializedViewStatusContext statusContext = activate.statusContext();
+                // Rebuild the relationship BEFORE journaling, and journal only once the MV is really
+                // active. fixRelationship() swallows its own failure and just leaves the MV inactive, and
+                // checkIsActiveOnLoadBlocking() reports a clean negative verdict without throwing at all,
+                // so isActive() is the only criterion covering both. Journaling first would record an
+                // activation that never happened -- the entry is durable and nothing revokes it, so a
+                // permanently broken MV grew one bogus entry per MVActiveChecker round, without bound.
+                // Captured before the rebuild so a failed journal write can restore exactly the state the
+                // statement started from.
+                String inactiveReasonBeforeActivate = materializedView.getInactiveReason();
+                // The rebuild resolves every base table again, several times each; the external ones are
+                // answered from what resolveBeforeLock resolved. It runs synchronously on this thread, inside
+                // the scope.
+                try (PreResolvedBaseTables.Scope ignored = activate.baseTables().enter()) {
+                    alterJobMgr.rebuildRelationshipForActivate(materializedView, statusContext);
+                }
+                if (!materializedView.isActive()) {
+                    throw new AlterJobException(String.format("Can not active materialized view [%s]: %s",
+                            materializedView.getName(), materializedView.getInactiveReason()));
+                }
                 AlterMaterializedViewStatusLog log = new AlterMaterializedViewStatusLog(materializedView.getDbId(),
                         materializedView.getId(), status, "");
                 // Journal the base tables the activation settled on, so replay can adopt them instead of
                 // re-analyzing the define query under the MV lock, see replayAlterMaterializedViewStatus.
                 log.setBaseTableInfos(Lists.newArrayList(statusContext.baseTableInfos()));
-                // The applier rebuilds the relationship, which resolves every base table again, several times
-                // each; the external ones are answered from what resolveBeforeLock resolved. The applier runs
-                // synchronously on this thread, inside the scope.
-                try (PreResolvedBaseTables.Scope ignored = activate.baseTables().enter()) {
+                try {
                     GlobalStateMgr.getCurrentState().getEditLog().logAlterMvStatus(log, wal ->
-                            alterJobMgr.applyAlterMaterializedViewStatus(materializedView, statusContext, false));
+                            alterJobMgr.resumeTaskForActivate(statusContext, false));
+                } catch (Throwable t) {
+                    // The rebuild already ran setActive(), which republishes the MV to the query-rewrite
+                    // cache. A journal write that never commits means the activation did not happen, so
+                    // undo it: otherwise this leader would keep rewriting queries with an MV that is
+                    // active in memory only, and whose refresh task was never resumed either -- so it
+                    // would never be refreshed again. setInactiveAndReason evicts the rewrite cache.
+                    materializedView.setInactiveAndReason(inactiveReasonBeforeActivate);
+                    throw t;
                 }
                 // The rebuild relinked the base tables holding this MV's lock only. A DROP of a base table in
                 // another database is not excluded by it, and if it ran before the link it found nothing to
@@ -1878,6 +1905,24 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                 mv.markVersionMapReset();
             }
         }
+    }
+
+    /**
+     * Inactivates an MV from inside the refresh that found it can no longer be refreshed, and stops scheduling it as
+     * every other inactivation does. Both happen under the MV's write lock, which ALTER ... ACTIVE takes too: an
+     * activation in between would be paused by the suspension, and leave an active MV that is never refreshed.
+     */
+    public static void inactiveMvAndSuspendTask(MaterializedView mv, String inactiveReason) {
+        try (AutoCloseableLock ignored = new AutoCloseableLock(mv.getDbId(), mv.getId(), LockType.WRITE)) {
+            inactiveMvAndSuspendTaskLocked(mv, inactiveReason);
+        }
+    }
+
+    /** {@link #inactiveMvAndSuspendTask} for a caller that already holds the MV's write lock. */
+    public static void inactiveMvAndSuspendTaskLocked(MaterializedView mv, String inactiveReason) {
+        inactiveMvAndLog(mv, inactiveReason);
+        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+        taskManager.suspendTaskWithoutKilling(taskManager.getTask(TaskBuilder.getMvTaskName(mv.getId())));
     }
 
     // Mark the MV inactive and journal the transition, so the inactive state survives a leader restart

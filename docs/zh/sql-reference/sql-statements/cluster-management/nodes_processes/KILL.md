@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "KILL 终止当前集群内正在执行的指定连接或查询。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # KILL

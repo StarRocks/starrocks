@@ -447,6 +447,9 @@ public class LakeRangeRollupJob extends LakeOnlineRewriteJobBase implements Gson
      */
     @Override
     protected void visualiseShadowIndex(@NotNull OlapTable table) {
+        // Invalidate lock-free plans first: they read the versions their copies recorded and resolve the layout later,
+        // so a plan that finds the new index has to fail validation and be planned again.
+        table.lastSchemaUpdateTime.set(System.nanoTime());
         if (isSyncMaterializedView()) {
             Preconditions.checkState(watershedTxnId > 0, "synchronous MV watershed is not set");
             table.getIndexMetaByMetaId(shadowIndexMetaId).setSyncMvRequiredTxnId(watershedTxnId);

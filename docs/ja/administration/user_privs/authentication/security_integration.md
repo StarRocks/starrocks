@@ -2,21 +2,17 @@
 displayed_sidebar: docs
 description: "セキュリティインテグレーションで外部認証システム（LDAP・OAuth等）と StarRocks を統合してユーザー認証を行います。"
 sidebar_position: 20
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # セキュリティインテグレーションで認証
 
-import SecurityIntegrationRangerLink from '../../../_assets/user_priv/security_integration_ranger_link.mdx'
-import SecurityIntegrationIntro from '../../../_assets/user_priv/security_integration_intro.mdx'
-import SecurityIntegrationJWT from '../../../_assets/user_priv/security_integration_jwt.mdx'
-import SecurityIntegrationOAuth from '../../../_assets/user_priv/security_integration_oauth.mdx'
-import SecurityIntegrationConnectSeeAlso from '../../../_assets/user_priv/security_integration_connect_see_also.mdx'
 
 StarRocks をセキュリティインテグレーションを使用して外部認証システムと統合します。
 
 StarRocks クラスター内でセキュリティインテグレーションを作成することで、外部認証サービスへのアクセスを StarRocks に許可できます。セキュリティインテグレーションを使用すると、StarRocks 内でユーザーを手動で作成する必要がありません。ユーザーが外部 ID を使用してログインしようとすると、StarRocks は `authentication_chain` の設定に従って対応するセキュリティインテグレーションを使用してユーザーを認証します。認証が成功し、ユーザーがログインを許可された後、StarRocks はセッション内に仮想ユーザーを作成し、そのユーザーが後続の操作を実行できるようにします。
 
-<SecurityIntegrationRangerLink />
+セキュリティインテグレーションを使用して外部認証方法を構成する場合は、外部認可を有効にするために [StarRocks を Apache Ranger と統合](../authorization/ranger_plugin.md) する必要があることに注意してください。現在、セキュリティインテグレーションを StarRocks ネイティブ認可と統合することはサポートされていません。
 
 また、StarRocks に [Group Provider](../group_provider.md) を有効にして、外部認証システムのグループ情報にアクセスし、StarRocks でユーザーグループを作成、認証、および認可することができます。
 
@@ -24,7 +20,10 @@ StarRocks クラスター内でセキュリティインテグレーションを�
 
 ## セキュリティインテグレーションを作成する
 
-<SecurityIntegrationIntro />
+現在、StarRocks のセキュリティインテグレーションは以下の認証システムをサポートしています:
+- LDAP
+- OJSON Web Token（JWT）
+- OAuth 2.0
 
 :::note
 StarRocks はセキュリティインテグレーションを作成する際に接続性チェックを提供しません。
@@ -179,9 +178,179 @@ AD のエントリーの RDN は表示名（`CN=Dana Scully,OU=People,DC=company
 - 必須: いいえ
 - 説明: セキュリティインテグレーションの説明。
 
-<SecurityIntegrationJWT />
+### JWT を使用したセキュリティインテグレーションの作成
 
-<SecurityIntegrationOAuth />
+#### 構文
+
+```SQL
+CREATE SECURITY INTEGRATION <security_integration_name> 
+PROPERTIES (
+    "type" = "authentication_jwt",
+    "jwks_url" = "",
+    "principal_field" = "",
+    "required_issuer" = "",
+    "required_audience" = "",
+    "group_source" = "",
+    "group_claim" = "",
+    "comment" = ""
+)
+```
+
+#### パラメータ
+
+##### security_integration_name
+
+- 必須: はい
+- 説明: セキュリティインテグレーションの名前。<br />**注意**<br />セキュリティインテグレーション名はグローバルに一意です。このパラメータを `native` として指定することはできません。
+
+##### type
+
+- 必須: はい
+- 説明: セキュリティインテグレーションのタイプ。`jwt` として指定します。
+
+##### jwks_url
+
+- 必須: はい
+- 説明: JSON Web Key Set (JWKS) サービスへの URL または `fe/conf` ディレクトリのローカルファイルへのパス。
+
+##### principal_field
+
+- 必須: はい
+- 説明: JWT 内のサブジェクト (`sub`) を示すフィールドを識別するために使用される文字列。デフォルト値は `sub` です。このフィールドの値は、StarRocks にログインするためのユーザー名と同一でなければなりません。
+
+##### required_issuer
+
+- 必須: いいえ
+- 説明: JWT 内の発行者 (`iss`) を識別するために使用される文字列のリスト。リスト内のいずれかの値が JWT 発行者と一致する場合にのみ、JWT は有効と見なされます。
+
+##### required_audience
+
+- 必須: いいえ
+- 説明: JWT 内の受信者 (`aud`) を識別するために使用される文字列のリスト。リスト内のいずれかの値が JWT 受信者と一致する場合にのみ、JWT は有効と見なされます。
+
+##### group_source
+
+- 必須: いいえ
+- 説明: このセキュリティインテグレーションで認証されたユーザーのグループの取得元。有効な値:
+  - `group_provider`（デフォルト）: `group_provider` で設定された Group Provider のみを使用します。以前のバージョンと同じ動作です。
+  - `claim`: 検証済みトークンのうち `group_claim` で指定した claim のみを使用します。`group_provider` で設定された Group Provider は無視されますが設定は保持されるため、元に戻すには `ALTER SECURITY INTEGRATION` 1 回で済みます。
+  - `both`: 両方の和集合。
+
+  トークンからグループを取得できることが、LDAP ディレクトリーを持たない ID プロバイダーでも権限を付与できる前提になります。解決されたグループは、Group Provider のグループと同様に、`GRANT ... TO EXTERNAL GROUP` によるロールマッピング、`permitted_groups` のログインチェック、`current_group()`、および Apache Ranger の認可に参加します。v4.2 以降でサポートされます。
+
+##### group_claim
+
+- 必須: `group_source` が `claim` または `both` の場合は必須です。`group_source` を設定せずにこのパラメータだけを設定すると、効果がないため拒否されます。明示的に `group_source` を `group_provider` に設定した場合は受け付けられ、設定も保持されるため、先に claim を用意してから `ALTER SECURITY INTEGRATION` でソースを切り替えられます。
+- 説明: ユーザーのグループを保持するトークンの claim。他のオブジェクトの中にネストされた claim はドット区切りで指定します。たとえば、トップレベルの claim は `groups`、Keycloak の realm ロールは `realm_access.roles`、その client ロールは `resource_access.<client_id>.roles` です。claim は文字列の配列であることが想定されますが、単一の文字列も 1 つのグループとして受け付けます。各グループ名の前後の空白は除去されます。それ以外は書き換えられません。大文字小文字も先頭のスラッシュもそのまま保持されます。グループ名は Apache Ranger にそのまま渡され、Ranger は厳密に照合するためです。大文字小文字だけが異なる `GRANT ... TO EXTERNAL GROUP` や `permitted_groups` のエントリーと一致するかどうかは、FE 設定項目 `authentication_group_case_insensitive` で決まります（デフォルトでは大文字小文字を無視します。ID プロバイダーが大文字小文字の異なるグループを別のグループとして扱う場合は `false` に設定してください）。
+
+  デフォルト値は意図的に設けていません。ID プロバイダーが発行する claim はプロバイダーごとに異なり、推測を誤ると明確なエラーにならずに「ログインできるが権限がない」状態になるためです。claim は署名、`required_issuer`、`required_audience` の検証がすべて通った後にのみ読み取られるため、トークンの保持者が自分でグループを選ぶことはできません。トークンに claim が存在しない場合でもログインは成功し、グループは空になり、その理由はログに記録されます（認証失敗として扱われません）。Microsoft Entra ID は 200 を超えるグループに所属するユーザーに対して claim 全体を省略するため、claim が存在しない状態は正しい設定でも発生します。また、ほとんどの ID プロバイダーは既定ではグループをトークンに含めません。Keycloak ではクライアントに group membership mapper を追加し、Entra ID ではトークン設定に groups claim を追加する必要があります。v4.2 以降でサポートされます。
+
+##### comment
+
+- 必須: いいえ
+- 説明: セキュリティインテグレーションの説明。
+
+### OAuth 2.0 を使用したセキュリティインテグレーションの作成
+
+#### 構文
+
+```SQL
+CREATE SECURITY INTEGRATION <security_integration_name> 
+PROPERTIES (
+    "type" = "authentication_oauth2",
+    "auth_server_url" = "",
+    "token_server_url" = "",
+    "client_id" = "",
+    "client_secret" = "",
+    "redirect_url" = "",
+    "jwks_url" = "",
+    "principal_field" = "",
+    "required_issuer" = "",
+    "required_audience" = "",
+    "group_source" = "",
+    "group_claim" = "",
+    "comment" = ""
+)
+```
+
+#### パラメータ
+
+##### security_integration_name
+
+- 必須: はい
+- 説明: セキュリティインテグレーションの名前。<br />**注意**<br />セキュリティインテグレーション名はグローバルに一意です。このパラメータを `native` として指定することはできません。
+
+##### auth_server_url
+
+- 必須: はい
+- 説明: 認可 URL。OAuth 2.0 認可プロセスを開始するためにユーザーのブラウザがリダイレクトされる URL。
+
+##### token_server_url
+
+- 必須: はい
+- 説明: StarRocks がアクセストークンを取得するための認可サーバーのエンドポイントの URL。
+
+##### client_id
+
+- 必須: はい
+- 説明: StarRocks クライアントの公開識別子。
+
+##### client_secret
+
+- 必須: はい
+- 説明: 認可サーバーで StarRocks クライアントを認可するために使用される秘密。
+
+##### redirect_url
+
+- 必須: はい
+- 説明: OAuth 2.0 認証が成功した後にユーザーのブラウザがリダイレクトされる URL。認可コードはこの URL に送信されます。ほとんどの場合、`http://<starrocks_fe_url>:<fe_http_port>/api/oauth2` として構成する必要があります。
+
+##### type
+
+- 必須: はい
+- 説明: セキュリティインテグレーションのタイプ。`authentication_oauth2` として指定します。
+
+##### jwks_url
+
+- 必須: はい
+- 説明: JSON Web Key Set (JWKS) サービスへの URL または `fe/conf` ディレクトリのローカルファイルへのパス。
+
+##### principal_field
+
+- 必須: はい
+- 説明: JWT 内のサブジェクト (`sub`) を示すフィールドを識別するために使用される文字列。デフォルト値は `sub` です。このフィールドの値は、StarRocks にログインするためのユーザー名と同一でなければなりません。
+
+##### required_issuer
+
+- 必須: いいえ
+- 説明: JWT 内の発行者 (`iss`) を識別するために使用される文字列のリスト。リスト内のいずれかの値が JWT 発行者と一致する場合にのみ、JWT は有効と見なされます。
+
+##### required_audience
+
+- 必須: いいえ
+- 説明: JWT 内の受信者 (`aud`) を識別するために使用される文字列のリスト。リスト内のいずれかの値が JWT 受信者と一致する場合にのみ、JWT は有効と見なされます。
+
+##### group_source
+
+- 必須: いいえ
+- 説明: このセキュリティインテグレーションで認証されたユーザーのグループの取得元。有効な値:
+  - `group_provider`（デフォルト）: `group_provider` で設定された Group Provider のみを使用します。以前のバージョンと同じ動作です。
+  - `claim`: 検証済みトークンのうち `group_claim` で指定した claim のみを使用します。`group_provider` で設定された Group Provider は無視されますが設定は保持されるため、元に戻すには `ALTER SECURITY INTEGRATION` 1 回で済みます。
+  - `both`: 両方の和集合。
+
+  トークンからグループを取得できることが、LDAP ディレクトリーを持たない ID プロバイダーでも権限を付与できる前提になります。解決されたグループは、Group Provider のグループと同様に、`GRANT ... TO EXTERNAL GROUP` によるロールマッピング、`permitted_groups` のログインチェック、`current_group()`、および Apache Ranger の認可に参加します。 OAuth 2.0 インテグレーションでは、MySQL プロトコル経由のブラウザーログインにも適用されます。この経路ではユーザーがブラウザーでサインインした後にトークンが StarRocks に届くため、グループは ID トークンの到着時に読み取られ、`permitted_groups` も接続確立時ではなくブラウザーログイン後の最初のステートメントで確認されます。`group_source` が `group_provider` のままの場合は変わらず、グループと確認は接続確立時に決まります。v4.2 以降でサポートされます。
+
+##### group_claim
+
+- 必須: `group_source` が `claim` または `both` の場合は必須です。それ以外の `group_source` と組み合わせて設定すると、効果がないため拒否されます。
+- 説明: ユーザーのグループを保持するトークンの claim。他のオブジェクトの中にネストされた claim はドット区切りで指定します。たとえば、トップレベルの claim は `groups`、Keycloak の realm ロールは `realm_access.roles`、その client ロールは `resource_access.<client_id>.roles` です。claim は文字列の配列であることが想定されますが、単一の文字列も 1 つのグループとして受け付けます。各グループ名の前後の空白は除去されます。それ以外は書き換えられません。大文字小文字も先頭のスラッシュもそのまま保持されます。グループ名は Apache Ranger にそのまま渡され、Ranger は厳密に照合するためです。大文字小文字だけが異なる `GRANT ... TO EXTERNAL GROUP` や `permitted_groups` のエントリーと一致するかどうかは、FE 設定項目 `authentication_group_case_insensitive` で決まります（デフォルトでは大文字小文字を無視します。ID プロバイダーが大文字小文字の異なるグループを別のグループとして扱う場合は `false` に設定してください）。
+
+  デフォルト値は意図的に設けていません。ID プロバイダーが発行する claim はプロバイダーごとに異なり、推測を誤ると明確なエラーにならずに「ログインできるが権限がない」状態になるためです。claim は署名、`required_issuer`、`required_audience` の検証がすべて通った後にのみ読み取られるため、トークンの保持者が自分でグループを選ぶことはできません。トークンに claim が存在しない場合でもログインは成功し、グループは空になり、その理由はログに記録されます（認証失敗として扱われません）。Microsoft Entra ID は 200 を超えるグループに所属するユーザーに対して claim 全体を省略するため、claim が存在しない状態は正しい設定でも発生します。また、ほとんどの ID プロバイダーは既定ではグループをトークンに含めません。Keycloak ではクライアントに group membership mapper を追加し、Entra ID ではトークン設定に groups claim を追加する必要があります。v4.2 以降でサポートされます。
+
+##### comment
+
+- 必須: いいえ
+- 説明: セキュリティインテグレーションの説明。
 
 ## 認証チェーンを構成する
 
@@ -196,12 +365,46 @@ ADMIN SET FRONTEND CONFIG (
 :::note
 - StarRocks はローカルユーザーのネイティブ認証を優先します。同じユーザー名を持つローカルユーザーが存在しない場合、`authentication_chain` で設定した順序で認証が行われます。ネイティブ認証方式でログインに失敗した場合、クラスタは指定された順序で次の認証方式を試行します。
 - OAuth 2.0 セキュリティインテグレーションを除いて、`authentication_chain` に複数のセキュリティインテグレーションを指定できます。複数の OAuth 2.0 セキュリティインテグレーションを指定することや、他のセキュリティインテグレーションと一緒に指定することはできません。
+- `authentication_chain` には LDAP と JWT のセキュリティインテグレーションを同時に含められますが、MySQL プロトコルでは部分的なサポートにとどまります。[LDAP と JWT のセキュリティインテグレーションを混在させる](#ldap-と-jwt-のセキュリティインテグレーションを混在させる)を参照してください。
 :::
 
 `authentication_chain` の値を確認するには、次のステートメントを使用します:
 
 ```SQL
 ADMIN SHOW FRONTEND CONFIG LIKE 'authentication_chain';
+```
+
+### LDAP と JWT のセキュリティインテグレーションを混在させる
+
+HTTP と Arrow Flight では、同じ `authentication_chain` 上の LDAP と JWT のセキュリティインテグレーションは並存できます。認証情報そのものが種類を示すためです。`Basic`（ユーザー名とパスワード）は LDAP セキュリティインテグレーションで、`Bearer`（トークン）は JWT と OAuth 2.0 セキュリティインテグレーションで検証されます。[HTTP と Arrow Flight から接続する](#http-と-arrow-flight-から接続する)を参照してください。
+
+MySQL プロトコルでは部分的なサポートにとどまります。StarRocks は認証情報を受け取る前に接続のクライアント認証プラグインを 1 つ決めなければならず、2 種類のセキュリティインテグレーションは異なるプラグインを必要とします。LDAP は `mysql_clear_password`、JWT は `authentication_openid_connect_client` です。StarRocks はクライアントがハンドシェイクで宣言したプラグインによって選びます。
+
+| クライアントが宣言するプラグイン | 使われるセキュリティインテグレーション |
+| --- | --- |
+| `authentication_openid_connect_client` | チェーン上の最初の JWT セキュリティインテグレーション |
+| `mysql_clear_password` | チェーン上の最初の LDAP セキュリティインテグレーション |
+| どちらも宣言しない（多くのクライアントはデフォルトで `mysql_native_password` を送る） | チェーン上の最初のセキュリティインテグレーション |
+
+したがって:
+
+- 追加の設定なしで大多数のクライアントが使うセキュリティインテグレーションを先頭に置いてください。
+- もう一方の種類のクライアントはプラグインを宣言する必要があります。MySQL クライアントでは `--default-auth=<plugin>`、MySQL Connector/J では `defaultAuthenticationPlugin=<plugin>` を使います。MySQL クライアントはバージョン 9.1 から `authentication_openid_connect_client` を同梱しており、コミュニティ版にも含まれます。それより古い MySQL クライアントと MariaDB クライアントにはこのプラグインがありません。
+- プラグインを宣言できないクライアント（PyMySQL など）は、常にチェーン上の最初のセキュリティインテグレーションを使います。
+
+```Bash
+# JWT セキュリティインテグレーションのユーザー（チェーンの先頭は LDAP セキュリティインテグレーション）
+mysql -h <fe_host> -P <query_port> --default-auth=authentication_openid_connect_client \
+    --authentication-openid-connect-client-id-token-file=<path_to_token_file> -u <username>
+
+# LDAP セキュリティインテグレーションのユーザー（チェーンの先頭は JWT セキュリティインテグレーション）
+mysql -h <fe_host> -P <query_port> --default-auth=mysql_clear_password --enable-cleartext-plugin -u <username> -p
+```
+
+JWT クライアントが OpenID Connect プラグインを読み込めない場合は、FE の設定項目 `authentication_chain_accept_jwt_as_password` を `true` にし、LDAP セキュリティインテグレーションを先頭に置いてください。JWT クライアントはトークンをパスワードとして渡します。MySQL ログインのパスワードが JWT の形をしている場合、StarRocks はまず JWT と OAuth 2.0 セキュリティインテグレーションで検証し、どれも受け入れなかった場合にのみパスワードとして LDAP セキュリティインテグレーションに渡します。トークンは平文パスワードと同じように送られるため、SSL 接続を使ってください。この設定項目は MySQL プロトコルにのみ適用されます。HTTP と Arrow Flight ではトークンを `Bearer` で送ってください。
+
+```Bash
+mysql -h <fe_host> -P <query_port> --ssl-mode=REQUIRED --enable-cleartext-plugin -u <username> -p"$(cat <path_to_token_file>)"
 ```
 
 ## HTTP と Arrow Flight から接続する
@@ -233,7 +436,7 @@ curl -H "Authorization: Bearer ${TOKEN}" -H "label:load_1" -H "column_separator:
 - セキュリティインテグレーションのユーザーの権限は [Group Provider](../group_provider.md) と `GRANT ... TO EXTERNAL GROUP` からのみ付与されます。ユーザーが解決されたグループはすべてのエントリポイントで有効です。
 - Arrow Flight SQL では、JWT はユーザー名とパスワードとまったく同じ方法で認証されます。サーバーは自身が発行するセッショントークンを返し、クライアントは接続の残りの間それを使います。セッションは JWT より長く生きられません。トークンの `exp` を過ぎると接続は拒否され、クライアントは新しい JWT で再認証する必要があります。
 - FE の設定項目 `enable_rest_bearer_authentication`（デフォルト `true`）は、HTTP と Arrow Flight エントリポイントの Bearer 認証を無効にします。MySQL プロトコルには影響せず、MySQL プロトコルのトークンログインは引き続き `authentication_openid_connect_client` と `authentication_oauth2_client` プラグインを使います。
-- MySQL プロトコルはクライアントに一度に 1 種類のトークンプラグインしか提示できず、`authentication_chain` で最初に現れる JWT または OAuth 2.0 インテグレーションがそれを決めます。HTTP と Arrow Flight にはこの制限はありません。トークン自体が issuer と audience でルーティングされるためです。
+- MySQL プロトコルはクライアントに一度に 1 つのプラグインしか提示できません。クライアントが宣言したプラグインが対応するセキュリティインテグレーションを選び、何も宣言しないクライアントは `authentication_chain` の最初のセキュリティインテグレーションを使います（[LDAP と JWT のセキュリティインテグレーションを混在させる](#ldap-と-jwt-のセキュリティインテグレーションを混在させる)を参照）。HTTP と Arrow Flight にはこの制限はありません。トークン自体が issuer と audience でルーティングされるためです。
 - HTTP 認証の失敗はすべて `401` を返し、`WWW-Authenticate` に `Basic` と `Bearer` の両方のチャレンジを含み、どのインテグレーションがなぜ拒否したかは示しません。原因の調査には FE のメトリクス `authentication_failure_total` と `authentication_failure_reason_total` を使ってください。
 
 ## セキュリティインテグレーションを管理する
@@ -321,5 +524,16 @@ SHOW CREATE SECURITY INTEGRATION LDAP1；
 `ldap_bind_root_pwd` は SHOW CREATE SECURITY INTEGRATION が実行されたときにマスクされます。
 :::
 
-<SecurityIntegrationConnectSeeAlso />
+## セキュリティ統合によるStarRocksへの接続
+
+- LDAP経由でStarRocksに接続する方法については、[LDAP認証 - StarRocksへの接続](./ldap_authentication.md#mysql-クライアントから-ldap-で接続する)を参照してください。
+- JWT 経由で StarRocks に接続する方法については、[JSON Web Token 認証 - StarRocks への接続](./jwt_authentication.md#mysql-クライアントから-jwt-で接続する) を参照してください。
+- OAuth 2.0 経由で StarRocks に接続する方法については、[OAuth 2.0 認証 - StarRocks への接続](./oauth2_authentication.md#jdbc-クライアントからの-oauth-20-接続) を参照してください。
+
+## See also
+
+- StarRocks で LDAP を使用してユーザーを手動で認証する方法については、[LDAP 認証](./ldap_authentication.md) を参照してください。
+- StarRocks で JSON Web Token を使用してユーザーを手動で認証する方法については、[JSON Web Token 認証](./jwt_authentication.md) を参照してください。
+- StarRocks で OAuth 2.0 を使用してユーザーを手動で認証する方法については、[OAuth 2.0 認証](./oauth2_authentication.md) を参照してください。
+- ユーザーグループを認証する方法については、[ユーザーグループの認証](../group_provider.md) を参照してください。
 

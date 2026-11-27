@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "Constructs a FILE value from a STRUCT expression."
 sidebar_position: 10
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 import Experimental from '../../../_assets/commonMarkdown/_experimental.mdx'
@@ -41,6 +42,8 @@ Returns a FILE value. If `struct_expr` is NULL, returns NULL.
 - For URI references, `offset` and `size` can be NULL; non-NULL values must be greater than or equal to zero. For inline content, both fields must be NULL. A row that violates these rules or the `uri`/`inline` rule causes the query to fail. To return NULL for such rows instead, use [try_to_file](try_to_file.md).
 - URI syntax, MIME types, checksums, and the referenced byte range are not validated.
 - `inline` contains raw bytes. Empty strings and empty binary values count as non-NULL and are preserved.
+
+When `ai_complete` or `ai_embed` consumes a FILE with a missing or empty `content_type`, the AI function attempts to infer it. See [FILE input support](../ai-functions/ai_functions.mdx#file-input).
 
 ## Examples
 

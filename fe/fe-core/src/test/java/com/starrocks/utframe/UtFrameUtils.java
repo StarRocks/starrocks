@@ -468,6 +468,7 @@ public class UtFrameUtils {
         be.setBrpcPort(backend.getBrpcPort());
         be.setHttpPort(backend.getHttpPort());
         be.setStarletPort(backend.getStarletPort());
+        be.setSupportLakeIndexFastPath(MockedBackend.reportLakeIndexFastPath);
         GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addBackend(be);
         if (RunMode.isSharedDataMode()) {
             int starletPort = backend.getStarletPort();
@@ -486,6 +487,7 @@ public class UtFrameUtils {
         cn.setHttpPort(backend.getHttpPort());
         cn.setStarletPort(backend.getStarletPort());
         cn.setIsStoragePath(false);
+        cn.setSupportLakeIndexFastPath(MockedBackend.reportLakeIndexFastPath);
         GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addComputeNode(cn);
         if (RunMode.isSharedDataMode()) {
             int starletPort = backend.getStarletPort();
@@ -1190,9 +1192,20 @@ public class UtFrameUtils {
             UtFrameUtils.dropMockBackend(backendId++);
         }
 
-        // mock be num
+        // mock be num. A shared-data dump taken with enable_cbo_warehouse_exec_nodes on records the alive execution
+        // nodes of the query's warehouse, which the cluster costed broadcasts and hash joins with, and usually no
+        // backends. Replay runs in shared-nothing mode, where the cost model counts backends, so mock that many nodes
+        // (up to replayMaxBackendNum) and pass the recorded number on through cbo_debug_alive_backend_number, which
+        // the backend counts of the cost model return. With the variable turned off in the replay, the recorded
+        // backends are used instead, as the cluster would have with it off.
         backendId = 10002;
-        int beNumToAdd = Math.min(replayMaxBackendNum, replayDumpInfo.getBeNum());
+        boolean useExecNodeNumber = replayDumpInfo.getExecNodeNumber() > 0
+                && connectContext.getSessionVariable().isEnableCboWarehouseExecNodes();
+        if (useExecNodeNumber && connectContext.getSessionVariable().getCboDebugAliveBackendNumber() <= 0) {
+            connectContext.getSessionVariable().setCboDebugAliveBackendNumber(replayDumpInfo.getExecNodeNumber());
+        }
+        int replayNodeNum = useExecNodeNumber ? replayDumpInfo.getExecNodeNumber() : replayDumpInfo.getBeNum();
+        int beNumToAdd = Math.min(replayMaxBackendNum, replayNodeNum);
         for (int i = 1; i < beNumToAdd; ++i) {
             //UtFrameUtils.addMockBackend(backendId++);
             String host = String.format("127.0.0.%s", i + 1);
@@ -1783,6 +1796,23 @@ public class UtFrameUtils {
                     dis.close();
                 }
             }
+        }
+
+        /**
+         * Removes every record queued for the follower and returns them deserialized, in journal order.
+         */
+        public static synchronized List<JournalEntity> drainFollowerJournal() throws InterruptedException, IOException {
+            assert (followerJournalQueue != null);
+            List<JournalEntity> entities = new ArrayList<>();
+            while (!followerJournalQueue.isEmpty()) {
+                DataOutputBuffer buffer = followerJournalQueue.take().getBuffer();
+                try (DataInputStream dis = new DataInputStream(
+                        new ByteArrayInputStream(buffer.getData(), 0, buffer.getLength()))) {
+                    short opCode = dis.readShort();
+                    entities.add(new JournalEntity(opCode, EditLogDeserializer.deserialize(opCode, dis)));
+                }
+            }
+            return entities;
         }
 
         public static synchronized void replayJournalToEnd() throws InterruptedException, IOException {

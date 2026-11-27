@@ -39,6 +39,7 @@
 
 #include "base/concurrency/spinlock.h"
 #include "base/phmap/phmap.h"
+#include "common/scan_audit_counters.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/data.pb.h"
 #include "platform/llm/ai_execution_statistics.h"
@@ -60,6 +61,8 @@ public:
     void add_exec_stats_item(uint32_t node_id, int64_t push, int64_t pull, int64_t pred_filter, int64_t index_filter,
                              int64_t rf_filter);
     void add_scan_stats(int64_t scan_rows, int64_t scan_bytes);
+    // Adds read counters of the scan node `plan_node_id`; unlike add_stats_item, it leaves scan_rows/scan_bytes alone.
+    void add_per_scan_stats(int32_t plan_node_id, const ScanAuditCounters& counters);
     void add_cpu_costs(int64_t cpu_ns) { this->cpu_ns += cpu_ns; }
     void add_mem_costs(int64_t bytes) { mem_cost_bytes += bytes; }
     void add_spill_bytes(int64_t bytes) { spill_bytes += bytes; }
@@ -87,6 +90,9 @@ public:
 
 private:
     void update_stats_item(int64_t table_id, int64_t scan_rows, int64_t scan_bytes);
+
+    // Requires _lock.
+    void update_per_scan_stats_item(int32_t plan_node_id, const ScanAuditCounters& counters);
 
     void update_exec_stats_item(uint32_t node_id, int64_t push, int64_t pull, int64_t pred_filter, int64_t index_filter,
                                 int64_t rf_filter);
@@ -129,6 +135,8 @@ private:
     // Protected by _lock; no payload is allocated for queries without AI tasks.
     std::unique_ptr<AIExecutionStatistics> _ai_statistics;
     std::unordered_map<int64_t, std::shared_ptr<ScanStats>> _stats_items;
+    // Protected by _lock.
+    std::unordered_map<int32_t, ScanAuditCounters> _per_scan_stats_items;
     std::unordered_map<uint32_t, std::shared_ptr<NodeExecStats>> _exec_stats_items;
 };
 

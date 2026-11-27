@@ -436,6 +436,54 @@ TEST_F(VectorIndexSearchTest, factory_create_and_init_null_fs_uses_injected_cach
     }
 }
 
+// Opens like the starlet filesystem: no existence check, so a missing object only fails once it is accessed.
+class LazyOpenFileSystem : public MemoryFileSystem {
+public:
+    using MemoryFileSystem::new_random_access_file;
+    StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const RandomAccessFileOptions& opts,
+                                                                       const std::string& path) override {
+        return new_random_access_file(opts, FileInfo{.path = path});
+    }
+    StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const RandomAccessFileOptions& opts,
+                                                                       const FileInfo& info) override {
+        return RandomAccessFile::from(std::make_unique<MissingObjectStream>(info.path), info.path, false,
+                                      FileEncryptionInfo());
+    }
+
+private:
+    class MissingObjectStream : public io::SeekableInputStream {
+    public:
+        explicit MissingObjectStream(std::string path) : _path(std::move(path)) {}
+        StatusOr<int64_t> read(void* data, int64_t count) override { return not_found(); }
+        Status seek(int64_t position) override { return not_found(); }
+        StatusOr<int64_t> position() override { return 0; }
+        StatusOr<int64_t> get_size() override { return not_found(); }
+
+    private:
+        Status not_found() const { return Status::NotFound(_path + " does not exist"); }
+        std::string _path;
+    };
+};
+
+// An async-build segment is queried before its .vi lands. On an object store the open succeeds and the
+// NotFound only shows up when the size is read; the factory must fall back to brute force, not fail.
+TEST_F(VectorIndexSearchTest, factory_falls_back_when_lazily_opened_vi_is_missing) {
+    auto tablet_index = prepare_tablet_index();
+    tablet_index->add_common_properties("index_type", "hnsw");
+    tablet_index->add_common_properties("dim", "3");
+    tablet_index->add_common_properties("is_vector_normed", "false");
+    tablet_index->add_common_properties("metric_type", "l2_distance");
+    tablet_index->add_index_properties("efconstruction", "40");
+    tablet_index->add_index_properties("m", "16");
+
+    FileInfo vi_file{.path = "/not_built_yet.vi", .fs = std::make_shared<LazyOpenFileSystem>()};
+    VectorIndexReaderFactory factory(*_reader_cache);
+    OlapReaderStatistics stats;
+    ASSIGN_OR_ABORT(auto result, factory.create_and_init(vi_file, tablet_index, {}, {.stats = stats}));
+    EXPECT_EQ(VectorIndexReaderInitResult::kFallback, result.state);
+    EXPECT_EQ(nullptr, result.reader);
+}
+
 TEST_F(VectorIndexSearchTest, reports_index_load_timing_and_query_cache_hit_miss) {
     auto tablet_index = prepare_tablet_index();
     tablet_index->add_common_properties("index_type", "hnsw");
@@ -1540,6 +1588,74 @@ TEST_F(EvaluatePredTreeBitmapTest, scattered_candidate_ranges) {
     }
     EXPECT_EQ(expect.cardinality(), got.cardinality());
     EXPECT_TRUE(expect == got);
+}
+
+TEST_F(EvaluatePredTreeBitmapTest, fragmented_candidate_bridges_short_gaps) {
+    // A scattered delete vector: about half the rows gone in runs and gaps of a few rows, plus one 10000-row gap.
+    // Batches read across the short gaps; the rows a predicate matches inside them must not reach the result, on the
+    // non-expression path (bridged), the expression path (not bridged) and the two combined.
+    roaring::Roaring candidate;
+    uint32_t seed = 1;
+    for (uint32_t i = 0; i < kRows; i++) {
+        seed = seed * 1103515245u + 12345u;
+        if (((seed >> 16) & 1) && (i < 30000 || i >= 40000)) {
+            candidate.add(i);
+        }
+    }
+    roaring::Roaring expect_eq;
+    roaring::Roaring expect_and;
+    for (uint32_t v : candidate) {
+        if (v % 7 == 3) {
+            expect_eq.add(v);
+            if (v >= 50000) {
+                expect_and.add(v);
+            }
+        }
+    }
+
+    std::unique_ptr<ColumnPredicate> eq(new_column_eq_predicate(get_type_info(TYPE_INT), 2, "3"));
+    ASSIGN_OR_ABORT(auto got_eq, evaluate_pred_tree_to_bitmap(single_node_tree(eq.get()), _schema, _iters_by_cid,
+                                                              nullptr, candidate));
+    EXPECT_TRUE(expect_eq == got_eq);
+
+    // `c2 = 3` as an expression predicate, the form a pushed-down LIKE or function call takes: it selects the same
+    // rows as `eq`, but its tree is not bridged.
+    RuntimeState state;
+    state.init_instance_mem_tracker();
+    ObjectPool pool;
+    TDescriptorTableBuilder table_builder;
+    TTupleDescriptorBuilder tuple_builder;
+    TSlotDescriptorBuilder slot_builder;
+    tuple_builder.add_slot(slot_builder.type(TYPE_INT).column_name("c2").column_pos(0).nullable(false).build());
+    tuple_builder.build(&table_builder);
+    DescriptorTbl* tbl = nullptr;
+    ASSERT_OK(DescriptorTbl::create(&state, &pool, table_builder.desc_tbl(), &tbl, /*chunk_size=*/4096));
+    SlotDescriptor* slot = tbl->get_tuple_descriptor(0)->slots()[0];
+    TExpr t_expr;
+    t_expr.nodes.emplace_back(ExprsTestHelper::create_binary_pred_node(TPrimitiveType::INT, TExprOpcode::EQ));
+    t_expr.nodes.emplace_back(ExprsTestHelper::create_slot_expr_node_t<TYPE_INT>(0, slot->id(), false));
+    t_expr.nodes.emplace_back(ExprsTestHelper::create_literal<TYPE_INT, int32_t>(3, false));
+    std::vector<ExprContext*> ctxs;
+    ASSERT_OK(ExprFactory::create_expr_trees(&pool, std::vector<TExpr>{t_expr}, &ctxs, &state));
+    ASSERT_OK(ExprExecutor::prepare(ctxs, &state));
+    ASSERT_OK(ExprExecutor::open(ctxs, &state));
+    ASSIGN_OR_ABORT(ColumnExprPredicate * raw_eq_expr,
+                    ColumnExprPredicate::make_column_expr_predicate(get_type_info(TYPE_INT), /*column_id=*/2, &state,
+                                                                    ctxs[0], slot));
+    std::unique_ptr<ColumnPredicate> eq_expr(raw_eq_expr);
+    ASSERT_TRUE(eq_expr->is_expr_predicate());
+
+    ASSIGN_OR_ABORT(auto got_expr, evaluate_pred_tree_to_bitmap(single_node_tree(eq_expr.get()), _schema, _iters_by_cid,
+                                                                nullptr, candidate));
+    EXPECT_TRUE(expect_eq == got_expr);
+
+    std::unique_ptr<ColumnPredicate> ge(new_column_ge_predicate(get_type_info(TYPE_INT), 1, "50000"));
+    PredicateAndNode root;
+    root.add_child(PredicateColumnNode(ge.get()));
+    root.add_child(PredicateColumnNode(eq_expr.get()));
+    ASSIGN_OR_ABORT(auto got_and, evaluate_pred_tree_to_bitmap(PredicateTree::create(std::move(root)), _schema,
+                                                               _iters_by_cid, nullptr, candidate));
+    EXPECT_TRUE(expect_and == got_and);
 }
 
 TEST_F(EvaluatePredTreeBitmapTest, empty_tree_returns_candidate) {

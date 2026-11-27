@@ -34,6 +34,7 @@ import mockit.Delegate;
 import mockit.Expectations;
 import mockit.Mocked;
 import mockit.Verifications;
+import org.apache.iceberg.BaseMetastoreTableOperations;
 import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DataFiles;
@@ -70,6 +71,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static com.starrocks.connector.iceberg.IcebergCatalogProperties.HIVE_METASTORE_URIS;
 import static com.starrocks.connector.iceberg.IcebergCatalogProperties.ICEBERG_CATALOG_TYPE;
@@ -322,6 +324,31 @@ public class CachingIcebergCatalogTest {
     }
 
     @Test
+    public void testReloadCachedTableThatLostItsMetadata(@Mocked IcebergCatalog icebergCatalog) {
+        AtomicReference<String> location = new AtomicReference<>("hdfs://path/to/table/metadata/v1.metadata.json");
+        BaseMetastoreTableOperations ops = Mockito.mock(BaseMetastoreTableOperations.class);
+        Mockito.when(ops.currentMetadataLocation()).thenAnswer(invocation -> location.get());
+        Table cached = new BaseTable(ops, "test.table");
+        Table reloaded = createBaseTableWithManifests(1, 1);
+        new Expectations() {
+            {
+                icebergCatalog.getTable(connectContext, "test", "table");
+                returns(cached, reloaded);
+                times = 2;
+            }
+        };
+        CachingIcebergCatalog cachingIcebergCatalog = new CachingIcebergCatalog(CATALOG_NAME, icebergCatalog,
+                DEFAULT_CATALOG_PROPERTIES, Executors.newSingleThreadExecutor());
+        Assertions.assertSame(cached, cachingIcebergCatalog.getTable(connectContext, "test", "table"));
+        Assertions.assertSame(cached, cachingIcebergCatalog.getTable(connectContext, "test", "table"));
+
+        // A commit racing an external drop refreshes the shared operations into a table that is not found.
+        location.set(null);
+        Assertions.assertSame(reloaded, cachingIcebergCatalog.getTable(connectContext, "test", "table"));
+        Assertions.assertSame(reloaded, cachingIcebergCatalog.getTable(connectContext, "test", "table"));
+    }
+
+    @Test
     public void testTableLoadedAtMs(@Mocked IcebergCatalog icebergCatalog) {
         Table nativeTable = createBaseTableWithManifests(1, 1);
         new Expectations() {
@@ -419,6 +446,7 @@ public class CachingIcebergCatalogTest {
 
         ManifestFile manifest = Mockito.mock(ManifestFile.class);
         Mockito.when(manifest.path()).thenReturn("/metadata/m1.avro");
+        Mockito.when(manifest.firstRowId()).thenReturn(null);
         Mockito.when(manifest.partitionSpecId()).thenReturn(0);
         Mockito.when(manifest.addedFilesCount()).thenReturn(1);
         Mockito.when(manifest.existingFilesCount()).thenReturn(1);
@@ -568,12 +596,15 @@ public class CachingIcebergCatalogTest {
     }
 
     @Test
-    public void testGetTableBypassCacheForRestCatalogWhenAuthToken(@Mocked IcebergRESTCatalog restCatalog) {
+    public void testGetTableBypassCacheForRestCatalogForwardingAuthToken(@Mocked IcebergRESTCatalog restCatalog) {
+        // A JWT-security REST catalog loads the table with the session's token, so it must not be cached.
         ConnectContext ctx = new ConnectContext();
         ctx.setAuthToken("token");
         Table nativeTable = createBaseTableWithManifests(1, 1);
         new Expectations() {
             {
+                restCatalog.forwardsSessionToken(ctx);
+                result = true;
                 restCatalog.getTable(ctx, "db3", "tbl3");
                 result = nativeTable;
                 times = 2;
@@ -584,6 +615,29 @@ public class CachingIcebergCatalogTest {
                 DEFAULT_CATALOG_PROPERTIES, Executors.newSingleThreadExecutor());
         Assertions.assertEquals(nativeTable, cachingIcebergCatalog.getTable(ctx, "db3", "tbl3"));
         Assertions.assertEquals(nativeTable, cachingIcebergCatalog.getTable(ctx, "db3", "tbl3"));
+    }
+
+    @Test
+    public void testRestCatalogNotForwardingAuthTokenUsesCache(@Mocked IcebergRESTCatalog restCatalog) {
+        // A REST catalog that authenticates with its own credential (e.g. oauth2) never forwards the session's
+        // JWT, so the table is the same for every user and a JWT session is served from the cache.
+        ConnectContext ctx = new ConnectContext();
+        ctx.setAuthToken("token");
+        Table nativeTable = createBaseTableWithManifests(1, 1);
+        new Expectations() {
+            {
+                restCatalog.forwardsSessionToken(ctx);
+                result = false;
+                restCatalog.getTable(ctx, "db3", "tbl3");
+                result = nativeTable;
+                times = 1;
+            }
+        };
+
+        CachingIcebergCatalog cachingIcebergCatalog = new CachingIcebergCatalog(CATALOG_NAME, restCatalog,
+                DEFAULT_CATALOG_PROPERTIES, Executors.newSingleThreadExecutor());
+        Assertions.assertSame(nativeTable, cachingIcebergCatalog.getTable(ctx, "db3", "tbl3"));
+        Assertions.assertSame(nativeTable, cachingIcebergCatalog.getTable(ctx, "db3", "tbl3"));
     }
 
     @Test

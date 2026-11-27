@@ -220,6 +220,10 @@ public class TableProperty implements Writable, GsonPostProcessable {
     // It represents the mode selected to determine how to refresh the materialized view
     private String mvRefreshMode = "";
 
+    // A materialized view created without the refresh_mode property is always PCT (IVMAnalyzer#getRefreshMode),
+    // so its declared mode must not follow default_mv_refresh_mode.
+    private static final String UNSPECIFIED_MV_REFRESH_MODE = "pct";
+
     // This property only applies to materialized views
     // When using the system to automatically refresh, the maximum range of the most recent partitions will be refreshed.
     // By default, all partitions will be refreshed.
@@ -351,9 +355,9 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     // Maximum number of parallel compaction subtasks per tablet
     // 0 means disable parallel compaction, positive value enables it
-    // Default: 3
+    // Default: 5, the same as Config.lake_compaction_max_parallel_default
     @SerializedName(value = "lakeCompactionMaxParallel")
-    private int lakeCompactionMaxParallel = 3;
+    private int lakeCompactionMaxParallel = 5;
 
     @SerializedName(value = "enableStatisticCollectOnFirstLoad")
     private boolean enableStatisticCollectOnFirstLoad = true;
@@ -733,7 +737,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     public TableProperty buildMVRefreshMode() {
         mvRefreshMode = properties.getOrDefault(PropertyAnalyzer.PROPERTIES_MV_REFRESH_MODE,
-                Config.default_mv_refresh_mode);
+                UNSPECIFIED_MV_REFRESH_MODE);
         return this;
     }
 
@@ -1213,7 +1217,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
     }
 
     public String getMvRefreshMode() {
-        return Strings.isNullOrEmpty(mvRefreshMode) ? Config.default_mv_refresh_mode : mvRefreshMode;
+        return Strings.isNullOrEmpty(mvRefreshMode) ? UNSPECIFIED_MV_REFRESH_MODE : mvRefreshMode;
     }
 
     public void setResourceGroup(String resourceGroup) {

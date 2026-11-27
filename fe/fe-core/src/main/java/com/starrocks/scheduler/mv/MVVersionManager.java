@@ -28,6 +28,7 @@ import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.connector.PartitionUtil;
+import com.starrocks.connector.partitiontraits.DeltaLakePartitionTraits;
 import com.starrocks.persist.ChangeMaterializedViewRefreshSchemeLog;
 import com.starrocks.scheduler.MvTaskRunContext;
 import com.starrocks.scheduler.TaskRun;
@@ -115,6 +116,10 @@ public class MVVersionManager {
                 }
                 mvTvrVersionRangeMap.put(entry.getKey(), TvrTableSnapshot.of(versionRange.to()));
             }
+            // The promotion ends the pinned job: journal its slot as released, or a replay revives the finished owner.
+            if (!tvrDeltaToPromote.isEmpty()) {
+                refreshContext.clearTempBaseTableInfoTvrDeltaState();
+            }
         }
 
         long maxChangedTableRefreshTime = 0L;
@@ -179,6 +184,25 @@ public class MVVersionManager {
         } finally {
             locker.unLockTableWithIntensiveDbLock(mv.getDbId(), mv.getId(), LockType.WRITE);
         }
+    }
+
+    public void clearTvrBaseline(boolean ownsFrozenSnapshot) {
+        MaterializedView.MvRefreshScheme copiedScheme = mv.getRefreshScheme().copy();
+        MaterializedView.AsyncRefreshContext refreshContext = copiedScheme.getAsyncRefreshContext();
+        Map<BaseTableInfo, TvrVersionRange> baseline = refreshContext.getBaseTableInfoTvrVersionRangeMap();
+        Map<BaseTableInfo, TvrVersionRange> frozen = refreshContext.getTempBaseTableInfoTvrDeltaMap();
+        // A table the frozen snapshot does not move is read at its baseline, and the last batch promotes only the
+        // tables that moved, so its entry has to stay.
+        Set<BaseTableInfo> readPastBaseline = baseline.keySet().stream()
+                .filter(table -> !ownsFrozenSnapshot || frozen.get(table) == null || !frozen.get(table).isEmpty())
+                .collect(Collectors.toSet());
+        if (readPastBaseline.isEmpty()) {
+            return;
+        }
+        logger.info("Clear the incremental baseline of {} for materialized view {} before a pct write, " +
+                "pinning owner: {}", readPastBaseline, mv.getName(), refreshContext.getTempTvrOwnerStartTaskRunId());
+        baseline.keySet().removeAll(readPastBaseline);
+        persistRefreshScheme(copiedScheme);
     }
 
     // Every refresh scheme this run publishes goes through here.
@@ -397,9 +421,17 @@ public class MVVersionManager {
                         snapshotTable.getName(), pctTableSnapshotInfo.getRefreshedPartitionInfos(), mv.getName());
                 continue;
             }
-            partitionNames.put(pctTableSnapshotInfo, PartitionUtil.getPartitionNames(snapshotTable));
+            partitionNames.put(pctTableSnapshotInfo, getLivePartitionNames(snapshotTable));
         }
         return partitionNames;
+    }
+
+    private static List<String> getLivePartitionNames(Table table) {
+        // a tracked Delta table keeps its version under the table name, which no partition listing returns
+        if (DeltaLakePartitionTraits.isTableVersionTracked(table)) {
+            return DeltaLakePartitionTraits.versionTrackingPartitionNames(table);
+        }
+        return PartitionUtil.getPartitionNames(table);
     }
 
     private void updateMetaForExternalTable(MaterializedView.AsyncRefreshContext refreshContext,

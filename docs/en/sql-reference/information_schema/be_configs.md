@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "be_configs provides information about the configuration parameters of each BE node."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # be_configs

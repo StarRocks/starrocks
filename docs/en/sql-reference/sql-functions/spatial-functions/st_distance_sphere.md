@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Calculates the spherical distance between two points on the Earth in 'meters'."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ST_Distance_Sphere

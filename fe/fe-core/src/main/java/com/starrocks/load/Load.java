@@ -64,6 +64,7 @@ import com.starrocks.sql.analyzer.AnalyzeState;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.analyzer.ExpressionAnalyzer;
 import com.starrocks.sql.analyzer.Field;
+import com.starrocks.sql.analyzer.IndexAnalyzer;
 import com.starrocks.sql.analyzer.RelationFields;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.ResolvedAIFunctionDetector;
@@ -733,6 +734,18 @@ public class Load {
         LOG.debug("after init column, exprMap: {}", exprsByName);
     }
 
+    private static boolean isConstantDeleteLoad(List<ImportColumnDesc> columnExprs) {
+        for (ImportColumnDesc desc : columnExprs) {
+            if (LOAD_OP_COLUMN.equalsIgnoreCase(desc.getColumnName())) {
+                Expr expr = desc.getExpr();
+                return (expr instanceof StringLiteral
+                        && "delete".equalsIgnoreCase(((StringLiteral) expr).getStringValue()))
+                        || (expr instanceof IntLiteral && ((IntLiteral) expr).getValue() == TOpType.DELETE.getValue());
+            }
+        }
+        return false;
+    }
+
     public static List<Column> getPartialUpateColumns(Table tbl, List<ImportColumnDesc> columnExprs,
                                                       List<Boolean> missAutoIncrementColumn) throws StarRocksException {
         Set<String> specified = columnExprs.stream()
@@ -770,6 +783,15 @@ public class Load {
                             }
                         }
                     }
+                }
+            }
+            // Every load planner (stream, broker, routine, merge commit) builds its partial update columns here.
+            // A load whose __op is the constant delete writes no rows, so it cannot leave a new key without a vector.
+            if (!isConstantDeleteLoad(columnExprs)) {
+                Optional<String> vectorIndexError = IndexAnalyzer.findPartialUpdateVectorIndexError(olaptable,
+                        ret.stream().map(Column::getName).collect(Collectors.toList()));
+                if (vectorIndexError.isPresent()) {
+                    throw new DdlException(vectorIndexError.get());
                 }
             }
         }

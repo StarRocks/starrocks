@@ -18,7 +18,12 @@ package com.starrocks.task;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.SchemaInfo;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LeaderLease;
+import com.starrocks.server.NodeMgr;
 import com.starrocks.sql.ast.KeysType;
+import com.starrocks.system.ComputeNode;
+import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TAlterTabletReqV2;
 import com.starrocks.thrift.TColumn;
 import com.starrocks.thrift.TStorageType;
@@ -27,6 +32,8 @@ import com.starrocks.thrift.TTabletType;
 import com.starrocks.type.IntegerType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.mockito.MockedStatic;
+import org.mockito.Mockito;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -249,4 +256,46 @@ public class AlterReplicaTaskTest {
         Assertions.assertEquals(TTabletType.TABLET_TYPE_LAKE, request.tablet_type);
     }
 
+    /**
+     * The task report resends an alter task its node no longer holds, for example after a restart. A node restarted
+     * on a binary without the lake index fast path would take such a request for a regular schema change of the
+     * tablet into itself, so a fast-path task is resent only to a node whose heartbeat to this leader, after its last
+     * failed one, reports the fast path. Other alter tasks are resent as before.
+     */
+    @Test
+    public void testLakeIndexFastPathTaskResendsOnlyToNodeReportingIt() {
+        LeaderLease lease = new LeaderLease(10L, 1L);
+        GlobalStateMgr gsm = Mockito.mock(GlobalStateMgr.class);
+        NodeMgr nodeMgr = Mockito.mock(NodeMgr.class);
+        SystemInfoService clusterInfo = Mockito.mock(SystemInfoService.class);
+        ComputeNode node = Mockito.mock(ComputeNode.class);
+        Mockito.when(gsm.captureLeaderLease()).thenReturn(lease);
+        Mockito.when(gsm.isLeaderLeaseValid(lease)).thenReturn(true);
+        Mockito.when(gsm.getNodeMgr()).thenReturn(nodeMgr);
+        Mockito.when(nodeMgr.getClusterInfo()).thenReturn(clusterInfo);
+        Mockito.when(clusterInfo.getBackendOrComputeNode(11L)).thenReturn(node);
+        AlterReplicaTask fastPath = AlterReplicaTask.alterLakeTablet(11L, 2, 3, 4, 5, 6, 6, 7, 8, 9, null,
+                new TTabletSchema());
+        fastPath.setOnlyAddIndex(Collections.emptyList());
+        AlterReplicaTask regular = AlterReplicaTask.alterLakeTablet(11L, 2, 3, 4, 5, 60, 6, 7, 8, 9, null,
+                new TTabletSchema());
+        long now = System.currentTimeMillis();
+
+        try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class)) {
+            gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
+            // No successful heartbeat since the node's last failed one: its flag may be its previous binary's.
+            Mockito.when(node.isSupportLakeIndexFastPath()).thenReturn(true);
+            Assertions.assertFalse(fastPath.shouldResend(now));
+            Assertions.assertTrue(regular.shouldResend(now));
+
+            Mockito.when(node.hasLakeIndexFastPathHeartbeat(lease)).thenReturn(true);
+            Assertions.assertTrue(fastPath.shouldResend(now));
+            Mockito.when(node.isSupportLakeIndexFastPath()).thenReturn(false);
+            Assertions.assertFalse(fastPath.shouldResend(now));
+
+            Mockito.when(node.isSupportLakeIndexFastPath()).thenReturn(true);
+            Mockito.when(gsm.isLeaderLeaseValid(lease)).thenReturn(false);
+            Assertions.assertFalse(fastPath.shouldResend(now));
+        }
+    }
 }

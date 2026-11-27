@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 unlisted: true
+products: [oss]
 ---
 
 # Load data from \<SOURCE\> TEMPLATE

@@ -45,9 +45,8 @@ constexpr const char* shifted = "POLYGON ((2 0,6 0,6 4,2 4,2 0))";
 constexpr const char* empty = "POLYGON EMPTY";
 
 TypeDescriptor geo_type(std::string crs = "EPSG:3857") {
-    return TypeDescriptor::create_geo_type(
-            TYPE_GEOMETRY, {GEO_LOGICAL_TYPE_GEOMETRY, GEO_COORDINATE_SYSTEM_CARTESIAN, GEO_EDGE_ALGORITHM_PLANAR, crs,
-                            crs == "EPSG:4326" ? 4326 : 3857});
+    return TypeDescriptor::create_geo_type(TYPE_GEOMETRY, {GEO_LOGICAL_TYPE_GEOMETRY, GEO_EDGE_ALGORITHM_PLANAR, crs,
+                                                           crs == "EPSG:4326" ? 4326 : 3857});
 }
 
 ColumnPtr geometries(std::initializer_list<const char*> values, const TypeDescriptor& type = geo_type()) {
@@ -475,9 +474,8 @@ TEST(GeoOverlayTest, RejectsMalformedNonFiniteDimensionsAndReturnDescriptor) {
         }
         auto bad_return = context(geo_type("EPSG:4326"));
         EXPECT_FALSE(fn(bad_return.get(), {geometries({square}), geometries({square})}).ok());
-        auto wrong_kind =
-                GeoColumn::create(GeoColumnDescriptor{{GEO_LOGICAL_TYPE_GEOGRAPHY, GEO_COORDINATE_SYSTEM_SPHERICAL,
-                                                       GEO_EDGE_ALGORITHM_SPHERICAL, "OGC:CRS84", 4326}});
+        auto wrong_kind = GeoColumn::create(
+                GeoColumnDescriptor{{GEO_LOGICAL_TYPE_GEOGRAPHY, GEO_EDGE_ALGORITHM_SPHERICAL, "OGC:CRS84", 4326}});
         wrong_kind->append_datum(Datum(Slice(wkb)));
         EXPECT_FALSE(fn(ctx.get(), {wrong_kind, geometries({square})}).ok());
     }

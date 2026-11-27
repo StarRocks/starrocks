@@ -44,6 +44,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.load.routineload.KafkaProgress;
 import com.starrocks.load.routineload.LoadDataSourceType;
+import com.starrocks.load.routineload.RoutineLoadPropertyNames;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.analyzer.CreateRoutineLoadAnalyzer;
@@ -301,6 +302,58 @@ public class CreateRoutineLoadStmtTest {
             Assertions.assertEquals(20, createRoutineLoadStmt.getTaskTimeoutSecond());
             Assertions.assertEquals(5, createRoutineLoadStmt.getTaskConsumeSecond());
         }
+    }
+
+    @Test
+    public void testDescriptivePropertyNames() {
+        {
+            CreateRoutineLoadStmt stmt = analyzeWithProperties("\"max_concurrency\" = \"3\", "
+                    + "\"load_interval\" = \"6500ms\", "
+                    + "\"max_consume_duration\" = \"5s\", "
+                    + "\"load_timeout\" = \"15s\", "
+                    + "\"max_error_rows\" = \"10\", "
+                    + "\"error_window_rows\" = \"3000000\"");
+            Assertions.assertEquals(3, stmt.getDesiredConcurrentNum());
+            Assertions.assertEquals(7, stmt.getMaxBatchIntervalS());
+            Assertions.assertEquals(5, stmt.getTaskConsumeSecond());
+            Assertions.assertEquals(15, stmt.getTaskTimeoutSecond());
+            Assertions.assertEquals(10, stmt.getMaxErrorNum());
+            Assertions.assertEquals(300000, stmt.getMaxBatchRows());
+            Assertions.assertEquals(6, stmt.getDescriptivePropertyValues().size());
+            Assertions.assertEquals("6500ms",
+                    stmt.getDescriptivePropertyValues().get(RoutineLoadPropertyNames.LOAD_INTERVAL));
+        }
+
+        {
+            // the timeout is derived from the consume duration, as it is for task_consume_second
+            CreateRoutineLoadStmt stmt = analyzeWithProperties("\"max_consume_duration\" = \"1500ms\"");
+            Assertions.assertEquals(2, stmt.getTaskConsumeSecond());
+            Assertions.assertEquals(8, stmt.getTaskTimeoutSecond());
+            Assertions.assertEquals(Map.of(RoutineLoadPropertyNames.MAX_CONSUME_DURATION, "1500ms"),
+                    stmt.getDescriptivePropertyValues());
+        }
+
+        {
+            CreateRoutineLoadStmt stmt = analyzeWithProperties("\"max_batch_interval\" = \"10\"");
+            Assertions.assertEquals(10, stmt.getMaxBatchIntervalS());
+            Assertions.assertTrue(stmt.getDescriptivePropertyValues().isEmpty());
+        }
+
+        SemanticException e = Assertions.assertThrows(SemanticException.class,
+                () -> analyzeWithProperties("\"load_interval\" = \"10s\", \"max_batch_interval\" = \"10\""));
+        Assertions.assertTrue(e.getMessage().contains("cannot be set together"), e.getMessage());
+
+        e = Assertions.assertThrows(SemanticException.class,
+                () -> analyzeWithProperties("\"load_interval\" = \"10\""));
+        Assertions.assertTrue(e.getMessage().contains("with a unit"), e.getMessage());
+    }
+
+    private static CreateRoutineLoadStmt analyzeWithProperties(String properties) {
+        String sql = "CREATE ROUTINE LOAD testdb.routine_name ON table1 PROPERTIES(" + properties + ") "
+                + "FROM KAFKA (\"kafka_broker_list\" = \"kafkahost1:9092\", \"kafka_topic\" = \"topictest\")";
+        CreateRoutineLoadStmt stmt = (CreateRoutineLoadStmt) SqlParser.parse(sql, 32).get(0);
+        CreateRoutineLoadAnalyzer.analyze(stmt, connectContext);
+        return stmt;
     }
 
     @Test

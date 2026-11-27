@@ -23,6 +23,7 @@
 #include "base/debug/trace.h"
 #include "base/testutil/assert.h"
 #include "common/thread/threadpool.h"
+#include "fs/remote_read_context.h"
 
 namespace starrocks::lake {
 
@@ -193,6 +194,44 @@ TEST(ParallelTaskRunnerTest, async_task_counters_reach_the_callers_trace) {
         }
     }
     ASSERT_EQ(4, counted);
+}
+
+// Pool workers do not inherit the caller's remote read context either. Without it the files a task opens -- the
+// source segments of a column-mode partial update publish, say -- were read with no attribution.
+TEST(ParallelTaskRunnerTest, async_tasks_read_under_the_callers_remote_read_context) {
+    auto pool = make_pool(4);
+    auto token = pool->new_token(ThreadPool::ExecutionMode::CONCURRENT);
+    std::atomic<int> attributed{0};
+    {
+        ScopedRemoteReadContext scope(RemoteReadContext::for_load(42));
+        ParallelTaskRunner runner(token.get());
+        for (int i = 0; i < 8; ++i) {
+            runner.run([&attributed]() {
+                const RemoteReadContext ctx = ScopedRemoteReadContext::or_current(RemoteReadContext{});
+                if (ctx.is_set && ctx.workload == RemoteReadContext::Workload::LOAD && ctx.flow_id == 42) {
+                    attributed++;
+                }
+                return Status::OK();
+            });
+        }
+        ASSERT_OK(runner.join());
+    }
+    ASSERT_EQ(8, attributed.load());
+
+    // A caller without a context gives its tasks none, and the pool threads that ran the tasks above are back
+    // to having none either.
+    std::atomic<int> unattributed{0};
+    ParallelTaskRunner runner(token.get());
+    for (int i = 0; i < 8; ++i) {
+        runner.run([&unattributed]() {
+            if (!ScopedRemoteReadContext::or_current(RemoteReadContext{}).is_set) {
+                unattributed++;
+            }
+            return Status::OK();
+        });
+    }
+    ASSERT_OK(runner.join());
+    ASSERT_EQ(8, unattributed.load());
 }
 
 TEST(ParallelTaskRunnerTest, destructor_joins_in_flight_tasks) {

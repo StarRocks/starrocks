@@ -16,9 +16,11 @@ package com.starrocks.sql.analyzer;
 
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
+import com.starrocks.common.util.LogUtil;
 import com.starrocks.common.util.SqlCredentialRedactor;
 import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.common.AuditEncryptionChecker;
 import com.starrocks.sql.formatter.AST2SQLVisitor;
 import com.starrocks.sql.formatter.FormatOptions;
 import org.apache.logging.log4j.LogManager;
@@ -65,7 +67,7 @@ public class AstToSQLBuilder {
         try {
             return toSQL(statement);
         } catch (Exception e) {
-            LOG.info("Ast to sql failed.", e);
+            LOG.info("Ast to sql failed.", LogUtil.desensitize(e));
             return SqlCredentialRedactor.redact(defaultSql);
         }
     }
@@ -74,9 +76,26 @@ public class AstToSQLBuilder {
         try {
             return Optional.of(AST2SQLVisitor.withOptions(options).visit(statement));
         } catch (Exception e) {
-            LOG.info("Ast to sql failed.", e);
+            LOG.info("Ast to sql failed.", LogUtil.desensitize(e));
             return Optional.empty();
         }
+    }
+
+    // For logs under enable_sql_desensitize_in_log: literals become `?`, and names the analyzer derived from
+    // expression text (unaliased select items, CTE columns) are not printed since they carry the literals.
+    public static String toDesensitizedSQL(StatementBase statement) {
+        String sql = toSQL(statement, FormatOptions.allEnable()
+                        .setColumnSimplifyTableName(false)
+                        .setHideCredential(AuditEncryptionChecker.needEncrypt(statement))
+                        .setEnableDigest(true)
+                        .setPrintActualSelectItem(false)
+                        .setHideCteColumnNames(true))
+                .orElse("this is a desensitized sql");
+        if (sql.isBlank()) {
+            // no formatter for this statement (e.g. CREATE REPOSITORY): name its type rather than log nothing
+            return "this is a desensitized sql (" + statement.getClass().getSimpleName() + ")";
+        }
+        return SqlCredentialRedactor.redact(sql);
     }
 
     public static String toDigest(StatementBase statement) {

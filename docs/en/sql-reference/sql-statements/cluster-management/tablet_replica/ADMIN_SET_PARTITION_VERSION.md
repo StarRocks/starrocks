@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "ADMIN SET PARTITION VERSION sets a partition to a specific data version."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ADMIN SET PARTITION VERSION

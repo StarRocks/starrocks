@@ -18,6 +18,7 @@
 #include "column/fixed_length_column.h"
 #include "common/logging.h"
 #include "connector/common/partition_chunk_writer_memory_manager.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks::connector {
 
@@ -88,9 +89,12 @@ Status IcebergRowDeltaSink::add(const ChunkPtr& chunk) {
         return Status::OK();
     }
 
+    // The sub-sinks do not count loaded rows, so each statement row is counted once here.
+    // An update row writes both a delete row and a data row but counts as one affected row.
     if (_op_code_index < 0) {
         RETURN_IF_ERROR(_delete_sink->add(chunk));
         RETURN_IF_ERROR(_data_sink->add(chunk));
+        _state->update_num_rows_load_sink(num_rows);
         return Status::OK();
     }
 
@@ -100,9 +104,13 @@ Status IcebergRowDeltaSink::add(const ChunkPtr& chunk) {
 
     _delete_rows.clear();
     _data_rows.clear();
+    int64_t num_affected_rows = 0;
 
     for (int i = 0; i < num_rows; ++i) {
         int8_t op = op_code_data[i];
+        if (op != OP_NO_OP) {
+            ++num_affected_rows;
+        }
         switch (op) {
         case OP_NO_OP:
             break;
@@ -134,6 +142,7 @@ Status IcebergRowDeltaSink::add(const ChunkPtr& chunk) {
         RETURN_IF_ERROR(_data_sink->add(all_to_data ? chunk : filter_chunk_by_rows(chunk, _data_rows)));
     }
 
+    _state->update_num_rows_load_sink(num_affected_rows);
     return Status::OK();
 }
 

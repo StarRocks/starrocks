@@ -21,6 +21,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.EsTable;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.KuduTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -28,10 +29,12 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.tvr.TvrTableSnapshot;
+import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.statistics.ConnectorTableColumnStats;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.JoinOperator;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.common.StarRocksPlannerException;
@@ -50,6 +53,7 @@ import com.starrocks.sql.optimizer.dump.DumpInfo;
 import com.starrocks.sql.optimizer.dump.MockDumpInfo;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.sql.optimizer.operator.AggType;
+import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.UKFKConstraints;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalEsScanOperator;
@@ -57,19 +61,32 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalKuduScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CollectionElementOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
+import com.starrocks.sql.optimizer.rule.transformation.DeriveRangeJoinPredicateRule;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
+import com.starrocks.statistic.StatisticUtils;
+import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.type.ArrayType;
 import com.starrocks.type.DateType;
+import com.starrocks.type.FloatType;
 import com.starrocks.type.IntegerType;
+import com.starrocks.type.StringType;
+import com.starrocks.type.StructField;
+import com.starrocks.type.StructType;
+import com.starrocks.type.Type;
 import com.starrocks.type.VarcharType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -84,6 +101,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.io.File;
 import java.io.IOException;
@@ -313,6 +331,212 @@ public class StatisticsCalculatorTest {
         }
     }
 
+    /**
+     * Operator level test for both call sites that ask the statistics storage for a subfield path: the projection of a
+     * scan operator, and a LogicalProject on top of a scan. A query reaches the first one, see
+     * {@link #testQueryWithSubfieldOfArrayElement()}, but not the second one, because the project is merged into the
+     * scan projection before statistics are estimated. That branch is therefore covered by a hand built operator tree.
+     */
+    @Test
+    public void testSkipStatisticsForSubfieldOfArrayElement() {
+        GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
+        OlapTable table = (OlapTable) globalStateMgr.getLocalMetastore().getDb("statistics_test")
+                .getTable("test_all_type");
+        List<Long> partitionIds = table.getPartitions().stream()
+                .mapToLong(Partition::getId).boxed().collect(Collectors.toList());
+
+        Type structType = new StructType(
+                new ArrayList<>(List.of(new StructField("bucket_id", IntegerType.INT))));
+        Type arrayType = new ArrayType(structType);
+        Column arrayColumn = new Column("bucket_array", arrayType, true);
+        ColumnRefOperator arrayRef = columnRefFactory.create("bucket_array", arrayType, true);
+        ColumnRefOperator outputRef = columnRefFactory.create("bucket_id", IntegerType.INT, true);
+        CollectionElementOperator arrayElement = new CollectionElementOperator(
+                structType, arrayRef, ConstantOperator.createInt(1), false);
+        SubfieldOperator subfield = new SubfieldOperator(
+                arrayElement, IntegerType.INT, List.of("bucket_id"));
+
+        LogicalOlapScanOperator scanOperator = new LogicalOlapScanOperator(table,
+                ImmutableMap.of(arrayRef, arrayColumn),
+                ImmutableMap.of(arrayColumn, arrayRef),
+                null, -1, null,
+                table.getBaseIndexMetaId(),
+                partitionIds,
+                null,
+                false,
+                Lists.newArrayList(),
+                Lists.newArrayList(),
+                Lists.newArrayList(),
+                false);
+        scanOperator.setProjection(new Projection(ImmutableMap.of(outputRef, subfield)));
+
+        List<String> requestedColumns = new ArrayList<>();
+        StatisticStorage originalStorage = globalStateMgr.getStatisticStorage();
+        globalStateMgr.setStatisticStorage(new EmptyStatisticStorage() {
+            @Override
+            public List<ColumnStatistic> getColumnStatistics(Table table, List<String> columns) {
+                requestedColumns.addAll(columns);
+                return super.getColumnStatistics(table, columns);
+            }
+        });
+        try {
+            GroupExpression groupExpression = new GroupExpression(scanOperator, Lists.newArrayList());
+            groupExpression.setGroup(new Group(0));
+            ExpressionContext expressionContext = new ExpressionContext(groupExpression);
+
+            new StatisticsCalculator(expressionContext, columnRefFactory, optimizerContext).estimatorStats();
+
+            // the array column itself has no collectable statistics, so only the subfield path could be requested,
+            // and a path rooted at the array element must not be
+            Assertions.assertFalse(requestedColumns.stream().anyMatch(column -> column.contains(",")),
+                    requestedColumns.toString());
+            Assertions.assertTrue(expressionContext.getStatistics().getColumnStatistic(outputRef).isUnknown());
+
+            requestedColumns.clear();
+            scanOperator.setProjection(null);
+            OptExpression scanExpression = OptExpression.create(scanOperator);
+            scanExpression.setStatistics(Statistics.builder()
+                    .setOutputRowCount(100)
+                    .addColumnStatistic(arrayRef, ColumnStatistic.unknown())
+                    .build());
+            OptExpression projectExpression = OptExpression.create(
+                    new LogicalProjectOperator(ImmutableMap.of(outputRef, subfield)), scanExpression);
+            ExpressionContext projectContext = new ExpressionContext(projectExpression);
+
+            new StatisticsCalculator(projectContext, columnRefFactory, optimizerContext).estimatorStats();
+
+            Assertions.assertTrue(requestedColumns.isEmpty());
+            Assertions.assertTrue(projectContext.getStatistics().getColumnStatistic(outputRef).isUnknown());
+        } finally {
+            globalStateMgr.setStatisticStorage(originalStorage);
+        }
+    }
+
+    @Test
+    public void testStatisticsForDirectSubfield() {
+        GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
+        OlapTable table = (OlapTable) globalStateMgr.getLocalMetastore().getDb("statistics_test")
+                .getTable("test_all_type");
+        List<Long> partitionIds = table.getPartitions().stream()
+                .mapToLong(Partition::getId).boxed().collect(Collectors.toList());
+
+        Type structType = new StructType(
+                new ArrayList<>(List.of(new StructField("bucket_id", IntegerType.INT))));
+        Column structColumn = new Column("bucket_struct", structType, true);
+        ColumnRefOperator structRef = columnRefFactory.create("bucket_struct", structType, true);
+        ColumnRefOperator outputRef = columnRefFactory.create("bucket_id", IntegerType.INT, true);
+        SubfieldOperator subfield = new SubfieldOperator(
+                structRef, IntegerType.INT, List.of("bucket_id"));
+
+        LogicalOlapScanOperator scanOperator = new LogicalOlapScanOperator(table,
+                ImmutableMap.of(structRef, structColumn),
+                ImmutableMap.of(structColumn, structRef),
+                null, -1, null,
+                table.getBaseIndexMetaId(),
+                partitionIds,
+                null,
+                false,
+                Lists.newArrayList(),
+                Lists.newArrayList(),
+                Lists.newArrayList(),
+                false);
+        scanOperator.setProjection(new Projection(ImmutableMap.of(outputRef, subfield)));
+
+        ColumnStatistic expected = new ColumnStatistic(1, 10, 0, 8, 5);
+        StatisticStorage originalStorage = globalStateMgr.getStatisticStorage();
+        globalStateMgr.setStatisticStorage(new EmptyStatisticStorage() {
+            @Override
+            public List<ColumnStatistic> getColumnStatistics(Table table, List<String> columns) {
+                if (columns.equals(List.of("bucket_struct.bucket_id"))) {
+                    return List.of(expected);
+                }
+                return super.getColumnStatistics(table, columns);
+            }
+        });
+        try {
+            GroupExpression groupExpression = new GroupExpression(scanOperator, Lists.newArrayList());
+            groupExpression.setGroup(new Group(0));
+            ExpressionContext expressionContext = new ExpressionContext(groupExpression);
+
+            new StatisticsCalculator(expressionContext, columnRefFactory, optimizerContext).estimatorStats();
+
+            ColumnStatistic actual = expressionContext.getStatistics().getColumnStatistic(outputRef);
+            Assertions.assertFalse(actual.isUnknown());
+            Assertions.assertEquals(expected.getMinValue(), actual.getMinValue());
+            Assertions.assertEquals(expected.getMaxValue(), actual.getMaxValue());
+            Assertions.assertEquals(expected.getDistinctValuesCount(), actual.getDistinctValuesCount());
+        } finally {
+            globalStateMgr.setStatisticStorage(originalStorage);
+        }
+    }
+
+    /**
+     * Query level regression test for the same bug. `ass[1].a` reaches the optimizer as a SubfieldOperator whose root
+     * is an expression instead of a table column, so before the fix the scan asked the statistics storage for the path
+     * `3: ass,1.a`, which no table column can ever match.
+     * <p>
+     * The statistics storage below reproduces what production then does with such a path: the loader behind
+     * CachedStatisticStorage resolves every requested path with StatisticUtils#getQueryStatisticsColumnType, which
+     * rejects an unknown root column, and CachedStatisticStorage falls back to unknown statistics for the whole
+     * requested batch. Since one scan requests all of its subfield paths in a single batch, the unsupported path also
+     * throws away the statistics of the valid `st1.s1` path selected by the same query. That is the user visible
+     * impact: a repeated failing statistics lookup plus worse cost estimates for the other columns of the projection.
+     */
+    @Test
+    public void testQueryWithSubfieldOfArrayElement() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE `test_subfield_statistics` (\n" +
+                "  `v1` bigint NULL,\n" +
+                "  `st1` struct<s1 int, s2 int> NULL,\n" +
+                "  `ass` array<struct<a int, b int>> NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`v1`)\n" +
+                "DISTRIBUTED BY HASH(`v1`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");");
+
+        ColumnStatistic structSubfieldStatistic = new ColumnStatistic(1, 10, 0, 4, 5);
+        List<String> requestedColumns = new ArrayList<>();
+        List<String> rejectedRequests = new ArrayList<>();
+        GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
+        StatisticStorage originalStorage = globalStateMgr.getStatisticStorage();
+        // the test table has no data, keep the scan instead of letting PruneEmptyScanRule replace it with values
+        boolean originalPruneEmptyOutputScan = FeConstants.enablePruneEmptyOutputScan;
+        FeConstants.enablePruneEmptyOutputScan = false;
+        globalStateMgr.setStatisticStorage(new EmptyStatisticStorage() {
+            @Override
+            public List<ColumnStatistic> getColumnStatistics(Table table, List<String> columns) {
+                requestedColumns.addAll(columns);
+                try {
+                    columns.forEach(column -> StatisticUtils.getQueryStatisticsColumnType(table, column));
+                } catch (SemanticException e) {
+                    rejectedRequests.add(columns.toString());
+                    return super.getColumnStatistics(table, columns);
+                }
+                return columns.stream()
+                        .map(column -> "st1.s1".equals(column) ? structSubfieldStatistic : ColumnStatistic.unknown())
+                        .collect(Collectors.toList());
+            }
+        });
+        try {
+            String plan = UtFrameUtils.getPlanAndFragment(connectContext,
+                            "select ass[1].a, st1.s1, " +
+                                    "cast(parse_json('{\"k\": 45}') as struct<k varchar>).k " +
+                                    "from test_subfield_statistics")
+                    .second.getExplainString(TExplainLevel.COSTS);
+
+            Assertions.assertTrue(rejectedRequests.isEmpty(),
+                    "unsupported statistics path requested: " + rejectedRequests);
+            Assertions.assertTrue(requestedColumns.contains("st1.s1"),
+                    "statistics of the supported subfield path were not requested: " + requestedColumns);
+            Assertions.assertTrue(plan.contains("-->[1.0, 10.0, 0.0, 4.0, 5.0] ESTIMATE"), plan);
+        } finally {
+            FeConstants.enablePruneEmptyOutputScan = originalPruneEmptyOutputScan;
+            globalStateMgr.setStatisticStorage(originalStorage);
+            starRocksAssert.dropTable("test_subfield_statistics");
+        }
+    }
+
     @Test
     public void testLogicalIcebergTableScan() {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
@@ -344,24 +568,160 @@ public class StatisticsCalculatorTest {
         new MockUp<MetadataMgr>() {
             @Mock
             public Statistics getTableStatisticsFromInternalStatistics(Table table, Map<ColumnRefOperator,
-                    Column> columns) {
+                    Column> columns, boolean queryTriggerAnalyzeEnabled) {
                 Statistics.Builder builder = Statistics.builder();
                 icebergScanOperator.getOutputColumns().forEach(col ->
                         builder.addColumnStatistic(col,
                                 new ColumnStatistic(0, 100, 0.0, 5.0, 100))
                 );
                 builder.setOutputRowCount(100);
-                return builder.build();
+                // like the real method: internal statistics are full-table ANALYZE statistics
+                return builder.setStatsSource(Statistics.StatsSource.ANALYZE).build();
             }
         };
         StatisticsCalculator statisticsCalculator = new StatisticsCalculator(expressionContext,
                 columnRefFactory, optimizerContext);
         statisticsCalculator.estimatorStats();
+        // ANALYZE statistics cover the whole table, so the partition predicate stays in the selectivity
         Assertions.assertEquals(50, expressionContext.getStatistics().getOutputRowCount(), 0.001);
         Assertions.assertEquals(50, expressionContext.getStatistics().
                 getColumnStatistic(partitionColumn).getMaxValue(), 0.001);
-        Assertions.assertTrue(optimizerContext.isObtainedFromInternalStatistics());
-        optimizerContext.setObtainedFromInternalStatistics(false);
+    }
+
+    @Test
+    public void testRemoveIcebergPartitionPredicateFollowsScanStatsSource() {
+        LogicalIcebergScanOperator scan = icebergScan("partitioned_db", "t1");
+        ScalarOperator predicate = new BinaryPredicateOperator(BinaryType.LT, icebergColumn(scan, "date"),
+                ConstantOperator.createVarchar("2020-01-03"));
+        StatisticsCalculator calculator = new StatisticsCalculator();
+
+        // row count from the pruned files: the partition predicate is already applied
+        Assertions.assertEquals(ConstantOperator.TRUE,
+                calculator.removePartitionPredicate(predicate, scan, ICEBERG_TABLE_METADATA));
+        // full-table ANALYZE statistics and default statistics keep it in the selectivity
+        Statistics analyzed = Statistics.builder().setStatsSource(Statistics.StatsSource.ANALYZE).build();
+        Assertions.assertEquals(predicate, calculator.removePartitionPredicate(predicate, scan, analyzed));
+        Assertions.assertEquals(predicate,
+                calculator.removePartitionPredicate(predicate, scan, Statistics.builder().build()));
+        Assertions.assertEquals(predicate, calculator.removePartitionPredicate(predicate, scan, null));
+    }
+
+    @Test
+    public void testRemovedIcebergPartitionPredicateKeepsColumnStatistics() {
+        LogicalIcebergScanOperator scan = icebergScan("partitioned_db", "t1");
+        ColumnRefOperator date = icebergColumn(scan, "date");
+        ColumnRefOperator id = icebergColumn(scan, "id");
+        ScalarOperator predicate = new InPredicateOperator(false, date, ConstantOperator.createVarchar("2020-01-01"),
+                ConstantOperator.createVarchar("2020-01-02"));
+        scan = new LogicalIcebergScanOperator(scan.getTable(), scan.getColRefToColumnMetaMap(),
+                scan.getColumnMetaToColRefMap(), -1, predicate, TvrTableSnapshot.empty());
+        LogicalIcebergScanOperator finalScan = scan;
+        new MockUp<MetadataMgr>() {
+            @Mock
+            public Statistics getTableStatistics(OptimizerContext session, String catalogName, Table table,
+                                                 Map<ColumnRefOperator, Column> columns,
+                                                 List<PartitionKey> partitionKeys, ScalarOperator predicate,
+                                                 long limit, TvrVersionRange version) {
+                // the row count of the files planned with the scan predicate
+                Statistics.Builder builder = Statistics.builder().setOutputRowCount(100)
+                        .setStatsSource(Statistics.StatsSource.TABLE_METADATA);
+                finalScan.getOutputColumns().forEach(col -> builder.addColumnStatistic(col,
+                        new ColumnStatistic(Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY, 0.0, 10.0, 50)));
+                return builder.build();
+            }
+        };
+        GroupExpression groupExpression = new GroupExpression(scan, Lists.newArrayList());
+        groupExpression.setGroup(new Group(0));
+        ExpressionContext expressionContext = new ExpressionContext(groupExpression);
+        new StatisticsCalculator(expressionContext, columnRefFactory, optimizerContext).estimatorStats();
+
+        Statistics statistics = expressionContext.getStatistics();
+        // the IN list is not applied to the pruned row count again, but still caps the NDV of its column
+        Assertions.assertEquals(100, statistics.getOutputRowCount(), 0.001);
+        Assertions.assertEquals(2, statistics.getColumnStatistic(date).getDistinctValuesCount(), 0.001);
+        Assertions.assertEquals(50, statistics.getColumnStatistic(id).getDistinctValuesCount(), 0.001);
+    }
+
+    @Test
+    public void testRemoveIcebergPartitionPredicateOnlyForPrunedConjuncts() {
+        StatisticsCalculator calculator = new StatisticsCalculator();
+
+        // a string-to-temporal cast on the identity string partition column is not converted, but the connector
+        // prunes manifests / files with it against the partition values, so the row count already reflects it
+        LogicalIcebergScanOperator identity = icebergScan("partitioned_db", "t1");
+        ScalarOperator castEq = new BinaryPredicateOperator(BinaryType.EQ,
+                new CastOperator(DateType.DATETIME, icebergColumn(identity, "date")),
+                ConstantOperator.createDatetime(LocalDateTime.of(2020, 1, 1, 0, 0)));
+        Assertions.assertEquals(ConstantOperator.TRUE,
+                calculator.removePartitionPredicate(castEq, identity, ICEBERG_TABLE_METADATA));
+        // ... but not with statistics that do not come from the planned files
+        Assertions.assertEquals(castEq, calculator.removePartitionPredicate(castEq, identity, null));
+        // shapes the manifest range check cannot prune with (a DATE cast, !=) keep every manifest, so they stay
+        ScalarOperator castDateEq = new BinaryPredicateOperator(BinaryType.EQ,
+                new CastOperator(DateType.DATE, icebergColumn(identity, "date")),
+                ConstantOperator.createDate(LocalDateTime.of(2020, 1, 1, 0, 0)));
+        Assertions.assertEquals(castDateEq,
+                calculator.removePartitionPredicate(castDateEq, identity, ICEBERG_TABLE_METADATA));
+        ScalarOperator castNe = new BinaryPredicateOperator(BinaryType.NE,
+                new CastOperator(DateType.DATETIME, icebergColumn(identity, "date")),
+                ConstantOperator.createDatetime(LocalDateTime.of(2020, 1, 1, 0, 0)));
+        Assertions.assertEquals(castNe, calculator.removePartitionPredicate(castNe, identity, ICEBERG_TABLE_METADATA));
+        // a literal the converter cannot bind to the string column does not prune either
+        ScalarOperator intLt = new BinaryPredicateOperator(BinaryType.LT, icebergColumn(identity, "date"),
+                ConstantOperator.createInt(50));
+        Assertions.assertEquals(intLt, calculator.removePartitionPredicate(intLt, identity, ICEBERG_TABLE_METADATA));
+
+        // bucket / truncate / time transforms prune at most whole transformed partitions, a range on a bucket column
+        // not at all
+        List<String[]> transformed = List.of(new String[] {"t0_bucket", "ts"}, new String[] {"t0_day", "ts"},
+                new String[] {"t0_truncate", "data"});
+        for (String[] t : transformed) {
+            LogicalIcebergScanOperator scan = icebergScan("partitioned_transforms_db", t[0]);
+            ColumnRefOperator column = icebergColumn(scan, t[1]);
+            ScalarOperator literal = column.getType().isStringType() ? ConstantOperator.createVarchar("abcde")
+                    : ConstantOperator.createDatetime(LocalDateTime.of(2024, 1, 1, 0, 0));
+            ScalarOperator ge = new BinaryPredicateOperator(BinaryType.GE, column, literal);
+            Assertions.assertEquals(ge, calculator.removePartitionPredicate(ge, scan, ICEBERG_TABLE_METADATA), t[0]);
+        }
+
+        // identity partitioned in the current spec only: files of the older month(ts) spec are not pruned exactly
+        LogicalIcebergScanOperator evolved = icebergScan("partitioned_transforms_db", "t0_date_month_identity_evolution");
+        ScalarOperator tsEq = new BinaryPredicateOperator(BinaryType.EQ, icebergColumn(evolved, "ts"),
+                ConstantOperator.createDatetime(LocalDateTime.of(2024, 1, 1, 0, 0)));
+        Assertions.assertEquals(tsEq, calculator.removePartitionPredicate(tsEq, evolved, ICEBERG_TABLE_METADATA));
+
+        // after a partition transform evolution the file partition values are not read, so the cast residual keeps
+        // every file and the cast stays
+        new MockUp<IcebergTable>() {
+            @Mock
+            public boolean hasPartitionTransformedEvolution() {
+                return true;
+            }
+        };
+        Assertions.assertEquals(castEq, calculator.removePartitionPredicate(castEq, identity, ICEBERG_TABLE_METADATA));
+    }
+
+    private static final Statistics ICEBERG_TABLE_METADATA =
+            Statistics.builder().setStatsSource(Statistics.StatsSource.TABLE_METADATA).build();
+
+    private LogicalIcebergScanOperator icebergScan(String db, String tableName) {
+        Table icebergTable = connectContext.getGlobalStateMgr().getMetadataMgr()
+                .getTable(connectContext, "iceberg0", db, tableName);
+        Map<ColumnRefOperator, Column> refToColumn = Maps.newHashMap();
+        Map<Column, ColumnRefOperator> columnToRef = Maps.newHashMap();
+        List<Column> columns = icebergTable.getColumns();
+        for (int i = 0; i < columns.size(); i++) {
+            ColumnRefOperator ref = new ColumnRefOperator(i, columns.get(i).getType(), columns.get(i).getName(), true);
+            refToColumn.put(ref, columns.get(i));
+            columnToRef.put(columns.get(i), ref);
+        }
+        return new LogicalIcebergScanOperator(icebergTable, refToColumn, columnToRef, -1, null,
+                TvrTableSnapshot.empty());
+    }
+
+    private static ColumnRefOperator icebergColumn(LogicalIcebergScanOperator scan, String name) {
+        return scan.getColRefToColumnMetaMap().keySet().stream().filter(ref -> ref.getName().equals(name))
+                .findFirst().orElseThrow();
     }
 
     @Test
@@ -381,7 +741,7 @@ public class StatisticsCalculatorTest {
         new MockUp<MetadataMgr>() {
             @Mock
             public Statistics getTableStatisticsFromInternalStatistics(Table table, Map<ColumnRefOperator,
-                    Column> cols) {
+                    Column> cols, boolean queryTriggerAnalyzeEnabled) {
                 Statistics.Builder builder = Statistics.builder();
                 cols.keySet().forEach(col -> builder.addColumnStatistic(col, new ColumnStatistic(0, 100, 0.0, 5.0, 100)));
                 return builder.setOutputRowCount(100).build();
@@ -390,7 +750,8 @@ public class StatisticsCalculatorTest {
         String analyzed = columns.get(0).getName();
         new MockUp<CachedStatisticStorage>() {
             @Mock
-            public List<ConnectorTableColumnStats> getConnectorTableStatistics(Table table, List<String> cols) {
+            public List<ConnectorTableColumnStats> getConnectorTableStatistics(Table table, List<String> cols,
+                                                                               boolean queryTriggerAnalyzeEnabled) {
                 return cols.stream().map(c -> c.equals(analyzed)
                         ? new ConnectorTableColumnStats(new ColumnStatistic(0, 100, 0.0, 5.0, 100), 3612L, "")
                         : ConnectorTableColumnStats.unknown()).collect(Collectors.toList());
@@ -415,7 +776,6 @@ public class StatisticsCalculatorTest {
             estimateIcebergScan(icebergTable, refToColumn, columnToRef);
         } finally {
             connectContext.setDumpInfo(previous);
-            optimizerContext.setObtainedFromInternalStatistics(false);
         }
     }
 
@@ -820,6 +1180,64 @@ public class StatisticsCalculatorTest {
     }
 
     @Test
+    public void testJoinEstimateAppliesAllResidualPredicates() {
+        ColumnRefOperator l1 = columnRefFactory.create("l1", IntegerType.INT, true);
+        ColumnRefOperator l2 = columnRefFactory.create("l2", IntegerType.INT, true);
+        ColumnRefOperator r1 = columnRefFactory.create("r1", IntegerType.INT, true);
+        ColumnRefOperator r2 = columnRefFactory.create("r2", IntegerType.INT, true);
+        ColumnRefOperator r3 = columnRefFactory.create("r3", IntegerType.INT, true);
+        columnRefFactory.updateColumnToRelationIds(l1.getId(), 0);
+        columnRefFactory.updateColumnToRelationIds(l2.getId(), 0);
+        columnRefFactory.updateColumnToRelationIds(r1.getId(), 1);
+        columnRefFactory.updateColumnToRelationIds(r2.getId(), 1);
+        columnRefFactory.updateColumnToRelationIds(r3.getId(), 1);
+
+        Statistics.Builder leftBuilder = Statistics.builder();
+        leftBuilder.setOutputRowCount(10000);
+        leftBuilder.addColumnStatistics(ImmutableMap.of(l1, new ColumnStatistic(0, 100, 0, 10, 50)));
+        leftBuilder.addColumnStatistics(ImmutableMap.of(l2, new ColumnStatistic(0, 50, 0, 10, 50)));
+        Group leftGroup = new Group(0);
+        leftGroup.setStatistics(leftBuilder.build());
+        leftGroup.setLogicalProperty(new LogicalProperty(new ColumnRefSet(Lists.newArrayList(l1, l2))));
+
+        Statistics.Builder rightBuilder = Statistics.builder();
+        rightBuilder.setOutputRowCount(20000);
+        rightBuilder.addColumnStatistics(ImmutableMap.of(r1, new ColumnStatistic(0, 100, 0, 10, 100)));
+        rightBuilder.addColumnStatistics(ImmutableMap.of(r2, new ColumnStatistic(0, 50, 0, 10, 50)));
+        rightBuilder.addColumnStatistics(ImmutableMap.of(r3, new ColumnStatistic(0, 50, 0, 10, 50)));
+        Group rightGroup = new Group(1);
+        rightGroup.setStatistics(rightBuilder.build());
+        rightGroup.setLogicalProperty(new LogicalProperty(new ColumnRefSet(Lists.newArrayList(r1, r2, r3))));
+
+        BinaryPredicateOperator eq = new BinaryPredicateOperator(BinaryType.EQ, l1, r1);
+        BinaryPredicateOperator ge = new BinaryPredicateOperator(BinaryType.GE, l2, r2);
+        BinaryPredicateOperator le = new BinaryPredicateOperator(BinaryType.LE, l2, r3);
+
+        // ON l1 = r1
+        double eqRows = estimateJoin(JoinOperator.INNER_JOIN, eq, leftGroup, rightGroup).getOutputRowCount();
+        Assertions.assertTrue(eqRows > 1);
+
+        // ON l1 = r1 AND l2 >= r2: one column-to-column residual, unknown coefficient 0.5
+        Statistics oneResidual =
+                estimateJoin(JoinOperator.INNER_JOIN, Utils.compoundAnd(eq, ge), leftGroup, rightGroup);
+        Assertions.assertEquals(eqRows * 0.5, oneResidual.getOutputRowCount(), 0.0001);
+
+        // ON l1 = r1 AND l2 >= r2 AND l2 <= r3: both residuals must apply, 0.5 * 0.5
+        Statistics twoResiduals =
+                estimateJoin(JoinOperator.INNER_JOIN, Utils.compoundAnd(eq, ge, le), leftGroup, rightGroup);
+        Assertions.assertEquals(eqRows * 0.25, twoResiduals.getOutputRowCount(), 0.0001);
+
+        // ON l1 = r1 AND l2 <= 25 AND l2 >= r2: the constant range residual is not the last conjunct,
+        // its column statistics narrowing must survive the following residual
+        BinaryPredicateOperator constRange =
+                new BinaryPredicateOperator(BinaryType.LE, l2, ConstantOperator.createInt(25));
+        Statistics withConstRange =
+                estimateJoin(JoinOperator.INNER_JOIN, Utils.compoundAnd(eq, constRange, ge), leftGroup, rightGroup);
+        Assertions.assertEquals(25, withConstRange.getColumnStatistic(l2).getMaxValue(), 0.0001);
+        Assertions.assertTrue(withConstRange.getOutputRowCount() < oneResidual.getOutputRowCount());
+    }
+
+    @Test
     public void testNotFoundColumnStatistics() {
         ColumnRefOperator v1 = columnRefFactory.create("v1", IntegerType.INT, true);
         ColumnRefOperator v2 = columnRefFactory.create("v2", IntegerType.INT, true);
@@ -915,6 +1333,54 @@ public class StatisticsCalculatorTest {
 
     @ParameterizedTest
     @EnumSource(value = OuterJoin.class)
+    public void testOuterJoinKeepsPreservedKeyDomain(OuterJoin outerJoin) {
+        // GIVEN
+        // A big preserved side whose key spans a wide range, joined to a tiny side with 32 distinct keys,
+        // like `member LEFT JOIN confirmation ON member.contact_id = confirmation.contact_id WHERE confirmation.x IS NULL`.
+        ColumnRefOperator outerKey = columnRefFactory.create("contact_id", IntegerType.BIGINT, true);
+        Statistics.Builder outerBuilder = Statistics.builder();
+        outerBuilder.setOutputRowCount(106_421_169);
+        outerBuilder.addColumnStatistics(ImmutableMap.of(
+                outerKey, new ColumnStatistic(0, 771_126_758, 0.007, 8, 106_421_169)));
+        Group outerGroup = new Group(0);
+        outerGroup.setStatistics(outerBuilder.build());
+        outerGroup.setLogicalProperty(new LogicalProperty(new ColumnRefSet(Lists.newArrayList(outerKey))));
+
+        ColumnRefOperator innerKey = columnRefFactory.create("employment_id", IntegerType.BIGINT, true);
+        Statistics.Builder innerBuilder = Statistics.builder();
+        innerBuilder.setOutputRowCount(38);
+        innerBuilder.addColumnStatistics(ImmutableMap.of(
+                innerKey, new ColumnStatistic(2238, 747_550_773, 0, 8, 32)));
+        Group innerGroup = new Group(1);
+        innerGroup.setStatistics(innerBuilder.build());
+        innerGroup.setLogicalProperty(new LogicalProperty(new ColumnRefSet(Lists.newArrayList(innerKey))));
+
+        boolean left = outerJoin == OuterJoin.LEFT_OUTER_JOIN;
+        LogicalJoinOperator joinOp = new LogicalJoinOperator(
+                left ? JoinOperator.LEFT_OUTER_JOIN : JoinOperator.RIGHT_OUTER_JOIN,
+                left ? new BinaryPredicateOperator(BinaryType.EQ, outerKey, innerKey)
+                        : new BinaryPredicateOperator(BinaryType.EQ, innerKey, outerKey));
+        GroupExpression groupExpr = new GroupExpression(joinOp,
+                left ? Lists.newArrayList(outerGroup, innerGroup) : Lists.newArrayList(innerGroup, outerGroup));
+        groupExpr.setGroup(new Group(2));
+        ExpressionContext exprCtx = new ExpressionContext(groupExpr);
+        StatisticsCalculator calc = new StatisticsCalculator(exprCtx, columnRefFactory, optimizerContext);
+
+        // WHEN
+        calc.estimatorStats();
+        ColumnStatistic outerKeyAfterJoin = exprCtx.getStatistics().getColumnStatistic(outerKey);
+
+        // THEN
+        // Every preserved row survives, so the preserved key keeps its own range and ndv instead of the
+        // 32 values of the other side; a GROUP BY on it must not be estimated at a few dozen rows.
+        Assertions.assertEquals(106_421_169, outerKeyAfterJoin.getDistinctValuesCount(), 1);
+        Assertions.assertEquals(0, outerKeyAfterJoin.getMinValue(), 0.001);
+        Assertions.assertEquals(771_126_758, outerKeyAfterJoin.getMaxValue(), 0.001);
+        Assertions.assertEquals(0.007, outerKeyAfterJoin.getNullsFraction(), 0.001);
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = OuterJoin.class)
     public void testOuterJoinEqForNullDoesNotTreatNullKeysAsUnmatched(OuterJoin outerJoin) {
         // GIVEN
         final var outerJoinKey = columnRefFactory.create("outer_key", IntegerType.INT, true);
@@ -982,6 +1448,82 @@ public class StatisticsCalculatorTest {
 
         // THEN
         Assertions.assertTrue(innerValStatAfterJoin.getNullsFraction() < outerNullFraction);
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = OuterJoin.class)
+    public void testOuterJoinKeepsPreservedSideStats(OuterJoin outerJoin) {
+        // GIVEN
+        JoinOperator joinType = JoinOperator.RIGHT_OUTER_JOIN;
+        if (outerJoin == OuterJoin.LEFT_OUTER_JOIN) {
+            joinType = JoinOperator.LEFT_OUTER_JOIN;
+        }
+
+        final var leftKey = columnRefFactory.create("left_key", FloatType.DOUBLE, true);
+        final var leftVal = columnRefFactory.create("left_val", IntegerType.INT, true);
+        final var rightKey = columnRefFactory.create("right_key", FloatType.DOUBLE, true);
+        columnRefFactory.updateColumnToRelationIds(leftKey.getId(), 0);
+        columnRefFactory.updateColumnToRelationIds(leftVal.getId(), 0);
+        columnRefFactory.updateColumnToRelationIds(rightKey.getId(), 1);
+
+        final var leftHistogram = new Histogram(
+                Lists.newArrayList(new Bucket(0, 200, 400L, 1L)), Maps.newHashMap());
+        // The join does not touch this histogram. The join estimate (200 rows) caps the NDV of left_val below its
+        // input NDV, and the outer join restores it.
+        final var leftValHistogram = new Histogram(
+                Lists.newArrayList(new Bucket(0, 200, 400L, 1L)), Maps.newHashMap());
+        final var leftGroup = new Group(0);
+        leftGroup.setStatistics(Statistics.builder().setOutputRowCount(400)
+                .addColumnStatistic(leftKey, new ColumnStatistic(0, 200, 0, 8, 200, leftHistogram,
+                        ColumnStatistic.StatisticType.ESTIMATE))
+                .addColumnStatistic(leftVal, new ColumnStatistic(0, 200, 0, 8, 300, leftValHistogram,
+                        ColumnStatistic.StatisticType.ESTIMATE))
+                .build());
+        leftGroup.setLogicalProperty(new LogicalProperty(new ColumnRefSet(Lists.newArrayList(leftKey, leftVal))));
+
+        final var rightHistogram = new Histogram(
+                Lists.newArrayList(new Bucket(0, 100, 100L, 1L)), Maps.newHashMap());
+        final var rightGroup = new Group(1);
+        rightGroup.setStatistics(Statistics.builder().setOutputRowCount(100)
+                .addColumnStatistic(rightKey, new ColumnStatistic(0, 100, 0, 8, 100, rightHistogram,
+                        ColumnStatistic.StatisticType.ESTIMATE))
+                .build());
+        rightGroup.setLogicalProperty(new LogicalProperty(new ColumnRefSet(Lists.newArrayList(rightKey))));
+
+        final var joinPred = new BinaryPredicateOperator(BinaryType.EQ, leftKey, rightKey);
+        final var groupExpr = new GroupExpression(new LogicalJoinOperator(joinType, joinPred),
+                Lists.newArrayList(leftGroup, rightGroup));
+        groupExpr.setGroup(new Group(2));
+        final var exprCtx = new ExpressionContext(groupExpr);
+        final var calc = new StatisticsCalculator(exprCtx, columnRefFactory, optimizerContext);
+
+        // WHEN
+        calc.estimatorStats();
+        final var joinStats = exprCtx.getStatistics();
+
+        // THEN
+        final var leftKeyStat = joinStats.getColumnStatistic(leftKey);
+        final var rightKeyStat = joinStats.getColumnStatistic(rightKey);
+        if (outerJoin == OuterJoin.LEFT_OUTER_JOIN) {
+            Assertions.assertEquals(400, joinStats.getOutputRowCount(), 0.0001);
+            Assertions.assertEquals(200, leftKeyStat.getDistinctValuesCount(), 0.0001);
+            Assertions.assertEquals(0, leftKeyStat.getMinValue(), 0.0001);
+            Assertions.assertEquals(200, leftKeyStat.getMaxValue(), 0.0001);
+            // The preserved NDV is larger than the joined NDV so the joined histogram cannot be used
+            Assertions.assertNull(leftKeyStat.getHistogram());
+            // The restored NDV is larger than the capped one, but the join did not build this histogram, so it stays.
+            final var leftValStat = joinStats.getColumnStatistic(leftVal);
+            Assertions.assertEquals(300, leftValStat.getDistinctValuesCount(), 0.0001);
+            Assertions.assertSame(leftValHistogram, leftValStat.getHistogram());
+        } else {
+            Assertions.assertEquals(200, joinStats.getOutputRowCount(), 0.0001);
+            Assertions.assertEquals(100, rightKeyStat.getDistinctValuesCount(), 0.0001);
+            Assertions.assertEquals(0, rightKeyStat.getMinValue(), 0.0001);
+            Assertions.assertEquals(100, rightKeyStat.getMaxValue(), 0.0001);
+            // restorePreservedKeys discards the histogram of a known preserved key, and restoring the other
+            // preserved columns does not bring it back.
+            Assertions.assertNull(rightKeyStat.getHistogram());
+        }
     }
 
     @Test
@@ -1282,6 +1824,238 @@ public class StatisticsCalculatorTest {
         ctx = new ExpressionContext(groupExpr);
         new StatisticsCalculator(ctx, columnRefFactory, optimizerContext).estimatorStats();
         Assertions.assertEquals(10000, ctx.getStatistics().getOutputRowCount(), 1);
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = OuterJoin.class)
+    public void testOuterJoinRepeatedMatchesKeepPreservedKeyDomain(OuterJoin outerJoin) {
+        ColumnRefOperator outerKey = columnRefFactory.create("outer_key", IntegerType.BIGINT, true);
+        ColumnRefOperator innerKey = columnRefFactory.create("inner_key", IntegerType.BIGINT, true);
+        Group outer = joinChild(0, 1000, ImmutableMap.of(outerKey,
+                new ColumnStatistic(0, 1000, 0.1, 8, 800)));
+        Group inner = joinChild(1, 100_000, ImmutableMap.of(innerKey,
+                new ColumnStatistic(100, 200, 0, 8, 100)));
+        boolean left = outerJoin == OuterJoin.LEFT_OUTER_JOIN;
+        Statistics joined = estimateJoin(left ? JoinOperator.LEFT_OUTER_JOIN : JoinOperator.RIGHT_OUTER_JOIN,
+                new BinaryPredicateOperator(BinaryType.EQ, outerKey, innerKey),
+                left ? outer : inner, left ? inner : outer);
+
+        Assertions.assertTrue(joined.getOutputRowCount() > 1000);
+        ColumnStatistic key = joined.getColumnStatistic(outerKey);
+        Assertions.assertEquals(800, key.getDistinctValuesCount(), 0.001);
+        Assertions.assertEquals(0, key.getMinValue(), 0.001);
+        Assertions.assertEquals(1000, key.getMaxValue(), 0.001);
+        // Preserve main's existing scaling when matches multiply the output rows.
+        Assertions.assertEquals(100.0 / joined.getOutputRowCount(), key.getNullsFraction(), 0.000001);
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = JoinOperator.class, names = {"LEFT_OUTER_JOIN", "RIGHT_OUTER_JOIN", "FULL_OUTER_JOIN"})
+    public void testOuterJoinPreservesStringBoundsForRangeDerivation(JoinOperator joinType) {
+        ColumnRefOperator leftKey = columnRefFactory.create("left_key", VarcharType.VARCHAR, true);
+        ColumnRefOperator rightKey = columnRefFactory.create("right_key", VarcharType.VARCHAR, true);
+        ColumnStatistic leftStatistic = ColumnStatistic.builder().setMinString("a").setMaxString("z")
+                .setDistinctValuesCount(1000).setNullsFraction(0.1).setAverageRowSize(8).build();
+        ColumnStatistic rightStatistic = ColumnStatistic.builder().setMinString("m").setMaxString("t")
+                .setDistinctValuesCount(100).setNullsFraction(0.2).setAverageRowSize(8).build();
+        Group left = joinChild(0, 10_000, ImmutableMap.of(leftKey, leftStatistic));
+        Group right = joinChild(1, 10_000, ImmutableMap.of(rightKey, rightStatistic));
+        BinaryPredicateOperator equality = new BinaryPredicateOperator(BinaryType.EQ, leftKey, rightKey);
+        boolean correlatedEstimate = connectContext.getSessionVariable().isUseCorrelatedJoinEstimate();
+        boolean deriveRange = connectContext.getSessionVariable().enableCboDeriveRangeJoinPredicate();
+        try {
+            connectContext.getSessionVariable().setUseCorrelatedJoinEstimate(true);
+            connectContext.getSessionVariable().setCboDeriveRangeJoinPredicate(true);
+            Statistics joined = estimateJoin(joinType, equality, left, right);
+            // Repeated matches avoid input-statistic restoration by the nullable-side padding loop.
+            Assertions.assertEquals(72_000, joined.getOutputRowCount(), 0.001);
+            for (ColumnRefOperator key : List.of(leftKey, rightKey)) {
+                ColumnStatistic original = key == leftKey ? leftStatistic : rightStatistic;
+                ColumnStatistic actual = joined.getColumnStatistic(key);
+                boolean preserved = joinType.isFullOuterJoin() ||
+                        (joinType.isLeftOuterJoin() ? key == leftKey : key == rightKey);
+                Assertions.assertEquals(preserved ? original.getMinString() : null, actual.getMinString());
+                Assertions.assertEquals(preserved ? original.getMaxString() : null, actual.getMaxString());
+                Assertions.assertEquals(preserved ? original.getNullsFraction() * 10_000 / 72_000 : 0,
+                        actual.getNullsFraction(), 0.000001);
+            }
+            Statistics innerJoined = estimateJoin(JoinOperator.INNER_JOIN, equality, left, right);
+            for (ColumnRefOperator key : List.of(leftKey, rightKey)) {
+                Assertions.assertNull(innerJoined.getColumnStatistic(key).getMinString());
+                Assertions.assertNull(innerJoined.getColumnStatistic(key).getMaxString());
+            }
+
+            ColumnRefOperator preservedKey = joinType.isRightOuterJoin() ? rightKey : leftKey;
+            ColumnStatistic original = preservedKey == leftKey ? leftStatistic : rightStatistic;
+            OptExpression outer = OptExpression.create(new LogicalJoinOperator(joinType, equality),
+                    OptExpression.create(new LogicalValuesOperator(List.of(leftKey))),
+                    OptExpression.create(new LogicalValuesOperator(List.of(rightKey))));
+            outer.setLogicalProperty(new LogicalProperty(new ColumnRefSet(List.of(leftKey, rightKey))));
+            outer.setStatistics(joined);
+            ColumnRefOperator lower = columnRefFactory.create("lower", VarcharType.VARCHAR, true);
+            ColumnRefOperator upper = columnRefFactory.create("upper", VarcharType.VARCHAR, true);
+            OptExpression bounds = OptExpression.create(new LogicalValuesOperator(List.of(lower, upper)));
+            bounds.deriveLogicalPropertyItself();
+            bounds.setStatistics(Statistics.builder().setOutputRowCount(1)
+                    .addColumnStatistic(lower, ColumnStatistic.unknown())
+                    .addColumnStatistic(upper, ColumnStatistic.unknown()).build());
+            ScalarOperator range = Utils.compoundAnd(
+                    new BinaryPredicateOperator(BinaryType.GT, preservedKey, lower),
+                    new BinaryPredicateOperator(BinaryType.LT, preservedKey, upper));
+            OptExpression rangeJoin = OptExpression.create(new LogicalJoinOperator(JoinOperator.INNER_JOIN, range),
+                    outer, bounds);
+            DeriveRangeJoinPredicateRule rule = new DeriveRangeJoinPredicateRule();
+            Assertions.assertTrue(rule.check(rangeJoin, optimizerContext));
+            List<OptExpression> rewritten = rule.transform(rangeJoin, optimizerContext);
+            Assertions.assertEquals(1, rewritten.size());
+            Assertions.assertEquals(Utils.compoundAnd(
+                    new BinaryPredicateOperator(BinaryType.LE, lower,
+                            new ConstantOperator(original.getMaxString(), StringType.STRING)),
+                    new BinaryPredicateOperator(BinaryType.GE, upper,
+                            new ConstantOperator(original.getMinString(), StringType.STRING))),
+                    rewritten.get(0).inputAt(1).getOp().getPredicate());
+        } finally {
+            connectContext.getSessionVariable().setUseCorrelatedJoinEstimate(correlatedEstimate);
+            connectContext.getSessionVariable().setCboDeriveRangeJoinPredicate(deriveRange);
+        }
+    }
+
+    @Test
+    public void testFullOuterJoinKeepsBothKeyDomainsWithRepeatedMatches() {
+        ColumnRefOperator leftKey = columnRefFactory.create("left_key", IntegerType.BIGINT, true);
+        ColumnRefOperator rightKey = columnRefFactory.create("right_key", IntegerType.BIGINT, true);
+        Group left = joinChild(0, 10_000, ImmutableMap.of(leftKey,
+                new ColumnStatistic(0, 1000, 0.1, 8, 1000)));
+        Group right = joinChild(1, 10_000, ImmutableMap.of(rightKey,
+                new ColumnStatistic(500, 1500, 0.2, 8, 1000)));
+        Statistics joined = estimateJoin(JoinOperator.FULL_OUTER_JOIN,
+                new BinaryPredicateOperator(BinaryType.EQ, leftKey, rightKey), left, right);
+
+        Assertions.assertTrue(joined.getOutputRowCount() > 10_000);
+        ColumnStatistic leftStat = joined.getColumnStatistic(leftKey);
+        ColumnStatistic rightStat = joined.getColumnStatistic(rightKey);
+        Assertions.assertEquals(1000, leftStat.getDistinctValuesCount(), 0.001);
+        Assertions.assertEquals(0, leftStat.getMinValue(), 0.001);
+        Assertions.assertEquals(1000, leftStat.getMaxValue(), 0.001);
+        Assertions.assertEquals(1000, rightStat.getDistinctValuesCount(), 0.001);
+        Assertions.assertEquals(500, rightStat.getMinValue(), 0.001);
+        Assertions.assertEquals(1500, rightStat.getMaxValue(), 0.001);
+        Assertions.assertEquals(1000.0 / joined.getOutputRowCount(), leftStat.getNullsFraction(), 0.000001);
+        Assertions.assertEquals(2000.0 / joined.getOutputRowCount(), rightStat.getNullsFraction(), 0.000001);
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = OuterJoin.class)
+    public void testOuterJoinHistogramDoesNotDiscardUnmatchedKeyRange(OuterJoin outerJoin) {
+        ColumnRefOperator outerKey = columnRefFactory.create("outer_key", IntegerType.BIGINT, true);
+        ColumnRefOperator innerKey = columnRefFactory.create("inner_key", IntegerType.BIGINT, true);
+        ColumnStatistic outerStatistic = uniformHistogramStatistic(0, 1000, 1000);
+        ColumnStatistic innerStatistic = uniformHistogramStatistic(100, 200, 100);
+        Group outer = joinChild(0, 1000, ImmutableMap.of(outerKey, outerStatistic));
+        Group inner = joinChild(1, 100, ImmutableMap.of(innerKey, innerStatistic));
+        boolean histogramEnabled = connectContext.getSessionVariable().isCboEnableHistogramJoinEstimation();
+        boolean correlatedEstimate = connectContext.getSessionVariable().isUseCorrelatedJoinEstimate();
+        try {
+            connectContext.getSessionVariable().setCboEnableHistogramJoinEstimation(true);
+            connectContext.getSessionVariable().setUseCorrelatedJoinEstimate(true);
+            boolean left = outerJoin == OuterJoin.LEFT_OUTER_JOIN;
+            Statistics joined = estimateJoin(left ? JoinOperator.LEFT_OUTER_JOIN : JoinOperator.RIGHT_OUTER_JOIN,
+                    new BinaryPredicateOperator(BinaryType.EQ, outerKey, innerKey),
+                    left ? outer : inner, left ? inner : outer);
+            ColumnStatistic preserved = joined.getColumnStatistic(outerKey);
+            Assertions.assertNull(preserved.getHistogram());
+            Assertions.assertEquals(0, preserved.getMinValue(), 0.001);
+            Assertions.assertEquals(1000, preserved.getMaxValue(), 0.001);
+            Assertions.assertEquals(1000, preserved.getDistinctValuesCount(), 0.001);
+            Statistics filtered = PredicateStatisticsCalculator.statisticsCalculate(
+                    new BinaryPredicateOperator(BinaryType.LT, outerKey, ConstantOperator.createBigint(100)), joined);
+            Assertions.assertEquals(100, filtered.getOutputRowCount(), 0.001,
+                    "Unmatched keys below the inner range still retain their selectivity");
+
+            // Preserve the nullable side's existing statistics and null-padding behavior.
+            ColumnStatistic nullable = joined.getColumnStatistic(innerKey);
+            Assertions.assertSame(innerStatistic.getHistogram(), nullable.getHistogram());
+            Assertions.assertEquals(0.9, nullable.getNullsFraction(), 0.001);
+
+            // Inner joins continue to carry the histogram of the matching key intersection.
+            Statistics innerJoined = estimateJoin(JoinOperator.INNER_JOIN,
+                    new BinaryPredicateOperator(BinaryType.EQ, outerKey, innerKey), outer, inner);
+            for (ColumnRefOperator key : List.of(outerKey, innerKey)) {
+                Histogram histogram = innerJoined.getColumnStatistic(key).getHistogram();
+                Assertions.assertNotNull(histogram);
+                Assertions.assertEquals(100, histogram.getBuckets().get(0).getLower(), 0.001);
+                Assertions.assertEquals(200, histogram.getBuckets().get(0).getUpper(), 0.001);
+            }
+        } finally {
+            connectContext.getSessionVariable().setCboEnableHistogramJoinEstimation(histogramEnabled);
+            connectContext.getSessionVariable().setUseCorrelatedJoinEstimate(correlatedEstimate);
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    public void testFullOuterJoinRestoresHistogramsAfterBothNullPaddingPasses(boolean histogramEnabled) {
+        ColumnRefOperator leftKey = columnRefFactory.create("left_key", IntegerType.BIGINT, true);
+        ColumnRefOperator rightKey = columnRefFactory.create("right_key", IntegerType.BIGINT, true);
+        Group left = joinChild(0, 1000, ImmutableMap.of(leftKey, uniformHistogramStatistic(0, 1000, 1000)));
+        Group right = joinChild(1, 1000, ImmutableMap.of(rightKey, uniformHistogramStatistic(500, 1500, 1000)));
+        boolean originalHistogramEnabled = connectContext.getSessionVariable().isCboEnableHistogramJoinEstimation();
+        boolean correlatedEstimate = connectContext.getSessionVariable().isUseCorrelatedJoinEstimate();
+        try {
+            connectContext.getSessionVariable().setCboEnableHistogramJoinEstimation(histogramEnabled);
+            connectContext.getSessionVariable().setUseCorrelatedJoinEstimate(true);
+            Statistics joined = estimateJoin(JoinOperator.FULL_OUTER_JOIN,
+                    new BinaryPredicateOperator(BinaryType.EQ, leftKey, rightKey), left, right);
+            ColumnStatistic leftStatistic = joined.getColumnStatistic(leftKey);
+            ColumnStatistic rightStatistic = joined.getColumnStatistic(rightKey);
+            Assertions.assertNull(leftStatistic.getHistogram());
+            Assertions.assertNull(rightStatistic.getHistogram());
+            Assertions.assertEquals(0, leftStatistic.getMinValue(), 0.001);
+            Assertions.assertEquals(1000, leftStatistic.getMaxValue(), 0.001);
+            Assertions.assertEquals(500, rightStatistic.getMinValue(), 0.001);
+            Assertions.assertEquals(1500, rightStatistic.getMaxValue(), 0.001);
+            if (histogramEnabled) {
+                // Both sides have unmatched rows, so the second null-padding pass must preserve the first fix.
+                Assertions.assertTrue(leftStatistic.getNullsFraction() > 0);
+                Assertions.assertTrue(rightStatistic.getNullsFraction() > 0);
+            }
+            Statistics leftFiltered = PredicateStatisticsCalculator.statisticsCalculate(
+                    new BinaryPredicateOperator(BinaryType.LT, leftKey, ConstantOperator.createBigint(500)), joined);
+            Statistics rightFiltered = PredicateStatisticsCalculator.statisticsCalculate(
+                    new BinaryPredicateOperator(BinaryType.GT, rightKey, ConstantOperator.createBigint(1000)), joined);
+            Assertions.assertEquals(500, leftFiltered.getOutputRowCount(), 0.001);
+            Assertions.assertEquals(500, rightFiltered.getOutputRowCount(), 0.001);
+        } finally {
+            connectContext.getSessionVariable().setCboEnableHistogramJoinEstimation(originalHistogramEnabled);
+            connectContext.getSessionVariable().setUseCorrelatedJoinEstimate(correlatedEstimate);
+        }
+    }
+
+    private static ColumnStatistic uniformHistogramStatistic(double min, double max, long rows) {
+        Histogram histogram = new Histogram(List.of(new Bucket(min, max, rows, 1L)), Map.of());
+        return ColumnStatistic.builder().setMinValue(min).setMaxValue(max).setDistinctValuesCount(rows)
+                .setNullsFraction(0).setAverageRowSize(8).setHistogram(histogram).build();
+    }
+
+    @Test
+    public void testOuterJoinDomainRestorationRespectsDisabledHistograms() {
+        ColumnRefOperator leftKey = columnRefFactory.create("left_key", IntegerType.BIGINT, true);
+        ColumnRefOperator rightKey = columnRefFactory.create("right_key", IntegerType.BIGINT, true);
+        Histogram histogram = new Histogram(List.of(new Bucket(0, 1000, 1000L, 1L)), Map.of());
+        Group left = joinChild(0, 1000, ImmutableMap.of(leftKey,
+                ColumnStatistic.builder().setMinValue(0).setMaxValue(1000).setDistinctValuesCount(1000)
+                        .setHistogram(histogram).build()));
+        Group right = joinChild(1, 10, ImmutableMap.of(rightKey,
+                new ColumnStatistic(100, 110, 0, 8, 10)));
+        boolean histogramEnabled = connectContext.getSessionVariable().isCboEnableHistogramJoinEstimation();
+        try {
+            connectContext.getSessionVariable().setCboEnableHistogramJoinEstimation(false);
+            Statistics joined = estimateJoin(JoinOperator.LEFT_OUTER_JOIN,
+                    new BinaryPredicateOperator(BinaryType.EQ, leftKey, rightKey), left, right);
+            Assertions.assertNull(joined.getColumnStatistic(leftKey).getHistogram());
+        } finally {
+            connectContext.getSessionVariable().setCboEnableHistogramJoinEstimation(histogramEnabled);
+        }
     }
 
     private Statistics estimateJoin(JoinOperator joinType, ScalarOperator onPredicate, Group leftGroup,

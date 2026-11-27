@@ -20,9 +20,6 @@ select * from t_non_replicated_storage_multi_replica_pk;
 abc	10	10
 -- !result
 -- name: test_insert_partial_update_with_inverted_index @native
-ADMIN SET FRONTEND CONFIG ("enable_experimental_gin" = "true");
--- result:
--- !result
 CREATE TABLE t_gin (
     pk BIGINT NOT NULL,
     v1 INT NOT NULL DEFAULT '0',

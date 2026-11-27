@@ -3,6 +3,7 @@ displayed_sidebar: docs
 toc_max_heading_level: 4
 sidebar_position: 50
 description: "How to create and use full-text inverted indexes in StarRocks (from v3.3) to accelerate text keyword searches and LIKE queries by indexing individual words."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 import Beta from '../../_assets/commonMarkdown/_beta.mdx'
@@ -28,12 +29,6 @@ During full-text searches, StarRocks can locate index entries containing the sea
 ## Basic operation
 
 ### Create full-text inverted index
-
-Before creating a full-text inverted index, you need to enable FE configuration item `enable_experimental_gin`.
-
-```sql
-ADMIN SET FRONTEND CONFIG ("enable_experimental_gin" = "true");
-```
 
 :::note
 When creating a full-text inverted index for a table, you must disable the `replicated_storage` feature for the table.

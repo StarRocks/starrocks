@@ -2,6 +2,7 @@
 sidebar_position: 120
 displayed_sidebar: docs
 description: "为 Flink 作业启用多表事务，以便在一个处理周期内向同一数据库中的多个表写入数据。"
+products: [oss, enterprise, anywhere]
 ---
 
 # 使用 Apache Flink® 通过多表事务加载数据
@@ -30,7 +31,7 @@ StarRocks Flink Connector 支持多表事务，可将 Flink 中的数据原子�
 
 | 能力                         | 描述                                                         |
 | ---------------------------- | ------------------------------------------------------------ |
-| 跨表原子提交                 | 同一刷新周期内的所有表共享一个 StarRocks 事务标签，Prepare 和 Commit 操作统一执行。 |
+| 跨表原子提交                 | 同一刷新周期内的所有表共享一个 StarRocks 事务标签，并针对该标签统一发出一次 `POST /api/transaction/commit`（不调用 prepare——StarRocks 不支持对多表事务执行 prepare）。 |
 | 源事务完整性                 | 提交时机由 `transactionEnd` 标志控制，仅在完整的源事务边界处进行提交。 |
 | 亚秒级数据可见性             | 数据定期刷新到 StarRocks（`/api/transaction/load`），当满足 `transactionEnd` 和定时器条件时进行提交。 |
 | N:1 事务映射                 | 多个源事务可以在单个 StarRocks 事务中累积，无需按 1:1 映射。 |
@@ -55,24 +56,24 @@ StarRocks Flink Connector 支持多表事务，可将 Flink 中的数据原子�
 
 #### `sink.transaction.multi-table.mini-switch-interval-ms`
 
-- Type: Long
-- Default: `-1`（自动）
-- Unit: ms
-- Description: 每个分区执行 Chunk 切换之间的最小间隔（毫秒）。在此间隔内，源事务会被批量合并到一次 Stream Load 中，从而限制 HTTP 请求数量。`-1` 表示自动计算为 `min(1000, max(500, sink.buffer-flush.interval-ms/4))`；设置正数时则使用指定值。
+- 类型：Long
+- 默认值：`-1`（自动）
+- 单位：毫秒
+- 描述：每个分区执行 Chunk 切换之间的最小间隔（毫秒）。在此间隔内，源事务会被批量合并到一次 Stream Load 中，从而限制 HTTP 请求数量。`-1` 表示自动计算为 `min(1000, max(500, sink.buffer-flush.interval-ms/4))`；设置正数时则使用指定值。
 
 #### `sink.transaction.multi-table.min-switch-bytes`
 
-- Type: Long
-- Default: `1048576`（1 MB）
-- Unit: Bytes
-- Description: 基于时间间隔触发的 Chunk 切换仅在某个 Region 的活动 Chunk 至少累积了此字节数后才会执行。这样，低流量分区可以将更多源事务批量合并到一次 Stream Load 中，而不是产生大量微小请求。达到半满时的预留空间、缓冲区大小导致的内存压力，或者自该分区上次切换后经过完整的 `sink.buffer-flush.interval-ms`，都会强制执行切换，不受此大小阈值限制。因此，即使设置了较大的阈值，持续的低流量数据流仍会大约按照 flush 间隔进行切换，不会被无限期地延迟。设置为 `<=0` 可禁用大小限制，恢复之前按时间间隔切换的行为。
+- 类型：Long
+- 默认值：`1048576`（1 MB）
+- 单位：字节
+- 描述：基于时间间隔触发的 Chunk 切换仅在某个 Region 的活动 Chunk 至少累积了此字节数后才会执行。这样，低流量分区可以将更多源事务批量合并到一次 Stream Load 中，而不是产生大量微小请求。达到半满时的预留空间、缓冲区大小导致的内存压力，或者自该分区上次切换后经过完整的 `sink.buffer-flush.interval-ms`，都会强制执行切换，不受此大小阈值限制。因此，即使设置了较大的阈值，持续的低流量数据流仍会大约按照 flush 间隔进行切换，不会被无限期地延迟。设置为 `<=0` 可禁用大小限制，恢复之前按时间间隔切换的行为。当 `mini-switch-interval-ms` 等于（或大于）`sink.buffer-flush.interval-ms` 时，此选项对 txnEnd 时的切换不起作用（参见块生命周期与 `miniInterval` 批处理）。
 
 #### `sink.transaction.multi-table.max-txn-bytes`
 
-- Type: Long
-- Default: `0`（无限制）
-- Unit: Bytes
-- Description: 在等待 `txnEnd` 期间，单个 sink 子任务可以缓冲的正在进行中的源事务数据的硬上限（字节）。对于在 `txnEnd` 之前无法 flush 的数据，Writer 不会阻塞（参见限制 7），因此单个源事务可能增长到超过 `2 × buffer-size`。此选项用于限制这种增长；超过限制时，任务将因明确的错误而失败。`0` 表示不限制大小，此时唯一的限制是 TaskManager 的堆内存。
+- 类型：Long
+- 默认值：`0`（无限制）
+- 单位：字节
+- 描述：在等待 `txnEnd` 期间，单个 sink 子任务可以缓冲的正在进行中的源事务数据的硬上限（字节）。对于在 `txnEnd` 之前无法 flush 的数据，Writer 不会阻塞（参见限制 7），因此单个源事务可能增长到超过 `2 × buffer-size`。此选项用于限制这种增长；超过限制时，任务将因明确的错误而失败。`0` 表示不限制大小，此时唯一的限制是 TaskManager 的堆内存。
 
 ### 加载相关配置
 
@@ -100,6 +101,11 @@ StarRocks Flink Connector 支持多表事务，可将 Flink 中的数据原子�
 
 - 推荐值：`1000`
 - 描述：控制提交周期。可将其设置为 `1000` 以实现约一秒的数据新鲜度。
+
+#### `sink.http.keep-alive.enabled`
+
+- 推荐值：`true`
+- 描述：推荐开启。加载请求以及 BEGIN / PREPARE / COMMIT / ROLLBACK 请求复用 HTTP 连接，而不是为每个请求新建一个连接。默认关闭（参见最佳实践 6）。
 
 #### `sink.properties.format`
 
@@ -358,7 +364,9 @@ public class WriteMultipleTablesWithTransaction {
         String password = params.get("password", "");
 
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
-        env.enableCheckpointing(10_000);  // Checkpoint is for recovery only; does not affect commit cycle
+        // 仅支持对齐 Checkpoint。每次 Checkpoint 还会排空并提交
+        // 当前开启的共享事务（参见最佳实践 3）。
+        env.enableCheckpointing(10_000);
 
         // --- 数据源 ---
         // 替换为实际的 Kafka Source，将数据反序列化为 TxnEvent
@@ -381,9 +389,11 @@ public class WriteMultipleTablesWithTransaction {
 
         // --- 步骤 3：配置连接器 ---
         // sink.transaction.multi-table.enabled=true 激活每分区的 region
-        // 在 StreamLoadManagerV2 内部进行跟踪：每个分区的 region 在其 txnEnd 到达时独立切换，
-        // 仅当所有活跃分区均已切换后才触发提交。
-        // 活跃分区均已完成切换。
+        // 在 StreamLoadManagerV2 内部进行跟踪：每个分区的所有 region 在其 txnEnd 边界处
+        // 一起切换，且与其他分区相互独立。
+        // 定时器驱动的提交不会等待每个分区：它切换处于干净边界的分区，
+        // 而处于事务中途的分区只贡献其之前已切换的 chunk——
+        // 其进行中的行会进入下一个共享事务。
         StarRocksSinkOptions options = StarRocksSinkOptions.builder()
                 .withProperty("jdbc-url", jdbcUrl)
                 .withProperty("load-url", loadUrl)
@@ -395,6 +405,7 @@ public class WriteMultipleTablesWithTransaction {
                 .withProperty("sink.semantic", "at-least-once")
                 .withProperty("sink.transaction.multi-table.enabled", "true")  // Enable multi-table txn
                 .withProperty("sink.buffer-flush.interval-ms", "1000")         // ~1s data freshness
+                .withProperty("sink.http.keep-alive.enabled", "true")          // Recommended: reuse HTTP connections
                 .withProperty("sink.properties.format", "json")
                 .withProperty("sink.properties.strip_outer_array", "true")
                 .build();
@@ -440,16 +451,18 @@ keyBy(sourcePartition) ———— Ensures same-partition rows go to the same s
   v
 StarRocksDynamicSinkFunctionV2 (via SinkFunctionFactory.createSinkFunction)
   |
-  |  +——————————— StreamLoadManagerV2 (multi-table txn mode) —————————-——+
+  |  +——————————— StreamLoadManagerV2 (multi-table txn mode) ———————————+
   |  |                                                                   |
-  |  |  Per-partition, per-table regions:                                |
+  |  |  Per-partition, per-table regions:                                 |
   |  |    Region(P0, orders), Region(P0, order_items)                    |
   |  |    Region(P2, orders), Region(P2, order_items)                    |
   |  |                                                                   |
   |  |  Each region tracks:                                              |
   |  |    - activeChunk / inactiveChunks                                 |
-  |  |    - lastSwitchTimeMs      (for miniInterval batching)            |
   |  |    - activeChunkCleanBoundary (true iff last task event is txnEnd)|
+  |  |    - commit watermark (set at the commit cut, see below)          |
+  |  |  Each partition tracks:                                           |
+  |  |    - last switch time         (for miniInterval batching)         |
   |  |                                                                   |
   |  |  write(partition, db, table, row)  [task thread]                  |
   |  |    -> routes to Region(partition, db, table)                      |
@@ -458,34 +471,39 @@ StarRocksDynamicSinkFunctionV2 (via SinkFunctionFactory.createSinkFunction)
   |  |       activeChunk only freezes at a txnEnd boundary               |
   |  |                                                                   |
   |  |  setCommitAllowed(partition, txnEnd=true)  [task thread]          |
-  |  |    -> region.tryMiniIntervalSwitch():                             |
-  |  |         sets activeChunkCleanBoundary = true                      |
-  |  |         if (now - lastSwitchTimeMs >= miniInterval                |
-  |  |             && activeChunk has data): switchChunkForCommit        |
-  |  |         else: data batches into activeChunk with subsequent       |
-  |  |               completed source transactions (N:1 mapping)         |
+  |  |    -> marks every region of the partition clean                   |
+  |  |    -> if (miniInterval elapsed && a region >= minSwitchBytes)     |
+  |  |          || commitInterval elapsed || half-full || cache pressure:|
+  |  |           lockstepSwitchPartition  (freshness-bounded)            |
+  |  |       else: batch into activeChunk with later txns (N:1)          |
   |  |    -> PartitionCommitTracker.onTxnEnd(partition)                  |
   |  |                                                                   |
   |  |  SharedTransactionCoordinator:                                    |
   |  |    -> eagerly opens shared txn before any flush                   |
   |  |    -> all autonomous flushes use the shared label                 |
-  |  |    -> recycles idle txn at 80% of server timeout                  |
+  |  |    -> recycles the txn at 80% of the BEGIN timeout                |
   |  |                                                                   |
   |  |  Manager thread (every scanningFrequency):                        |
-  |  |    -> tryForceCleanSwitch per region:                             |
-  |  |         if cleanBoundary && has data && miniInterval elapsed      |
-  |  |             -> switchChunkForCommit (source-idle fallback)        |
+  |  |    -> force-switch clean partitions (source-idle):                |
+  |  |         if all-clean && has data && (pressure                     |
+  |  |             || (bytes>=minSwitchBytes && miniInterval elapsed))   |
+  |  |             -> lockstepSwitchPartition                            |
   |  |    -> tryStartTimerDrivenCommit:                                  |
-  |  |         if commitInterval elapsed && hasDataLoaded                |
+  |  |         if commitInterval elapsed && committable data             |
   |  |             -> set commitInFlight = true                          |
   |  |    -> autonomous flush: drain inactiveChunks via streamLoad       |
   |  |       (never touches activeChunk in multi-table mode)             |
   |  |                                                                   |
   |  |  Manager thread (commitInFlight=true):                            |
-  |  |    -> triggerLoadIfNeeded per region (HTTP /api/transaction/load) |
+  |  |    -> commit cut, per partition:                                  |
+  |  |         clean: switch activeChunk, then set watermark             |
+  |  |         dirty: set watermark at its last switch; its              |
+  |  |                activeChunk goes into the next shared txn          |
+  |  |    -> triggerLoadIfNeeded for chunks <= watermark                 |
+  |  |       (HTTP /api/transaction/load)                                |
   |  |    -> wait all loads complete                                     |
   |  |    -> unified commit via SharedTransactionCoordinator             |
-  |  |    -> reset tracker; open next shared txn                         |
+  |  |    -> lift watermarks; reset tracker; open next shared txn        |
   |  +———————————————————————————————————————————————————————————————————+
   |
   v
@@ -496,21 +514,35 @@ StarRocks (test.orders + test.order_items)
 
 ### 块生命周期与 `miniInterval` 批处理
 
-每个 `(partition, table)` 区域有一个 `activeChunk`（当前接受写入）和一个 `inactiveChunks` 的 FIFO（冻结数据，等待 HTTP 加载）。在多表事务模式下，**仅** 数据从 `activeChunk` 移入 `inactiveChunks` 的方式是通过 `switchChunkForCommit`，它恰好从三个地方被调用：
+每个 `(partition, table)` 区域有一个 `activeChunk`（当前接受写入）和一个 `inactiveChunks` 的 FIFO（冻结数据，等待 HTTP 加载）。在多表事务模式下，数据从 `activeChunk` 移入 `inactiveChunks` 的**唯一**方式是提交切换：它仅在干净的事务边界处进行，并且除保存点外，会同时作用于一个分区的所有区域（`lockstepSwitchPartition`）。提交切换恰好发生在以下四个位置：
 
-1. **任务线程，在 txnEnd 时** — 通过 `region.tryMiniIntervalSwitch()` 在 `setCommitAllowed(partition, true)` 内部。这是常见路径。
+1. **任务线程，在 txnEnd 时** — 在 `setCommitAllowed(partition, true)` 内部进行。该方法先将分区的每个区域标记为干净，然后为整个分区做出一次切换决策（规则见下文）。这是常见路径。
 
-2. **管理线程，源空闲回退** — 在每个扫描周期中，通过 `region.tryForceCleanSwitch()` 对那些 `activeChunk` 一直处于干净事务边界空闲状态的区域执行此操作。
+2. **管理线程，源空闲强制切换** — 在每个扫描周期中调用 `managerForceSwitchCleanBoundaryRegions()`，作用于所有区域**都**处于干净边界、且至少有一个区域包含数据行的分区。存在压力时（缓冲的字节数达到 `buffer-size`，或某个区域的 `activeChunk` 已半满），该分区会被立即切换；否则，仅当某个区域至少包含 `min-switch-bytes` 的数据，**并且**自该分区上次切换以来已经过 `miniSwitchIntervalMs` 时，才会切换。低于 `min-switch-bytes` 的空闲数据留给提交切分处理。
 
-3. **管理线程，保存点/回收** — 在验证每个区域都处于干净边界后，强制切换所有区域。
+3. **管理线程，提交切分** — 在每次定时器驱动的提交以及每次回收开始时进行（参见管理线程 — 时间驱动提交，以及共享事务协调）：切换每个干净分区，并在每个区域上冻结提交水位线。
 
-为避免在高吞吐量 CDC 中每个源事务产生一次 HTTP 加载，任务线程仅在距同一区域上次切换已过去至少 `miniSwitchIntervalMs` 时才执行切换。`miniSwitchIntervalMs` 的计算方式为 `min(1000 ms, max(100 ms, commitInterval / 10))`，因此 1 秒的提交间隔在 100 ms 时进行批处理，而 30 秒的间隔则将批处理上限设为 1 秒。在一个 miniInterval 窗口内，多个已完成的源事务会累积到同一个 `activeChunk` 中（N:1 映射），并在下次切换时一起冻结。
+4. **管理线程，保存点** — Checkpoint 刷新在验证每个区域都处于干净边界后，强制切换所有区域（参见最佳实践 3）。
 
-每个区域包含两个驱动这些决策的字段：
+为避免在高吞吐量 CDC 中每个源事务产生一次 HTTP 加载，txnEnd 路径仅在满足以下**任一**条件时才切换该分区；否则，已完成的事务会留在 `activeChunk` 中，与后续事务一起批处理：
 
-- `lastSwitchTimeMs` — 最近一次切换的纪元毫秒数。初始值为 0，因此区域创建后的第一个 txnEnd 始终会触发切换。
+- 自该分区上次切换以来已经过至少 `miniSwitchIntervalMs`，**并且**其至少一个区域的 `activeChunk` 中的数据量达到 `sink.transaction.multi-table.min-switch-bytes`（默认 1 MB；`<= 0` 表示禁用此大小检查）；
 
-- `activeChunkCleanBoundary` — 如果此区域上最近的任务线程事件是 `onTxnEnd` 或 `switchChunk`，则为 `true`。在任何 `write()` 之后为 `false`。管理线程的 `tryForceCleanSwitch` 仅在此标志为 `true` 时运行，因此它永远不会冻结部分源事务数据。
+- 自该分区上次切换以来已经过完整的 `commitInterval`（新鲜度上限，确保大小限制永远不会无限期地推迟已完成的数据）；
+
+- 某个区域的 `activeChunk` 达到写阻塞上限的一半（即 `buffer-size` 字节）；
+
+- 所有区域的缓冲字节总数达到 `buffer-size`。
+
+自动计算时，`miniSwitchIntervalMs` 为 `min(1000 ms, max(500 ms, commitInterval / 4))`，因此 2 秒的提交间隔按 500 ms 进行批处理，而 4 秒或更长的间隔则将批处理上限设为 1 秒（显式设置的 `sink.transaction.multi-table.mini-switch-interval-ms` 会覆盖此值）。在该窗口内，多个已完成的源事务会累积到同一个 `activeChunk` 中（N:1 映射），并在下次切换时一起冻结。
+
+大小限制仅在 `miniSwitchIntervalMs` 小于 `commitInterval` 时才起作用。如果将 `mini-switch-interval-ms` 设置为等于（或大于）`sink.buffer-flush.interval-ms`——或者在提交间隔不超过 500 ms 时自动计算为 500 ms——则新鲜度上限最迟在该间隔结束时就会达到，因此在该间隔过后，每个 txnEnd 都会触发切换（与数据大小无关），`min-switch-bytes` 对 txnEnd 路径不起作用。
+
+以下两项状态驱动这些决策：
+
+- 分区的上次切换时间（由管理器按分区维护，因此同一分区的所有区域一起进行批处理）。初始值为 0，因此分区的第一个 txnEnd 始终会触发切换。
+
+- `activeChunkCleanBoundary`（按区域维护）— 如果此区域上最近的任务线程事件是 txnEnd 或切换，则为 `true`。在任何 `write()` 之后为 `false`。管理线程执行的切换会在持有各区域写锁的情况下，重新检查该分区每个区域的此标志，只要有任一区域为脏就跳过该分区，因此永远不会冻结部分源事务数据。
 
 ### 任务线程 — 写入与 txnEnd
 
@@ -524,11 +556,12 @@ invoke(record)                                           [Flink task thread]
   |  if record carries transactionEnd=true:
   |      setCommitAllowed(partition, true)
   |          for each region owned by this partition:
-  |              region.tryMiniIntervalSwitch():
-  |                  cleanBoundary = true       // always (txnEnd observed)
-  |                  if (now - lastSwitchTimeMs >= miniInterval
-  |                      && activeChunk has data):
-  |                      switchChunkForCommit()  // freezes activeChunk
+  |              cleanBoundary = true           // always (txnEnd observed)
+  |          if (activeChunk has data) and (
+  |                (miniInterval elapsed && bytes >= minSwitchBytes)
+  |             || commitInterval elapsed since last switch   // freshness bound
+  |             || half-full headroom || memory pressure):
+  |              lockstepSwitchPartition()      // freezes all regions together
   |          partitionTracker.onTxnEnd(partition)  // safety bookkeeping only
 ```
 
@@ -538,19 +571,25 @@ invoke(record)                                           [Flink task thread]
 
 管理线程以 `scanningFrequency` 的频率运行扫描循环。每次迭代：
 
-1. **Ensure shared transaction**: 打开一个新连接（即时），或在当前连接接近 StarRocks 服务端超时时主动回收该连接（`timeout` 标头的 80%，默认 480 秒）。
+1. **确保共享事务**: 开启一个新的共享事务（提前开启），或在当前共享事务接近 StarRocks 服务端超时时主动回收它（`timeout` 标头的 80%，默认 480 秒）。
 
-2. **源空闲回退**: call `region.tryForceCleanSwitch()` on every region to freeze any `activeChunk` that is clean and has been idle for at least `miniInterval`. This handles the "source paused after a few txnEnds" case where the task thread stopped before issuing a fresh switch.
+2. **源空闲回退**: 对于所有 region **都**处于干净边界的分区，一旦其累积的数据达到 `min-switch-bytes`，且自其上次切换以来已经过 `miniSwitchIntervalMs`，就强制切换该分区；在内存压力下则立即强制切换（参见块生命周期与 `miniInterval` 批处理）。低于大小阈值时，空闲数据不会在此处切换——而是由下文的时间驱动提交对其进行切分并提交（参见步骤 3），因此即使源暂停，其数据仍会在一个 `commitInterval` 内变为可见。这用于处理「源在若干次 txnEnd 后暂停」的情况，即任务线程在发起新一次切换之前就已停止。
 
-3. **时间驱动的提交触发器**: 调用 `tryStartTimerDrivenCommit()`，如果满足条件则设置 `commitInFlight=true`**两者** 条件成立：
+3. **时间驱动的提交触发器**: 调用 `tryStartTimerDrivenCommit()`，该方法在以下**两个**条件均成立时设置 `commitInFlight=true`：
 
    - `now - lastCommitTimeMs >= commitInterval`（已配置的 `sink.buffer-flush.interval-ms`）。
 
-   - 存在待提交的数据——`txnCoordinator.hasDataLoaded()` 为 true，或至少有一个 region 仍有待处理的 inactiveChunks。
+   - 存在待提交的数据——`txnCoordinator.hasDataLoaded()` 为 true，至少有一个 region 有待处理的 inactiveChunks，或者某个分区整体处于干净边界，且有缓冲的活动行（因低于大小限制而被推迟），提交切分会将这些行冻结。最后这项检查在分区范围内进行，因此单独一个干净的 region（其兄弟表仍处于事务中途）不会触发一个无法推进的提交周期。
 
-4. **自主刷新**：通过 `FlushAndCommitStrategy` 排空任何 `inactiveChunks` 非空的 region。多表模式的 `flush()` 仅流出已冻结的非活跃 chunk——它**从不**不会触碰 `activeChunk`。这保证了在共享标签下到达 StarRocks 的每个 chunk 均来自已完成的源事务这一不变量。
+4. **自主刷新**：通过 `FlushAndCommitStrategy` 排空任何 `inactiveChunks` 非空的 region。多表模式的 `flush()` 仅流出已冻结的非活跃 chunk——它**从不**触碰 `activeChunk`。这保证了在共享标签下到达 StarRocks 的每个 chunk 均来自已完成的源事务这一不变量。
 
-当 `commitInFlight=true` 时，主循环进入 `processMultiTableCommit`，等待飞行中的加载完成，为所有剩余的非活跃 chunk 触发加载，通过 `SharedTransactionCoordinator` 执行统一提交，更新 `lastCommitTimeMs`，重置追踪器，并为下一个周期开启新的共享事务。
+当 `commitInFlight=true` 时，主循环进入 `processMultiTableCommit`。其第一步是**提交切分**（commit cut），用于决定哪些数据进入当前标签。切分按分区进行，不会等待每个分区都到达干净边界。在持有该分区各 region 写锁的情况下（这样并发的 txnEnd 切换就无法插入其间）：
+
+- **干净**分区（每个 region 都处于干净边界，且至少有一个 region 有数据）会以 lockstep 方式切换，然后将每个 region 的提交水位线设置为其最新切换出的 chunk。
+
+- **脏**分区（任一 region 处于事务中途）不会被切换；其各 region 的水位线设置在各自的上次切换处。该分区之前切换出的 chunk 会在本次提交，而其 `activeChunk`（进行中的源事务，以及与之一起批处理的已完成事务）会进入下一个共享事务。
+
+如果任一分区的锁正被占用，则在下一次扫描时重试切分。只有位于水位线及以下的 chunk 会在当前标签下加载；切分之后才切换出的 chunk 则等待下一次切分。随后，提交会等待飞行中的加载完成，为剩余符合条件的 chunk 触发加载，通过 `SharedTransactionCoordinator` 执行统一提交，解除水位线，更新 `lastCommitTimeMs`，重置追踪器，并为下一个周期开启新的共享事务。
 
 ### 共享事务协调
 
@@ -558,9 +597,9 @@ invoke(record)                                           [Flink task thread]
 
 1. **提前开启事务**：在任何自主刷新之前，共享事务会被提前开启，因此所有 HTTP 加载均使用共享标签。这消除了独立标签刷新可能在共享事务随后覆盖标签时成为孤儿的数据丢失窗口。
 
-2. **统一提交**：在所有 region 的数据加载完成后，针对共享标签执行单次 `commit`。多表事务跳过 `prepare` 步骤，因为 StarRocks 在多表模式下不支持 `TXN_PREPARE`。
+2. **统一提交**：在所有 region 的数据加载完成后，针对共享标签执行单次 `POST /api/transaction/commit`。多表事务跳过 `prepare` 步骤，因为 StarRocks 在多表模式下不支持 `TXN_PREPARE`。
 
-3. **空闲事务回收**：如果共享事务保持开启的时间超过 StarRocks 服务端超时时间的 80%（默认：600s 超时对应 480s），则会主动回收（提交或回滚 + 重新开启），以防止服务端超时错误。若任何 region 存在进行中的事务数据（违反清洁边界），或任何分区已写入数据但从未收到 txnEnd，则回收操作将快速失败。
+3. **事务回收**：如果共享事务的开启时长（从其 BEGIN 开始计算，而不是从最后一次加载开始计算）超过 BEGIN 请求 `timeout` 标头的 80%（默认：连接器发送的 600s 对应 480s），则会主动回收（提交或回滚 + 重新开启），以防止服务端超时错误。回收使用与定时器驱动的提交相同的按分区提交切分，因此处于事务中途的分区只会被顺延到下一个标签。仅当某个分区自上次提交以来写入了数据却未收到任何 txnEnd 时，回收操作才会快速失败。回收是尽力而为的：当有提交周期正在进行，或任一 region 仍在加载或重试时，回收会等待，因此一个永不返回的加载（在默认 `sink.socket.timeout-ms=-1` 下可能发生）仍可能使标签到达其截止时间。请设置有限的 `sink.socket.timeout-ms` 来限制这种情况。
 
 ### 6.5 PartitionCommitTracker（安全记账）
 
@@ -568,7 +607,7 @@ invoke(record)                                           [Flink task thread]
 
 - `onWrite(partition)` 在首次写入时将分区注册为 `ACTIVE`。
 
-- `onTxnEnd(partition)` 将分区转换为 `TXN_END_SEEN`（粘性——后续写入**不会**不会将其降级回 `ACTIVE`）。
+- `onTxnEnd(partition)` 将分区转换为 `TXN_END_SEEN`（粘性——后续写入**不会**将其降级回 `ACTIVE`）。
 
 - `getPartitionsWithoutTxnEnd()` 列出已写入数据但从未收到 txnEnd 的分区。用于保存点和回收操作在上游合约违规（从未关闭的源事务）时快速失败。
 
@@ -578,7 +617,7 @@ invoke(record)                                           [Flink task thread]
 
 ### 使用共享标签的自主刷新
 
-当 region 的 `inactiveChunks` 变为非空时，管理线程的自主刷新循环通过 `/api/transaction/load` 在**当前共享标签**当前共享标签下将其流式传输到 StarRocks。由于共享事务始终在任何数据加载之前开启，因此不存在数据在独立（孤儿）标签下被加载的窗口。在多表模式下，`flush()` 从不触发 `switchChunk`——它仅排空已冻结的非活跃 chunk——因此「在共享标签下到达 StarRocks 的每个 chunk 均来自已完成的源事务」这一不变量无条件成立。
+当 region 的 `inactiveChunks` 变为非空时，管理线程的自主刷新循环通过 `/api/transaction/load` 在**当前共享标签**下将其流式传输到 StarRocks。由于共享事务始终在任何数据加载之前开启，因此不存在数据在独立（孤儿）标签下被加载的窗口。在多表模式下，`flush()` 从不触发 `switchChunk`——它仅排空已冻结的非活跃 chunk——因此「在共享标签下到达 StarRocks 的每个 chunk 均来自已完成的源事务」这一不变量无条件成立。
 
 ### 安全保证
 
@@ -588,10 +627,10 @@ invoke(record)                                           [Flink task thread]
 | 提交从不包含部分源事务                              | 到达 StarRocks 的每个 chunk 均源自 `switchChunkForCommit`。自主刷新在多表模式下从不切换 `activeChunk`。 |
 | 按分区隔离                                         | 每个 `(partition, table)` 拥有自己的 region。一个分区的切换不会影响另一个分区的数据。 |
 | 分区内有序性                                       | `keyBy(sourcePartition)` 将相同分区的行路由到同一 sink 子任务。 |
-| 任务线程非阻塞                                     | `tryMiniIntervalSwitch` 的时间复杂度为 O(regions-in-partition)。HTTP 工作在管理线程上异步执行。 |
-| 源空闲时的数据可见性                               | 管理线程的 `tryForceCleanSwitch` 在空闲 `miniInterval` 后冻结干净的 `activeChunk`，因此即使源暂停，数据在 `commitInterval + miniInterval` 内仍保持可见。 |
+| txnEnd 路径上无 HTTP I/O                         | `setCommitAllowed` 中的分区切换决策的时间复杂度为 O(regions-in-partition)，所有 HTTP 工作都在管理线程上异步执行。这并不是非阻塞保证：任务线程可能会等待由管理线程切换持有的 region 写锁，可能在自身的切换冻结了一个过大的 chunk 时逐行重新拆分该 chunk（参见限制 7），可能在 `blockIfCacheFull` 中挂起，也可能在 Checkpoint 期间阻塞（参见最佳实践 3）。 |
+| 源空闲时的数据可见性                               | 如果源在数据量低于 `min-switch-bytes` 时暂停，时间驱动提交的分区范围清洁边界检测会切分并提交空闲的 `activeChunk`，因此即使源不再恢复，数据也会在大约一个 `commitInterval` 内变为可见。 |
 | 自主刷新是事务安全的                               | 每次加载均使用共享标签。每个冻结的 chunk 均来自已完成的源事务。 |
-| 空闲事务不会超时                                   | 共享事务在服务端超时时间的 80% 时被回收。回收在进行中的数据上快速失败。 |
+| 共享事务在截止时间前被回收（尽力而为）                      | 共享事务在 BEGIN `timeout` 的 80% 时被回收。处于事务中途的分区会被顺延到下一个标签，且仅当某个分区写入了数据却没有任何 txnEnd 时，回收才会快速失败。当有提交周期或加载正在进行时，回收会等待，因此一个永不返回的加载（默认 `sink.socket.timeout-ms=-1`）可能使标签超过其截止时间；设置有限的 socket 超时时间可以限制这种情况。 |
 | 按分区独立提交                                     | 具有已完成源事务的分区在下一个提交间隔提交，与其他分区的进行中事务无关。 |
 
 ### N:1 事务映射
@@ -609,27 +648,35 @@ commitInterval elapsed
                                                   -> K1 + K2 + K3 atomically committed to StarRocks
 ```
 
-由于提交决策是时间驱动的（不与特定的 txnEnd 绑定），连接器通过摊销 HTTP 加载及 begin/commit 开销来处理大量小型源事务，无需任何配置更改。对于以每秒 100 个 txnEnd 速率发送的 CDC 源，配置 `commitInterval=1 s`、`miniInterval=100 ms` 时，连接器每秒最多发出约 10 次加载调用，而非约 100 次。
+由于提交决策是时间驱动的（不与特定的 txnEnd 绑定），连接器通过摊销 HTTP 加载及 begin/commit 开销来处理大量小型源事务，无需任何配置更改。对于以每秒 100 个 txnEnd 速率发送的 CDC 源，配置 `commitInterval=1 s`（因此自动计算出的 `miniInterval=500 ms`）时，连接器每秒最多发出约 2 次加载调用，而非约 100 次；在默认的 `min-switch-bytes` 大小限制下，低流量数据流会进一步批处理，降至大约每个 `commitInterval` 一次加载（即低于阈值的 chunk 仍会被切换的新鲜度上限）。
 
 ## 限制
 
-- **需要 `sink.version=V2`**：V1 不支持事务流式加载。
+1. **需要 `sink.version=V2`**：V1 不支持事务流式加载。
 
-- **仅至少一次**：失败的重试可能产生重复写入。多表模式保证同一批次内的所有表一起成功或失败，但不提供全局精确一次语义。对于 PRIMARY KEY 表，重复写入是幂等的（upsert）。
+2. **仅至少一次**：失败的重试可能产生重复写入。多表模式保证同一批次内的所有表一起成功或失败，但不提供全局精确一次语义。对于 PRIMARY KEY 表，重复写入是幂等的（upsert）。
 
-- **所有表必须在同一数据库中**：StarRocks 多表事务是数据库范围的；不支持跨数据库事务。
+3. **所有表必须在同一数据库中**：StarRocks 多表事务是数据库范围的；不支持跨数据库事务。
 
-- **事务范围为每个 sink 子任务 + 每个分区**：每个 sink 子任务独立维护其自身的 StarRocks 事务。原子性在**在单个源事务内**（某一分区上单次 txnEnd 涉及的所有行，跨该分区写入的所有表）范围内得到保证。不同**不同**源分区的数据可见性可以交错：一旦分区 P0 的源事务已完全到达且提交间隔已过，P0 的数据即会被提交，即使分区 P1 的源事务仍在进行中。需要在 StarRocks 层面实现跨分区原子性的应用，必须使用单一源分区或在上游协调提交。
+4. **事务范围为每个 sink 子任务 + 每个分区**：每个 sink 子任务独立维护其自身的 StarRocks 事务。原子性**在单个源事务内**（某一分区上单次 txnEnd 涉及的所有行，跨该分区写入的所有表）得到保证。**不同**源分区的数据可见性可以交错：一旦分区 P0 的源事务已完全到达且提交间隔已过，P0 的数据即会被提交，即使分区 P1 的源事务仍在进行中。需要在 StarRocks 层面实现跨分区原子性的应用，必须使用单一源分区或在上游协调提交。简而言之，源事务保证仅在每个 lane 内成立，其中一个 lane 指一个 sink 子任务上的一个 `sourcePartition`。在同一个 Label 下提交的所有内容（包括来自多个 lane 的行）会原子地变为可见，但无法控制不同 lane 的哪些源事务会进入同一个 Label：另一个 lane 上的相关事务可能落入更早或更晚的 Label，而不同 sink 子任务上的 lane 永远不会共享同一个 Label。
 
-- **数据可见性延迟**：由 `sink.buffer-flush.interval-ms` 和内部 `miniInterval = min(1000, max(100, commitInterval/10))` 控制。在持续流动的 CDC 流中，单行数据在其源提交后约 `commitInterval + miniInterval` 内即可在 StarRocks 中可见。在源暂停期间，已提交的数据保持可见，而上次切换与暂停之间的任何行将在再经过一个 `miniInterval` 后可见（由管理线程的清洁边界回退机制处理）。
+5. **数据可见性延迟**：由 `sink.buffer-flush.interval-ms`（提交间隔）控制。已完成的源事务首先会从 `activeChunk` 中冻结出来——要么在分区达到 `sink.transaction.multi-table.min-switch-bytes`（默认 1 MB）时立即冻结，要么对于低于该阈值的低流量分区，最迟在其上次切换后一个 `commitInterval` 时冻结（即任务线程在 txnEnd 时强制执行的新鲜度上限）——然后由下一次时间驱动的提交发布。因此，在持续流动的 CDC 流中，如果分区足够繁忙、能够达到大小限制，单行数据会在大约一个 `commitInterval` 内可见；在低流量的最坏情况下，则最多需要两个 `commitInterval` 窗口（一个用于冻结低于阈值的 Chunk，一个用于提交它）。在源暂停期间，已提交的数据保持可见，而最后一个低于阈值的空闲 Chunk 会通过时间驱动提交的干净边界检测，在最多再经过一个 `commitInterval` 后被提交。设置 `min-switch-bytes <= 0` 可在每个间隔都执行切换（延迟最低，但加载次数更多、单次数据量更小）。
 
-- **取决于 StarRocks 集群事务设置**：监控运行中的事务数量限制、prepared 超时（默认 600 秒）以及 label 保留情况。确保 `sink.buffer-flush.interval-ms` 显著短于 StarRocks 事务超时时间。
+6. **取决于 StarRocks 集群事务设置**：监控运行中的事务数量限制、事务超时时间以及 Label 保留情况。事务超时时间是指连接器在 BEGIN 请求中发送的 `timeout` 标头——除非被 `sink.properties.timeout` 覆盖，否则为 600 秒——StarRocks 将其视为从 BEGIN 开始计算的绝对截止时间，而非空闲超时：向该 Label 加载数据不会延长它。连接器会在达到该超时时间的 80% 时（默认 480 秒）回收共享事务。确保 `sink.buffer-flush.interval-ms` 显著短于此超时时间。
 
-- **长源事务下 `activeChunk` 内存增长**：由于多表模式会禁用基于 Chunk 大小触发的内部切换（以保持干净的事务边界不变量），因此 `activeChunk` 可能一直增长到下一个 `txnEnd` 到达。`sink.transaction.multi-table.buffer-size`（软限制）和 `2 × buffer-size`（通过 `blockIfCacheFull` 实现的硬限制）仅限制缓冲区中*可 flush 的*部分。冻结的 Chunk 和所有 clean 分区不受此限制。无法在 `txnEnd` 之前从缓冲区中移出的数据（正在进行中的事务本身，以及同一分区中因 lockstep 规则而被暂时保留的兄弟表已完成数据）不会触发等待：当缓冲区达到硬上限且没有任何可 flush 数据时，Writer 会记录 WARN（`Write-block cap ... reached with nothing flushable`），并继续缓冲直到 `txnEnd` 到达；之后，该分区会被切换并排空。因此，单个源事务可能超过 `2 × buffer-size`；其大小仅受 `sink.transaction.multi-table.max-txn-bytes`（默认为无限制）和 TaskManager 堆内存的限制。应根据预期的最大源事务大小 × 每个 TaskManager 上的 sink 子任务数来规划堆内存；如果希望在内存压力过大时直接明确失败，请设置 `max-txn-bytes`。对于无界事务（批量初始化），应在上游拆分事务。在切换时，如果冻结的 Chunk 大于 Load Body 限制（默认为 `sink.chunk-limit` 的 3 GB 与 `sink.transaction.multi-table.buffer-size` 两者中的较小值），则会在相同的共享 Label 下重新切分为多个 Load 请求。因此，除了单行数据本身就超过该限制的情况外，单个 `/api/transaction/load` 请求体都不会超过此限制。
+7. **长源事务下 `activeChunk` 内存增长**：由于多表模式会禁用基于 Chunk 大小触发的内部切换（以保持干净的事务边界不变量），因此 `activeChunk` 可能一直增长到下一个 `txnEnd` 到达。`sink.transaction.multi-table.buffer-size`（软限制）和 `2 × buffer-size`（通过 `blockIfCacheFull` 实现的硬限制）仅限制缓冲区中*可 flush 的*部分，即冻结的 Chunk 和所有 clean 分区。无法在 `txnEnd` 之前从缓冲区中移出的数据（正在进行中的事务本身，以及同一分区中因 lockstep 规则而被暂时保留的兄弟表已完成数据）不会触发等待：当缓冲区达到硬上限且没有任何可 flush 数据时，Writer 会记录 WARN（`Write-block cap ... reached with nothing flushable`），并继续缓冲直到 `txnEnd` 到达；之后，该分区会被切换并排空。因此，单个源事务可能超过 `2 × buffer-size`；其大小仅受 `sink.transaction.multi-table.max-txn-bytes`（默认为无限制）和 TaskManager 堆内存的限制。应根据预期的最大源事务大小 × 每个 TaskManager 上的 sink 子任务数来规划堆内存；如果希望在内存压力过大时直接明确失败，请设置 `max-txn-bytes`。对于无界事务（批量初始化），应在上游拆分事务。在切换时，如果冻结的 Chunk 大于 Load Body 限制（默认为 `sink.chunk-limit` 的 3 GB 与 `sink.transaction.multi-table.buffer-size` 两者中的较小值），则会在相同的共享 Label 下重新切分为多个 Load 请求。因此，除了单行数据本身就超过该限制的情况外，单个 `/api/transaction/load` 请求体都不会超过此限制。
 
-- **跨数据库写入将被拒绝**：多表事务会验证所有 region 是否属于同一数据库。在同一提交周期内向不同数据库的表写入数据将抛出错误。
+8. **跨数据库写入将被拒绝**：多表事务会验证所有 region 是否属于同一数据库。在同一提交周期内向不同数据库的表写入数据将抛出错误。
 
-- **与合并提交不兼容**：`sink.properties.enable_merge_commit=true` 不能与 `sink.transaction.multi-table.enabled=true` 组合使用。合并提交将写入路由通过 `MergeCommitManager`，而该路径缺少多表模式用于事务边界的分区感知 `write(int, ...)` / `setCommitAllowed(int, ...)` 钩子。若两者同时启用，连接器将在验证阶段快速失败。
+9. **与合并提交不兼容**：`sink.properties.enable_merge_commit=true` 不能与 `sink.transaction.multi-table.enabled=true` 组合使用。合并提交将写入路由通过 `MergeCommitManager`，而该路径缺少多表模式用于事务边界的分区感知 `write(int, ...)` / `setCommitAllowed(int, ...)` 钩子。若两者同时启用，连接器将在验证阶段快速失败。
+
+10. **每个 `sourcePartition` 只能有一个上游生产者**：干净边界是基于位置判断的——当且仅当 sink 子任务为某个分区收到的最后一行带有 txnEnd 时，该分区才处于干净边界；连接器不会跟踪某一行属于哪个源事务。如果两个生产者（两个 assembler 子任务，或分区编号冲突的两个源，例如两个 Kafka Topic 的分区 0）发出具有相同 `sourcePartition` 的行，这些行会在 sink 端交错，一个生产者的 txnEnd 会将该分区标记为干净，而另一个生产者的事务仍在进行中，下一次切换就可能部分提交该事务。请让 TransactionAssembler 与 sink 按相同的值进行 keyBy，并确保 `sourcePartition` 在所有源中唯一。
+
+11. **仅支持对齐 Checkpoint**：Checkpoint 刷新要求 barrier 到达 sink 时每个 region 都处于干净边界（参见最佳实践 3）。对齐 Checkpoint 可以保证这一点，因为 assembler 会在一次 `processElement()` 调用中发出整个源事务，barrier 不会落在该事务的行之间。非对齐 Checkpoint（`execution.checkpointing.unaligned.enabled`；Flink 1.20 之前为 `execution.checkpointing.unaligned`）允许 barrier 越过在途的行，在事务中途到达 sink。这也包括先对齐后非对齐的模式，即同时启用非对齐 Checkpoint 和 `execution.checkpointing.aligned-checkpoint-timeout`，Checkpoint 会在超时后切换为非对齐；在禁用非对齐 Checkpoint 时，该超时设置不起作用。在这种情况下，Checkpoint 会失败，当前开启的 Label 会被回滚，作业发生故障转移。
+
+12. **数据质量拒绝会中止整个 Label**：对于多表事务，StarRocks 在提交时（而不是在每次 `/api/transaction/load` 时）应用严格模式和 `max_filter_ratio`。一旦被拒绝，提交就会失败，并中止整个 Label——即该提交周期内所有表的行，而不仅仅是包含问题行的那张表。连接器会报告提交失败，作业发生故障转移；由于会重放相同的行，作业会持续失败，直到修复这些行或加载设置。
+
+13. **StarRocks v4.1.6 及更早版本可能将失败的多表提交报告为 OK**：在这些版本中，服务端已失败的多表提交可能会以 `OK` 返回给客户端。连接器随后会将该 Label 视为已提交，因此该提交周期的行可能会静默丢失。该问题已由 StarRocks PR [#80351](https://github.com/StarRocks/starrocks/pull/80351) 修复（CelerData backport：commit `1ceb0763cf`）。
 
 ## 监控与故障排查
 
@@ -643,13 +690,15 @@ commitInterval elapsed
   - 运行中/已 prepared 的事务数量
   - 事务超时发生次数
   - Label 冲突
+- **连接器侧**
+  - `sharedTxnLatencyMs` 直方图：从共享事务的最早一行进入 sink 缓冲区到该事务提交所经过的时间。每次提交还会按 Label 将其记录到日志中：`[MultiTxn] SharedTransaction committed successfully: label=<label>, firstRowTimeMs=<epoch ms>, latencyMs=<ms>`（未知时两者均为 `-1`）。
 
 ### 常见问题
 
 #### `transaction not existed`
 
 - 原因：StarRocks 事务超时
-- 解决方案：连接器会在服务器超时时间的 80% 时自动回收空闲事务。若问题仍然发生，请检查 prepared 超时是否过短或刷新间隔是否过大。
+- 解决方案：连接器会在 BEGIN `timeout` 的 80% 时（从 BEGIN 开始计算）自动回收共享事务。若问题仍然发生，请检查 `sink.properties.timeout` 是否过短、刷新间隔是否过大，或者是否有加载挂起超过了截止时间（请设置有限的 `sink.socket.timeout-ms`）。
 
 #### `too many running txns`
 
@@ -664,7 +713,7 @@ commitInterval elapsed
 #### 数据可见性延迟过高
 
 - 原因：提交条件未满足。
-- 解决方案：验证上游数据是否包含正确的 `transactionEnd=true` 标记；每行数据预期最多有 `commitInterval + miniInterval` 的延迟。若延迟超出此预算，请检查管理线程是否卡在回收或飞行中的加载操作（参见 `StarRocks-Sink-Manager` 日志）。
+- 解决方案：验证上游数据是否包含正确的 `transactionEnd=true` 标记；对于低于 `min-switch-bytes` 的低流量分区，每行数据预期最多有约 2×`commitInterval` 的延迟（一个间隔用于冻结低于阈值的 Chunk，一个间隔用于提交它）。若延迟超出此预算，请检查管理线程是否卡在回收或飞行中的加载操作（参见 `StarRocks-Sink-Manager` 日志），或者调低 `min-switch-bytes`。
 
 #### `Write-block cap ... reached with nothing flushable` (WARN)
 
@@ -690,10 +739,12 @@ commitInterval elapsed
    - 每一行必须包含 `setSourcePartition(partition)`。
    - 所有行必须在单个 `processElement()` 调用中同步发出。
 
-2. **sink 前的 keyBy 是强制要求**：`rows.keyBy(DefaultStarRocksRowData::getSourcePartition).addSink(sink)` — 省略此项会破坏分区内的事务顺序。
+2. **sink 前的 keyBy 是强制要求**：`rows.keyBy(DefaultStarRocksRowData::getSourcePartition).addSink(sink)` — 省略此项会破坏分区内的事务顺序。每个 `sourcePartition` 值还必须只来自一个上游生产者（参见限制 10）。
 
-3. **Checkpoint 与提交解耦**：Checkpoint 间隔可以设置为较大的值（例如 60 秒）用于故障恢复。数据可见性由 `sink.buffer-flush.interval-ms` 控制（例如 1000ms）。
+3. **Checkpoint 也会提交**：数据可见性由 `sink.buffer-flush.interval-ms` 控制（例如 1000ms），但 Checkpoint 并未与提交解耦。在 at-least-once 模式下，`snapshotState` 会调用 `flush()`，该调用会阻塞任务线程，直到整个缓冲区——包括仍在 `activeChunk` 中批处理的已完成事务——全部加载完毕，且当前开启的共享 Label 已提交。该 flush 的时间预算为事务超时时间的 1.1 倍（默认 660 秒），但该预算仅在各次等待之间检查，并非硬性上限：排空过程会等待每个飞行中的 `/api/transaction/load`，且没有截止时间；在默认 `sink.socket.timeout-ms=-1` 的情况下，一个始终收不到响应的加载可能会使 Checkpoint 以及任务线程无限期阻塞。请设置一个有限的 `sink.socket.timeout-ms`，并使其长于预期最慢的加载耗时，这样挂起的加载会转而导致作业失败。如果 barrier 到达时有任一分区处于事务中途，flush 会抛出异常，当前开启的 Label 会被回滚，作业发生故障转移（参见限制 10 和 11）。Checkpoint 间隔越大（例如 60 秒），这类强制提交就越少。
 
 4. **保持路由策略稳定**：避免单个事务写入过多不同的表，这会增加事务持续时间和失败概率。
 
 5. **上线前进行故障注入测试**：终止 TaskManager / 引入网络抖动，并在 checkpoint 恢复后验证数据正确性。
+
+6. **启用 HTTP keep-alive**：设置 `sink.http.keep-alive.enabled=true`。一个共享事务会发送一次 BEGIN、多次加载和一次 COMMIT，如果不启用 keep-alive，其中每个请求都会新建一个 TCP（以及 TLS）连接。在任一请求过程中出现连接故障，都会导致整个共享事务失败，从而回滚其中的所有表并使作业发生故障转移；因此，新建连接越少，此类失败就越少，例如位于可能重置新连接的负载均衡器后方时。启用 keep-alive 后，如果某个请求所用的复用连接已被服务器或负载均衡器关闭，则在不会导致数据被写入两次的情况下，该请求会在新连接上重新发送。请确保 `sink.http.keep-alive.idle-timeout-ms`（默认 60000）短于 Flink 与 StarRocks 之间每个代理或负载均衡器的空闲超时时间；AWS Network Load Balancer 默认会断开空闲 350 秒的连接。

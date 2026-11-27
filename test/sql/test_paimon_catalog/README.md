@@ -51,10 +51,12 @@ schema, snapshot, manifest and data files:
 
 ```text
 ci_catalog_test_data/paimon/
-└── paimon_test.db/
-    ├── scalar_types/
-    ├── pk_merge_v1/
-    └── ...
+├── paimon_test.db/          # Persistent reader fixtures
+│   ├── scalar_types/
+│   ├── pk_merge_v1/
+│   └── ...
+└── tmp/
+    └── <case-UUID>/        # Temporary DDL and INSERT warehouses
 ```
 
 Do not add a `warehouse/` directory between `paimon/` and `paimon_test.db/`.
@@ -77,14 +79,28 @@ keep credentials out of committed files. The original six fixtures originate fro
 Fixture-based cases create unique Catalog names and drop only those Catalogs when finished.
 They do not upload, modify or delete the shared data. An early failure may leave
 a Catalog requiring cleanup. Tests that generate or modify data must use a
-separate `tmp/<case-name>/<UUID>/` prefix, not this persistent warehouse.
+separate `oss://${oss_bucket}/ci_catalog_test_data/paimon/tmp/${uuid0}/` warehouse.
+Temporary writes use the configured writable bucket, and cleanup must stay inside
+the case UUID directory. The `tmp/` prefix does not automatically expire objects.
 See [T/test_paimon_reader_modes](T/test_paimon_reader_modes) for an example.
+
+`test_paimon_hms_files` also needs HiveServer2 and the Hive metastore. It creates a unique
+temporary Hive database using HiveServer2, then registers the existing `pk_merge_v1` fixture
+directly in HMS as an external Paimon table. This avoids requiring Paimon classes on the
+HiveServer2 classpath. The case reads `$files` through an HMS Paimon catalog with the JNI
+reader. Cleanup drops only the external table metadata and temporary database, leaving the
+fixture data untouched.
+For local HDFS runs, override `paimon_hms_prefix`, `paimon_hms_warehouse`, and
+`paimon_hms_fixture_location` in a private SQL-tester config. This SQL test checks the
+end-to-end path; the Java compatibility tests exercise the Hive/Thrift dependency failure.
 
 ## DDL tests
 
 `T/test_paimon_catalog_ddl` creates and drops native databases and tables through SQL.
-Each case uses its own `oss://${oss_bucket}/tmp/paimon_catalog_ddl/${uuid0}/`
-filesystem warehouse; the configured OSS credentials need write/delete permission there.
+Each case uses its own
+`oss://${oss_bucket}/ci_catalog_test_data/paimon/tmp/${uuid0}/` filesystem warehouse;
+the configured OSS credentials need write/delete permission there. INSERT cases
+use the same helper and temporary root.
 Set `paimon_ddl_warehouse_root` under `[replace]` in a private config to use a personal
 OSS prefix instead of the default CI prefix. The case UUID is appended to that root.
 The cases do not use or change the persistent fixtures. A second Catalog reads the
@@ -302,3 +318,26 @@ The legacy ORC timestamp case checks fractional microseconds and NULLs rather th
 complete timestamp strings: legacy decoding depends on the reader JVM default time
 zone, which is not fixed by the SQL session time zone. Routing assertions still
 require `ORC_LEGACY_TIMESTAMP` and explicit NATIVE rejection.
+
+## Native INSERT tests
+
+`test_paimon_insert_into` creates a temporary filesystem catalog using the same
+isolated warehouse helper as the DDL tests. It writes only beneath the per-case
+UUID directory under `oss://${oss_bucket}/ci_catalog_test_data/paimon/tmp/`
+(or the explicitly configured local warehouse).
+It never writes to the shared `ci_catalog_test_data/paimon/paimon_test.db` fixtures.
+Use an S3-compatible `s3://` warehouse and a same-region internal OSS endpoint
+when running against OSS.
+
+The cases cover append writes, column mapping, static partitions, empty input,
+fixed buckets, primary-key full-row upserts, and nested/VARIANT values. Independent
+catalogs and the JNI reader verify visibility of the committed append and
+primary-key data. Every case has a `CLEANUP` block for the objects it creates.
+
+`test_paimon_insert_overwrite` covers full, static partition, and dynamic
+partition overwrites, including empty input and independent JNI readback.
+
+`test_paimon_ctas` uses the same temporary warehouse helper and checks append
+and primary-key targets, empty input, `IF NOT EXISTS`, and cleanup after a write
+failure. It also covers CTAS in both directions between Paimon and
+`default_catalog`.

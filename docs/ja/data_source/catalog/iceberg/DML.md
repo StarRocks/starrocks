@@ -4,6 +4,7 @@ displayed_sidebar: docs
 description: "StarRocks Iceberg Catalog のテーブルへのデータ挿入を含む DML 操作。"
 toc_max_heading_level: 5
 keywords: ['iceberg', 'dml', 'insert', 'sink data', 'overwrite']
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Iceberg DML 操作
@@ -20,6 +21,10 @@ Icebergテーブルにデータを挿入します。この機能はv3.1以降で
 
 StarRocksの内部テーブルと同様に、Icebergテーブルに対して [INSERT](../../../administration/user_privs/authorization/privilege_item.md#table) 権限を持っている場合、 [INSERT](../../../sql-reference/sql-statements/loading_unloading/INSERT.md) ステートメントを使用して、StarRocksテーブルのデータをそのIcebergテーブルにシンクできます（現在、Parquet形式のIcebergテーブルのみがサポートされています）。
 
+Parquet データファイルでは、StarRocks は Iceberg テーブルプロパティ `write.parquet.page-size-bytes`、`write.parquet.dict-size-bytes`、`write.parquet.row-group-size-bytes` を適用します。各値は 0 より大きく 2,147,483,647 バイト以下の整数である必要があり、無効な値の場合は書き込みが失敗します。プロパティを設定しない場合、ライターのデフォルト値（データページと辞書ページはそれぞれ 1 MiB、行グループは 128 MiB）が使用されます。これらのプロパティは位置削除ファイルには適用されません。
+
+Parquet データファイルでは、Iceberg テーブルプロパティ `write.parquet.compression-level` に整数を指定して、選択した圧縮コーデックのレベルを制御できます。指定できる範囲は ZSTD が -131072～22、GZIP が -1～9、Brotli が 0～11 です。その他のコーデックではレベルを明示的に指定できません。無効な値の場合は書き込みが失敗します。このプロパティを設定しない場合、Parquet ライターは選択したコーデックのデフォルトレベルを使用します。このレベルは位置削除ファイルには適用されません。
+
 ### 構文
 
 ```SQL
@@ -35,7 +40,7 @@ PARTITION (par_col1=<value> [, par_col2=<value>...])
 
 :::note
 
-パーティション列は `NULL` 値を許可しません。したがって、Icebergテーブルのパーティション列に空の値がロードされないようにする必要があります。
+パーティション列は `NULL` 値を許可します。パーティション値が `NULL` の行は、パーティション値が `NULL` のパーティションに書き込まれます。
 
 :::
 
@@ -47,7 +52,7 @@ StarRocks テーブルのデータを Iceberg テーブルに追加します。
 
 #### OVERWRITE
 
-StarRocks テーブルのデータで Iceberg テーブルの既存のデータを上書きします。
+StarRocks テーブルのデータで Iceberg テーブルの既存のデータを上書きします。新しいデータが書き込まれたパーティションのみが上書きされ、その他のパーティションは保持されます。この動作は変数 `dynamic_overwrite` に依存せず、この変数は Iceberg テーブルには影響しません。非パーティションテーブルの場合、既存のすべてのデータが置き換えられます。クエリが行を返さない場合、非パーティションテーブルであってもデータは上書きされません。
 
 #### column_name
 
@@ -67,7 +72,7 @@ Iceberg テーブルにロードされるクエリストートメントの結果
 
 #### PARTITION
 
-データをロードしたいパーティション。Iceberg テーブルのすべてのパーティション列をこのプロパティで指定する必要があります。このプロパティで指定するパーティション列は、テーブル作成ステートメントで定義したパーティション列と異なる順序であってもかまいません。このプロパティを指定する場合、`column_name` プロパティを指定することはできません。
+データをロードしたいパーティション。Iceberg テーブルのすべてのパーティション列をこのプロパティで指定する必要があります。このプロパティで指定するパーティション列は、テーブル作成ステートメントで定義したパーティション列と異なる順序であってもかまいません。Iceberg テーブルのパーティション仕様に identity 以外の変換（例: `day()` や `bucket()`）が含まれる場合、PARTITION 句はサポートされていません。このプロパティを指定する場合、`column_name` プロパティを指定することはできません。
 
 ### 例
 
@@ -119,9 +124,13 @@ Iceberg テーブルにロードされるクエリストートメントの結果
    INSERT OVERWRITE partition_tbl_1 partition(dt='2023-09-01',id=1) SELECT 'close';
    ```
 
+### Parquet データページバージョン
+
+Parquet データファイルでは、Iceberg テーブルプロパティ `write.parquet.page-version` に `v1` または `v2` を指定できます（大文字と小文字は区別されません）。未設定の場合、StarRocks は DataPage V1 を書き込みます。無効な値の場合は書き込みが失敗します。データファイルのスキーマに BOOLEAN カラムが含まれる場合（配列、マップ、構造体内にネストされている場合も含む）、StarRocks リーダーが RLE エンコードされた値を現在デコードできないため、DataPage V2 の書き込みは拒否されます。このプロパティは位置削除ファイルには適用されません。Parquet のデータページバージョンと Iceberg のテーブルフォーマットバージョンは別の設定です。
+
 ## DELETE
 
-指定された条件に基づいて Iceberg テーブルからデータを削除するには、DELETE ステートメントを使用できます。この機能は StarRocks v4.1 以降でサポートされています。
+指定された条件に基づいて Iceberg テーブルからデータを削除するには、DELETE ステートメントを使用できます。この機能は StarRocks v4.1 以降でサポートされています。`WITH` 句、`USING` 句、および `FOR VERSION AS OF` は v4.2 以降でサポートされています。WHERE 句は必須であり、PARTITION 句はサポートされていません。
 
 ### 構文
 
@@ -461,7 +470,7 @@ Iceberg テーブルに実際に書き込む MERGE INTO ステートメントは
 
 ## TRUNCATE
 
-Iceberg テーブルからすべてのデータを迅速に削除するには、TRUNCATE TABLE ステートメントを使用できます。
+Iceberg テーブルからすべてのデータを迅速に削除するには、TRUNCATE TABLE ステートメントを使用できます。Iceberg テーブルでは、特定のパーティションの切り捨て（`TRUNCATE TABLE ... PARTITION`）はサポートされていません。
 
 ### 構文
 

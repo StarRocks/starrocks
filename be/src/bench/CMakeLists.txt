@@ -50,6 +50,7 @@ ADD_BE_BENCH(${SRC_DIR}/bench/jemalloc_bench)
 ADD_BE_BENCH(${SRC_DIR}/bench/buffer_bench)
 ADD_BE_BENCH(${SRC_DIR}/bench/lock_free_scan_task_queue_bench)
 ADD_BE_BENCH(${SRC_DIR}/bench/simd_common_bench)
+ADD_BE_BENCH(${SRC_DIR}/bench/simdutf_sql_bench)
 ADD_BE_BENCH(${SRC_DIR}/bench/parquet_simd_bench)
 ADD_BE_BENCH(${SRC_DIR}/bench/storage_simd_bench)
 ADD_BE_BENCH(${SRC_DIR}/bench/execution_simd_bench)
@@ -61,3 +62,5 @@ ADD_BE_BENCH(${SRC_DIR}/bench/flat_json_vertical_compaction_mem_bench)
 # Measure task memory with the same malloc hooks as starrocks_be.
 target_sources(flat_json_vertical_compaction_mem_bench PRIVATE ${SRC_DIR}/service/mem_hook.cpp)
 ADD_BE_BENCH(${SRC_DIR}/bench/tdigest_bench)
+ADD_BE_BENCH(${SRC_DIR}/bench/spinlock_bench)
+

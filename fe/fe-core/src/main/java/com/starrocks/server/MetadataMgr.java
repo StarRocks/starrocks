@@ -716,7 +716,8 @@ public class MetadataMgr {
         return ImmutableList.copyOf(partitionNames.build());
     }
 
-    public Statistics getTableStatisticsFromInternalStatistics(Table table, Map<ColumnRefOperator, Column> columns) {
+    public Statistics getTableStatisticsFromInternalStatistics(Table table, Map<ColumnRefOperator, Column> columns,
+                                                               boolean queryTriggerAnalyzeEnabled) {
         Statistics.Builder statistics = Statistics.builder();
 
         List<ColumnRefOperator> requiredColumnRefs = new ArrayList<>();
@@ -730,8 +731,8 @@ public class MetadataMgr {
 
         List<String> columnNames = requiredColumnRefs.stream().map(col -> columns.get(col).getName()).collect(
                 Collectors.toList());
-        List<ConnectorTableColumnStats> columnStatisticList =
-                GlobalStateMgr.getCurrentState().getStatisticStorage().getConnectorTableStatistics(table, columnNames);
+        List<ConnectorTableColumnStats> columnStatisticList = GlobalStateMgr.getCurrentState().getStatisticStorage()
+                .getConnectorTableStatistics(table, columnNames, queryTriggerAnalyzeEnabled);
 
         Map<String, Histogram> histogramStatistics =
                 GlobalStateMgr.getCurrentState().getStatisticStorage().getConnectorHistogramStatistics(table, columnNames);
@@ -773,8 +774,9 @@ public class MetadataMgr {
                 .filter(ref -> !FeNameFormat.FORBIDDEN_COLUMN_NAMES.contains(ref.getName()))
                 .collect(Collectors.toList());
         List<String> columnNames = refs.stream().map(ref -> columns.get(ref).getName()).collect(Collectors.toList());
-        List<ConnectorTableColumnStats> stats =
-                GlobalStateMgr.getCurrentState().getStatisticStorage().getConnectorTableStatistics(table, columnNames);
+        List<ConnectorTableColumnStats> stats = GlobalStateMgr.getCurrentState().getStatisticStorage()
+                .getConnectorTableStatistics(table, columnNames,
+                        session.getOptimizerOptions().isQueryTriggerAnalyzeEnabled());
         for (int i = 0; i < refs.size() && i < stats.size(); i++) {
             if (!stats.get(i).isUnknown()) {
                 session.getDumpInfo().addExternalColumnRowCount(table, refs.get(i).getName(),
@@ -865,11 +867,11 @@ public class MetadataMgr {
         // FIXME: In testing env, `_statistics_.external_column_statistics` is not created, ignore query columns stats from it.
         // Get basic/histogram stats from internal statistics.
         Statistics internalStatistics = FeConstants.runningUnitTest ? null :
-                getTableStatisticsFromInternalStatistics(table, columns);
+                getTableStatisticsFromInternalStatistics(table, columns,
+                        session.getOptimizerOptions().isQueryTriggerAnalyzeEnabled());
         if (internalStatistics == null ||
                 internalStatistics.getColumnStatistics().values().stream().allMatch(ColumnStatistic::isUnknown)) {
             // Get basic stats from connector metadata.
-            session.setObtainedFromInternalStatistics(false);
             // Avoid `analyze table` to collect table statistics from metadata.
             if (StatisticUtils.statisticTableBlackListCheck(table.getId())) {
                 return internalStatistics;
@@ -899,17 +901,12 @@ public class MetadataMgr {
                             setOutputRowCount(connectorBasicStats.getOutputRowCount())
                             .setStatsSource(Statistics.StatsSource.TABLE_METADATA).build();
                 } else {
-                    // A connector serving ANALYZE statistics (query dump replay) keeps the partition predicate in the
-                    // selectivity, exactly like the internal-statistics branch below.
-                    if (connectorBasicStats != null
-                            && connectorBasicStats.getStatsSource() == Statistics.StatsSource.ANALYZE) {
-                        session.setObtainedFromInternalStatistics(true);
-                    }
+                    // A connector serving ANALYZE statistics (query dump replay) keeps that stats source, so the
+                    // partition predicate stays in the selectivity like the internal-statistics branch below.
                     return connectorBasicStats;
                 }
             }
         } else {
-            session.setObtainedFromInternalStatistics(true);
             captureAnalyzedColumnRowCountsToDump(session, catalogName, table, columns);
             return widenWithPartitionSourceRanges(catalogName, table, columns, internalStatistics, versionRange);
         }
@@ -1088,6 +1085,14 @@ public class MetadataMgr {
         connectorMetadata.ifPresent(metadata -> metadata.invalidateTableForRead(srDbName, table));
     }
 
+    /**
+     * See {@link ConnectorMetadata#invalidateCachedTable}.
+     */
+    public void invalidateCachedTable(String catalogName, String dbName, String tableName) {
+        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
+        connectorMetadata.ifPresent(metadata -> metadata.invalidateCachedTable(dbName, tableName));
+    }
+
     public void finishSink(String catalogName, String dbName, String tableName,
                            List<TSinkCommitInfo> sinkCommitInfos, String branch) {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
@@ -1115,7 +1120,7 @@ public class MetadataMgr {
                 metadata.finishSink(dbName, tableName, sinkCommitInfos, branch, extra, context);
             } catch (StarRocksConnectorException e) {
                 LOG.error("table sink commit failed", e);
-                throw new StarRocksConnectorException(e.getMessage());
+                throw e;
             }
         });
     }
@@ -1128,6 +1133,19 @@ public class MetadataMgr {
             } catch (StarRocksConnectorException e) {
                 LOG.error("table sink abort failed", e);
                 throw new StarRocksConnectorException(e.getMessage());
+            }
+        });
+    }
+
+    public void abortSink(String catalogName, String dbName, String tableName, List<TSinkCommitInfo> sinkCommitInfos,
+                          Object extra, ConnectContext context) {
+        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
+        connectorMetadata.ifPresent(metadata -> {
+            try {
+                metadata.abortSink(dbName, tableName, sinkCommitInfos, extra, context);
+            } catch (StarRocksConnectorException e) {
+                LOG.error("table sink abort failed", e);
+                throw e;
             }
         });
     }
