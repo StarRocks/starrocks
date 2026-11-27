@@ -510,16 +510,25 @@ public class ListPartitionPruner implements PartitionPruner {
         }
         Set<Long> matches = null;
         Boolean existNoEval = false;
+        // Partitions whose value cannot be converted for a CAST'ed column are kept, not pruned. Their rows have
+        // not been checked against the predicate, so it must also stay for execution (external scans only
+        // evaluate noEvalConjuncts at runtime).
+        Set<Long> unconverted = Sets.newHashSet();
         if (operator instanceof BinaryPredicateOperator) {
-            matches = evalBinaryPredicate((BinaryPredicateOperator) operator);
+            matches = evalBinaryPredicate((BinaryPredicateOperator) operator, unconverted);
         } else if (operator instanceof InPredicateOperator) {
-            matches = evalInPredicate((InPredicateOperator) operator);
+            matches = evalInPredicate((InPredicateOperator) operator, unconverted);
         } else if (operator instanceof IsNullPredicateOperator) {
             matches = evalIsNullPredicate((IsNullPredicateOperator) operator);
         } else if (operator instanceof CompoundPredicateOperator) {
             Pair<Set<Long>, Boolean> matchesPair = evalCompoundPredicate((CompoundPredicateOperator) operator);
             matches = matchesPair.first;
             existNoEval = matchesPair.second;
+        }
+        if (matches != null && !unconverted.isEmpty()) {
+            matches = Sets.newHashSet(matches);
+            matches.addAll(unconverted);
+            existNoEval = true;
         }
         return matches == null ? Pair.create(null, true) : Pair.create(matches, existNoEval);
     }
@@ -558,7 +567,8 @@ public class ListPartitionPruner implements PartitionPruner {
         try {
             result = LiteralExprFactory.create(value, type);
         } catch (Exception e) {
-            LOG.warn("Failed to execute LiteralExprFactory.create", e);
+            // Expected for values that do not convert; callers keep such partitions or skip pruning.
+            LOG.debug("Failed to execute LiteralExprFactory.create", e);
             throw new StarRocksConnectorException("can not cast literal value " + literalExpr.getStringValue() +
                     " to target type " + type.prettyPrint());
         }
@@ -590,13 +600,26 @@ public class ListPartitionPruner implements PartitionPruner {
     // string_col = '001' 3
     // will generate new partition value map
     // int_col = 1  [1, 2, 3]
+    //
+    // A partition value that does not convert ('hello' to double, '1.3' to bigint) is left out of the
+    // map and its partitions are added to {@code unconverted}; the caller must keep them. The
+    // conversion here parses the value's text as a literal of the target type, which is not what the
+    // CAST does at run time (CAST(1.3 AS BIGINT) is 1), so a failure says nothing about the row and
+    // only the rows can decide.
     private ConcurrentNavigableMap<LiteralExpr, Set<Long>> getCastPartitionValueMap(CastOperator castOperator,
-                                            ConcurrentNavigableMap<LiteralExpr, Set<Long>> partitionValueMap) {
+                                            ConcurrentNavigableMap<LiteralExpr, Set<Long>> partitionValueMap,
+                                            Set<Long> unconverted) {
         ConcurrentNavigableMap<LiteralExpr, Set<Long>> newPartitionValueMap = new ConcurrentSkipListMap<>();
 
         for (Map.Entry<LiteralExpr, Set<Long>> entry : partitionValueMap.entrySet()) {
             LiteralExpr key = entry.getKey();
-            LiteralExpr literalExpr = castLiteralExpr(key, castOperator.getType());
+            LiteralExpr literalExpr;
+            try {
+                literalExpr = castLiteralExpr(key, castOperator.getType());
+            } catch (StarRocksConnectorException e) {
+                unconverted.addAll(entry.getValue());
+                continue;
+            }
             Set<Long> partitions = newPartitionValueMap.computeIfAbsent(literalExpr, k -> Sets.newHashSet());
             partitions.addAll(entry.getValue());
         }
@@ -624,7 +647,7 @@ public class ListPartitionPruner implements PartitionPruner {
         return null;
     }
 
-    private Set<Long> evalBinaryPredicate(BinaryPredicateOperator binaryPredicate) {
+    private Set<Long> evalBinaryPredicate(BinaryPredicateOperator binaryPredicate, Set<Long> unconverted) {
         Preconditions.checkNotNull(binaryPredicate);
         ScalarOperator right = binaryPredicate.getChild(1);
         // eval the right child only if it is a constant or cast(constant)
@@ -648,7 +671,7 @@ public class ListPartitionPruner implements PartitionPruner {
         if (binaryPredicate.getChild(0) instanceof CastOperator && partitionValueMap != null) {
             // partitionValueMap need cast to target type
             partitionValueMap = getCastPartitionValueMap((CastOperator) binaryPredicate.getChild(0),
-                    partitionValueMap);
+                    partitionValueMap, unconverted);
         }
 
         if (partitionValueMap == null || nullPartitions == null || partitionValueMap.isEmpty()) {
@@ -759,7 +782,7 @@ public class ListPartitionPruner implements PartitionPruner {
         return null;
     }
 
-    private Set<Long> evalInPredicate(InPredicateOperator inPredicate) {
+    private Set<Long> evalInPredicate(InPredicateOperator inPredicate, Set<Long> unconverted) {
         Preconditions.checkNotNull(inPredicate);
         if (!inPredicate.allValuesMatch(ScalarOperator::isConstantRef)) {
             return null;
@@ -787,7 +810,7 @@ public class ListPartitionPruner implements PartitionPruner {
         if (inPredicate.getChild(0) instanceof CastOperator && partitionValueMap != null) {
             // partitionValueMap need cast to target type
             partitionValueMap = getCastPartitionValueMap((CastOperator) inPredicate.getChild(0),
-                    partitionValueMap);
+                    partitionValueMap, unconverted);
         }
 
         if (partitionValueMap == null || nullPartitions == null || partitionValueMap.isEmpty()) {
