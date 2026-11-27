@@ -19,6 +19,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.ScanNode;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.base.ColumnIdentifier;
@@ -3374,4 +3375,56 @@ public class AggregateTest extends PlanTestBase {
         assertContains(plan, "output: sum(2: v2), max(3: v3)");
         assertContains(plan, "named_struct('a', 4: sum, 'b', 5: max).a");
     }
+<<<<<<< HEAD
+=======
+
+    // count(v) on a VARIANT counts it as VARIANT. Counting cast(v as VARCHAR) instead turned a variant null into a SQL
+    // NULL and dropped it from the count, although `v IS NULL` is false.
+    @Test
+    public void testCountVariantDoesNotCastToVarchar() throws Exception {
+        int oldStage = connectContext.getSessionVariable().getNewPlannerAggStage();
+        try {
+            for (int stage : new int[] {0, 1, 2}) {
+                connectContext.getSessionVariable().setNewPlanerAggStage(stage);
+                String plan = getVerboseExplain(
+                        "select t1b, count(cast(t1a as variant)) from test_all_type group by t1b");
+                assertContains(plan, "count[([11: cast, VARIANT, true]); args: VARIANT; result: BIGINT");
+                assertNotContains(plan, "as VARCHAR");
+            }
+            // There is no distinct aggregate over VARIANT: count distinct still casts its argument to VARCHAR, so
+            // the multi-phase split never hands a VARIANT column to a VARCHAR distinct state.
+            for (int stage : new int[] {0, 1, 2, 3, 4}) {
+                connectContext.getSessionVariable().setNewPlanerAggStage(stage);
+                String plan = getVerboseExplain(
+                        "select count(distinct cast(t1a as variant)) from test_all_type");
+                assertContains(plan, "VARIANT, true] as VARCHAR)");
+                assertNotContains(plan, "as VARIANT)); args: CHAR");
+                assertNotContains(plan, "VARIANT, true]); args: CHAR");
+            }
+        } finally {
+            connectContext.getSessionVariable().setNewPlanerAggStage(oldStage);
+        }
+    }
+
+    @Test
+    public void testNoRuntimeAdaptiveDopWithSpill() throws Exception {
+        String sql = "select t0.v1, t0.v2 from t1 cross join t0 group by t0.v1, t0.v2";
+        SessionVariable sv = connectContext.getSessionVariable();
+        boolean oldAdaptive = sv.isEnableRuntimeAdaptiveDop();
+        boolean oldSpill = sv.isEnableSpill();
+        try {
+            sv.setEnableRuntimeAdaptiveDop(true);
+            sv.setEnableSpill(false);
+            ExecPlan plan = getExecPlan(sql);
+            Assertions.assertTrue(plan.getFragments().stream().anyMatch(PlanFragment::isUseRuntimeAdaptiveDop));
+
+            sv.setEnableSpill(true);
+            plan = getExecPlan(sql);
+            Assertions.assertTrue(plan.getFragments().stream().noneMatch(PlanFragment::isUseRuntimeAdaptiveDop));
+        } finally {
+            sv.setEnableRuntimeAdaptiveDop(oldAdaptive);
+            sv.setEnableSpill(oldSpill);
+        }
+    }
+>>>>>>> 086e6d2 ([BugFix] Do not use runtime adaptive DOP together with spill (#84447))
 }

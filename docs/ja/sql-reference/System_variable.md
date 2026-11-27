@@ -722,12 +722,28 @@ MySQL クライアント互換性のために使用されます。実際の用�
 
 ### tablet_internal_parallel_mode
 
+<<<<<<< HEAD
 * **説明**: タブレットの内部並列スキャン戦略。有効な値:
   * `auto`: BE または CN ノードでスキャンされるタブレットの数が並行性（DOP）より少ない場合、システムはタブレットの推定サイズに基づいて並列スキャンが必要かどうかを自動的に判断します。
   * `force_split`: タブレットを強制的に分割し、並列スキャンを実行します。
 * **デフォルト**: auto
 * **データ型**: 文字列
 * **導入バージョン**: v2.5.0
+=======
+* **説明**: セッションで有効にすると、オプティマイザは現在のセッションでカーディナリティを保持する結合に対してルールベース（RBO）によるテーブルプルーニングを適用します。オプティマイザは一連のリライトおよびプルーニングステップ（パーティションプルーニング、project のマージ/分離、`UniquenessBasedTablePruneRule`、結合順序入れ替え、`RboTablePruneRule`）を実行して不要なテーブルスキャンの候補を除去し、結合における走査パーティション/行数を削減します。このオプションを有効にすると、論理ルールのリライト実行中に競合する変換を避けるために結合同値性導出（`context.setEnableJoinEquivalenceDerive(false)`）が無効化されます。プルーニングフローは、`enable_table_prune_on_update` が設定されている場合に UPDATE 文に対して `PrimaryKeyUpdateTableRule` を追加で実行することがあります。ルールは、クエリがプルーニング可能な結合を含む場合にのみ実行されます（`Utils.hasPrunableJoin(tree)` でチェックされます）。
+* **スコープ**: Session
+* **デフォルト**: `false`
+* **タイプ**: boolean
+* **導入バージョン**: v3.2.0
+
+### enable_runtime_adaptive_dop
+
+* **スコープ**: Session
+* **説明**: セッションで有効にすると、planner と fragment builder はランタイムの adaptive DOP をサポートするパイプライン対応フラグメントに対して、実行時に adaptive degree-of-parallelism を使用するようマークします。このオプションは `enable_pipeline_engine` が true で、かつ spill が有効でないときのみ有効になります。`enable_spill` が true の場合、またはステートメント自体が spill を有効にする場合（例：`enable_connector_sink_spill` が有効な状態で Iceberg、Hive、FILES() テーブルに書き込む場合）は、ランタイム adaptive DOP は使用されません。有効にするとフラグメントはプラン構築中に `enableAdaptiveDop()` を呼び出すようになり、ランタイム上の影響があります：join の probe はすべての build フェーズが完了するのを待つ可能性があり（これは `group_execution` の動作と衝突します）、ランタイム adaptive DOP を有効にするとパイプラインレベルの multi-partitioned runtime filters が無効になります（setter は `enablePipelineLevelMultiPartitionedRf` をクリアします）。このフラグはクエリプロファイルに記録され、セッション単位で切り替えることができます。
+* **デフォルト**: `false`
+* **データ型**: boolean
+* **導入バージョン**: v3.2.0
+>>>>>>> 086e6d2 ([BugFix] Do not use runtime adaptive DOP together with spill (#84447))
 
 ### enable_scan_datacache
 

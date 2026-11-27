@@ -449,6 +449,14 @@ public class InsertPlanner {
             // Non-query must use the strategy assign scan ranges per driver sequence, which local shuffle agg cannot use.
             session.getSessionVariable().setEnableLocalShuffleAgg(false);
             session.getSessionVariable().setEnableMaterializedViewRewrite(enableMVRewrite);
+            // Enable spill for connector sinks before planning, so the optimizer and the fragments see spill on.
+            if (currentVariable.isEnableConnectorSinkSpill() && (targetTable instanceof IcebergTable
+                    || targetTable instanceof HiveTable || targetTable instanceof TableFunctionTable)) {
+                currentVariable.setEnableSpill(true);
+                if (currentVariable.getConnectorSinkSpillMemLimitThreshold() < currentVariable.getSpillMemLimitThreshold()) {
+                    currentVariable.setSpillMemLimitThreshold(currentVariable.getConnectorSinkSpillMemLimitThreshold());
+                }
+            }
 
             ExecPlan execPlan = buildExecPlan(insertStmt, session, outputColumns, logicalPlan, columnRefFactory,
                     queryRelation, targetTable);
@@ -575,6 +583,7 @@ public class InsertPlanner {
                 throw new SemanticException("Unknown table type " + insertStmt.getTargetTable().getType());
             }
 
+<<<<<<< HEAD
             // enable spill for connector sink
             if (session.getSessionVariable().isEnableConnectorSinkSpill() && (targetTable instanceof IcebergTable
                     || targetTable instanceof HiveTable || targetTable instanceof TableFunctionTable)) {
@@ -584,6 +593,9 @@ public class InsertPlanner {
                 }
             }
 
+=======
+            ConnectorSinkShuffleSpec.forTable(targetTable).ifPresent(spec -> spec.applyToExecPlan(execPlan, dataSink));
+>>>>>>> 086e6d2 ([BugFix] Do not use runtime adaptive DOP together with spill (#84447))
             PlanFragment sinkFragment = execPlan.getFragments().get(0);
             if (canUsePipeline && (targetTable instanceof OlapTable || targetTable.isIcebergTable() ||
                     targetTable.isHiveTable() || targetTable.isTableFunctionTable())) {

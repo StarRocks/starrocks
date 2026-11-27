@@ -14,8 +14,15 @@
 
 package com.starrocks.sql.plan;
 
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.IcebergTable;
+import com.starrocks.catalog.Table;
+import com.starrocks.common.jmockit.Deencapsulation;
+>>>>>>> 086e6d2 ([BugFix] Do not use runtime adaptive DOP together with spill (#84447))
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.QueryState;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.ast.StatementBase;
@@ -54,7 +61,41 @@ public class DeletePlanTest extends PlanTestBase {
         Assertions.assertEquals(connectContext.getState().getStateType(), QueryState.MysqlStateType.EOF);
     }
 
+<<<<<<< HEAD
     private static String getDeleteExecPlan(String originStmt) throws Exception {
+=======
+    // A connector sink turns spill on for its statement; it has to happen before planning, so no fragment keeps
+    // runtime adaptive DOP (which must not run together with spill), and only on a copy of the session variable.
+    @Test
+    public void testIcebergDeleteConnectorSinkSpillBeforePlanning() throws Exception {
+        String sql = "delete from iceberg0.unpartitioned_db.t0_v2 where id in " +
+                "(select id from iceberg0.partitioned_db.t1_v2 group by id)";
+        SessionVariable original = connectContext.getSessionVariable();
+        SessionVariable sv = (SessionVariable) original.clone();
+        connectContext.setSessionVariable(sv);
+        try {
+            sv.setEnableRuntimeAdaptiveDop(true);
+            sv.setEnableSpill(false);
+
+            // without connector sink spill the plan does use runtime adaptive DOP
+            Deencapsulation.setField(sv, "enableConnectorSinkSpill", false);
+            ExecPlan execPlan = getDeleteExecPlan(sql);
+            assertTrue(execPlan.getFragments().stream().anyMatch(PlanFragment::isUseRuntimeAdaptiveDop));
+            assertSame(sv, connectContext.getSessionVariable());
+
+            Deencapsulation.setField(sv, "enableConnectorSinkSpill", true);
+            execPlan = getDeleteExecPlan(sql);
+            assertTrue(execPlan.getFragments().stream().noneMatch(PlanFragment::isUseRuntimeAdaptiveDop));
+            assertTrue(connectContext.getSessionVariable().isEnableSpill());
+            // the user's session variable is left untouched
+            assertFalse(sv.isEnableSpill());
+        } finally {
+            connectContext.setSessionVariable(original);
+        }
+    }
+
+    private static ExecPlan getDeleteExecPlan(String originStmt) throws Exception {
+>>>>>>> 086e6d2 ([BugFix] Do not use runtime adaptive DOP together with spill (#84447))
         connectContext.setQueryId(UUIDUtil.genUUID());
         connectContext.setExecutionId(UUIDUtil.toTUniqueId(connectContext.getQueryId()));
         connectContext.setDumpInfo(new QueryDumpInfo(connectContext));

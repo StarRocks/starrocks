@@ -164,4 +164,81 @@ public class SessionVariableTest {
         Assertions.assertThrows(IllegalArgumentException.class,
                 () -> sessionVariable.setBinaryEncodingLevel("invalid"));
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testLakeTabletInternalParallelSkewSplitRatioValidation() {
+        SessionVariable sessionVariable = new SessionVariable();
+        // A positive finite ratio is accepted.
+        sessionVariable.setLakeTabletInternalParallelSkewSplitRatio(2.0);
+        Assertions.assertEquals(2.0, sessionVariable.getLakeTabletInternalParallelSkewSplitRatio(), 0.0);
+        // Non-positive or non-finite ratios are rejected: a non-positive value would make every sufficiently
+        // large tablet look skewed (over-splitting), and NaN/Infinity would silently disable the skew override.
+        Assertions.assertThrows(SemanticException.class,
+                () -> sessionVariable.setLakeTabletInternalParallelSkewSplitRatio(0));
+        Assertions.assertThrows(SemanticException.class,
+                () -> sessionVariable.setLakeTabletInternalParallelSkewSplitRatio(-1.0));
+        Assertions.assertThrows(SemanticException.class,
+                () -> sessionVariable.setLakeTabletInternalParallelSkewSplitRatio(Double.NaN));
+        Assertions.assertThrows(SemanticException.class,
+                () -> sessionVariable.setLakeTabletInternalParallelSkewSplitRatio(Double.POSITIVE_INFINITY));
+    }
+
+    @Test
+    public void testReplayFromJsonWithAlias() throws Exception {
+        SessionVariable sessionVariable = new SessionVariable();
+
+        // alias key in JSON should be resolved
+        sessionVariable.replayFromJson("{\"" +
+                SessionVariable.SCAN_HIVE_PARTITION_NUM_LIMIT + "\": 1024}");
+        Assertions.assertEquals(1024, sessionVariable.getScanLakePartitionNumLimit());
+
+        // canonical name key should also work
+        sessionVariable.replayFromJson("{\"" +
+                SessionVariable.SCAN_LAKE_PARTITION_NUM_LIMIT + "\": 2048}");
+        Assertions.assertEquals(2048, sessionVariable.getScanLakePartitionNumLimit());
+    }
+
+    @Test
+    public void testReplayFromJsonNameTakesPriorityOverAlias() throws Exception {
+        SessionVariable sessionVariable = new SessionVariable();
+
+        // when both name and alias are present, canonical name takes priority
+        sessionVariable.replayFromJson("{\"" +
+                SessionVariable.SCAN_LAKE_PARTITION_NUM_LIMIT + "\": 4096, \"" +
+                SessionVariable.SCAN_HIVE_PARTITION_NUM_LIMIT + "\": 512}");
+        Assertions.assertEquals(4096, sessionVariable.getScanLakePartitionNumLimit());
+    }
+
+    @Test
+    public void testGroupedRangeModeIsSessionOnlyAndIndependentOfParallel() throws Exception {
+        SessionVariable variables = new SessionVariable();
+        Assertions.assertFalse(variables.isRangeScanExecutionOverride());
+        variables.setRangeScanExecutionMode("GROUPED");
+        Assertions.assertTrue(variables.isGroupedRangeScan());
+        Assertions.assertFalse(variables.isParallelRangeScan());
+        Assertions.assertEquals("grouped", variables.clone().getRangeScanExecutionMode());
+        var field = SessionVariable.class.getDeclaredField("rangeScanExecutionMode");
+        Assertions.assertEquals(VariableMgr.SESSION_ONLY, field.getAnnotation(VariableMgr.VarAttr.class).flag());
+        Assertions.assertThrows(IllegalArgumentException.class, () -> variables.setRangeScanExecutionMode("auto"));
+        Assertions.assertTrue(variables.isGroupedRangeScan());
+        variables.setRangeScanExecutionMode("parallel");
+        Assertions.assertTrue(variables.isParallelRangeScan());
+        Assertions.assertFalse(variables.isGroupedRangeScan());
+    }
+
+    @Test
+    public void testRuntimeAdaptiveDopIsOffWithSpill() {
+        SessionVariable variables = new SessionVariable();
+        variables.setEnableRuntimeAdaptiveDop(true);
+        Assertions.assertTrue(variables.isEnableRuntimeAdaptiveDop());
+
+        variables.setEnableSpill(true);
+        Assertions.assertFalse(variables.isEnableRuntimeAdaptiveDop());
+
+        variables.setEnableSpill(false);
+        Assertions.assertTrue(variables.isEnableRuntimeAdaptiveDop());
+    }
+>>>>>>> 086e6d2 ([BugFix] Do not use runtime adaptive DOP together with spill (#84447))
 }
