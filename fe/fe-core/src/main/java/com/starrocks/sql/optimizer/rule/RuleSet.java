@@ -101,6 +101,7 @@ import com.starrocks.sql.optimizer.rule.transformation.MergeTwoFiltersRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeTwoProjectRule;
 import com.starrocks.sql.optimizer.rule.transformation.MinMaxOptOnScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.OuterJoinEliminationRule;
+import com.starrocks.sql.optimizer.rule.transformation.PaimonAnnTopNRule;
 import com.starrocks.sql.optimizer.rule.transformation.PartitionPruneRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneAIProjectColumnsRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneAggregateColumnsRule;
@@ -261,7 +262,7 @@ public class RuleSet {
     ));
 
     public static final Rule VECTOR_REWRITE_RULES = new CombinationRule(RuleType.GP_VECTOR_REWRITE, ImmutableList.of(
-            new RewriteToVectorPlanRule()
+            new RewriteToVectorPlanRule(), new PaimonAnnTopNRule()
     ));
 
     public static final Rule PRUNE_COLUMNS_RULES = new CombinationRule(RuleType.GP_PRUNE_COLUMNS, ImmutableList.of(

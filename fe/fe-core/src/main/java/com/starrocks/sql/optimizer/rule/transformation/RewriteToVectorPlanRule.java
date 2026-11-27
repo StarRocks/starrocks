@@ -423,7 +423,7 @@ public class RewriteToVectorPlanRule extends TransformationRule {
      * (the last form is used by prepared statements that send the array as a string parameter,
      * via `CAST(? AS ARRAY<FLOAT>)`).
      */
-    private boolean isConstantArrayFloat(ScalarOperator scalarOperator) {
+    static boolean isConstantArrayFloat(ScalarOperator scalarOperator) {
         if (!scalarOperator.isConstant()) {
             return false;
         }
@@ -441,7 +441,7 @@ public class RewriteToVectorPlanRule extends TransformationRule {
                 return true;
             }
 
-            return scalarOperator.getChildren().stream().allMatch(this::isConstantArrayFloat);
+            return scalarOperator.getChildren().stream().allMatch(RewriteToVectorPlanRule::isConstantArrayFloat);
         } else if (scalarOperator instanceof ArrayOperator) {
             if (!scalarOperator.getType().isArrayType()) {
                 return false;
@@ -471,7 +471,7 @@ public class RewriteToVectorPlanRule extends TransformationRule {
         return child instanceof ConstantOperator && child.getType() != null && child.getType().isStringType();
     }
 
-    private void extractValuesFromConstantArray(ScalarOperator scalarOperator, List<String> vectorQuery) {
+    static void extractValuesFromConstantArray(ScalarOperator scalarOperator, List<String> vectorQuery) {
         if (scalarOperator instanceof ColumnRefOperator) {
             return;
         }

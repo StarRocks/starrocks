@@ -129,6 +129,11 @@ if ("${WITH_PAIMON_CPP}" STREQUAL "ON" AND NOT "${MAKE_TEST}" STREQUAL "ON" AND 
             hive/paimon/paimon_scanner.cpp
             hive/paimon/paimon_blob_converter.cpp
     )
+    if (PAIMON_ENABLE_LUMINA AND WITH_GLIBC_COMPAT)
+        target_sources(starrocks_paimon PRIVATE ${SRC_DIR}/common/glibc_compat.c)
+        set_source_files_properties(${SRC_DIR}/common/glibc_compat.c
+                PROPERTIES LANGUAGE C COMPILE_OPTIONS "-std=gnu11;-fvisibility=hidden")
+    endif()
     set_target_properties(starrocks_paimon PROPERTIES POSITION_INDEPENDENT_CODE ON)
     # WRAP_LINKER_FLAGS keeps __cxa_throw/__floattidf wrapping consistent with
     # the executable; the __wrap_* definitions resolve from it at dlopen.

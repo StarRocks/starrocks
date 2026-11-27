@@ -32,9 +32,12 @@ import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.thrift.THdfsScanRange;
+import com.starrocks.thrift.TPaimonGlobalIndexScanRange;
 import com.starrocks.thrift.TResultBatch;
 import com.starrocks.thrift.TResultSinkType;
 import com.starrocks.thrift.TRowFormat;
+import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TWorkGroup;
 import com.starrocks.type.IntegerType;
@@ -116,7 +119,17 @@ class PaimonGlobalIndexCollectJobTest {
         var coordinator = mock(Coordinator.class);
         var scan = mock(PaimonGlobalIndexScanNode.class);
         when(coordinator.getScanNodes()).thenReturn(List.of(scan));
-        when(scan.getScanRangeLocations(0)).thenReturn(java.util.Collections.nCopies(expected, new TScanRangeLocations()));
+        List<TScanRangeLocations> ranges = new ArrayList<>();
+        for (int id = 0; id < expected; id++) {
+            TPaimonGlobalIndexScanRange range = new TPaimonGlobalIndexScanRange();
+            range.setShard_id(id);
+            range.setProtocol_version(request.getVersion());
+            range.setRange_from(256L * id);
+            range.setRange_to(256L * id + 255);
+            ranges.add(new TScanRangeLocations().setScan_range(new TScanRange()
+                    .setHdfs_scan_range(new THdfsScanRange().setPaimon_global_index_scan_range(range))));
+        }
+        when(scan.getScanRangeLocations(0)).thenReturn(ranges);
         doReturn(coordinator).when(job).getMetadataJobCoord();
         doAnswer(call -> {
             for (TResultBatch batch : batches) {
@@ -158,6 +171,81 @@ class PaimonGlobalIndexCollectJobTest {
     private void rejects(ByteBuffer row, String message) {
         Exception error = assertThrows(IllegalStateException.class, () -> job(BUDGET).getResultConsumer().accept(batch(row)));
         assertTrue(error.getMessage().contains(message), error.getMessage());
+    }
+
+    private void annRequest(int k) {
+        request = PaimonGlobalIndexRequest.createAnn("file:/orders", "main", 42, 0, 1000,
+                7, "vec", "l2", List.of(1.0f, 2.0f), k);
+    }
+
+    private static byte[] annResult(long[] ids, float[] scores) {
+        ByteBuffer data = ByteBuffer.allocate(4 + 12 * ids.length).order(ByteOrder.LITTLE_ENDIAN);
+        data.putInt(ids.length);
+        for (int i = 0; i < ids.length; i++) {
+            data.putLong(ids[i]).putFloat(scores[i]);
+        }
+        return data.array();
+    }
+
+    @Test
+    void testAnnGlobalTopKAndEmptyShard() throws Exception {
+        annRequest(2);
+        var job = collectingJob(3, batch(
+                row(2, annResult(new long[0], new float[0])),
+                row(1, annResult(new long[] {300, 256}, new float[] {1, 0})),
+                row(0, annResult(new long[] {1, 2}, new float[] {0, 2}))));
+        var result = job.collect(caller).results();
+        assertEquals(2, result.getLongCardinality());
+        assertTrue(result.contains(1) && result.contains(256));
+        assertTrue(job.getResultQueue().isEmpty());
+    }
+
+    @Test
+    void testAnnCppLittleEndianResult() throws Exception {
+        annRequest(1);
+        // C++ uint32 count=1, int64 global row ID=300, float lower-is-better score=1.5.
+        byte[] cpp = HexFormat.of().parseHex("010000002c010000000000000000c03f");
+        var job = collectingJob(2, batch(row(0, annResult(new long[0], new float[0])), row(1, cpp)));
+        var result = job.collect(caller).results();
+        assertEquals(1, result.getLongCardinality());
+        assertTrue(result.contains(300));
+    }
+
+    @Test
+    void testAnnRejectsOutOfRangeDuplicateAndNonFiniteRows() throws Exception {
+        annRequest(2);
+        for (byte[] invalid : List.of(
+                annResult(new long[] {256}, new float[] {0}),
+                annResult(new long[] {-1}, new float[] {0}),
+                annResult(new long[] {1, 1}, new float[] {0, 1}),
+                annResult(new long[] {1}, new float[] {Float.NaN}),
+                annResult(new long[] {1}, new float[] {Float.POSITIVE_INFINITY}),
+                annResult(new long[] {1, 2, 3}, new float[] {0, 1, 2}),
+                new byte[] {-1, -1, -1, -1}, new byte[3], new byte[5])) {
+            var job = collectingJob(1, batch(row(0, invalid)));
+            assertThrows(IllegalStateException.class, () -> job.collect(caller));
+        }
+    }
+
+    @Test
+    void testAnnRejectsBudgetAndUnplannedResults() throws Exception {
+        annRequest(2);
+        byte[] empty = annResult(new long[0], new float[0]);
+        var bounded = job(900);
+        Exception error = assertThrows(IllegalStateException.class,
+                () -> bounded.getResultConsumer().accept(batch(row(0, empty))));
+        assertTrue(error.getMessage().contains("collection budget"), error.getMessage());
+        assertThrows(IllegalStateException.class, () -> job(BUDGET).getResultConsumer().accept(batch(row(0, empty))));
+    }
+
+    @Test
+    void testAnnRejectsMissingDuplicateAndUnexpectedShards() throws Exception {
+        annRequest(1);
+        byte[] empty = annResult(new long[0], new float[0]);
+        assertThrows(IllegalStateException.class, () -> collectingJob(2, batch(row(0, empty))).collect(caller));
+        assertThrows(IllegalStateException.class,
+                () -> collectingJob(1, batch(row(0, empty), row(0, empty))).collect(caller));
+        assertThrows(IllegalStateException.class, () -> collectingJob(1, batch(row(1, empty))).collect(caller));
     }
 
     @Test

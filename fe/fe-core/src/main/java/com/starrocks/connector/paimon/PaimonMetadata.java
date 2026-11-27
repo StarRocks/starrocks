@@ -978,7 +978,9 @@ public class PaimonMetadata implements ConnectorMetadata {
         // withLimit stops at the first splits that pass the pushed filter, so it is only safe when every
         // partition conjunct was converted: one left to the BE (e.g. LIKE 'a_c%') would let Paimon pick
         // splits the BE then filters out entirely, while splits that match are never scanned.
-        boolean pruneManifestsByLimit = params.getLimit() != -1 && params.getLimit() < Integer.MAX_VALUE
+        boolean hasAnnQuery = evaluateIndex && params instanceof PaimonScanRangeParams scanParams
+                && scanParams.getAnnQuery() != null;
+        boolean pruneManifestsByLimit = !hasAnnQuery && params.getLimit() != -1 && params.getLimit() < Integer.MAX_VALUE
                 && onlyHasPartitionPredicate(paimonTable, params.getPredicate())
                 && predicates.size() == Utils.extractConjuncts(params.getPredicate()).size();
         readBuilder = readBuilder.withFilter(predicates).withProjection(projected);
@@ -988,17 +990,20 @@ public class PaimonMetadata implements ConnectorMetadata {
         }
         PaimonMetricRegistry paimonMetricRegistry = new PaimonMetricRegistry();
         List<Split> splits = null;
+        boolean annApplied = false;
         RuntimeException indexFailure = null;
         if (evaluateIndex && paimonNativeTable instanceof FileStoreTable fileStore) {
             SimpleExecutor.checkInternalQueryState(caller);
             try {
-                GlobalIndexResult result = evaluateGlobalIndex(
+                IndexEvaluation evaluation = evaluateGlobalIndex(
                         paimonTable, fileStore, (PaimonScanRangeParams) params, snapshotId, caller);
-                if (result != null) {
+                if (evaluation != null) {
                     SimpleExecutor.checkInternalQueryState(caller);
-                    splits = planDataSplits(readBuilder, paimonMetricRegistry, result);
+                    splits = planDataSplits(readBuilder, paimonMetricRegistry, evaluation.result());
+                    annApplied = evaluation.ann();
                 } else {
-                    Tracers.record(EXTERNAL, "PaimonGlobalIndex.Result", "no supported indexed scalar predicate");
+                    Tracers.record(EXTERNAL, "PaimonGlobalIndex.Result",
+                            hasAnnQuery ? "no eligible ANN snapshot" : "no supported indexed scalar predicate");
                 }
             } catch (RuntimeException e) {
                 if (mode != PaimonGlobalIndexMode.AUTO) {
@@ -1015,6 +1020,9 @@ public class PaimonMetadata implements ConnectorMetadata {
         }
         if (splits != null) {
             Tracers.record(EXTERNAL, "PaimonGlobalIndex.Result", "applied");
+            if (annApplied) {
+                Tracers.record(EXTERNAL, "PaimonGlobalIndex.ANN", "applied");
+            }
         } else {
             if (indexFailure != null) {
                 paimonMetricRegistry = new PaimonMetricRegistry();
@@ -1040,17 +1048,26 @@ public class PaimonMetadata implements ConnectorMetadata {
         return new PaimonSplitsInfo(predicates, splits, paimonNativeTable);
     }
 
-    private static GlobalIndexResult evaluateGlobalIndex(PaimonTable paimonTable, FileStoreTable fileStore,
-                                                         PaimonScanRangeParams params, long snapshotId,
-                                                         ConnectContext caller) {
+    private record IndexEvaluation(GlobalIndexResult result, boolean ann) {
+    }
+
+    private static IndexEvaluation evaluateGlobalIndex(PaimonTable paimonTable, FileStoreTable fileStore,
+                                                       PaimonScanRangeParams params, long snapshotId,
+                                                       ConnectContext caller) {
         try (Timer ignored = Tracers.watchScope(EXTERNAL, "PaimonGlobalIndex.Evaluate")) {
-            PaimonGlobalIndexRequest request = PaimonGlobalIndexPlanner.request(
-                    fileStore, snapshotId, params.getPredicate(), params.getColumnNames());
+            PaimonAnnQuery annQuery = params.getAnnQuery();
+            PaimonGlobalIndexRequest request = annQuery == null ? null
+                    : PaimonGlobalIndexPlanner.annRequest(
+                            fileStore, snapshotId, annQuery, params.getPredicate(), params.getColumnNames());
+            if (request == null) {
+                request = PaimonGlobalIndexPlanner.request(fileStore, snapshotId, params.getPredicate(), params.getColumnNames());
+            }
             if (request == null) {
                 return null;
             }
-            return new PaimonGlobalIndexCollectJob(paimonTable, request,
+            GlobalIndexResult result = new PaimonGlobalIndexCollectJob(paimonTable, request,
                     PaimonGlobalIndexRequest.resultBudget()).collect(caller);
+            return result == null ? null : new IndexEvaluation(result, request.isAnn());
         }
     }
 

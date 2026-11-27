@@ -24,6 +24,7 @@
 #include <string>
 #include <unordered_map>
 
+#include "base/string/slice.h"
 #include "connector/hive/paimon/paimon_file_system.h"
 #include "connector/hive/scanner/hdfs_scanner.h"
 
@@ -35,7 +36,7 @@ class PaimonGlobalIndexScannerTestAccessor;
 class TPaimonGlobalIndexScanRange;
 
 // Executes one snapshot-bound Paimon global-index row-id range and emits one
-// serialized GlobalIndexResult row for FE aggregation.
+// serialized scalar bitmap or ANN scored row for FE aggregation.
 class PaimonGlobalIndexScanner final : public HdfsScanner {
 public:
     PaimonGlobalIndexScanner() = default;
@@ -54,6 +55,9 @@ private:
     Status _parse_request();
     static Status _parse_request(const TPaimonGlobalIndexScanRange& scan_range, rapidjson::Document* request);
     StatusOr<std::shared_ptr<paimon::GlobalIndexResult>> _evaluate(RuntimeState* runtime_state);
+    StatusOr<std::shared_ptr<paimon::ScoredGlobalIndexResult>> _evaluate_vector(RuntimeState* runtime_state);
+    Status _emit_result(Slice bytes, ChunkPtr* chunk);
+    Status _open_vector_reader(RuntimeState* runtime_state);
 
     bool _emitted = false;
     int64_t _open_ns = 0;

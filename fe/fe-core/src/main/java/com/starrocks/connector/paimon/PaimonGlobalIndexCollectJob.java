@@ -34,6 +34,10 @@ import org.roaringbitmap.buffer.ImmutableRoaringBitmap;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.BitSet;
+import java.util.Comparator;
+import java.util.HashSet;
+import java.util.PriorityQueue;
+import java.util.Set;
 import java.util.function.Consumer;
 
 /** Collects every shard through the shared metadata executor without retaining result batches. */
@@ -47,6 +51,12 @@ public final class PaimonGlobalIndexCollectJob extends MetadataCollectJob {
     private long receivedRows;
     private final BitSet received = new BitSet();
     private final RoaringNavigableMap64 aggregate = new RoaringNavigableMap64();
+    private static final Comparator<Candidate> BEST_FIRST = Comparator.comparingDouble(Candidate::score)
+            .thenComparingLong(Candidate::rowId);
+    private final PriorityQueue<Candidate> candidates = new PriorityQueue<>(BEST_FIRST.reversed());
+
+    private record Candidate(long rowId, float score) {
+    }
 
     public PaimonGlobalIndexCollectJob(PaimonTable origin, PaimonGlobalIndexRequest request, long budget) {
         super(origin.getCatalogName(), origin.getCatalogDBName(), origin.getCatalogTableName(), TResultSinkType.CUSTOMIZED);
@@ -102,6 +112,11 @@ public final class PaimonGlobalIndexCollectJob extends MetadataCollectJob {
         if (expected == 0 || received.cardinality() != expected || received.length() != expected) {
             throw new IllegalStateException("Incomplete Paimon Global Index shard results");
         }
+        if (request.isAnn()) {
+            for (Candidate candidate : candidates) {
+                aggregate.add(candidate.rowId());
+            }
+        }
         return GlobalIndexResult.create(aggregate);
     }
 
@@ -128,17 +143,65 @@ public final class PaimonGlobalIndexCollectJob extends MetadataCollectJob {
                 }
                 byte[] serialized = new byte[data.remaining()];
                 data.get(serialized);
-                RoaringNavigableMap64 partial = deserialize(serialized, budget / MEMORY_BYTES_PER_ROW - receivedRows);
-                long cardinality = partial.getLongCardinality();
-                if (cardinality > budget / MEMORY_BYTES_PER_ROW - receivedRows) {
-                    throw new IllegalStateException("Paimon Global Index bitmap exceeds the FE collection budget");
+                if (request.isAnn()) {
+                    consumeAnn((int) id, serialized);
+                } else {
+                    RoaringNavigableMap64 partial = deserialize(serialized, budget / MEMORY_BYTES_PER_ROW - receivedRows);
+                    long cardinality = partial.getLongCardinality();
+                    if (cardinality > budget / MEMORY_BYTES_PER_ROW - receivedRows) {
+                        throw new IllegalStateException("Paimon Global Index bitmap exceeds the FE collection budget");
+                    }
+                    receivedRows += cardinality;
+                    aggregate.or(partial);
                 }
-                receivedRows += cardinality;
-                aggregate.or(partial);
                 received.set((int) id);
             } catch (Exception e) {
                 String reason = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
                 throw new IllegalStateException("Cannot collect Paimon Global Index result: " + reason, e);
+            }
+        }
+    }
+
+    private void consumeAnn(int shardId, byte[] serialized) {
+        int k = request.getVector().k();
+        if ((long) k * MEMORY_BYTES_PER_ROW > budget) {
+            throw new IllegalStateException("Paimon ANN candidates exceed the FE collection budget");
+        }
+        var coordinator = getMetadataJobCoord();
+        if (coordinator == null || coordinator.getScanNodes().size() != 1
+                || !(coordinator.getScanNodes().get(0) instanceof com.starrocks.planner.PaimonGlobalIndexScanNode)) {
+            throw new IllegalStateException("Missing Paimon ANN metadata plan");
+        }
+        var ranges = coordinator.getScanNodes().get(0).getScanRangeLocations(0);
+        if (shardId >= ranges.size()) {
+            throw new IllegalArgumentException("Unexpected Paimon ANN shard ID");
+        }
+        var range = ranges.get(shardId).getScan_range().getHdfs_scan_range().getPaimon_global_index_scan_range();
+        if (range == null || !range.isSetShard_id() || !range.isSetProtocol_version()
+                || !range.isSetRange_from() || !range.isSetRange_to() || range.getShard_id() != shardId
+                || range.getProtocol_version() != request.getVersion() || range.getRange_from() < 0
+                || range.getRange_to() < range.getRange_from() || range.getRange_to() == Long.MAX_VALUE) {
+            throw new IllegalArgumentException("Invalid Paimon ANN planned shard range");
+        }
+        ByteBuffer input = ByteBuffer.wrap(serialized).order(ByteOrder.LITTLE_ENDIAN);
+        long count = Integer.toUnsignedLong(input.getInt());
+        if (count > k || 12L * count != input.remaining()) {
+            throw new IllegalArgumentException("Invalid Paimon ANN candidate result length");
+        }
+        Set<Long> unique = new HashSet<>();
+        for (long i = 0; i < count; i++) {
+            long rowId = input.getLong();
+            float score = input.getFloat();
+            if (rowId < range.getRange_from() || rowId > range.getRange_to()
+                    || !Float.isFinite(score) || !unique.add(rowId)) {
+                throw new IllegalArgumentException("Invalid or duplicate Paimon ANN candidate");
+            }
+            Candidate candidate = new Candidate(rowId, score);
+            if (candidates.size() < k) {
+                candidates.add(candidate);
+            } else if (BEST_FIRST.compare(candidate, candidates.peek()) < 0) {
+                candidates.poll();
+                candidates.add(candidate);
             }
         }
     }

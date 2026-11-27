@@ -19,11 +19,13 @@ import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.VarcharType;
 import org.apache.paimon.schema.TableSchema;
 import org.apache.paimon.types.DataField;
 import org.apache.paimon.types.DataTypes;
+import org.apache.paimon.utils.Range;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -32,6 +34,133 @@ import java.util.Map;
 import java.util.Set;
 
 public class PaimonGlobalIndexRequestTest {
+    private static PaimonGlobalIndexRequest ann(int k) {
+        return PaimonGlobalIndexRequest.createAnn("file:/orders", "main", 42, 3, 1000,
+                7, "vec", "l2", List.of(1.0f, 2.0f, 3.0f, 4.0f), k);
+    }
+
+    private static ScalarOperator filterPredicate() {
+        return new BinaryPredicateOperator(BinaryType.EQ, new ColumnRefOperator(101, IntegerType.INT, "k", true),
+                ConstantOperator.createInt(3));
+    }
+
+    @Test
+    public void testFilteredAnnRoundTripAndImmutableBase() {
+        var base = ann(3);
+        String original = base.toJson();
+        var ranges = new java.util.ArrayList<>(List.of(new Range(0, 99), new Range(256, 511)));
+        var filtered = PaimonGlobalIndexRequest.createFilteredAnn(base, filterPredicate(), Map.of(101, 9), ranges);
+        ranges.clear();
+        Assertions.assertEquals(original, base.toJson());
+        Assertions.assertEquals(base.getVector(), filtered.getVector());
+        Assertions.assertEquals(base.getSnapshotId(), filtered.getSnapshotId());
+        Assertions.assertEquals(base.getResultBytesLimit(), filtered.getResultBytesLimit());
+        Assertions.assertTrue(filtered.isFilteredAnn());
+        Assertions.assertTrue(filtered.hasScalarPredicate());
+        Assertions.assertEquals(Set.of(9), filtered.getScalarFieldIds());
+        Assertions.assertEquals(Set.of(7, 9), filtered.getRequiredFieldIds());
+        var parsed = PaimonGlobalIndexRequest.parseTransport(filtered.toTransportString());
+        Assertions.assertEquals(filtered.toJson(), parsed.toJson());
+        Assertions.assertEquals(List.of(new Range(0, 99), new Range(256, 511)), parsed.getPartitionRanges());
+        Assertions.assertThrows(UnsupportedOperationException.class, () -> parsed.getPartitionRanges().clear());
+        var schema = new TableSchema(3, List.of(
+                DataTypes.FIELD(7, "vec", DataTypes.ARRAY(DataTypes.FLOAT().notNull()).notNull()),
+                DataTypes.FIELD(9, "k", DataTypes.INT())), 9, List.of(), List.of(), Map.of(), null);
+        parsed.validateVector(schema);
+        parsed.validatePredicate(schema);
+    }
+
+    @Test
+    public void testFilteredAnnScalarOnlyAndPartitionOnly() {
+        var base = ann(3);
+        var scalarOnly = PaimonGlobalIndexRequest.createFilteredAnn(base, filterPredicate(), Map.of(101, 9), null);
+        Assertions.assertNull(scalarOnly.getPartitionRanges());
+        Assertions.assertTrue(PaimonGlobalIndexRequest.parse(scalarOnly.toJson()).hasScalarPredicate());
+        var partitionOnly = PaimonGlobalIndexRequest.createFilteredAnn(base, null, Map.of(), List.of(new Range(3, 7)));
+        Assertions.assertFalse(partitionOnly.hasScalarPredicate());
+        Assertions.assertTrue(partitionOnly.getScalarFieldIds().isEmpty());
+        Assertions.assertFalse(partitionOnly.toJson().contains("indexes"));
+        Assertions.assertFalse(partitionOnly.toJson().contains("predicate"));
+        Assertions.assertTrue(PaimonGlobalIndexRequest.parse(partitionOnly.toJson()).isFilteredAnn());
+    }
+
+    @Test
+    public void testFilteredAnnRejectsRangesAndIncompleteBindings() {
+        var base = ann(3);
+        for (List<Range> ranges : List.of(List.<Range>of(), List.of(new Range(-1, 3)),
+                List.of(new Range(0, Long.MAX_VALUE)), List.of(new Range(0, 8), new Range(8, 10)),
+                List.of(new Range(5, 7), new Range(0, 3)), java.util.Collections.nCopies(4097, new Range(0, 0)))) {
+            Assertions.assertThrows(IllegalArgumentException.class,
+                    () -> PaimonGlobalIndexRequest.createFilteredAnn(base, null, Map.of(), ranges));
+        }
+        Assertions.assertThrows(IllegalArgumentException.class,
+                () -> PaimonGlobalIndexRequest.createFilteredAnn(base, null, Map.of(), null));
+        var valid = PaimonGlobalIndexRequest.createFilteredAnn(base, filterPredicate(), Map.of(101, 9),
+                List.of(new Range(0, 8)));
+        for (String json : List.of(
+                valid.toJson().replace("\"from\":0", "\"from\":0.5"),
+                valid.toJson().replace("\"to\":8", "\"to\":\"8\""),
+                valid.toJson().replace("\"from\":0,", ""),
+                valid.toJson().replace("\"fieldId\":9", "\"fieldId\":9.1"),
+                valid.toJson().replace("\"provider\":\"btree\"", "\"provider\":\"bitmap\""),
+                valid.toJson().replace("\"indexes\":{\"k\":{\"fieldId\":9,\"provider\":\"btree\"}}", "\"indexes\":null"))) {
+            Assertions.assertThrows(IllegalArgumentException.class, () -> PaimonGlobalIndexRequest.parse(json), json);
+        }
+        Assertions.assertThrows(IllegalArgumentException.class,
+                () -> PaimonGlobalIndexRequest.createFilteredAnn(valid, null, Map.of(), null));
+    }
+
+    @Test
+    public void testAnnRoundTripAndSchemaBinding() {
+        PaimonGlobalIndexRequest request = ann(3);
+        PaimonGlobalIndexRequest parsed = PaimonGlobalIndexRequest.parseTransport(request.toTransportString());
+        Assertions.assertTrue(parsed.isAnn());
+        Assertions.assertEquals(6, parsed.getVersion());
+        Assertions.assertEquals(request.getVector(), parsed.getVector());
+        Assertions.assertEquals(Set.of(7), parsed.getRequiredFieldIds());
+        Assertions.assertFalse(parsed.toJson().contains("predicate"));
+        Assertions.assertFalse(parsed.toJson().contains("indexes"));
+        Assertions.assertThrows(UnsupportedOperationException.class, () -> parsed.getVector().queryVector().add(5f));
+        TableSchema schema = new TableSchema(3L,
+                List.of(new DataField(7, "vec", DataTypes.ARRAY(DataTypes.FLOAT().notNull()).notNull())),
+                7, List.of(), List.of(), Map.of(), null);
+        parsed.validateVector(schema);
+        for (var type : List.of(DataTypes.ARRAY(DataTypes.FLOAT()).notNull(),
+                DataTypes.ARRAY(DataTypes.FLOAT().notNull()), DataTypes.ARRAY(DataTypes.DOUBLE().notNull()).notNull())) {
+            TableSchema unsupported = new TableSchema(3L, List.of(new DataField(7, "vec", type)),
+                    7, List.of(), List.of(), Map.of(), null);
+            Assertions.assertThrows(IllegalArgumentException.class, () -> parsed.validateVector(unsupported));
+        }
+        TableSchema renamed = new TableSchema(3L,
+                List.of(new DataField(7, "renamed", DataTypes.ARRAY(DataTypes.FLOAT().notNull()).notNull())),
+                7, List.of(), List.of(), Map.of(), null);
+        Assertions.assertThrows(IllegalArgumentException.class, () -> parsed.validateVector(renamed));
+    }
+
+    @Test
+    public void testAnnRejectsInvalidEnvelopeAndVector() {
+        for (String json : List.of(
+                ann(3).toJson().replace("unfiltered_top_n", "filtered_top_n"),
+                ann(3).toJson().replace("lumina", "btree"),
+                ann(3).toJson().replace("l2", "invalid"),
+                ann(3).toJson().replace("\"k\":3", "\"k\":0"),
+                ann(3).toJson().replace("\"fieldId\":7", "\"fieldId\":-1"),
+                ann(3).toJson().replace("\"fieldId\":7,", ""),
+                ann(3).toJson().replace("\"k\":3", "\"k\":3.5"),
+                ann(3).toJson().replace("\"queryVector\":[1.0,2.0,3.0,4.0]", "\"queryVector\":[\"1\"]"),
+                ann(3).toJson().replace("\"resultBytesLimit\":1048576", "\"resultBytesLimit\":39"),
+                ann(3).toJson().replace("\"queryVector\":[1.0,2.0,3.0,4.0]", "\"queryVector\":[]"),
+                ann(3).toJson().replace("\"queryVector\":[1.0,2.0,3.0,4.0]", "\"queryVector\":[1e100]"),
+                ann(3).toJson().replace("\"version\":6", "\"version\":5"),
+                ann(3).toJson().replace("\"version\":6", "\"version\":6,\"predicate\":{}"))) {
+            Assertions.assertThrows(IllegalArgumentException.class, () -> PaimonGlobalIndexRequest.parse(json), json);
+        }
+        Assertions.assertThrows(IllegalArgumentException.class, () -> ann(Integer.MAX_VALUE));
+        Assertions.assertThrows(IllegalArgumentException.class, () -> PaimonGlobalIndexRequest.createAnn(
+                "file:/orders", "main", 42, 3, 1000, 7, "vec", "l2",
+                java.util.Collections.nCopies(4097, 1.0f), 1));
+    }
+
     @Test
     public void testSchemaBoundLiteralValidation() {
         TableSchema schema = new TableSchema(3L, List.of(new DataField(7, "k", DataTypes.TINYINT())),

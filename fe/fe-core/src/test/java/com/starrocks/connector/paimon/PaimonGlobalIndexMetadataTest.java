@@ -22,6 +22,7 @@ import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.type.IntegerType;
@@ -40,6 +41,7 @@ import org.apache.paimon.table.FileStoreTable;
 import org.apache.paimon.table.source.DataSplit;
 import org.apache.paimon.table.source.ScanMode;
 import org.apache.paimon.table.source.Split;
+import org.apache.paimon.types.ArrayType;
 import org.apache.paimon.types.DataField;
 import org.apache.paimon.types.DataTypes;
 import org.apache.paimon.utils.Filter;
@@ -48,12 +50,15 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -137,16 +142,186 @@ class PaimonGlobalIndexMetadataTest {
     }
 
     private void setData(List<Range> ranges) {
+        splits(List.of(dataSplit(BinaryRow.EMPTY_ROW, ranges)));
+    }
+
+    private DataSplit dataSplit(BinaryRow partition, List<Range> ranges) {
         List<DataFileMeta> files = new ArrayList<>();
         for (Range range : ranges) {
             DataFileMeta file = mock(DataFileMeta.class);
             when(file.firstRowId()).thenReturn(range.from);
+            when(file.schemaId()).thenReturn(schema.id());
+            when(file.rowCount()).thenReturn(range.count());
+            when(file.writeCols()).thenReturn(null);
             when(file.nonNullRowIdRange()).thenReturn(range);
             files.add(file);
         }
         DataSplit split = mock(DataSplit.class);
         when(split.dataFiles()).thenReturn(files);
-        splits(List.of(split));
+        when(split.partition()).thenReturn(partition);
+        return split;
+    }
+
+    private void annRequest() {
+        annRequest(List.of());
+    }
+
+    private void annRequest(List<String> partitionKeys) {
+        schema = new TableSchema(1, List.of(DataTypes.FIELD(7, "vec", new ArrayType(false, DataTypes.FLOAT().notNull())),
+                DataTypes.FIELD(9, "key", DataTypes.INT()), DataTypes.FIELD(10, "part", DataTypes.INT())),
+                20, partitionKeys, List.of(), Map.of("data-evolution.enabled", "true", "row-tracking.enabled", "true"), "");
+        when(table.schema()).thenReturn(schema);
+        when(table.options()).thenReturn(schema.options());
+        when(table.schemaManager().schema(1)).thenReturn(schema);
+        when(table.schemaManager().schema(0)).thenReturn(schema(0, schema.fields()));
+        request = PaimonGlobalIndexRequest.createAnn(table.location().toString(), "main", 42, schema.id(),
+                schema.timeMillis(), 7, "vec", "l2", List.of(1F, 2F), 3);
+    }
+
+    private static IndexManifestEntry annIndex(long from, long to, String metric) {
+        byte[] metadata = ("""
+                {"index.dimension":"2","index.type":"diskann","distance.metric":"%s","encoding.type":"rawf32"}
+                """.formatted(metric)).getBytes(StandardCharsets.UTF_8);
+        return index(7, from, to, 100, "lumina", metadata);
+    }
+
+    private static IndexManifestEntry inPartition(IndexManifestEntry index, BinaryRow partition) {
+        return new IndexManifestEntry(index.kind(), partition, index.bucket(), index.indexFile());
+    }
+
+    private static ScalarOperator keyPredicate() {
+        return new IsNullPredicateOperator(true, new ColumnRefOperator(11, IntegerType.INT, "key", true));
+    }
+
+    @Test
+    void testAnnRequestRequiresAnIndexOnTheBoundField() {
+        annRequest();
+        var query = new PaimonAnnQuery("vec", "l2", List.of(1F, 2F), 3);
+        when(handler.scan(snapshot, "lumina")).thenReturn(List.of());
+        assertNull(PaimonGlobalIndexPlanner.annRequest(table, 42, query));
+        when(handler.scan(snapshot, "lumina")).thenReturn(List.of(annIndex(0, 19, "l2")));
+        assertEquals(request.toJson(), PaimonGlobalIndexPlanner.annRequest(table, 42, query).toJson());
+    }
+
+    @Test
+    void testAnnMetadataUsesPhysicalSegmentBoundaries() {
+        annRequest();
+        List<IndexManifestEntry> manifests = List.of(annIndex(256, 511, "l2"), annIndex(0, 255, "l2"));
+        when(handler.scan(snapshot, "lumina")).thenReturn(manifests);
+        setData(List.of(new Range(0, 127), new Range(128, 383), new Range(384, 511)));
+
+        var shards = PaimonGlobalIndexPlanner.metadata(origin, request).getSplits().stream()
+                .map(split -> (PaimonGlobalIndexPlanner.Shard) split).toList();
+        assertEquals(2, shards.size());
+        assertEquals(List.of(new Range(0, 255), new Range(256, 511)),
+                shards.stream().map(shard -> new Range(shard.from(), shard.to())).toList());
+        assertEquals(1, shards.get(1).files().size());
+        var file = shards.get(1).files().get(0);
+        assertEquals("array<float>", file.getField_type());
+        assertEquals(256, file.getRow_range_from());
+        assertEquals("file:/warehouse/orders/index/index-7-256", file.getPath());
+    }
+
+    @Test
+    void testFilteredAnnKeepsVectorShardsWithDifferentBTreeBoundaries() {
+        annRequest();
+        var query = new PaimonAnnQuery("vec", "l2", List.of(1F, 2F), 3);
+        setData(List.of(new Range(0, 511)));
+        var vectorIndexes = List.of(annIndex(0, 255, "l2"), annIndex(256, 511, "l2"));
+        var btreeIndexes = List.of(index(9, 0, 127, 50), index(9, 128, 383, 60), index(9, 384, 511, 70));
+        when(handler.scan(snapshot, "lumina")).thenReturn(vectorIndexes);
+        when(handler.scan(snapshot, "btree")).thenReturn(btreeIndexes);
+        indexes(btreeIndexes);
+        var predicate = keyPredicate();
+        request = PaimonGlobalIndexPlanner.annRequest(table, 42, query, predicate, Map.of(11, "key"));
+        assertNotNull(request);
+        assertTrue(request.isFilteredAnn() && request.hasScalarPredicate());
+        assertEquals(1, predicate.getColumnRefs().size());
+        var shards = PaimonGlobalIndexPlanner.metadata(origin, request).getSplits().stream()
+                .map(split -> (PaimonGlobalIndexPlanner.Shard) split).toList();
+        assertEquals(2, shards.size());
+        assertEquals(List.of(0L, 256L), shards.stream().map(PaimonGlobalIndexPlanner.Shard::from).toList());
+        assertEquals(List.of(0L, 0L, 128L), shards.get(0).files().stream()
+                .map(file -> file.getRow_range_from()).toList());
+        assertEquals(List.of(256L, 128L, 384L), shards.get(1).files().stream()
+                .map(file -> file.getRow_range_from()).toList());
+        assertEquals(230, shards.get(1).bytes());
+
+        when(handler.scan(snapshot, "btree")).thenReturn(List.of(btreeIndexes.get(0), btreeIndexes.get(2)));
+        rejects("does not cover its vector shard");
+        when(handler.scan(snapshot, "btree")).thenReturn(List.of(
+                index(9, 0, 128, 50), btreeIndexes.get(1), btreeIndexes.get(2)));
+        rejects("overlapping BTree ranges");
+    }
+
+    @Test
+    void testFilteredAnnPartitionAndCombinedSelection() {
+        annRequest(List.of("part"));
+        var first = BinaryRow.singleColumn(1);
+        var second = BinaryRow.singleColumn(2);
+        splits(List.of(dataSplit(first, List.of(new Range(0, 255))), dataSplit(second, List.of(new Range(256, 511)))));
+        var vectorIndexes = List.of(inPartition(annIndex(0, 255, "l2"), first),
+                inPartition(annIndex(256, 511, "l2"), second));
+        when(handler.scan(snapshot, "lumina")).thenReturn(vectorIndexes);
+        var scalar = inPartition(index(9, 256, 511, 50), second);
+        when(handler.scan(snapshot, "btree")).thenReturn(List.of(scalar));
+        indexes(List.of(scalar));
+
+        var query = new PaimonAnnQuery("vec", "l2", List.of(1F, 2F), 3);
+        var part = new ColumnRefOperator(12, IntegerType.INT, "alias", true);
+        var partitionFilter = new BinaryPredicateOperator(BinaryType.EQ, part, ConstantOperator.createInt(2));
+        var names = Map.of(11, "key", 12, "part");
+        var partitionOnly = PaimonGlobalIndexPlanner.annRequest(table, 42, query, partitionFilter, names);
+        assertNotNull(partitionOnly);
+        assertEquals(List.of(new Range(256, 511)), partitionOnly.getPartitionRanges());
+        assertFalse(partitionOnly.hasScalarPredicate());
+        assertEquals("alias", part.getName());
+        assertEquals(1, ((PaimonGlobalIndexPlanner.Shard) PaimonGlobalIndexPlanner.metadata(origin, partitionOnly)
+                .getSplits().get(0)).files().size());
+
+        request = PaimonGlobalIndexPlanner.annRequest(table, 42, query,
+                Utils.compoundAnd(partitionFilter, keyPredicate()), names);
+        assertNotNull(request);
+        var shards = PaimonGlobalIndexPlanner.metadata(origin, request).getSplits();
+        assertEquals(1, shards.size());
+        var shard = (PaimonGlobalIndexPlanner.Shard) shards.get(0);
+        assertEquals(256L, shard.from());
+        assertEquals(2, shard.files().size());
+
+        var unfiltered = PaimonGlobalIndexPlanner.annRequest(table, 42, query);
+        request = PaimonGlobalIndexRequest.createFilteredAnn(unfiltered, null, Map.of(), List.of(new Range(1, 511)));
+        rejects("does not match complete ANN shards");
+        var noPartition = new BinaryPredicateOperator(BinaryType.EQ, part, ConstantOperator.createInt(3));
+        assertNull(PaimonGlobalIndexPlanner.annRequest(table, 42, query, noPartition, names));
+    }
+
+    @Test
+    void testFilteredAnnDoesNotDiscardAnUnsupportedResidual() {
+        annRequest();
+        var query = new PaimonAnnQuery("vec", "l2", List.of(1F, 2F), 3);
+        when(handler.scan(snapshot, "lumina")).thenReturn(List.of(annIndex(0, 19, "l2")));
+        indexes(List.of(index(9, 0, 19, 50)));
+        var key = new ColumnRefOperator(11, IntegerType.INT, "key", true);
+        var notIn = new InPredicateOperator(true,
+                List.of(key, ConstantOperator.createInt(1), ConstantOperator.createInt(2)));
+        assertNull(PaimonGlobalIndexPlanner.annRequest(table, 42, query,
+                Utils.compoundAnd(keyPredicate(), notIn), Map.of(11, "key")));
+        indexes(List.of());
+        assertNull(PaimonGlobalIndexPlanner.annRequest(table, 42, query, keyPredicate(), Map.of(11, "key")));
+    }
+
+    @Test
+    void testAnnRejectsMissingOrExtraVisibilityAndOverlappingSegments() {
+        annRequest();
+        setData(List.of(new Range(50, 99)));
+        when(handler.scan(snapshot, "lumina")).thenReturn(List.of(annIndex(0, 99, "l2")));
+        rejects("do not exactly cover");
+        when(handler.scan(snapshot, "lumina")).thenReturn(List.of(annIndex(50, 98, "l2")));
+        rejects("do not exactly cover");
+        when(handler.scan(snapshot, "lumina")).thenReturn(List.of(annIndex(50, 80, "l2"), annIndex(80, 99, "l2")));
+        rejects("overlapping");
+        when(handler.scan(snapshot, "lumina")).thenReturn(List.of(annIndex(50, 99, "cosine")));
+        rejects("metadata does not match");
     }
 
     private void rejects(String reason) {

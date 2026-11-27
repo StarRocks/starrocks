@@ -926,6 +926,23 @@ Paimon テーブルのスキーマを表示するには、次のいずれかの�
    SELECT count(*) FROM <table_name> LIMIT 10;
    ```
 
+### Paimon ベクトルインデックスを検索する
+
+Linux x86-64 では、`PAIMON_ENABLE_LUMINA=ON` でビルドした BE が既存の Paimon Lumina インデックスを使い、単一テーブルのベクトル Top-N を実行できます。BE をビルドする前に、同じオプションで Paimon C++ 依存ライブラリをビルドします。このランタイムはデフォルトのビルドでは無効です。
+
+`APPROX_L2_DISTANCE` の昇順、`APPROX_COSINE_SIMILARITY` と `APPROX_INNER_PRODUCT` の降順をサポートします。定数ベクトルと明示的な `LIMIT` が必要です。行追跡を有効にした append-only Data Evolution テーブルで、main ブランチの単一スナップショットを `rawf32` Lumina インデックスがカバーする必要があります。`ARRAY<FLOAT>` 列と要素はいずれも非 NULL である必要があります。
+
+```SQL
+SELECT id, APPROX_L2_DISTANCE(embedding, CAST([1, 2, 3, 4] AS ARRAY<FLOAT>)) AS distance
+FROM documents
+ORDER BY distance
+LIMIT 10;
+```
+
+フィルター付き ANN は、対応するパーティション列または BTree で完全にカバーされた列に対する直接比較、正の `IN`、`IS [NOT] NULL` と、それらの `AND` の組み合わせをサポートします。パーティション値で完全なベクトルセグメントを選択し、BTree の候補で各セグメントの Top-N 検索範囲を事前に制限します。未対応の述語を含むクエリは通常のクエリ経路を使用します。
+
+`auto` モードで回復可能な分散インデックスエラーが発生した場合、同じスナップショットの通常スキャンにフォールバックします。明示的な `distributed` モードではエラーが返ります。候補行に対して元のスコア式と並べ替えを使用します。
+
 ### 計画されたスキャンサイズの確認
 
 `EXPLAIN VERBOSE` と `EXPLAIN COSTS` は、各 Paimon スキャンノードの候補ファイルのメトリクスを表示します。通常の `EXPLAIN` では、このブロックは表示されません。

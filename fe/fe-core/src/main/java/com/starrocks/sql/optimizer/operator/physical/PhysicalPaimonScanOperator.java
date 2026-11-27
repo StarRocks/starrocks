@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.optimizer.operator.physical;
 
+import com.starrocks.connector.paimon.PaimonAnnQuery;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
@@ -22,12 +23,16 @@ import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
 import com.starrocks.sql.optimizer.operator.logical.LogicalPaimonScanOperator;
 
+import java.util.Objects;
+
 public class PhysicalPaimonScanOperator extends PhysicalScanOperator {
     private ScanOperatorPredicates predicates;
+    private final PaimonAnnQuery annQuery;
 
     public PhysicalPaimonScanOperator(LogicalPaimonScanOperator scan) {
         super(OperatorType.PHYSICAL_PAIMON_SCAN, scan);
         this.predicates = scan.getScanOperatorPredicates();
+        this.annQuery = scan.getAnnQuery();
     }
 
     @Override
@@ -48,6 +53,20 @@ public class PhysicalPaimonScanOperator extends PhysicalScanOperator {
     @Override
     public <R, C> R accept(OptExpressionVisitor<R, C> visitor, OptExpression optExpression, C context) {
         return visitor.visitPhysicalPaimonScan(optExpression, context);
+    }
+
+    public PaimonAnnQuery getAnnQuery() {
+        return annQuery;
+    }
+
+    @Override
+    public boolean equals(Object other) {
+        return super.equals(other) && Objects.equals(annQuery, ((PhysicalPaimonScanOperator) other).annQuery);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(super.hashCode(), annQuery);
     }
 
     @Override
