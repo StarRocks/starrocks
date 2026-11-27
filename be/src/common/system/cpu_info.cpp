@@ -59,7 +59,10 @@ int64_t CpuInfo::_parse_flags(const string& values, const std::vector<FlagMappin
     for (StringPiece token : strings::Split(values, " ", strings::SkipWhitespace())) {
         const std::string_view token_view(token.data(), token.size());
         for (const auto& flag_mapping : mappings) {
-            if (token_view == flag_mapping.name) {
+            // Linux /proc/cpuinfo spells X86_FEATURE_AVX512_VBMI2 as "avx512_vbmi2", whereas
+            // GCC/Clang target attributes and __builtin_cpu_supports spell it "avx512vbmi2".
+            if (token_view == flag_mapping.name ||
+                (flag_mapping.name == "avx512vbmi2" && token_view == "avx512_vbmi2")) {
                 flags |= flag_mapping.flag;
                 break;
             }

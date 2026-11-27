@@ -107,9 +107,47 @@ TEST(X86CpuInfoConstants, BitmaskValues) {
     EXPECT_EQ(int64_t(1LL << 6), int64_t(CpuInfo::AVX2));
     EXPECT_EQ(int64_t(1LL << 7), int64_t(CpuInfo::AVX512F));
     EXPECT_EQ(int64_t(1LL << 8), int64_t(CpuInfo::AVX512BW));
+    EXPECT_EQ(int64_t(1LL << 9), int64_t(CpuInfo::AVX512VL));
+    EXPECT_EQ(int64_t(1LL << 10), int64_t(CpuInfo::AVX512VBMI2));
     const int64_t all_x86 = CpuInfo::SSSE3 | CpuInfo::SSE4_1 | CpuInfo::SSE4_2 | CpuInfo::POPCNT | CpuInfo::AVX |
-                            CpuInfo::AVX2 | CpuInfo::AVX512F | CpuInfo::AVX512BW;
-    EXPECT_EQ((1LL << 9) - (1LL << 1), all_x86);
+                            CpuInfo::AVX2 | CpuInfo::AVX512F | CpuInfo::AVX512BW | CpuInfo::AVX512VL |
+                            CpuInfo::AVX512VBMI2;
+    EXPECT_EQ((1LL << 11) - (1LL << 1), all_x86);
+}
+
+TEST_F(CpuInfoTest, X86FastAvx512Gating) {
+    int64_t* hw_flags = CpuInfo::TEST_mutable_hardware_flags();
+
+    // Skylake-SP / Cascade Lake / Cooper Lake have AVX512F/BW/VL/DQ/CD but lack AVX512VBMI2.
+    // These CPUs suffer severe 512-bit frequency downclocking and must NOT pass the fast AVX-512 gate.
+    const std::string skylake_sp_flags =
+            "fpu sse4_1 sse4_2 popcnt avx avx2 avx512f avx512dq avx512cd avx512bw avx512vl";
+    *hw_flags = CpuInfo::TEST_parse_flags(skylake_sp_flags, CpuInfo::TEST_flag_mappings());
+    EXPECT_TRUE(CpuInfo::is_supported(CpuInfo::AVX2));
+    EXPECT_TRUE(CpuInfo::is_supported(CpuInfo::AVX512F));
+    EXPECT_TRUE(CpuInfo::is_supported(CpuInfo::AVX512BW));
+    EXPECT_TRUE(CpuInfo::is_supported(CpuInfo::AVX512VL));
+    EXPECT_FALSE(CpuInfo::is_supported(CpuInfo::AVX512VBMI2));
+    EXPECT_FALSE(CpuInfo::is_fast_avx512_supported());
+
+    // Intel Ice Lake+ and AMD Zen 4+ expose avx512vbmi2 (or avx512_vbmi2 in Linux /proc/cpuinfo).
+    const std::string icelake_flags =
+            "fpu sse4_1 sse4_2 popcnt avx avx2 avx512f avx512dq avx512cd avx512bw avx512vl avx512vbmi2";
+    *hw_flags = CpuInfo::TEST_parse_flags(icelake_flags, CpuInfo::TEST_flag_mappings());
+    EXPECT_TRUE(CpuInfo::is_supported(CpuInfo::AVX512VBMI2));
+    EXPECT_TRUE(CpuInfo::is_fast_avx512_supported());
+
+    const std::string zen4_procfs_flags =
+            "fpu sse4_1 sse4_2 popcnt avx avx2 avx512f avx512dq avx512cd avx512bw avx512vl avx512_vbmi2";
+    *hw_flags = CpuInfo::TEST_parse_flags(zen4_procfs_flags, CpuInfo::TEST_flag_mappings());
+    EXPECT_TRUE(CpuInfo::is_supported(CpuInfo::AVX512VBMI2));
+    EXPECT_TRUE(CpuInfo::is_fast_avx512_supported());
+
+    // Missing any required sub-extension (e.g. AVX512BW or AVX512VL) must reject fast AVX-512.
+    *hw_flags = CpuInfo::AVX512F | CpuInfo::AVX512VL | CpuInfo::AVX512VBMI2;
+    EXPECT_FALSE(CpuInfo::is_fast_avx512_supported());
+    *hw_flags = CpuInfo::AVX512F | CpuInfo::AVX512BW | CpuInfo::AVX512VBMI2;
+    EXPECT_FALSE(CpuInfo::is_fast_avx512_supported());
 }
 #endif
 

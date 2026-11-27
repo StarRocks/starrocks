@@ -27,7 +27,8 @@ namespace starrocks {
 
 // Sizes chosen to exercise every code path: empty, < SIMD width, one full vector,
 // multiple vectors with unroll, vectors + tail, large enough to defeat unroll.
-static const std::vector<int32_t> kRleTestSizes = {0, 1, 3, 7, 8, 15, 16, 17, 31, 32, 33, 63, 64, 65, 127, 128, 257};
+static const std::vector<int32_t> kRleTestSizes = {0,  1,  3,  4,  7,  8,   15,  16,  17,  31,
+                                                   32, 33, 63, 64, 65, 127, 128, 257, 1024};
 
 // ----------------------------------------------------------------------------
 // simd_fill_int16 / simd_fill_int32 / SIMDUtils::simd_fill<T>
@@ -125,6 +126,50 @@ PARALLEL_TEST(RleSimdTest, simd_minmax_int32) {
         simd_minmax_int32_default(data.data(), n, def_min, def_max);
         ASSERT_EQ(def_min, expected_min) << "n=" << n;
         ASSERT_EQ(def_max, expected_max) << "n=" << n;
+
+#if defined(__x86_64__)
+        if (__builtin_cpu_supports("avx2")) {
+            int32_t avx2_min = 0, avx2_max = 0;
+            simd_minmax_int32_avx2(data.data(), n, avx2_min, avx2_max);
+            ASSERT_EQ(avx2_min, expected_min) << "n=" << n;
+            ASSERT_EQ(avx2_max, expected_max) << "n=" << n;
+        }
+#if !defined(ADDRESS_SANITIZER)
+        if (__builtin_cpu_supports("avx512f")) {
+            int32_t avx512_min = 0, avx512_max = 0;
+            simd_minmax_int32_avx512(data.data(), n, avx512_min, avx512_max);
+            ASSERT_EQ(avx512_min, expected_min) << "n=" << n;
+            ASSERT_EQ(avx512_max, expected_max) << "n=" << n;
+        }
+#endif
+#endif
+    }
+
+    // Edge: negative count <= 0 returns [INT32_MAX, INT32_MIN].
+    {
+        int32_t dummy = 42;
+        int32_t mn = 0, mx = 0;
+        simd_minmax_int32(&dummy, -1, mn, mx);
+        ASSERT_EQ(mn, std::numeric_limits<int32_t>::max());
+        ASSERT_EQ(mx, std::numeric_limits<int32_t>::min());
+#if defined(__x86_64__)
+        if (__builtin_cpu_supports("avx2")) {
+            mn = 0;
+            mx = 0;
+            simd_minmax_int32_avx2(&dummy, -1, mn, mx);
+            ASSERT_EQ(mn, std::numeric_limits<int32_t>::max());
+            ASSERT_EQ(mx, std::numeric_limits<int32_t>::min());
+        }
+#if !defined(ADDRESS_SANITIZER)
+        if (__builtin_cpu_supports("avx512f")) {
+            mn = 0;
+            mx = 0;
+            simd_minmax_int32_avx512(&dummy, -1, mn, mx);
+            ASSERT_EQ(mn, std::numeric_limits<int32_t>::max());
+            ASSERT_EQ(mx, std::numeric_limits<int32_t>::min());
+        }
+#endif
+#endif
     }
 
     // Edge: all identical, signed extremes, negatives.
@@ -141,6 +186,44 @@ PARALLEL_TEST(RleSimdTest, simd_minmax_int32) {
         simd_minmax_int32(data.data(), data.size(), mn, mx);
         ASSERT_EQ(mn, std::numeric_limits<int32_t>::min());
         ASSERT_EQ(mx, std::numeric_limits<int32_t>::max());
+    }
+}
+
+PARALLEL_TEST(RleSimdTest, simd_minmax_template_type_safety) {
+    // float with negative and positive values must not be reinterpreted as signed int32_t.
+    for (int32_t n : kRleTestSizes) {
+        if (n == 0) continue;
+        std::vector<float> data(n);
+        for (int32_t i = 0; i < n; ++i) {
+            data[i] = static_cast<float>(i - n / 2) * 1.25f - 0.5f;
+        }
+        float got_min = 0.0f, got_max = 0.0f;
+        simd_minmax<float>(data.data(), n, got_min, got_max);
+        ASSERT_FLOAT_EQ(got_min, *std::min_element(data.begin(), data.end())) << "n=" << n;
+        ASSERT_FLOAT_EQ(got_max, *std::max_element(data.begin(), data.end())) << "n=" << n;
+    }
+
+    // All-negative floats: max must still be the largest (least-negative) float, not +FLT_MIN.
+    {
+        std::vector<float> neg_floats = {-100.5f, -42.25f, -3.75f, -0.125f, -19.0f};
+        float got_min = 0.0f, got_max = 0.0f;
+        simd_minmax<float>(neg_floats.data(), static_cast<int32_t>(neg_floats.size()), got_min, got_max);
+        ASSERT_FLOAT_EQ(got_min, -100.5f);
+        ASSERT_FLOAT_EQ(got_max, -0.125f);
+    }
+
+    // uint32_t with values > INT32_MAX must compare as unsigned, not wrap negative via int32_t.
+    for (int32_t n : kRleTestSizes) {
+        if (n == 0) continue;
+        std::vector<uint32_t> data(n);
+        for (int32_t i = 0; i < n; ++i) {
+            // Mix values below and above INT32_MAX (0x7fffffff).
+            data[i] = (i % 2 == 0) ? static_cast<uint32_t>(10 + i) : (0x80000000u + static_cast<uint32_t>(i * 100));
+        }
+        uint32_t got_min = 0, got_max = 0;
+        simd_minmax<uint32_t>(data.data(), n, got_min, got_max);
+        ASSERT_EQ(got_min, *std::min_element(data.begin(), data.end())) << "n=" << n;
+        ASSERT_EQ(got_max, *std::max_element(data.begin(), data.end())) << "n=" << n;
     }
 }
 
@@ -244,6 +327,51 @@ PARALLEL_TEST(RleSimdTest, simd_dict_gather_double) {
     }
 }
 
+template <typename DstT, typename SrcT, typename IdxT = uint32_t>
+static void test_simd_dict_gather_template(DstT sentinel) {
+    constexpr int32_t kDictSize = 137;
+    std::mt19937 rng(0xBADC0FFE);
+    std::uniform_int_distribution<int32_t> idx_dist(0, kDictSize - 1);
+
+    std::vector<SrcT> dict(kDictSize);
+    for (int32_t i = 0; i < kDictSize; ++i) {
+        dict[i] = static_cast<SrcT>(i * 17 - 500) + static_cast<SrcT>(0.25);
+    }
+
+    for (int32_t n : kRleTestSizes) {
+        std::vector<IdxT> indices(n);
+        for (auto& v : indices) v = static_cast<IdxT>(idx_dist(rng));
+
+        std::vector<DstT> dst(static_cast<size_t>(n) + 1, sentinel);
+        simd_dict_gather(dst.data(), dict.data(), indices.data(), n);
+
+        for (int32_t i = 0; i < n; ++i) {
+            ASSERT_EQ(dst[i], static_cast<DstT>(dict[indices[i]])) << "n=" << n << " i=" << i;
+        }
+        ASSERT_EQ(dst.back(), sentinel) << "n=" << n << " sentinel overwritten";
+    }
+}
+
+PARALLEL_TEST(RleSimdTest, simd_dict_gather_template_dispatch) {
+    // Same-type 4-byte and 8-byte fast paths (both uint32_t and int32_t index types)
+    test_simd_dict_gather_template<int32_t, int32_t, uint32_t>(static_cast<int32_t>(0x7F7F7F7F));
+    test_simd_dict_gather_template<int32_t, int32_t, int32_t>(static_cast<int32_t>(0x7F7F7F7F));
+    test_simd_dict_gather_template<uint32_t, uint32_t, uint32_t>(0xDEADBEEFu);
+    test_simd_dict_gather_template<int64_t, int64_t, uint32_t>(0x123456789ABCDEF0LL);
+    test_simd_dict_gather_template<uint64_t, uint64_t, uint32_t>(0xFEDCBA9876543210ULL);
+    test_simd_dict_gather_template<float, float, uint32_t>(-77.25f);
+    test_simd_dict_gather_template<float, float, int32_t>(-77.25f);
+    test_simd_dict_gather_template<double, double, uint32_t>(-99.125);
+    test_simd_dict_gather_template<double, double, int32_t>(-99.125);
+
+    // Cross-width and cross-category DstT != SrcT fallback paths (must convert, never corrupt memory)
+    test_simd_dict_gather_template<int64_t, int32_t, uint32_t>(0x1122334455667788LL);
+    test_simd_dict_gather_template<int32_t, int16_t, uint32_t>(0x13572468);
+    test_simd_dict_gather_template<double, float, uint32_t>(-123.75);
+    test_simd_dict_gather_template<float, int32_t, uint32_t>(-456.5f);
+    test_simd_dict_gather_template<double, int64_t, uint32_t>(-789.25);
+}
+
 // ----------------------------------------------------------------------------
 // simd_widen_int{8,16}_to_int32
 // Contract: dest[i] = static_cast<int32_t>(src[i]) (sign-extending).
@@ -264,6 +392,21 @@ PARALLEL_TEST(RleSimdTest, simd_widen_int8_to_int32) {
             ASSERT_EQ(dest[i], static_cast<int32_t>(src[i])) << "n=" << n << " i=" << i;
         }
         ASSERT_EQ(dest.back(), static_cast<int32_t>(0xDEADBEEFu)) << "n=" << n;
+
+#if defined(__x86_64__)
+        if (__builtin_cpu_supports("avx2")) {
+            std::vector<int32_t> avx2_dest(static_cast<size_t>(n) + 1, static_cast<int32_t>(0xDEADBEEFu));
+            simd_widen_int8_to_int32_avx2(avx2_dest.data(), src.data(), n);
+            ASSERT_EQ(avx2_dest, dest) << "n=" << n;
+        }
+#if !defined(ADDRESS_SANITIZER)
+        if (__builtin_cpu_supports("avx512f")) {
+            std::vector<int32_t> avx512_dest(static_cast<size_t>(n) + 1, static_cast<int32_t>(0xDEADBEEFu));
+            simd_widen_int8_to_int32_avx512(avx512_dest.data(), src.data(), n);
+            ASSERT_EQ(avx512_dest, dest) << "n=" << n;
+        }
+#endif
+#endif
     }
     // Sign-extension on the extreme negative explicitly.
     {
@@ -303,6 +446,21 @@ PARALLEL_TEST(RleSimdTest, simd_widen_int16_to_int32) {
             ASSERT_EQ(dest[i], static_cast<int32_t>(src[i])) << "n=" << n << " i=" << i;
         }
         ASSERT_EQ(dest.back(), static_cast<int32_t>(0xDEADBEEFu)) << "n=" << n;
+
+#if defined(__x86_64__)
+        if (__builtin_cpu_supports("avx2")) {
+            std::vector<int32_t> avx2_dest(static_cast<size_t>(n) + 1, static_cast<int32_t>(0xDEADBEEFu));
+            simd_widen_int16_to_int32_avx2(avx2_dest.data(), src.data(), n);
+            ASSERT_EQ(avx2_dest, dest) << "n=" << n;
+        }
+#if !defined(ADDRESS_SANITIZER)
+        if (__builtin_cpu_supports("avx512f")) {
+            std::vector<int32_t> avx512_dest(static_cast<size_t>(n) + 1, static_cast<int32_t>(0xDEADBEEFu));
+            simd_widen_int16_to_int32_avx512(avx512_dest.data(), src.data(), n);
+            ASSERT_EQ(avx512_dest, dest) << "n=" << n;
+        }
+#endif
+#endif
     }
     {
         int16_t src[8] = {-32768, -1, 0, 1, 32767, -16000, 16000, -2};

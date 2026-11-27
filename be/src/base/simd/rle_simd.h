@@ -17,6 +17,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <limits>
+#include <type_traits>
 
 #include "base/simd/multi_version.h"
 
@@ -59,22 +60,82 @@ MFV_AUTOVEC_STATIC(void simd_minmax_int32_default(const int32_t* __restrict data
 
 MFV_AUTOVEC_STATIC(void simd_dict_gather_int32_default(int32_t* __restrict dest, const int32_t* __restrict dict,
                                                        const uint32_t* __restrict indices, int32_t count) {
-    for (int32_t i = 0; i < count; ++i) dest[i] = dict[indices[i]];
+    int32_t i = 0;
+    for (; i + 4 <= count; i += 4) {
+        const uint32_t idx0 = indices[i];
+        const uint32_t idx1 = indices[i + 1];
+        const uint32_t idx2 = indices[i + 2];
+        const uint32_t idx3 = indices[i + 3];
+        const int32_t v0 = dict[idx0];
+        const int32_t v1 = dict[idx1];
+        const int32_t v2 = dict[idx2];
+        const int32_t v3 = dict[idx3];
+        dest[i] = v0;
+        dest[i + 1] = v1;
+        dest[i + 2] = v2;
+        dest[i + 3] = v3;
+    }
+    for (; i < count; ++i) dest[i] = dict[indices[i]];
 })
 
 MFV_AUTOVEC_STATIC(void simd_dict_gather_int64_default(int64_t* __restrict dest, const int64_t* __restrict dict,
                                                        const uint32_t* __restrict indices, int32_t count) {
-    for (int32_t i = 0; i < count; ++i) dest[i] = dict[indices[i]];
+    int32_t i = 0;
+    for (; i + 4 <= count; i += 4) {
+        const uint32_t idx0 = indices[i];
+        const uint32_t idx1 = indices[i + 1];
+        const uint32_t idx2 = indices[i + 2];
+        const uint32_t idx3 = indices[i + 3];
+        const int64_t v0 = dict[idx0];
+        const int64_t v1 = dict[idx1];
+        const int64_t v2 = dict[idx2];
+        const int64_t v3 = dict[idx3];
+        dest[i] = v0;
+        dest[i + 1] = v1;
+        dest[i + 2] = v2;
+        dest[i + 3] = v3;
+    }
+    for (; i < count; ++i) dest[i] = dict[indices[i]];
 })
 
 MFV_AUTOVEC_STATIC(void simd_dict_gather_float_default(float* __restrict dest, const float* __restrict dict,
                                                        const uint32_t* __restrict indices, int32_t count) {
-    for (int32_t i = 0; i < count; ++i) dest[i] = dict[indices[i]];
+    int32_t i = 0;
+    for (; i + 4 <= count; i += 4) {
+        const uint32_t idx0 = indices[i];
+        const uint32_t idx1 = indices[i + 1];
+        const uint32_t idx2 = indices[i + 2];
+        const uint32_t idx3 = indices[i + 3];
+        const float v0 = dict[idx0];
+        const float v1 = dict[idx1];
+        const float v2 = dict[idx2];
+        const float v3 = dict[idx3];
+        dest[i] = v0;
+        dest[i + 1] = v1;
+        dest[i + 2] = v2;
+        dest[i + 3] = v3;
+    }
+    for (; i < count; ++i) dest[i] = dict[indices[i]];
 })
 
 MFV_AUTOVEC_STATIC(void simd_dict_gather_double_default(double* __restrict dest, const double* __restrict dict,
                                                         const uint32_t* __restrict indices, int32_t count) {
-    for (int32_t i = 0; i < count; ++i) dest[i] = dict[indices[i]];
+    int32_t i = 0;
+    for (; i + 4 <= count; i += 4) {
+        const uint32_t idx0 = indices[i];
+        const uint32_t idx1 = indices[i + 1];
+        const uint32_t idx2 = indices[i + 2];
+        const uint32_t idx3 = indices[i + 3];
+        const double v0 = dict[idx0];
+        const double v1 = dict[idx1];
+        const double v2 = dict[idx2];
+        const double v3 = dict[idx3];
+        dest[i] = v0;
+        dest[i + 1] = v1;
+        dest[i + 2] = v2;
+        dest[i + 3] = v3;
+    }
+    for (; i < count; ++i) dest[i] = dict[indices[i]];
 })
 
 MFV_AUTOVEC_STATIC(void simd_widen_int8_to_int32_default(int32_t* __restrict dest, const int8_t* __restrict src,
@@ -88,10 +149,18 @@ MFV_AUTOVEC_STATIC(void simd_widen_int16_to_int32_default(int32_t* __restrict de
 })
 
 // ============================================================================
-// Public dispatchers. Implementations and their hand-rolled MFV_AVX2 /
-// MFV_AVX512F helpers live in rle_simd.cpp so intrinsic headers stay out of
-// the inclusion graph for callers.
+// Public dispatchers and target-specific kernels. Implementations live in
+// rle_simd.cpp so intrinsic headers stay out of the inclusion graph for callers.
 // ============================================================================
+
+#if defined(__x86_64__)
+void simd_minmax_int32_avx2(const int32_t* __restrict data, int32_t count, int32_t& out_min, int32_t& out_max);
+void simd_minmax_int32_avx512(const int32_t* __restrict data, int32_t count, int32_t& out_min, int32_t& out_max);
+void simd_widen_int8_to_int32_avx2(int32_t* __restrict dest, const int8_t* __restrict src, int32_t count);
+void simd_widen_int8_to_int32_avx512(int32_t* __restrict dest, const int8_t* __restrict src, int32_t count);
+void simd_widen_int16_to_int32_avx2(int32_t* __restrict dest, const int16_t* __restrict src, int32_t count);
+void simd_widen_int16_to_int32_avx512(int32_t* __restrict dest, const int16_t* __restrict src, int32_t count);
+#endif
 
 void simd_minmax_int32(const int32_t* __restrict data, int32_t count, int32_t& out_min, int32_t& out_max);
 
@@ -115,17 +184,15 @@ void simd_widen_int16_to_int32(int32_t* __restrict dest, const int16_t* __restri
 
 template <typename T>
 inline void simd_minmax(const T* __restrict data, int32_t count, T& out_min, T& out_max) {
-    if constexpr (sizeof(T) == 4) {
+    if constexpr (sizeof(T) == 4 && std::is_integral_v<T> && std::is_signed_v<T>) {
         int32_t mn = std::numeric_limits<int32_t>::max();
         int32_t mx = std::numeric_limits<int32_t>::min();
         simd_minmax_int32(reinterpret_cast<const int32_t*>(data), count, mn, mx);
-        // Round-trip through int32 preserves the value bits; callers that
-        // care about signed vs unsigned interpretation cast back themselves.
         out_min = static_cast<T>(mn);
         out_max = static_cast<T>(mx);
     } else {
         T mn = std::numeric_limits<T>::max();
-        T mx = std::numeric_limits<T>::min();
+        T mx = std::numeric_limits<T>::lowest();
         for (int32_t i = 0; i < count; ++i) {
             mn = std::min(mn, data[i]);
             mx = std::max(mx, data[i]);
@@ -140,15 +207,43 @@ inline void simd_minmax(const T* __restrict data, int32_t count, T& out_min, T& 
 template <typename DstT, typename SrcT, typename IdxT>
 inline void simd_dict_gather(DstT* __restrict dst, const SrcT* __restrict dict, const IdxT* __restrict indices,
                              int32_t count) {
-    if constexpr (sizeof(IdxT) == 4 && sizeof(SrcT) == 4) {
-        simd_dict_gather_int32(reinterpret_cast<int32_t*>(dst), reinterpret_cast<const int32_t*>(dict),
-                               reinterpret_cast<const uint32_t*>(indices), count);
-    } else if constexpr (sizeof(IdxT) == 4 && sizeof(SrcT) == 8) {
-        simd_dict_gather_int64(reinterpret_cast<int64_t*>(dst), reinterpret_cast<const int64_t*>(dict),
-                               reinterpret_cast<const uint32_t*>(indices), count);
-    } else {
-        for (int32_t i = 0; i < count; ++i) dst[i] = dict[indices[i]];
+    using RawDstT = std::remove_cv_t<DstT>;
+    using RawSrcT = std::remove_cv_t<SrcT>;
+    if constexpr (sizeof(IdxT) == 4 && std::is_integral_v<IdxT> && sizeof(DstT) == sizeof(SrcT) &&
+                  std::is_trivially_copyable_v<DstT> && std::is_trivially_copyable_v<SrcT>) {
+        if constexpr (std::is_same_v<RawDstT, float> && std::is_same_v<RawSrcT, float>) {
+            simd_dict_gather_float(dst, dict, reinterpret_cast<const uint32_t*>(indices), count);
+            return;
+        } else if constexpr (std::is_same_v<RawDstT, double> && std::is_same_v<RawSrcT, double>) {
+            simd_dict_gather_double(dst, dict, reinterpret_cast<const uint32_t*>(indices), count);
+            return;
+        } else if constexpr (sizeof(SrcT) == 4 && std::is_integral_v<DstT> && std::is_integral_v<SrcT>) {
+            simd_dict_gather_int32(reinterpret_cast<int32_t*>(dst), reinterpret_cast<const int32_t*>(dict),
+                                   reinterpret_cast<const uint32_t*>(indices), count);
+            return;
+        } else if constexpr (sizeof(SrcT) == 8 && std::is_integral_v<DstT> && std::is_integral_v<SrcT>) {
+            simd_dict_gather_int64(reinterpret_cast<int64_t*>(dst), reinterpret_cast<const int64_t*>(dict),
+                                   reinterpret_cast<const uint32_t*>(indices), count);
+            return;
+        }
     }
+
+    int32_t i = 0;
+    for (; i + 4 <= count; i += 4) {
+        const IdxT idx0 = indices[i];
+        const IdxT idx1 = indices[i + 1];
+        const IdxT idx2 = indices[i + 2];
+        const IdxT idx3 = indices[i + 3];
+        const DstT v0 = static_cast<DstT>(dict[idx0]);
+        const DstT v1 = static_cast<DstT>(dict[idx1]);
+        const DstT v2 = static_cast<DstT>(dict[idx2]);
+        const DstT v3 = static_cast<DstT>(dict[idx3]);
+        dst[i] = v0;
+        dst[i + 1] = v1;
+        dst[i + 2] = v2;
+        dst[i + 3] = v3;
+    }
+    for (; i < count; ++i) dst[i] = static_cast<DstT>(dict[indices[i]]);
 }
 
 } // namespace starrocks

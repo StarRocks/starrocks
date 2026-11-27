@@ -45,6 +45,8 @@ public:
     static const int64_t AVX2 = (1LL << 6);
     static const int64_t AVX512F = (1LL << 7);
     static const int64_t AVX512BW = (1LL << 8);
+    static const int64_t AVX512VL = (1LL << 9);
+    static const int64_t AVX512VBMI2 = (1LL << 10);
 #elif defined(__aarch64__)
     // Detected at runtime via /proc/cpuinfo "Features" and getauxval(AT_HWCAP/AT_HWCAP2).
     static const int64_t ARM_NEON = (1LL << 1);  ///< Advanced SIMD (NEON); mandatory on aarch64
@@ -75,6 +77,20 @@ public:
     inline static bool is_supported(long flag) {
         DCHECK(initialized_);
         return (hardware_flags_ & flag) != 0;
+    }
+
+    /// Returns whether the CPU supports non-downclocking AVX-512 (Intel Ice Lake+ and
+    /// AMD Zen 4+). Older Intel server generations (Skylake-X, Skylake-SP, Cascade Lake,
+    /// Cooper Lake) support AVX512F/BW/VL but lack AVX512VBMI2 and suffer severe frequency
+    /// throttling on 512-bit ZMM instructions.
+    inline static bool is_fast_avx512_supported() {
+        DCHECK(initialized_);
+#if defined(__x86_64__) || defined(__i386__)
+        constexpr int64_t kFastAvx512Mask = AVX512F | AVX512BW | AVX512VL | AVX512VBMI2;
+        return (hardware_flags_ & kFastAvx512Mask) == kFastAvx512Mask;
+#else
+        return false;
+#endif
     }
 
     /// Returns the number of cpu cycles per millisecond
