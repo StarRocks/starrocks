@@ -312,6 +312,26 @@ public class AnalyzeAggregateTest {
     }
 
     @Test
+    public void testNoAggregateInGroupingSets() {
+        // A plain GROUP BY rejects aggregates; ROLLUP/CUBE/GROUPING SETS used to let them through to the planner.
+        String merge = "ds_theta_count_distinct_merge(ds_theta_count_distinct_state(cast(1 as smallint)))";
+        analyzeFail("select distinct " + merge + " from t0 group by rollup(" + merge + ")",
+                "GROUP BY clause cannot contain aggregations");
+        analyzeFail("select sum(v1) from t0 group by rollup(sum(v1))",
+                "GROUP BY clause cannot contain aggregations");
+        analyzeFail("select v1 from t0 group by cube(v1, max(v2))",
+                "GROUP BY clause cannot contain aggregations");
+        analyzeFail("select v1 from t0 group by grouping sets((v1), (count(v2)))",
+                "GROUP BY clause cannot contain aggregations");
+        analyzeFail("select v1 from t0 group by rollup(v1, sum(v2) over ())",
+                "GROUP BY clause cannot contain window function");
+        // An output alias that names an aggregate is still an aggregate.
+        analyzeFail("select v1, sum(v2) as s from t0 group by rollup(v1, s)",
+                "GROUP BY clause cannot contain aggregations");
+        analyzeSuccess("select v1, v2 + 1 as x, sum(v3) from t0 group by rollup(v1, x)");
+    }
+
+    @Test
     public void testForQualifiedName() {
         QueryRelation query = ((QueryStatement) analyzeSuccess("select grouping_id(t0.v1, t0.v3), " +
                 "grouping(t0.v2) from t0 group by cube(t0.v1, t0.v2, t0.v3);"))
