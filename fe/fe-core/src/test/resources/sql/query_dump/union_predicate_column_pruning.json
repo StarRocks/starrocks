@@ -1,0 +1,47 @@
+{
+  "statement": "WITH c AS (SELECT id FROM v WHERE source = 1) SELECT id FROM v UNION ALL SELECT a.id FROM c a CROSS JOIN c b ",
+  "table_meta": {
+    "union_repro.t": "CREATE TABLE `t` (\n  `id` int(11) NULL COMMENT \"\",\n  `source` int(11) NULL COMMENT \"\"\n) ENGINE=OLAP \nDUPLICATE KEY(`id`)\nDISTRIBUTED BY HASH(`id`) BUCKETS 1 \nPROPERTIES (\n\"compression\" = \"LZ4\",\n\"fast_schema_evolution\" = \"true\",\n\"replicated_storage\" = \"true\",\n\"replication_num\" = \"1\"\n);",
+    "union_repro.mv": "CREATE MATERIALIZED VIEW `mv` (`id`)\nDISTRIBUTED BY HASH(`id`) BUCKETS 1 \nREFRESH DEFERRED MANUAL\nPROPERTIES (\n\"replicated_storage\" = \"true\",\n\"query_rewrite_consistency\" = \"FORCE_MV\",\n\"replication_num\" = \"1\",\n\"storage_medium\" = \"HDD\"\n)\nAS SELECT `v`.`id`\nFROM `union_repro`.`v`;"
+  },
+  "table_row_count": {
+    "union_repro.t": {
+      "t": 100
+    }
+  },
+  "view_meta": {
+    "union_repro.v": "SELECT `union_repro`.`t`.`id`, `union_repro`.`t`.`source`\nFROM `union_repro`.`t` UNION ALL SELECT `union_repro`.`t`.`id`, `union_repro`.`t`.`source`\nFROM `union_repro`.`t`"
+  },
+  "column_statistics": {
+    "union_repro.t": {
+      "id": {
+        "version": 1,
+        "min": "-Infinity",
+        "max": "Infinity",
+        "nullsFraction": "0.0",
+        "averageRowSize": "1.0",
+        "distinctValuesCount": "1.0",
+        "collectionSize": "-1.0",
+        "type": "UNKNOWN"
+      },
+      "source": {
+        "version": 1,
+        "min": "-Infinity",
+        "max": "Infinity",
+        "nullsFraction": "0.0",
+        "averageRowSize": "1.0",
+        "distinctValuesCount": "1.0",
+        "collectionSize": "-1.0",
+        "type": "UNKNOWN"
+      }
+    }
+  },
+  "be_number": 1,
+  "be_core_stat": {
+    "numOfHardwareCoresPerBe": "{}",
+    "cachedAvgNumOfHardwareCores": -1
+  },
+  "exception": [
+    "com.starrocks.sql.common.StarRocksPlannerException: only found column statistics: {5: id}, but missing statistic of col: 6: source."
+  ]
+}
