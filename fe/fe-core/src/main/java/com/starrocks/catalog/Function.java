@@ -46,11 +46,7 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.CredentialMask;
-<<<<<<< HEAD
-=======
-import com.starrocks.common.util.PrintableMap;
 import com.starrocks.connector.hadoop.HadoopExt;
->>>>>>> 2937771 ([BugFix] Persist UDF cloud configuration across FE replay (#82920))
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
 import com.starrocks.credential.CloudType;
@@ -265,22 +261,10 @@ public class Function implements Writable, GsonPostProcessable {
         isNullable = other.isNullable;
         isMetaFunction = other.isMetaFunction;
         aggStateDesc = other.aggStateDesc;
-<<<<<<< HEAD
-=======
-        inputType = other.inputType;
         legacyCloudConfiguration = other.legacyCloudConfiguration;
         cloudConfigurationProperties = other.cloudConfigurationProperties == null ? null
                 : new HashMap<>(other.cloudConfigurationProperties);
         cloudConfiguration = other.cloudConfiguration;
-    }
-
-    public void setInputType(String inputType) {
-        this.inputType = inputType;
-    }
-
-    public String getInputType() {
-        return inputType;
->>>>>>> 2937771 ([BugFix] Persist UDF cloud configuration across FE replay (#82920))
     }
 
     public FunctionName getFunctionName() {
