@@ -55,8 +55,9 @@ import com.starrocks.thrift.TCloudConfiguration;
 import com.starrocks.thrift.TFunction;
 import com.starrocks.thrift.TFunctionBinaryType;
 import org.apache.commons.lang.ArrayUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
-import java.io.IOException;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
@@ -70,6 +71,8 @@ import java.util.stream.Collectors;
  * Base class for all functions.
  */
 public class Function implements Writable, GsonPostProcessable {
+    private static final Logger LOG = LogManager.getLogger(Function.class);
+
     // Enum for how to compare function signatures.
     // For decimal types, the type in the function can be a wildcard, i.e. decimal(*,*).
     // The wildcard can *only* exist as function type, the caller will always be a
@@ -314,12 +317,20 @@ public class Function implements Writable, GsonPostProcessable {
     }
 
     @Override
-    public void gsonPostProcess() throws IOException {
+    public void gsonPostProcess() {
         if (cloudConfigurationProperties != null) {
-            cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(cloudConfigurationProperties);
-            if (cloudConfiguration.getCloudType() == CloudType.DEFAULT) {
-                throw new IOException("Cannot restore UDF cloud configuration from persisted properties");
+            cloudConfiguration = null;
+            try {
+                CloudConfiguration restored =
+                        CloudConfigurationFactory.buildCloudConfigurationForStorage(cloudConfigurationProperties);
+                if (restored != null && restored.getCloudType() != CloudType.DEFAULT) {
+                    cloudConfiguration = restored;
+                    return;
+                }
+            } catch (RuntimeException e) {
+                // A malformed function must not prevent the FE from loading its image or edit log.
             }
+            LOG.warn("Cannot restore cloud configuration for UDF {}; recreate the function before using it", name);
         }
     }
 
@@ -780,9 +791,15 @@ public class Function implements Writable, GsonPostProcessable {
     }
 
     public TFunction toThrift() {
-        if (legacyCloudConfiguration != null && cloudConfiguration == null) {
-            throw new IllegalStateException("UDF cloud configuration was saved in an unsupported format; "
-                    + "recreate the function");
+        if (cloudConfiguration == null) {
+            if (legacyCloudConfiguration != null) {
+                throw new IllegalStateException("UDF cloud configuration was saved in an unsupported format; "
+                        + "recreate the function");
+            }
+            if (cloudConfigurationProperties != null) {
+                throw new IllegalStateException("UDF cloud configuration could not be restored from persisted properties; "
+                        + "recreate the function");
+            }
         }
         TFunction fn = new TFunction();
         fn.setName(name.toThrift());
