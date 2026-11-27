@@ -613,7 +613,7 @@ PROPERTIES (
 - 不支持表达式分区和列表分区。
 - 分区列必须是日期类型。
 - 不支持多分区列。
-- 不支持主键表。
+- 存算一体集群中的主键表支持单列 `DATE` 或 `DATETIME` Range 分区降冷。到期后，物理迁移还要求同一 BE 有可用的目标介质磁盘，并受 `primary_key_disk_schedule_time` 限制。
 
 #### 设置分区中每个 tablet 的副本数
 

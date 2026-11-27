@@ -47,6 +47,7 @@ import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.persist.CreateTableInfo;
 import com.starrocks.persist.OperationType;
 import com.starrocks.qe.ConnectContext;
@@ -66,6 +67,7 @@ import com.starrocks.sql.ast.ShowCreateTableStmt;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.StarRocksTestBase;
 import com.starrocks.utframe.UtFrameUtils;
@@ -1972,27 +1974,61 @@ public class CreateTableTest extends StarRocksTestBase {
     }
 
     @Test
-    public void testPrimaryKeyNotSupportCoolDown() {
+    public void testPrimaryKeyRangeStorageCoolDown() throws Exception {
+        String ddl = """
+                CREATE TABLE test.%s (dt %s NOT NULL, id BIGINT NOT NULL)
+                PRIMARY KEY(dt, id)
+                PARTITION BY RANGE(dt) (PARTITION p1 VALUES LESS THAN ("2099-01-02"))
+                DISTRIBUTED BY HASH(id) BUCKETS 1
+                PROPERTIES ("replication_num" = "1", "storage_medium" = "SSD", "%s" = "%s")
+                """;
+        boolean strictStorageMediumCheck = Config.enable_strict_storage_medium_check;
+        try {
+            // The mock backends only have HDD paths. This test checks partition metadata.
+            Config.enable_strict_storage_medium_check = false;
+            createTable(ddl.formatted("pk_range_cooldown_ttl", "DATE", "storage_cooldown_ttl", "2 DAY"));
+            createTable(ddl.formatted("pk_range_cooldown_time", "DATETIME",
+                    "storage_cooldown_time", "2099-01-03 16:00:00"));
+        } finally {
+            Config.enable_strict_storage_medium_check = strictStorageMediumCheck;
+        }
+
+        assertPartitionCoolDown("pk_range_cooldown_ttl", "2099-01-04 00:00:00");
+        assertPartitionCoolDown("pk_range_cooldown_time", "2099-01-03 16:00:00");
+    }
+
+    private void assertPartitionCoolDown(String tableName, String expectedTime) {
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("test", tableName);
+        DataProperty property = table.getPartitionInfo().getDataProperty(table.getPartition("p1").getId());
+        Assertions.assertEquals(TStorageMedium.SSD, property.getStorageMedium());
+        Assertions.assertEquals(expectedTime, TimeUtils.longToTimeString(property.getCooldownTimeMs()));
+    }
+
+    @Test
+    public void testExternalPrimaryKeyRangeRejectsStorageCoolDown() {
         ExceptionChecker.expectThrowsWithMsg(DdlException.class,
-                "Primary key table does not support storage medium cool down currently.",
-                () -> createTable(
-                        "CREATE TABLE test.`primary_table_not_support_cool_down`\n" +
-                                "             ( `k1`  date, `k2`  datetime,`k3`  string, `k4`  varchar(20), " +
-                                "`k5`  boolean, `k6`  tinyint, `k7`  smallint, `k8`  int, `k9`  bigint, " +
-                                "`k10` largeint, `k11` float, `k12` double, `k13` decimal(27,9))\n" +
-                                "             primary KEY(`k1`, `k2`, `k3`, `k4`, `k5`)\n" +
-                                "             PARTITION BY range(k1)\n" +
-                                "             (\n" +
-                                "                 PARTITION p1 VALUES LESS THAN (\"2021-01-02\"),\n" +
-                                "                 PARTITION p2 VALUES LESS THAN (\"2021-08-18\"),\n" +
-                                "                 PARTITION p3 VALUES LESS THAN (\"2022-08-17\"),\n" +
-                                "                 PARTITION p4 VALUES LESS THAN (\"2022-08-18\"),\n" +
-                                "                 PARTITION p5 VALUES LESS THAN (\"2022-08-19\"),\n" +
-                                "                 PARTITION p6 VALUES LESS THAN (\"2023-08-18\"),\n" +
-                                "                 PARTITION p7 VALUES LESS THAN (\"2024-08-18\")\n" +
-                                "             ) DISTRIBUTED BY HASH(`k1`, `k2`, `k3`)\n" +
-                                "  PROPERTIES (\"storage_medium\" = \"SSD\", \"storage_cooldown_ttl\" = \"0 year\");"
-                ));
+                "Storage medium cooldown for primary key tables requires",
+                () -> createTable("""
+                        CREATE EXTERNAL TABLE test.pk_external_range_cooldown (dt DATE NOT NULL, id BIGINT NOT NULL)
+                        ENGINE=OLAP PRIMARY KEY(dt, id)
+                        PARTITION BY RANGE(dt) (PARTITION p1 VALUES LESS THAN ("2099-01-02"))
+                        DISTRIBUTED BY HASH(id) BUCKETS 1
+                        PROPERTIES ("host" = "127.0.0.2", "port" = "9020", "user" = "root", "password" = "",
+                                    "database" = "remote_db", "table" = "remote_table",
+                                    "storage_medium" = "SSD", "storage_cooldown_ttl" = "2 DAY")
+                        """));
+    }
+
+    @Test
+    public void testInvalidStorageCoolDownConfiguration() {
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "Storage medium cooldown for primary key tables requires",
+                () -> createTable("""
+                        CREATE TABLE test.pk_without_range_cooldown (id BIGINT NOT NULL)
+                        PRIMARY KEY(id)
+                        DISTRIBUTED BY HASH(id) BUCKETS 1
+                        PROPERTIES ("replication_num" = "1", "storage_medium" = "SSD", "storage_cooldown_ttl" = "2 DAY")
+                        """));
         ExceptionChecker.expectThrowsWithMsg(DdlException.class,
                 "List partition table does not support storage medium cool down currently.",
                 () -> createTable(

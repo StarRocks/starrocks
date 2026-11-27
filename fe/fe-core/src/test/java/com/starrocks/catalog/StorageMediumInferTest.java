@@ -36,6 +36,8 @@ package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
 import com.starrocks.common.Config;
+import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
@@ -133,6 +135,65 @@ public class StorageMediumInferTest {
                 globalStateMgr.getLocalMetastore().getDataPropertyIncludeRecycleBin(tbl4.getPartitionInfo(),
                         partitionList4.get(0).getId());
         Assertions.assertEquals(TStorageMedium.HDD, dataProperty4.getStorageMedium());
+    }
+
+    @Test
+    public void testReplayCooldownWithInferredSsd() throws Exception {
+        TStorageMedium previousMedium1 = be1.getDisks().get("10001/path1").getStorageMedium();
+        TStorageMedium previousMedium2 = be2.getDisks().get("10002/path1").getStorageMedium();
+        long previousCooldown = Config.tablet_sched_storage_cooldown_second;
+        try {
+            Config.tablet_sched_storage_cooldown_second = -1;
+            be1.setStorageMediumForAllDisks(TStorageMedium.SSD);
+            be2.setStorageMediumForAllDisks(TStorageMedium.SSD);
+            createTable("""
+                    CREATE TABLE test.pk_inferred_cooldown (dt DATE NOT NULL, id BIGINT NOT NULL)
+                    PRIMARY KEY(dt, id) PARTITION BY RANGE(dt) (PARTITION p1 VALUES LESS THAN ("2099-01-01"))
+                    DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES ("replication_num" = "1")
+                    """);
+            StarRocksAssert sql = new StarRocksAssert(connectContext);
+            String show = "SHOW CREATE TABLE test.pk_inferred_cooldown";
+            Assertions.assertFalse(sql.showCreateTable(show).contains("\"storage_medium\""));
+            alterTableWithNewParser("ALTER TABLE test.pk_inferred_cooldown SET (\"storage_cooldown_ttl\" = \"2 DAY\")");
+
+            // A later topology change must not affect the meaning of the exported policy.
+            be2.setStorageMediumForAllDisks(TStorageMedium.HDD);
+            String ddl = sql.showCreateTable(show);
+            Assertions.assertTrue(ddl.contains("\"storage_medium\" = \"SSD\""), ddl);
+            createTable(ddl.replace("`pk_inferred_cooldown`", "`test`.`pk_cooldown_replayed`"));
+            sql.ddl("CREATE TABLE test.pk_cooldown_liked LIKE test.pk_inferred_cooldown");
+
+            for (String name : List.of("pk_cooldown_replayed", "pk_cooldown_liked")) {
+                OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("test", name);
+                DataProperty property = table.getPartitionInfo().getDataProperty(table.getPartition("p1").getId());
+                Assertions.assertEquals(TStorageMedium.SSD, property.getStorageMedium());
+                Assertions.assertEquals("2099-01-03 00:00:00", TimeUtils.longToTimeString(property.getCooldownTimeMs()));
+            }
+            OlapTable source = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable("test", "pk_inferred_cooldown");
+            Assertions.assertNull(source.getTableProperty().getProperties().get(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM));
+            DataProperty sourcePartition = source.getPartitionInfo().getDataProperty(source.getPartition("p1").getId());
+            Assertions.assertEquals(TStorageMedium.SSD, sourcePartition.getStorageMedium());
+            Assertions.assertEquals(DataProperty.MAX_COOLDOWN_TIME_MS, sourcePartition.getCooldownTimeMs());
+
+            alterTableWithNewParser("ALTER TABLE test.pk_inferred_cooldown SET (\"storage_cooldown_ttl\" = \"\")");
+            String cleared = sql.showCreateTable(show);
+            Assertions.assertFalse(cleared.contains("\"storage_cooldown_ttl\""), cleared);
+            Assertions.assertFalse(cleared.contains("\"storage_medium\""), cleared);
+            sql.ddl("CREATE TABLE test.pk_cooldown_cleared LIKE test.pk_inferred_cooldown");
+            OlapTable hdd = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable("test", "pk_cooldown_cleared");
+            Assertions.assertEquals(TStorageMedium.HDD,
+                    hdd.getPartitionInfo().getDataProperty(hdd.getPartition("p1").getId()).getStorageMedium());
+            alterTableWithNewParser("ALTER TABLE test.pk_cooldown_cleared SET (\"storage_cooldown_ttl\" = \"2 DAY\")");
+            String hddDdl = sql.showCreateTable("SHOW CREATE TABLE test.pk_cooldown_cleared");
+            Assertions.assertTrue(hddDdl.contains("\"storage_cooldown_ttl\""), hddDdl);
+            Assertions.assertFalse(hddDdl.contains("\"storage_medium\" = \"SSD\""), hddDdl);
+        } finally {
+            be1.setStorageMediumForAllDisks(previousMedium1);
+            be2.setStorageMediumForAllDisks(previousMedium2);
+            Config.tablet_sched_storage_cooldown_second = previousCooldown;
+        }
     }
 
     @Test
