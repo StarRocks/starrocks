@@ -2022,8 +2022,7 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
             final ColumnRefSet requiredOutputColumns = optimizerContext.getTaskContext().getRequiredColumns();
             requiredOutputColumns.union(queryCompensationPredicate.getUsedColumns());
 
-            // Push-down predicates will pollute the original input operators, if rewrite fail we should retrieve
-            // push-down predicates.
+            // Builds a new tree: queryExpression is what the optimizer keeps if the union rewrite fails later.
             OptExpression newQueryExpr = pushdownPredicatesForJoin(queryExpression, queryCompensationPredicate);
             if (CollectionUtils.isNotEmpty(mvRewriteContext.getEnforcedNonExistedColumns())) {
                 Set<ColumnRefOperator> enforcedNonExistedColumns = mvRewriteContext.getEnforcedNonExistedColumns()
@@ -2073,8 +2072,7 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
         return builder.build();
     }
 
-    // pushdown predicates on join nodes
-    // the OptExpression will be modified in place
+    // pushdown predicates on join nodes; returns a new tree, the inputs of optExpression are not changed
     private OptExpression pushdownPredicatesForJoin(OptExpression optExpression, ScalarOperator predicate) {
         if (!(optExpression.getOp() instanceof LogicalJoinOperator)) {
             if (predicate != null) {

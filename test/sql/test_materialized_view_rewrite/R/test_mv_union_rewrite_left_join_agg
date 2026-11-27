@@ -1,0 +1,54 @@
+-- name: test_mv_union_rewrite_left_join_agg
+CREATE TABLE ti (k DATE NOT NULL, b INT) DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO ti VALUES ('2011-02-20', 1), ('2011-12-01', NULL), ('2015-08-31', 0), ('2018-06-17', 0);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_left_join_agg REFRESH MANUAL PROPERTIES ("replication_num" = "1")
+AS SELECT a0.b AS c0, a1.b AS c1, a1.k AS c2, MIN(a1.k) AS m0, COUNT(*) AS m1
+FROM ti AS a0 LEFT JOIN ti AS a1 ON a0.b = a1.b
+WHERE a0.b = 0
+GROUP BY a0.b, a1.b, a1.k;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_left_join_agg WITH SYNC MODE;
+SET enable_materialized_view_rewrite = false;
+-- result:
+-- !result
+SELECT a0.b, a1.b, a1.k, MIN(a1.k), COUNT(*) FROM ti AS a0 LEFT JOIN ti AS a1 ON a0.b = a1.b
+GROUP BY a0.b, a1.b, a1.k ORDER BY 3;
+-- result:
+None	None	None	None	1
+1	1	2011-02-20	2011-02-20	1
+0	0	2015-08-31	2015-08-31	2
+0	0	2018-06-17	2018-06-17	2
+-- !result
+SET enable_materialized_view_rewrite = true;
+-- result:
+-- !result
+SET enable_materialized_view_union_rewrite = true;
+-- result:
+-- !result
+SELECT a0.b, a1.b, a1.k, MIN(a1.k), COUNT(*) FROM ti AS a0 LEFT JOIN ti AS a1 ON a0.b = a1.b
+GROUP BY a0.b, a1.b, a1.k ORDER BY 3;
+-- result:
+None	None	None	None	1
+1	1	2011-02-20	2011-02-20	1
+0	0	2015-08-31	2015-08-31	2
+0	0	2018-06-17	2018-06-17	2
+-- !result
+SELECT a0.b, a1.b, a1.k, MIN(a1.k), COUNT(*) FROM ti AS a0 LEFT JOIN ti AS a1 ON a0.b = a1.b
+WHERE a0.b = 0 GROUP BY a0.b, a1.b, a1.k ORDER BY 3;
+-- result:
+0	0	2015-08-31	2015-08-31	2
+0	0	2018-06-17	2018-06-17	2
+-- !result
+SELECT a0.b, a1.b, a1.k, MIN(a1.k), COUNT(*) FROM ti AS a0 LEFT JOIN ti AS a1 ON a0.b = a1.b
+WHERE a0.b >= 0 GROUP BY a0.b, a1.b, a1.k ORDER BY 3;
+-- result:
+1	1	2011-02-20	2011-02-20	1
+0	0	2015-08-31	2015-08-31	2
+0	0	2018-06-17	2018-06-17	2
+-- !result
