@@ -16,6 +16,8 @@ package com.starrocks.scheduler.mv.pct;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Maps;
+import com.starrocks.alter.AlterJobMgr;
+import com.starrocks.alter.AlterMVJobExecutor;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
@@ -24,9 +26,11 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.tvr.TvrVersionRange;
+import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.LogUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.UUIDUtil;
@@ -34,6 +38,7 @@ import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.metric.IMaterializedViewMetricsEntity;
+import com.starrocks.persist.AlterMaterializedViewBaseTableInfosLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryDetail;
 import com.starrocks.scheduler.Constants;
@@ -52,19 +57,24 @@ import com.starrocks.scheduler.mv.MVVersionManager;
 import com.starrocks.scheduler.persist.MVTaskRunExtraMessage;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.StatementPlanner;
+import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
+import com.starrocks.sql.analyzer.MaterializedViewAnalyzer;
 import com.starrocks.sql.analyzer.PlannerMetaLocker;
 import com.starrocks.sql.analyzer.QueryAnalyzer;
 import com.starrocks.sql.analyzer.mv.IvmRefreshDefinition;
 import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.common.QueryDebugOptions;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
+import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
 import org.apache.parquet.Strings;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
@@ -152,6 +162,11 @@ public final class MVPCTRefreshProcessor extends MVRefreshProcessor {
             return ProcessExecPlan.skipped(ProcessExecPlan.SkipReason.STALE_PINNED_BATCH);
         }
 
+        // before anything reads the base tables, so that this run snapshots, plans and records the current ones
+        try (Timer ignored = Tracers.watchScope("MVRefreshSyncBaseTableInfos")) {
+            syncBaseTableInfosWithDefinedQuery();
+        }
+
         // Also freezes TVR and hydrates the pinned ranges, before it aligns partitions against them.
         mvPctRefreshSynchronizer.syncAndCheckPCTPartitions();
 
@@ -220,6 +235,98 @@ public final class MVPCTRefreshProcessor extends MVRefreshProcessor {
             new MVVersionManager(mv, mvContext).clearTvrBaseline(isPinnedMode());
         } finally {
             locker.unLockTableWithIntensiveDbLock(db.getId(), mv.getId(), LockType.WRITE);
+        }
+    }
+
+    /**
+     * Re-resolve the base tables of an mv defined on a connector view. The external catalog can redefine such a view
+     * without StarRocks noticing, so this refresh would read other tables than the ones the mv tracks versions,
+     * relations and dependencies for.
+     * <p>
+     * The defined query is resolved before the mv lock is taken, since resolving it goes through the connector.
+     */
+    private void syncBaseTableInfosWithDefinedQuery() throws LockTimeoutException {
+        if (mv.getBaseTableInfos().stream().noneMatch(MvUtils::isConnectorView)) {
+            return;
+        }
+        ConnectContext ctx = mvContext.getCtx();
+        Set<BaseTableInfo> resolvedBaseTableInfos;
+        try (ConnectContext.ScopeGuard guard = ctx.bindScope()) {
+            QueryStatement queryStmt =
+                    (QueryStatement) SqlParser.parse(mv.getViewDefineSql(), ctx.getSessionVariable()).get(0);
+            Analyzer.analyze(queryStmt, ctx);
+            resolvedBaseTableInfos = MaterializedViewAnalyzer.getBaseTableInfos(queryStmt);
+        } catch (Exception e) {
+            // Fail the run instead of keeping the current base tables: the refresh analyzes the defined query again,
+            // and once a transient connector failure is gone it would read the tables the view moved to, while the
+            // mv still tracks versions, relations and its cached plan for the old ones. A later run retries.
+            logger.warn("failed to resolve base tables of mv's defined query: {}", DebugUtil.getRootStackTrace(e));
+            throw new DmlException("failed to resolve base tables of materialized view %s.%s: %s", e,
+                    db.getFullName(), mv.getName(), e.getMessage());
+        }
+
+        if (MvUtils.isSameBaseTables(mv.getBaseTableInfos(), resolvedBaseTableInfos)) {
+            return;
+        }
+        // keep the current infos of base tables still read, so only the tables the view moved to are new
+        Map<String, BaseTableInfo> currentByName = mv.getBaseTableInfos().stream()
+                .collect(Collectors.toMap(MvUtils::getBaseTableQualifiedName, x -> x, (x, y) -> x));
+        List<BaseTableInfo> newBaseTableInfos = resolvedBaseTableInfos.stream()
+                .map(info -> currentByName.getOrDefault(MvUtils.getBaseTableQualifiedName(info), info))
+                .collect(Collectors.toList());
+
+        Locker locker = new Locker();
+        if (!locker.tryLockTableWithIntensiveDbLock(db.getId(), mv.getId(), LockType.WRITE,
+                Config.mv_refresh_try_lock_timeout_ms, TimeUnit.MILLISECONDS)) {
+            logger.warn("failed to lock database: {} in syncBaseTableInfosWithDefinedQuery", db.getFullName());
+            throw new LockTimeoutException("Failed to lock database: " + db.getFullName() +
+                    " in syncBaseTableInfosWithDefinedQuery");
+        }
+        String inactiveReason = null;
+        // see AlterJobMgr#frontendsNotAdoptingRedefinedMvBaseTables
+        List<String> olderFrontends = AlterJobMgr.frontendsNotAdoptingRedefinedMvBaseTables();
+        try {
+            if (GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), mv.getId()) == null) {
+                throw new DmlException("refresh failed: materialized view %s.%s does not exist, " +
+                        "it may have been dropped during refresh", db.getFullName(), mv.getName());
+            }
+            if (mv.getPartitionInfo().isUnPartitioned() && !olderFrontends.isEmpty()) {
+                // An older FE would replay the adoption keeping the versions of the old base tables, so keep those
+                // and stop using the mv on every FE, without the versions the old definition was refreshed with. The
+                // activation of a later run adopts the new base tables once every FE is upgraded.
+                inactiveReason = MaterializedViewExceptions.inactiveReasonForMvBaseTablesRedefinedOnOlderFrontends(
+                        MvUtils.formatBaseTableInfos(mv.getBaseTableInfos()),
+                        MvUtils.formatBaseTableInfos(newBaseTableInfos), olderFrontends);
+                // a retry of this refresh finds the mv inactive already
+                if (mv.isActive()) {
+                    AlterMVJobExecutor.inactiveMvFromRefreshLocked(mv, inactiveReason);
+                }
+            } else if (mv.getPartitionInfo().isUnPartitioned()) {
+                // NOTE: fixRelationship in replaceBaseTableInfos resolves the new base tables under the mv lock,
+                // as the replay of this entry does.
+                GlobalStateMgr.getCurrentState().getEditLog().logAlterMvBaseTableInfos(
+                        AlterMaterializedViewBaseTableInfosLog.ofRedefinedBaseTables(db.getId(), mv.getId(),
+                                newBaseTableInfos),
+                        wal -> mv.replaceBaseTableInfos(newBaseTableInfos));
+                // This run has read nothing yet and plans against the new base tables, so the reset of the version
+                // map is not one it has to fence itself from, see MVVersionManager#persistRefreshScheme.
+                mvContext.setVersionMapResetEpoch(mv.getVersionMapResetEpoch());
+            } else {
+                // The partition expressions stay bound to the current base tables, so keep those and stop using the
+                // mv until its defined query reads them again, see AlterJobMgr#resolveActivate.
+                inactiveReason = MaterializedViewExceptions.inactiveReasonForPartitionedMvBaseTablesRedefined(
+                        MvUtils.formatBaseTableInfos(mv.getBaseTableInfos()),
+                        MvUtils.formatBaseTableInfos(newBaseTableInfos));
+                // a retry of this refresh finds the mv inactive already
+                if (mv.isActive()) {
+                    AlterMVJobExecutor.inactiveMvAndLog(mv, inactiveReason);
+                }
+            }
+        } finally {
+            locker.unLockTableWithIntensiveDbLock(db.getId(), mv.getId(), LockType.WRITE);
+        }
+        if (inactiveReason != null) {
+            throw new DmlException(inactiveReason);
         }
     }
 

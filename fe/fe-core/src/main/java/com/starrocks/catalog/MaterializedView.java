@@ -1565,49 +1565,53 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     private void unlinkFromBaseTables(MvId mvId) {
         List<BaseTableInfo> baseTableInfos = getBaseTableInfos();
         for (BaseTableInfo baseTableInfo : ListUtils.emptyIfNull(baseTableInfos)) {
-            if (!baseTableInfo.isInternalCatalog()) {
-                // An external base table is not resolved here, on purpose. The authoritative record of this
-                // relationship is ConnectorTblMetaInfoMgr, not the Table object: MetadataMgr#getTable
-                // re-applies the entry onto whatever instance the connector cache hands back, see
-                // ConnectorTableInfo#seTableInfoForConnectorTable. So resolving the table only to strip one
-                // cached projection of that entry is a connector round trip bought for nothing -- and every
-                // caller of onDrop holds the database write lock (Database#unprotectDropTable), including the
-                // rollback of a failed CREATE, where the catalog is by definition the one that just failed.
-                //
-                // Dropping the authoritative entry is the whole job, and it is also exactly what this code
-                // already fell back to whenever the resolve threw, which is the case an unreachable external
-                // system produced anyway.
-                //
-                // Known gap, deliberately left: a Table instance the connector already has cached keeps this
-                // MvId until it is evicted, because ConnectorTableInfo#seTableInfoForConnectorTable only ever
-                // adds. Making it reconcile instead was tried and does not work yet -- the store is looked up
-                // by Table#getTableIdentifier, which does not reliably match the identifier the relationship
-                // was recorded under, so "no entry" cannot be read as "no related MVs" without emptying sets
-                // that are the only copy (it breaks mv rewrite over external tables outright). What is left
-                // behind is the same shape as the create-side window documented on Table#onCreateAfterUnlock:
-                // not persisted, and skipped by every consumer that resolves the id -- and not seen at all by
-                // AnalyzerUtils.CopyUnsafeTablesCollector, which returns before counting for a table in an
-                // external catalog. Fixing the keying is its own change.
+            unlinkFromBaseTable(baseTableInfo, mvId);
+        }
+    }
+
+    private static void unlinkFromBaseTable(BaseTableInfo baseTableInfo, MvId mvId) {
+        if (!baseTableInfo.isInternalCatalog()) {
+            // An external base table is not resolved here, on purpose. The authoritative record of this
+            // relationship is ConnectorTblMetaInfoMgr, not the Table object: MetadataMgr#getTable
+            // re-applies the entry onto whatever instance the connector cache hands back, see
+            // ConnectorTableInfo#seTableInfoForConnectorTable. So resolving the table only to strip one
+            // cached projection of that entry is a connector round trip bought for nothing -- and every
+            // caller of onDrop holds the database write lock (Database#unprotectDropTable), including the
+            // rollback of a failed CREATE, where the catalog is by definition the one that just failed.
+            //
+            // Dropping the authoritative entry is the whole job, and it is also exactly what this code
+            // already fell back to whenever the resolve threw, which is the case an unreachable external
+            // system produced anyway.
+            //
+            // Known gap, deliberately left: a Table instance the connector already has cached keeps this
+            // MvId until it is evicted, because ConnectorTableInfo#seTableInfoForConnectorTable only ever
+            // adds. Making it reconcile instead was tried and does not work yet -- the store is looked up
+            // by Table#getTableIdentifier, which does not reliably match the identifier the relationship
+            // was recorded under, so "no entry" cannot be read as "no related MVs" without emptying sets
+            // that are the only copy (it breaks mv rewrite over external tables outright). What is left
+            // behind is the same shape as the create-side window documented on Table#onCreateAfterUnlock:
+            // not persisted, and skipped by every consumer that resolves the id -- and not seen at all by
+            // AnalyzerUtils.CopyUnsafeTablesCollector, which returns before counting for a table in an
+            // external catalog. Fixing the keying is its own change.
+            removeConnectorRelatedMaterializedView(baseTableInfo, mvId);
+            return;
+        }
+
+        Optional<Table> baseTableOpt;
+        try {
+            // Internal catalog only: a local metastore lookup, not I/O.
+            baseTableOpt = MvUtils.getTableWithIdentifier(baseTableInfo);
+        } catch (Exception e) {
+            LOG.error("Failed to get base table: {}", baseTableInfo, e);
+            return;
+        }
+
+        if (baseTableOpt.isPresent()) {
+            Table baseTable = baseTableOpt.get();
+            baseTable.removeRelatedMaterializedView(mvId);
+            if (!baseTable.isNativeTableOrMaterializedView()) {
+                // remove relatedMaterializedViews for connector table
                 removeConnectorRelatedMaterializedView(baseTableInfo, mvId);
-                continue;
-            }
-
-            Optional<Table> baseTableOpt;
-            try {
-                // Internal catalog only: a local metastore lookup, not I/O.
-                baseTableOpt = MvUtils.getTableWithIdentifier(baseTableInfo);
-            } catch (Exception e) {
-                LOG.error("Failed to get base table: {}", baseTableInfo, e);
-                continue;
-            }
-
-            if (baseTableOpt.isPresent()) {
-                Table baseTable = baseTableOpt.get();
-                baseTable.removeRelatedMaterializedView(mvId);
-                if (!baseTable.isNativeTableOrMaterializedView()) {
-                    // remove relatedMaterializedViews for connector table
-                    removeConnectorRelatedMaterializedView(baseTableInfo, mvId);
-                }
             }
         }
     }
@@ -1966,30 +1970,72 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
      * <p>NOTE: caller need to hold the mv write lock; the returned future does not.
      */
     public CompletableFuture<?> activateOnReplay(List<BaseTableInfo> journaledBaseTableInfos) {
-        this.baseTableInfos = journaledBaseTableInfos;
+        if (MvUtils.isSameBaseTables(ListUtils.emptyIfNull(baseTableInfos), journaledBaseTableInfos)) {
+            this.baseTableInfos = journaledBaseTableInfos;
+        } else {
+            // the leader's activation found the defined query reading other base tables, see
+            // AlterJobMgr#rebuildRelationshipForActivate; the relinking below covers the new ones
+            adoptRedefinedBaseTableInfos(journaledBaseTableInfos);
+        }
         if (GlobalStateMgr.isCheckpointThread()) {
             setActive();
             return CompletableFuture.completedFuture(null);
         }
+        return rebuildRelationshipOnReplay("MVReplayActivate", "replayed activation", "replay active failed: ",
+                true);
+    }
+
+    /**
+     * Replay the leader adopting the base tables of a redefined connector view, see {@link #replaceBaseTableInfos}.
+     * The journal already carries the resolved base tables, so they are adopted, and the versions of the old ones
+     * cleared, right away. What {@link #fixRelationship} derives on top resolves every base table through its
+     * connector, so it runs asynchronously, off the replay thread and outside the caller's lock, as for
+     * {@link #activateOnReplay}: a slow or unreachable external catalog must not hold up the journals replayed after
+     * this one, or the checkpoint. Until then, rewrite does not use the mv, which has no versions of its new base
+     * tables.
+     *
+     * <p>On the checkpoint thread nothing is derived: the image only keeps the persisted state.
+     *
+     * <p>NOTE: caller need to hold the mv write lock; the returned future does not.
+     */
+    public CompletableFuture<?> replaceBaseTableInfosOnReplay(List<BaseTableInfo> journaledBaseTableInfos) {
+        adoptRedefinedBaseTableInfos(journaledBaseTableInfos);
+        if (GlobalStateMgr.isCheckpointThread()) {
+            return CompletableFuture.completedFuture(null);
+        }
+        return rebuildRelationshipOnReplay("MVReplayRedefinedBaseTables", "replayed base-table redefinition",
+                "replay base-table redefinition failed: ", false);
+    }
+
+    /**
+     * Rebuild what {@link #fixRelationship} derives from the persisted state a replay adopted, asynchronously, and
+     * apply its verdict only if no other status change was replayed meanwhile.
+     *
+     * @param leaderVerifiedActive whether the leader journaled the entry only once the mv was active, so that a
+     *                             negative verdict here is a divergence from the leader
+     */
+    private CompletableFuture<?> rebuildRelationshipOnReplay(String taskName, String replayed,
+                                                             String failureReasonPrefix,
+                                                             boolean leaderVerifiedActive) {
         final long epoch;
         synchronized (this) {
             epoch = statusEpoch;
         }
-        return CachingMvPlanContextBuilder.submitAsyncTask(buildTaskName("MVReplayActivate"), () -> {
+        return CachingMvPlanContextBuilder.submitAsyncTask(buildTaskName(taskName), () -> {
             InactiveReason reason;
             try {
                 onReloadImplHeavy();
                 reason = checkIsActiveOnLoadBlocking();
             } catch (Throwable e) {
-                LOG.warn("rebuild the relationship of replayed activation failed for mv: {}", this, e);
-                reason = InactiveReason.ofInactive("replay active failed: " + e.getMessage());
+                LOG.warn("rebuild the relationship of {} failed for mv: {}", replayed, this, e);
+                reason = InactiveReason.ofInactive(failureReasonPrefix + e.getMessage());
             }
             boolean stale;
             synchronized (this) {
                 stale = statusEpoch != epoch;
                 if (stale) {
-                    LOG.info("status of mv {} changed while its replayed activation was being rebuilt, "
-                            + "dropping the stale verdict", getName());
+                    LOG.info("status of mv {} changed while its {} was being rebuilt, dropping the stale verdict",
+                            getName(), replayed);
                 } else {
                     setInActiveReason(reason);
                 }
@@ -1998,10 +2044,10 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             // the base-table links and the rewrite cache. DROP takes the mv out of the catalog before it
             // cleans up, so checking after every side effect above means one of the two always runs last.
             if (!isInCatalog()) {
-                undoActivationOfDroppedMv("dropped while its replayed activation was being rebuilt");
+                undoActivationOfDroppedMv("dropped while its " + replayed + " was being rebuilt");
                 return null;
             }
-            if (!stale && !reason.isActive) {
+            if (leaderVerifiedActive && !stale && !reason.isActive) {
                 // The leader journals ACTIVE only once the activation actually succeeded, so failing to
                 // reproduce it here is a real divergence between this FE and the leader.
                 LOG.error("replayed ACTIVE for materialized view {} but could not rebuild its base-table "
@@ -3402,9 +3448,55 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     }
 
     /**
+     * Replace the base tables once the defined query resolves to different ones, e.g. because an external view was
+     * redefined in its catalog. Base tables no longer read lose their relation to this mv. All base tables lose their
+     * refreshed versions, since the mv's data still reflects the old definition, e.g. still holds the rows of a
+     * dropped UNION ALL branch. So the next refresh rebuilds the mv even if the tables still read are unchanged, and
+     * rewrite does not consider the mv fresh until then: clearing the versions also clears the confirmed freshness,
+     * which keeps the staleness shortcut of rewrite, see #isStalenessSatisfied, from serving the old data, also
+     * while the rebuild runs or after it failed. The last refresh time is reset as well, the mv was never refreshed
+     * from its current base tables.
+     * <p>
+     * NOTE: caller need to hold the mv's write lock
+     */
+    public void replaceBaseTableInfos(List<BaseTableInfo> newBaseTableInfos) {
+        adoptRedefinedBaseTableInfos(newBaseTableInfos);
+        fixRelationship();
+    }
+
+    /**
+     * {@link #replaceBaseTableInfos} without relinking the new base tables, which resolves them through their
+     * connectors. For a caller that relinks them itself, see #activateOnReplay and #replaceBaseTableInfosOnReplay.
+     */
+    private void adoptRedefinedBaseTableInfos(List<BaseTableInfo> newBaseTableInfos) {
+        // by name: an activation resolves the base tables again, and a connector hands out new ids for the same ones
+        Set<String> kept = newBaseTableInfos.stream()
+                .map(MvUtils::getBaseTableQualifiedName).collect(Collectors.toSet());
+        MvId mvId = getMvId();
+        for (BaseTableInfo oldBaseTableInfo : ListUtils.emptyIfNull(baseTableInfos)) {
+            if (!kept.contains(MvUtils.getBaseTableQualifiedName(oldBaseTableInfo))) {
+                unlinkFromBaseTable(oldBaseTableInfo, mvId);
+            }
+        }
+        // a refresh run racing this one finds the epoch moved and publishes no versions, see MVVersionManager
+        resetVisibleVersionMap();
+        refreshScheme.setLastRefreshTime(0);
+        LOG.info("replace base table infos of materialized view {} from {} to {}", name,
+                MvUtils.formatBaseTableInfos(baseTableInfos), MvUtils.formatBaseTableInfos(newBaseTableInfos));
+        setBaseTableInfos(Lists.newArrayList(newBaseTableInfos));
+        resetMetadataCache();
+        CachingMvPlanContextBuilder.getInstance().evictMaterializedViewCache(this);
+    }
+
+    /**
      * Replay AlterMaterializedViewBaseTableInfosLog and update associated variables.
      */
     public void replayAlterMaterializedViewBaseTableInfos(AlterMaterializedViewBaseTableInfosLog log) {
+        if (log.isBaseTablesRedefined()) {
+            LOG.info("Replay redefined base table infos log for mv {}", this.getName());
+            replaceBaseTableInfosOnReplay(log.getBaseTableInfos());
+            return;
+        }
         int mvAlterType = log.getAlterType();
         LOG.info("Replay alter materialized view base table infos log for mv {}, alter type is {}",
                 this.getName(), mvAlterType);

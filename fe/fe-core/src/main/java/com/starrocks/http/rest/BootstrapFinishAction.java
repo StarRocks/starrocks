@@ -105,6 +105,7 @@ public class BootstrapFinishAction extends RestBaseAction {
                     result.setCpuCores(MachineInfo.getInstance().getCpuCores());
                     result.setMacAddress(MachineInfo.getInstance().getMacAddress());
                     result.setRebuildsLakeIndexPayload(true);
+                    result.setAdoptsRedefinedMvBaseTables(true);
                 }
             }
         } else {
@@ -138,6 +139,10 @@ public class BootstrapFinishAction extends RestBaseAction {
         // the rebuild does not send the key, which reads back as false.
         @SerializedName("rebuildsLakeIndexPayload")
         private boolean rebuildsLakeIndexPayload;
+        // Whether this FE replays an mv adopting the base tables of a redefined connector view. An FE that predates
+        // it does not send the key, which reads back as false.
+        @SerializedName("adoptsRedefinedMvBaseTables")
+        private boolean adoptsRedefinedMvBaseTables;
 
         public BootstrapResult() {
             super();
@@ -217,6 +222,14 @@ public class BootstrapFinishAction extends RestBaseAction {
 
         public void setRebuildsLakeIndexPayload(boolean rebuildsLakeIndexPayload) {
             this.rebuildsLakeIndexPayload = rebuildsLakeIndexPayload;
+        }
+
+        public boolean adoptsRedefinedMvBaseTables() {
+            return adoptsRedefinedMvBaseTables;
+        }
+
+        public void setAdoptsRedefinedMvBaseTables(boolean adoptsRedefinedMvBaseTables) {
+            this.adoptsRedefinedMvBaseTables = adoptsRedefinedMvBaseTables;
         }
 
         @Override

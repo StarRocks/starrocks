@@ -1883,27 +1883,32 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
      */
     public static void inactiveMvFromRefresh(MaterializedView mv, String inactiveReason) {
         try (AutoCloseableLock ignored = new AutoCloseableLock(mv.getDbId(), mv.getId(), LockType.WRITE)) {
-            // A refresh can get here after its MV, or the MV's database, was dropped: the entry would then have
-            // nothing to apply to on any FE.
-            if (!mv.isInCatalog()) {
-                LOG.info("Skip inactivating materialized view {}/{}, it was dropped: {}", mv.getName(), mv.getId(),
-                        inactiveReason);
-                return;
-            }
-            AlterMaterializedViewStatusLog log = new AlterMaterializedViewStatusLog(mv.getDbId(),
-                    mv.getId(), AlterMaterializedViewStatusClause.INACTIVE, inactiveReason);
-            log.setClearVersionMap(true);
-            log.setKeepTaskScheduled(true);
-            // See doInactiveMaterializedViewOnly for the reset epoch bumped on both sides of the clear.
+            inactiveMvFromRefreshLocked(mv, inactiveReason);
+        }
+    }
+
+    /** {@link #inactiveMvFromRefresh} for a caller that already holds the MV's write lock. */
+    public static void inactiveMvFromRefreshLocked(MaterializedView mv, String inactiveReason) {
+        // A refresh can get here after its MV, or the MV's database, was dropped: the entry would then have
+        // nothing to apply to on any FE.
+        if (!mv.isInCatalog()) {
+            LOG.info("Skip inactivating materialized view {}/{}, it was dropped: {}", mv.getName(), mv.getId(),
+                    inactiveReason);
+            return;
+        }
+        AlterMaterializedViewStatusLog log = new AlterMaterializedViewStatusLog(mv.getDbId(),
+                mv.getId(), AlterMaterializedViewStatusClause.INACTIVE, inactiveReason);
+        log.setClearVersionMap(true);
+        log.setKeepTaskScheduled(true);
+        // See doInactiveMaterializedViewOnly for the reset epoch bumped on both sides of the clear.
+        mv.markVersionMapReset();
+        try {
+            GlobalStateMgr.getCurrentState().getEditLog().logAlterMvStatus(log, wal -> {
+                mv.setInactiveAndReason(inactiveReason);
+                mv.getRefreshScheme().clearVersionState();
+            });
+        } finally {
             mv.markVersionMapReset();
-            try {
-                GlobalStateMgr.getCurrentState().getEditLog().logAlterMvStatus(log, wal -> {
-                    mv.setInactiveAndReason(inactiveReason);
-                    mv.getRefreshScheme().clearVersionState();
-                });
-            } finally {
-                mv.markVersionMapReset();
-            }
         }
     }
 

@@ -18,6 +18,7 @@
 package com.starrocks.persist;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.MaterializedView;
@@ -56,6 +57,13 @@ public class AlterMaterializedViewBaseTableInfosLog implements Writable {
     private String originalViewDefineSql;
     @SerializedName(value = "queryOutputIndices")
     protected List<Integer> queryOutputIndices = Lists.newArrayList();
+
+    // Set when the mv's defined query resolved to other base tables, see MaterializedView#replaceBaseTableInfos.
+    // An older FE would ignore it and replay the entry as a DEFAULT one, which keeps the versions of the old base
+    // tables, so it is only journaled once every FE reports it replays it, see
+    // AlterJobMgr#frontendsNotAdoptingRedefinedMvBaseTables.
+    @SerializedName("baseTablesRedefined")
+    private boolean baseTablesRedefined;
 
     public static enum AlterType {
         DEFAULT,
@@ -112,6 +120,28 @@ public class AlterMaterializedViewBaseTableInfosLog implements Writable {
                 this.baseTableInfoVisibleVersionMap = mvContext.getBaseTableInfoVisibleVersionMap();
             }
         }
+    }
+
+    // Not a no-arg constructor: Gson would then run the field initializers on read, see queryOutputIndices.
+    private AlterMaterializedViewBaseTableInfosLog(long dbId, long mvId, List<BaseTableInfo> baseTableInfos) {
+        this.dbId = dbId;
+        this.mvId = mvId;
+        this.alterType = AlterType.DEFAULT.ordinal();
+        this.baseTableInfos = baseTableInfos;
+        // not read on replay, which clears the versions, see MaterializedView#replaceBaseTableInfos
+        this.baseTableVisibleVersionMap = Maps.newHashMap();
+        this.baseTableInfoVisibleVersionMap = Maps.newHashMap();
+    }
+
+    public static AlterMaterializedViewBaseTableInfosLog ofRedefinedBaseTables(
+            long dbId, long mvId, List<BaseTableInfo> baseTableInfos) {
+        AlterMaterializedViewBaseTableInfosLog log = new AlterMaterializedViewBaseTableInfosLog(dbId, mvId, baseTableInfos);
+        log.baseTablesRedefined = true;
+        return log;
+    }
+
+    public boolean isBaseTablesRedefined() {
+        return baseTablesRedefined;
     }
 
     public long getDbId() {

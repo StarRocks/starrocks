@@ -21,10 +21,13 @@ import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.SchemaInfo;
 import com.starrocks.common.SchemaVersionAndHash;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
 import com.starrocks.sql.ast.KeysType;
+import com.starrocks.system.Frontend;
+import com.starrocks.system.FrontendHbResponse;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletMetaType;
 import com.starrocks.type.IntegerType;
@@ -451,6 +454,34 @@ public class AlterJobMgrTest {
         sourcePartitionNames.add("p1");
         List<String> tmpPartitionNames = Deencapsulation.getField(job, "tmpPartitionNames");
         tmpPartitionNames.add("p_tmp");
+    }
+
+    @Test
+    public void testFrontendsNotAdoptingRedefinedMvBaseTables() {
+        // Every FE but the one that decides counts, observers too since they rewrite queries to the mv.
+        Frontend self = frontend(FrontendNodeType.FOLLOWER, "fe_self", false);
+        Frontend observer = frontend(FrontendNodeType.OBSERVER, "fe_observer", true);
+        Frontend upgraded = frontend(FrontendNodeType.FOLLOWER, "fe_upgraded", true);
+        Assertions.assertEquals(List.of(), AlterJobMgr.frontendsNotAdoptingRedefinedMvBaseTables(
+                List.of(self, observer, upgraded), "fe_self"));
+
+        Frontend notUpgraded = frontend(FrontendNodeType.FOLLOWER, "fe_not_upgraded", false);
+        Frontend oldObserver = frontend(FrontendNodeType.OBSERVER, "fe_old_observer", false);
+        // It may come back on another version.
+        Frontend dead = frontend(FrontendNodeType.FOLLOWER, "fe_dead", true);
+        dead.setAlive(false);
+        Assertions.assertEquals(List.of("fe_not_upgraded", "fe_old_observer", "fe_dead"),
+                AlterJobMgr.frontendsNotAdoptingRedefinedMvBaseTables(
+                        List.of(self, observer, upgraded, notUpgraded, oldObserver, dead), "fe_self"));
+    }
+
+    private static Frontend frontend(FrontendNodeType role, String name, boolean adoptsRedefinedMvBaseTables) {
+        Frontend fe = new Frontend(role, name, name, 9010);
+        FrontendHbResponse hbResponse = new FrontendHbResponse(name, 9030, 9020, 1L, System.currentTimeMillis(), 1L,
+                "version", 0.0f, 1, "");
+        hbResponse.setAdoptsRedefinedMvBaseTables(adoptsRedefinedMvBaseTables);
+        fe.handleHbResponse(hbResponse, true);
+        return fe;
     }
 
     private RollupJobV2 buildRollupJobWithTabletData(long id) {
