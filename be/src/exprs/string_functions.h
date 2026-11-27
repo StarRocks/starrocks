@@ -866,6 +866,11 @@ StatusOr<ColumnPtr> StringFunctions::field(FunctionContext* context, const Colum
         } else if (state->list_all_const) {
             const auto viewer = ColumnViewer<Type>(columns[0]);
             for (int i = 0; i < size; i++) {
+                // A NULL first argument matches nothing; the value under its null flag must not be looked up.
+                if (viewer.is_null(i)) {
+                    result.append(0);
+                    continue;
+                }
                 const auto& list_val = viewer.value(i);
                 auto it = state->mp.find(list_val);
                 if (it != state->mp.end()) {
@@ -885,6 +890,10 @@ StatusOr<ColumnPtr> StringFunctions::field(FunctionContext* context, const Colum
     }
 
     for (int row = 0; row < size; row++) {
+        if (list[0].is_null(row)) {
+            result.append(0);
+            continue;
+        }
         auto value = list[0].value(row);
         int res = 0, id = 1;
         for (auto it = std::next(list.begin()); it != list.end(); it++) {
