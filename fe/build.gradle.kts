@@ -86,6 +86,7 @@ subprojects {
         set("staros.version", "4.3-rc2")
         set("thrift.version", "0.24.0")
         set("tomcat.version", "8.5.70")
+        set("unboundid.ldapsdk.version", "7.0.5")
         set("lz4-java.version", "1.11.4")
         // var sync end
     }
@@ -147,6 +148,7 @@ subprojects {
             // tencentcloud-sdk below 3.1.1471 drags in EOL okhttp 2.7.5 (via hadoop-cos)
             implementation("com.tencentcloudapi:tencentcloud-sdk-java-common:3.1.1471")
             implementation("com.tencentcloudapi:tencentcloud-sdk-java-kms:3.1.1471")
+            implementation("com.unboundid:unboundid-ldapsdk:${project.ext["unboundid.ldapsdk.version"]}")
             implementation("com.starrocks:fe-testing:${project.version}")
             implementation("com.starrocks:hive-udf:${project.version}")
             implementation("com.starrocks:jprotobuf-rpc-core:1.0.0")
@@ -222,6 +224,7 @@ subprojects {
             implementation("org.apache.iceberg:iceberg-common:${project.ext["iceberg.version"]}")
             implementation("org.apache.iceberg:iceberg-core:${project.ext["iceberg.version"]}")
             implementation("org.apache.iceberg:iceberg-hive-metastore:${project.ext["iceberg.version"]}")
+            implementation("org.apache.iceberg:iceberg-parquet:${project.ext["iceberg.version"]}")
             implementation("org.apache.ivy:ivy:2.5.2")
             implementation("org.apache.kafka:kafka-clients:${project.ext["kafka-clients.version"]}")
             implementation("org.apache.kudu:kudu-client:${project.ext["kudu.version"]}")
