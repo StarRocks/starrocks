@@ -129,8 +129,14 @@ import com.starrocks.type.VarcharType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.StarRocksTestBase;
 import com.starrocks.utframe.UtFrameUtils;
+<<<<<<< HEAD
+=======
+import com.starrocks.warehouse.DefaultWarehouse;
+import com.starrocks.warehouse.Warehouse;
+>>>>>>> 643a0232212... [BugFix][RB-1916] Check USAGE on a pipe's warehouse at CREATE PIPE and ALTER PIPE (#71276)
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import mockit.Expectations;
+import mockit.Invocation;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
@@ -148,6 +154,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ThreadLocalRandom;
 
 import static org.mockito.ArgumentMatchers.eq;
@@ -3828,6 +3835,92 @@ public class PrivilegeCheckerTest extends StarRocksTestBase {
         grantRevokeSqlAsRoot("revoke INSERT on tbl_pipe from test");
         starRocksAssert.dropTable("tbl_pipe");
         starRocksAssert.getCtx().setDatabase(null);
+    }
+
+    @Test
+    public void testPipeWarehouse() throws Exception {
+        PipeManagerTest.mockRepoExecutorDML();
+        // warehouse names are case-sensitive, so DEFAULT_WAREHOUSE is a warehouse of its own
+        Map<String, Long> whIds = Map.of("wh_pipe", 10916L, "DEFAULT_WAREHOUSE", 10917L);
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public Warehouse getWarehouse(Invocation inv, String name) {
+                return whIds.containsKey(name) ? new DefaultWarehouse(whIds.get(name), name) : inv.proceed(name);
+            }
+
+            @Mock
+            public Warehouse getWarehouseAllowNull(Invocation inv, String name) {
+                return whIds.containsKey(name) ? new DefaultWarehouse(whIds.get(name), name) : inv.proceed(name);
+            }
+
+            @Mock
+            public Warehouse getWarehouse(Invocation inv, long id) {
+                return mockWarehouse(id).orElseGet(() -> inv.proceed(id));
+            }
+
+            @Mock
+            public Warehouse getWarehouseAllowNull(Invocation inv, long id) {
+                return mockWarehouse(id).orElseGet(() -> inv.proceed(id));
+            }
+
+            private Optional<Warehouse> mockWarehouse(long id) {
+                return whIds.entrySet().stream().filter(e -> e.getValue() == id).findFirst()
+                        .map(e -> new DefaultWarehouse(e.getValue(), e.getKey()));
+            }
+        };
+
+        ConnectContext ctx = starRocksAssert.getCtx();
+        starRocksAssert.withTable("create table db1.tbl_pipe_wh (id int, str string) properties('replication_num'='1')");
+        ctx.setDatabase("db1");
+        grantRevokeSqlAsRoot("grant INSERT on db1.tbl_pipe_wh to test");
+        grantRevokeSqlAsRoot("grant CREATE PIPE on DATABASE db1 to test");
+        String asInsert = " as insert into tbl_pipe_wh select * from " +
+                "files('path'='fake://dir/', 'format'='parquet', 'auto_ingest'='false')";
+        String expectError = "Access denied; you need (at least one of) the USAGE privilege(s) on WAREHOUSE wh_pipe";
+
+        // 'task.warehouse' sets the same task variable as 'warehouse'
+        for (String key : List.of("warehouse", "task.warehouse", "TASK.WAREHOUSE")) {
+            verifyGrantRevoke("create pipe p_wh properties('" + key + "'='wh_pipe')" + asInsert,
+                    "grant USAGE on WAREHOUSE wh_pipe to test",
+                    "revoke USAGE on WAREHOUSE wh_pipe from test", expectError);
+        }
+        ctxToRoot();
+        StatementBase createOnDefault = UtFrameUtils.parseStmtWithNewParser(
+                "create pipe p_wh properties('warehouse'='default_warehouse')" + asInsert, ctx);
+        ctxToTestUser();
+        Authorizer.check(createOnDefault, ctx);
+        verifyGrantRevoke("create pipe p_wh properties('warehouse'='DEFAULT_WAREHOUSE')" + asInsert,
+                "grant USAGE on WAREHOUSE DEFAULT_WAREHOUSE to test",
+                "revoke USAGE on WAREHOUSE DEFAULT_WAREHOUSE from test",
+                "Access denied; you need (at least one of) the USAGE privilege(s) on WAREHOUSE DEFAULT_WAREHOUSE");
+        // the analyzer resolves only 'warehouse', so an unknown 'task.warehouse' must be rejected here
+        ctxToRoot();
+        StatementBase createOnUnknown = UtFrameUtils.parseStmtWithNewParser(
+                "create pipe p_wh properties('task.warehouse'='wh_not_exist')" + asInsert, ctx);
+        ctxToTestUser();
+        Exception unknown = Assertions.assertThrows(Exception.class, () -> Authorizer.check(createOnUnknown, ctx));
+        Assertions.assertTrue(unknown.getMessage().contains("wh_not_exist"), unknown.getMessage());
+
+        ctxToRoot();
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser("create pipe p_wh" + asInsert, ctx), ctx);
+        grantRevokeSqlAsRoot("grant ALTER on PIPE db1.p_wh to test");
+        for (String key : List.of("warehouse", "task.warehouse", "TASK.WAREHOUSE")) {
+            verifyGrantRevoke("alter pipe p_wh set('" + key + "'='wh_pipe')",
+                    "grant USAGE on WAREHOUSE wh_pipe to test",
+                    "revoke USAGE on WAREHOUSE wh_pipe from test", expectError);
+        }
+        ctxToRoot();
+        StatementBase alterToDefault = UtFrameUtils.parseStmtWithNewParser(
+                "alter pipe p_wh set('warehouse'='default_warehouse')", ctx);
+        ctxToTestUser();
+        Authorizer.check(alterToDefault, ctx);
+
+        ctxToRoot();
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser("drop pipe p_wh", ctx), ctx);
+        grantRevokeSqlAsRoot("revoke CREATE PIPE on DATABASE db1 from test");
+        grantRevokeSqlAsRoot("revoke INSERT on db1.tbl_pipe_wh from test");
+        starRocksAssert.dropTable("tbl_pipe_wh");
+        ctx.setDatabase(null);
     }
 
     @Test
