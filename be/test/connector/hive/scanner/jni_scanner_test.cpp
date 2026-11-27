@@ -14,18 +14,28 @@
 
 #include "connector/hive/scanner/jni_scanner.h"
 
+#include <bthread/bthread.h>
 #include <gtest/gtest.h>
 
+#include <atomic>
 #include <cstdlib>
 #include <string>
 
+#include "base/bthreads/util.h"
+#include "base/testutil/assert.h"
+#include "base/testutil/sync_point.h"
+#include "base/utility/defer_op.h"
 #include "common/config_exec_fwd.h"
+#include "common/system/cpu_info.h"
 #include "common/util/debug_util.h"
 #include "common/util/thrift_util.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors_ext.h"
+#include "runtime/java/java_env.h"
 #include "runtime/java/jni_env.h"
 #include "runtime/java/jvm_helper.h"
+#include "runtime/runtime_env.h"
+#include "runtime/runtime_env_test_util.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {
@@ -601,6 +611,74 @@ TEST_F(JniScannerTest, test_close_clears_pending_java_exception) {
     scanner->do_close(_runtime_state);
 
     ASSERT_FALSE(env->ExceptionCheck()) << "do_close() left a pending Java exception";
+    ASSERT_EQ(scanner->_jni_scanner_obj, nullptr);
+    ASSERT_EQ(scanner->_jni_scanner_cls, nullptr);
+}
+
+// The last QueryContext reference can be dropped in a brpc callback, so do_close() may run on a bthread,
+// which cannot attach to the JVM. do_close() must move its JNI calls to a pthread and still release the
+// scanner refs.
+TEST_F(JniScannerTest, test_close_from_bthread_runs_jni_on_pthread) {
+    if (std::getenv("JAVA_HOME") == nullptr) {
+        GTEST_SKIP() << "JAVA_HOME is not set";
+    }
+    JNIEnv* env = getJNIEnv();
+    if (env == nullptr) {
+        GTEST_SKIP() << "JVM is unavailable";
+    }
+
+    CpuInfo::init();
+    runtime_env_test::set_small_thread_pool_configs();
+    auto* java_env = RuntimeEnv::GetInstance()->java_env();
+    java_env->destroy();
+    DeferOp cleanup_java_env([java_env]() {
+        java_env->shutdown();
+        java_env->destroy();
+    });
+    ASSERT_OK(java_env->init());
+    ASSERT_NE(java_env->jvm_call_pool(), nullptr);
+
+    std::atomic<int> jni_close_calls = 0;
+    std::atomic<bool> jni_close_on_bthread = false;
+    SyncPoint::GetInstance()->SetCallBack("JniScanner::_close_jni_scanner", [&](void*) {
+        jni_close_calls.fetch_add(1, std::memory_order_relaxed);
+        if (bthread_self() != 0) {
+            jni_close_on_bthread.store(true, std::memory_order_relaxed);
+        }
+    });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp cleanup_sync_point([]() {
+        SyncPoint::GetInstance()->DisableProcessing();
+        SyncPoint::GetInstance()->ClearCallBack("JniScanner::_close_jni_scanner");
+    });
+
+    jclass list_cls = env->FindClass("java/util/ArrayList");
+    ASSERT_NE(list_cls, nullptr);
+    LOCAL_REF_GUARD_ENV(env, list_cls);
+    jmethodID list_constructor = env->GetMethodID(list_cls, "<init>", "()V");
+    ASSERT_NE(list_constructor, nullptr);
+    jobject list = env->NewObject(list_cls, list_constructor);
+    ASSERT_NE(list, nullptr);
+    LOCAL_REF_GUARD_ENV(env, list);
+    // ArrayList.clear() matches the `()V` signature JniScanner uses for the scanner's close().
+    jmethodID clear_method = env->GetMethodID(list_cls, "clear", "()V");
+    ASSERT_NE(clear_method, nullptr);
+
+    std::map<std::string, std::string> params = {{"test_key", "test_value"}};
+    auto scanner = std::make_unique<JniScanner>("com/test/TestFactory", params);
+    scanner->_jni_scanner_obj = env->NewGlobalRef(list);
+    scanner->_jni_scanner_cls = (jclass)env->NewGlobalRef(list_cls);
+    scanner->_jni_scanner_close = clear_method;
+
+    std::atomic<bool> closed_on_bthread = false;
+    ASSERT_OK(bthreads::start_bthread_and_join([&]() {
+        closed_on_bthread.store(bthread_self() != 0, std::memory_order_relaxed);
+        scanner->do_close(_runtime_state);
+    }));
+
+    ASSERT_TRUE(closed_on_bthread.load(std::memory_order_relaxed));
+    ASSERT_EQ(jni_close_calls.load(std::memory_order_relaxed), 1);
+    ASSERT_FALSE(jni_close_on_bthread.load(std::memory_order_relaxed)) << "JNI close ran on a bthread";
     ASSERT_EQ(scanner->_jni_scanner_obj, nullptr);
     ASSERT_EQ(scanner->_jni_scanner_cls, nullptr);
 }
