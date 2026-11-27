@@ -45,11 +45,7 @@ import com.starrocks.lake.compaction.PartitionStatistics;
 import com.starrocks.load.InsertOverwriteJob;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.WALApplier;
-<<<<<<< HEAD
-=======
-import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.planner.RangeDistributionPrunerTest;
->>>>>>> 773d1b93c89... [BugFix][RB-1485] Keep tablet range boundary values as raw bytes on FE (#71058)
 import com.starrocks.proto.AggregatePublishVersionRequest;
 import com.starrocks.proto.PublishVersionRequest;
 import com.starrocks.proto.PublishVersionResponse;
