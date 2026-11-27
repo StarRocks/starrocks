@@ -15,6 +15,7 @@
 package com.starrocks.sql.plan;
 
 import com.starrocks.utframe.StarRocksAssert;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
@@ -82,5 +83,26 @@ public class MapTypeTest extends PlanTestBase {
                 "  |  output: any_value(3: c2)\n" +
                 "  |  group by: \n" +
                 "  |  limit: 1");
+    }
+
+    @Test
+    public void testMapLiteralInAggregateQuery() throws Exception {
+        String[] sqls = {
+                "select count(*), map{1:'a'} from test_map",
+                "select c0, map{1:'a'} from test_map group by c0",
+                "select c0 from test_map group by c0 having map{1:'a'} is not null",
+                "select c0 from test_map group by c0 having map_size(map{1:'a'}) > 0",
+                "select c0 from test_map group by c0 order by map_size(map{1:'a'})",
+                "select c0, map{c0:'a'} from test_map group by c0",
+        };
+        for (String sql : sqls) {
+            getFragmentPlan(sql);
+        }
+        try {
+            getFragmentPlan("select count(*), map{c0:'a'} from test_map");
+            Assertions.fail("map on a non-grouped column must be rejected");
+        } catch (Exception e) {
+            assertContains(e.getMessage(), "GROUP BY clause");
+        }
     }
 }

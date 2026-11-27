@@ -1,0 +1,36 @@
+-- name: test_map_literal_in_aggregate
+CREATE TABLE t (k INT) DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO t VALUES (1), (2), (2);
+-- result:
+-- !result
+SELECT COUNT(*), map{1:'a'} FROM t;
+-- result:
+3	{1:"a"}
+-- !result
+SELECT k, map{1:'a'} FROM t GROUP BY k ORDER BY k;
+-- result:
+1	{1:"a"}
+2	{1:"a"}
+-- !result
+SELECT k, map{k:'a'} FROM t GROUP BY k ORDER BY k;
+-- result:
+1	{1:"a"}
+2	{2:"a"}
+-- !result
+SELECT k FROM t GROUP BY k HAVING map{1:'a'} IS NOT NULL ORDER BY k;
+-- result:
+1
+2
+-- !result
+SELECT k FROM t GROUP BY k HAVING map_size(map{1:'a'}) > 0 ORDER BY k;
+-- result:
+1
+2
+-- !result
+SELECT k, COUNT(*) FROM t GROUP BY k ORDER BY map_size(map{1:'a'}), k;
+-- result:
+1	1
+2	2
+-- !result
