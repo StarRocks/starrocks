@@ -28,6 +28,7 @@ set(EXEC_FILES
         ./common/cow_test.cpp
         ./column/schema_test.cpp
         ./column/column_cow_test.cpp
+        ./common/backend_options_test.cpp
         ./common/config_test.cpp
         ./common/greplog_test.cpp
         ./common/crash_watchdog_test.cpp

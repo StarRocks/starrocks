@@ -78,6 +78,11 @@ CONF_mBool(enable_resolve_hostname_to_ip_in_load_error_url, "false");
 // If no ip match this rule, will choose one randomly.
 CONF_String(priority_networks, "");
 CONF_Bool(net_use_ipv6_when_priority_networks_empty, "false");
+// How long BE/CN startup waits for a non-loopback address to appear when the host only has
+// loopback addresses, e.g. the process was started before DHCP assigned an address. Without
+// the wait, the process picks a loopback address and keeps it until it is restarted.
+// Once the wait times out, the address is chosen as before. 0 disables the wait.
+CONF_Int32(net_wait_for_local_ip_timeout_s, "300");
 
 // Memory urged water level, if the memory usage exceeds this level,
 // be will free up some memory immediately to ensure the system runs smoothly.
