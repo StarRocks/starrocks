@@ -176,6 +176,16 @@ TEST_F(CompressedInputStreamTest, test_lz4_bug_1268_2) {
     ASSERT_OK(codec->decompress(compressed_slice, &decompressed_slice2));
 }
 
+// Empty compressed source (merge-commit parallel CSV channel with no data) must EOF
+// cleanly instead of failing LZ4 frame-header validation on 0-byte input.
+TEST_F(CompressedInputStreamTest, test_lz4_empty_source) {
+    auto input_stream = std::make_shared<StringInputStream>(std::string());
+    auto f = std::make_shared<CompressedInputStream>(input_stream, LZ4F_decompressor());
+    std::string buf(1024, '\0');
+    ASSIGN_OR_ABORT(auto nread, f->read(buf.data(), buf.size()));
+    ASSERT_EQ(0, nread);
+}
+
 // NOLINTNEXTLINE
 TEST_F(CompressedInputStreamTest, test_LZ4F) {
     const size_t K1 = 1024;
