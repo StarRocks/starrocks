@@ -367,6 +367,21 @@ public class PlanningSnapshotViewLockTest extends ConnectorPlanTestBase {
     }
 
     /**
+     * Before analysis the grouping expressions are only in the parsed GROUP BY clause, not in the analyzed group-by
+     * list the traverser walks. A [_SYNC_MV_] read there is analyzed -- and its base table copied -- like any other,
+     * in every kind of grouping.
+     */
+    @Test
+    public void testSyncMVReadInGroupBy() throws Exception {
+        String read = "(SELECT count(*) FROM test." + SYNC_MV + " [_SYNC_MV_])";
+        assertSyncMVBaseTableCopiedUnderItsLock("SELECT count(*) FROM test.t1 GROUP BY " + read);
+        assertSyncMVBaseTableCopiedUnderItsLock("SELECT count(*) FROM test.t1 GROUP BY GROUPING SETS ((v4), ("
+                + read + "))");
+        assertSyncMVBaseTableCopiedUnderItsLock("SELECT count(*) FROM test.t1 GROUP BY ROLLUP (v4, " + read + ")");
+        assertSyncMVBaseTableCopiedUnderItsLock("SELECT count(*) FROM test.t1 GROUP BY CUBE (v4, " + read + ")");
+    }
+
+    /**
      * CREATE VIEW analyzes its query without the planner lock, and the analyzer still copies the base table of a
      * [_SYNC_MV_] read: 2-g, exempted until the analyzer stops copying. Here so that dropping the exemption before
      * then fails a test rather than CREATE VIEW in error mode.
@@ -476,6 +491,18 @@ public class PlanningSnapshotViewLockTest extends ConnectorPlanTestBase {
             connectContext.setThreadLocalInfo();
             starRocksAssert.dropTable("if exists test.t_rollup_temporary_lock");
         }
+    }
+
+    /** The same for a table read only by a subquery of GROUP BY, in every kind of grouping. */
+    @Test
+    public void testNoReLockForATableReadInGroupBy() throws Exception {
+        String read = "(SELECT count(*) FROM test.t1)";
+        AtomicInteger reLocks = countReLocks();
+        assertEveryCopyWasLockedOf("SELECT count(*) FROM test.t0 GROUP BY " + read, "t1");
+        assertEveryCopyWasLockedOf("SELECT count(*) FROM test.t0 GROUP BY GROUPING SETS ((v1), (" + read + "))", "t1");
+        assertEveryCopyWasLockedOf("SELECT count(*) FROM test.t0 GROUP BY ROLLUP (v1, " + read + ")", "t1");
+        assertEveryCopyWasLockedOf("SELECT count(*) FROM test.t0 GROUP BY CUBE (v1, " + read + ")", "t1");
+        Assertions.assertEquals(0, reLocks.get());
     }
 
     /** A view does not take the whole set again: the lock taken before analysis already covers its base tables. */

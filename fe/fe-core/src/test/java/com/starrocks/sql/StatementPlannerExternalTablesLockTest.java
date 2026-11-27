@@ -356,6 +356,17 @@ public class StatementPlannerExternalTablesLockTest extends ConnectorPlanTestBas
     }
 
     /**
+     * An external table read by a subquery in GROUP BY. The lock collection walks GROUP BY before analysis and
+     * locks t0, so the external-table pre-pass has to walk it as well: the JDBC lookup must not wait for the
+     * analyzer under that lock.
+     */
+    @Test
+    public void testGroupByExternalSubqueryMetadataNotUnderLock() throws Exception {
+        assertExternalMetadataFetchedBeforeLock(
+                "select count(*) from t0 group by (select count(*) from jdbc0.partitioned_db0.tbl0)");
+    }
+
+    /**
      * A non-recursive CTE's name is in scope only after its own definition: inside it, a same-named table is the
      * table. Here the inner tbl0 is the JDBC table of the current database, which the pre-pass must resolve
      * rather than skip as the CTE, or the analyzer fetches it holding t0's lock.
