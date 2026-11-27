@@ -222,6 +222,25 @@ public class SimplifiedPredicateRuleTest extends PlanTestBase {
     }
 
     @Test
+    public void doNotMergeTimeFnsBeyondInt() {
+        ColumnRefOperator ts = new ColumnRefOperator(1, DateType.DATETIME, "ts", true);
+        for (String[] unit : TIME_FN_UNITS) {
+            String add = unit[0];
+            String sub = unit[1];
+            // a merged amount beyond INT would wrap, so the calls are kept as they are
+            for (CallOperator call : new CallOperator[] {
+                    timeFn(add, timeFn(add, ts, 2000000000), 2000000000),
+                    timeFn(sub, timeFn(sub, ts, 2000000000), 2000000000),
+                    timeFn(sub, timeFn(add, ts, 1), Integer.MIN_VALUE),
+                    timeFn(add, timeFn(add, ts, Integer.MIN_VALUE), -1)}) {
+                assertEquals(call.toString(), rule.apply(call, null).toString());
+            }
+            assertEquals(add + "(1: ts, 2147483647)",
+                    rule.apply(timeFn(add, timeFn(add, ts, 2147483646), 1), null).toString());
+        }
+    }
+
+    @Test
     public void doNotMergeTimeFnsOfDifferentUnits() {
         ColumnRefOperator ts = new ColumnRefOperator(1, DateType.DATETIME, "ts", true);
         List<String[]> units = Lists.newArrayList(TIME_FN_UNITS);
