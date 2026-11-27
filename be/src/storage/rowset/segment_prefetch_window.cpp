@@ -27,13 +27,31 @@ static constexpr int kLateReadAheadMinBatches = 4;
 
 SegmentPrefetchWindow::SegmentPrefetchWindow(std::vector<Column> columns, const SparseRange<>* scan_range,
                                              rowid_t start_row, size_t ahead_blocks, double late_read_ahead_ratio,
-                                             size_t block_size, OlapReaderStatistics* stats)
+                                             size_t block_size, OlapReaderStatistics* stats, ReadAheadBudget* budget)
         : _scan_range(scan_range),
           _ahead_limit(ahead_blocks),
           _late_read_ahead_ratio(late_read_ahead_ratio),
           _block_size(std::max<int64_t>(1, static_cast<int64_t>(block_size))),
-          _stats(stats) {
+          _stats(stats),
+          _budget(budget),
+          _member(budget != nullptr ? budget->join() : ReadAheadBudget::Member()) {
     add_cursors(columns, start_row);
+}
+
+size_t SegmentPrefetchWindow::granted_blocks() const {
+    size_t blocks = 0;
+    for (const auto& e : _inflight) {
+        blocks += e.grant.blocks();
+    }
+    return blocks;
+}
+
+void SegmentPrefetchWindow::disable() {
+    _disabled = true;
+    _inflight.clear();
+    _ahead_blocks = 0;
+    _row_batch.clear();
+    _member.leave();
 }
 
 void SegmentPrefetchWindow::add_cursors(const std::vector<Column>& columns, rowid_t start_row) {
@@ -92,10 +110,7 @@ bool SegmentPrefetchWindow::warm(io::SeekableInputStream* file, int64_t offset, 
         // Nothing here is required for correctness: the reads fetch whatever was not warmed. A stream
         // that cannot warm at all will not start to, so stop asking.
         VLOG(2) << "stop warming " << file->filename() << ": " << res.status();
-        _disabled = true;
-        _inflight.clear();
-        _ahead_blocks = 0;
-        _row_batch.clear();
+        disable();
         return false;
     }
     _stats->remote_prefetch_ranges++;
@@ -103,7 +118,7 @@ bool SegmentPrefetchWindow::warm(io::SeekableInputStream* file, int64_t offset, 
     return true;
 }
 
-void SegmentPrefetchWindow::submit(size_t cursor_idx, rowid_t row) {
+bool SegmentPrefetchWindow::submit(size_t cursor_idx, rowid_t row) {
     Cursor& c = _cursors[cursor_idx];
     const PagePointer pp = c.page.page();
     const rowid_t begin_row = static_cast<rowid_t>(c.page.first_ordinal());
@@ -120,7 +135,7 @@ void SegmentPrefetchWindow::submit(size_t cursor_idx, rowid_t row) {
     if (end_row <= row || pp.size == 0) {
         // The reader is past this page already.
         next_page();
-        return;
+        return true;
     }
     if (last_block <= c.last_block) {
         // Pages smaller than a cache block: an earlier page of this column asked for this block already,
@@ -132,26 +147,35 @@ void SegmentPrefetchWindow::submit(size_t cursor_idx, rowid_t row) {
             }
         }
         next_page();
-        return;
+        return true;
     }
     // A page larger than what is left of the window is asked for a window at a time: the cursor stays on it,
     // and the rest follows once the reader has released enough blocks.
     const int64_t from_block = std::max(first_block, c.last_block + 1);
-    const int64_t budget = static_cast<int64_t>(_ahead_limit) - static_cast<int64_t>(_ahead_blocks);
-    const int64_t to_block = std::min(last_block, from_block + std::max<int64_t>(budget, 1) - 1);
+    const size_t want = std::min(static_cast<size_t>(last_block - from_block + 1), _ahead_limit - _ahead_blocks);
+    size_t blocks = want;
+    ReadAheadBudget::Grant grant;
+    if (_budget != nullptr) {
+        grant = _budget->acquire(want, granted_blocks(), _ahead_limit);
+        if (grant.blocks() == 0) {
+            return false;
+        }
+        blocks = grant.blocks();
+    }
+    const int64_t to_block = from_block + static_cast<int64_t>(blocks) - 1;
     const int64_t warm_begin = std::max(begin, from_block * _block_size);
     const int64_t warm_end = std::min(end, (to_block + 1) * _block_size);
     std::shared_ptr<io::CacheWarmHandle> handle;
     if (!warm(c.column.file, warm_begin - c.column.object_offset, warm_end - warm_begin, false /* urgent */, &handle)) {
-        return;
+        return false;
     }
-    const size_t blocks = static_cast<size_t>(to_block - from_block + 1);
     c.last_block = to_block;
-    _inflight.push_back(InFlight{cursor_idx, begin_row, end_row, blocks, std::move(handle)});
+    _inflight.push_back(InFlight{cursor_idx, begin_row, end_row, blocks, std::move(handle), std::move(grant)});
     _ahead_blocks += blocks;
     if (to_block == last_block) {
         next_page();
     }
+    return true;
 }
 
 void SegmentPrefetchWindow::advance(rowid_t row) {
@@ -169,7 +193,7 @@ void SegmentPrefetchWindow::advance(rowid_t row) {
     });
     _inflight.erase(consumed, _inflight.end());
 
-    while (_ahead_blocks < _ahead_limit && !_disabled) {
+    while (!_disabled && _ahead_blocks < _ahead_limit) {
         size_t next = _cursors.size();
         for (size_t i = 0; i < _cursors.size(); ++i) {
             if (!_cursors[i].done &&
@@ -180,7 +204,9 @@ void SegmentPrefetchWindow::advance(rowid_t row) {
         if (next == _cursors.size()) {
             break;
         }
-        submit(next, row);
+        if (!submit(next, row)) {
+            break;
+        }
     }
 }
 
