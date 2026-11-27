@@ -263,6 +263,79 @@ public class LocalTabletTest {
     }
 
     @Test
+    public void testQueryableReplicasDuringBalanceCommitAndPublish() {
+        Replica source = new Replica(101, 201, ReplicaState.DECOMMISSION, 10, 0);
+        source.setWatermarkTxnId(1000);
+        Replica destination = new Replica(102, 202, ReplicaState.NORMAL, 10, 0);
+        LocalTablet tablet = new LocalTablet(100, Lists.newArrayList(source, destination));
+
+        // Commit marks a later version failed, but the normal replica can still serve version 10.
+        destination.updateLastFailedVersion(11);
+        assertQueryableReplicas(tablet, 10, 201, Lists.newArrayList(destination), Lists.newArrayList());
+
+        // Publish makes 11 visible on the source only. It is usable without undoing decommission.
+        source.updateVersionInfo(11, -1, 11);
+        assertQueryableReplicas(tablet, 11, 201, Lists.newArrayList(source), Lists.newArrayList(source));
+        Assertions.assertEquals(ReplicaState.DECOMMISSION, source.getState());
+        Assertions.assertEquals(1000, source.getWatermarkTxnId());
+
+        // Repair restores normal query routing; a local decommissioned replica must not take precedence.
+        destination.updateVersionInfo(11, -1, 11);
+        assertQueryableReplicas(tablet, 11, 201, Lists.newArrayList(destination), Lists.newArrayList());
+    }
+
+    @Test
+    public void testDecommissionFallbackPreservesReadabilityChecks() {
+        for (ReplicaState state : new ReplicaState[] {ReplicaState.NORMAL, ReplicaState.DECOMMISSION}) {
+            Replica replica = new Replica(101, 201, state, 10, 0);
+            LocalTablet tablet = new LocalTablet(100, Lists.newArrayList(replica));
+            assertQueryableReplicas(tablet, 10, -1, Lists.newArrayList(replica), Lists.newArrayList());
+
+            // A later failure must not hide an earlier gap in the actual replica version.
+            replica.updateLastFailedVersion(12);
+            assertQueryableReplicas(tablet, 11, -1, Lists.newArrayList(), Lists.newArrayList());
+            assertQueryableReplicas(tablet, 12, -1, Lists.newArrayList(), Lists.newArrayList());
+            assertQueryableReplicas(tablet, 13, -1, Lists.newArrayList(), Lists.newArrayList());
+            assertQueryableReplicas(tablet, 10, -1, Lists.newArrayList(replica), Lists.newArrayList());
+
+            replica.setBad(true);
+            assertQueryableReplicas(tablet, 10, -1, Lists.newArrayList(), Lists.newArrayList());
+            replica.setBad(false);
+            replica.setIsErrorState(true);
+            assertQueryableReplicas(tablet, 10, -1, Lists.newArrayList(), Lists.newArrayList());
+            replica.setIsErrorState(false);
+
+            List<Replica> replicas = Lists.newArrayList();
+            tablet.getQueryableReplicas(replicas, Lists.newArrayList(), 10, -1, 999);
+            Assertions.assertTrue(replicas.isEmpty());
+            Assertions.assertEquals(0, tablet.getQueryableReplicasSize(10, 999));
+
+            Replica compacted = new Replica(102, 202, 10, 0, 0, 0, state, -1, 10, 9);
+            LocalTablet compactedTablet = new LocalTablet(103, Lists.newArrayList(compacted));
+            assertQueryableReplicas(compactedTablet, 8, -1, Lists.newArrayList(), Lists.newArrayList());
+        }
+    }
+
+    @Test
+    public void testOtherReplicaStatesAreNotQueryFallbacks() {
+        for (ReplicaState state : new ReplicaState[] {ReplicaState.CLONE, ReplicaState.ALTER, ReplicaState.RECOVER}) {
+            Replica replica = new Replica(101, 201, state, 10, 0);
+            LocalTablet tablet = new LocalTablet(100, Lists.newArrayList(replica));
+            assertQueryableReplicas(tablet, 10, -1, Lists.newArrayList(), Lists.newArrayList());
+        }
+    }
+
+    private void assertQueryableReplicas(LocalTablet tablet, long version, long localBackend,
+                                         List<Replica> expected, List<Replica> expectedLocal) {
+        List<Replica> replicas = Lists.newArrayList();
+        List<Replica> local = Lists.newArrayList();
+        tablet.getQueryableReplicas(replicas, local, version, localBackend, 0);
+        Assertions.assertEquals(expected, replicas);
+        Assertions.assertEquals(expectedLocal, local);
+        Assertions.assertEquals(expected.size(), tablet.getQueryableReplicasSize(version, 0));
+    }
+
+    @Test
     public void testGetNormalReplicaBackendPathMapFilterDecommission() {
         List<Replica> replicas = Lists.newArrayList(new Replica(10001, 20001, ReplicaState.NORMAL, 10, -1),
                 new Replica(10002, 20002, ReplicaState.NORMAL, 10, -1),
