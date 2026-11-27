@@ -210,6 +210,16 @@ template <>
 struct StorageTypeTraits<TYPE_VARBINARY> {
     using CppType = Slice;
 };
+// GEO values are stored as opaque WKB bytes, matching RunTimeTypeTraits<TYPE_GEOGRAPHY/GEOMETRY>::CppType.
+// This only gives GEO a storage value type; it does not make GEO comparable, hashable or indexable.
+template <>
+struct StorageTypeTraits<TYPE_GEOGRAPHY> {
+    using CppType = Slice;
+};
+template <>
+struct StorageTypeTraits<TYPE_GEOMETRY> {
+    using CppType = Slice;
+};
 template <>
 struct StorageTypeTraits<TYPE_ARRAY> {
     using CppType = Collection;
