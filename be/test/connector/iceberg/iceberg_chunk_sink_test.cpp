@@ -201,36 +201,6 @@ TEST_F(IcebergChunkSinkTest, test_factory) {
     }
 }
 
-<<<<<<< HEAD
-=======
-TEST_F(IcebergChunkSinkTest, test_factory_with_encryption) {
-    SCOPED_UPDATE(bool, config::enable_connector_sink_spill, false);
-
-    // The FE's encryption signal reaches the Parquet writer as factory options; a sink built from an
-    // encrypted context must come up like any other.
-    auto sink_ctx = std::make_shared<connector::IcebergChunkSinkContext>();
-    sink_ctx->path = "/path/to/directory/";
-    sink_ctx->column_names = {"k1", "k2"};
-    sink_ctx->executor = nullptr;
-    sink_ctx->format = formats::PARQUET;
-    sink_ctx->compression_type = TCompressionType::NO_COMPRESSION;
-    sink_ctx->options = {};
-    sink_ctx->parquet_field_ids = {};
-    sink_ctx->max_file_size = 1 << 30;
-    sink_ctx->column_evaluators = ColumnSlotIdEvaluator::from_types({TYPE_VARCHAR_DESC, TYPE_INT_DESC});
-    sink_ctx->runtime_state = _runtime_state.get();
-    sink_ctx->encryption_enabled = true;
-    sink_ctx->encryption_algorithm = "AES_GCM_V1";
-    sink_ctx->encryption_dek_length = 16;
-    IcebergChunkSinkProvider provider(sink_ctx);
-    formats::AsyncFlushStreamPoller poller;
-    SinkMemoryManager mgr(nullptr, nullptr);
-    ASSIGN_OR_ABORT(auto sink, provider.create_sink(0));
-    EXPECT_OK(sink->init(&poller, nullptr, &mgr));
-    // The options are copied for the writer, not written back into the shared context.
-    EXPECT_TRUE(sink_ctx->options.empty());
-}
-
 // A row-delta data sub-sink still reports its file but leaves row counting to the composite sink.
 TEST_F(IcebergChunkSinkTest, test_callback_without_row_count) {
     SCOPED_UPDATE(bool, config::enable_connector_sink_spill, false);
@@ -268,7 +238,6 @@ TEST_F(IcebergChunkSinkTest, test_callback_without_row_count) {
     EXPECT_EQ(_runtime_state->num_rows_load_sink(), 0);
 }
 
->>>>>>> 0f69df6 ([BugFix] Count Iceberg UPDATE and MERGE affected rows once (#82217))
 TEST_F(IcebergChunkSinkTest, test_factory_requires_runtime_state) {
     auto sink_ctx = std::make_shared<connector::IcebergChunkSinkContext>();
     IcebergChunkSinkProvider provider(sink_ctx);
