@@ -36,14 +36,20 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <functional>
 #include <iostream>
 
+#include "base/bit/rle_encoding.h"
+#include "base/coding.h"
 #include "base/failpoint/fail_point.h"
 #include "base/testutil/assert.h"
 #include "base/utility/defer_op.h"
+#include "cache/mem_cache/page_handle.h"
 #include "column/chunk_factory.h"
 #include "column/datum_tuple.h"
+#include "column/geo_column.h"
+#include "column/nullable_column.h"
 #include "common/config_exec_fwd.h"
 #include "common/logging.h"
 #include "fs/fs_memory.h"
@@ -53,8 +59,10 @@
 #include "runtime/mem_tracker.h"
 #include "storage/chunk_helper.h"
 #include "storage/olap_common.h"
+#include "storage/rowset/binary_plain_page.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/column_reader.h"
+#include "storage/rowset/scalar_column_iterator.h"
 #include "storage/rowset/segment_options.h"
 #include "storage/rowset/segment_writer.h"
 #include "storage/tablet_schema.h"
@@ -204,6 +212,326 @@ TEST_F(SegmentReaderWriterTest, per_column_zstd_page_size_changes_the_pages_writ
     // ~2 MB of values: roughly 32 pages at the 64 KB default, a couple at 1 MB.
     ASSERT_GT(default_pages, 8);
     ASSERT_LT(big_page_pages, default_pages / 4);
+}
+
+TEST_F(SegmentReaderWriterTest, nullable_geo_plain_v2_scan_and_rowid_fallback) {
+    constexpr size_t kPageTarget = 4096;
+    // ISO WKB LINESTRING EMPTY and a linestring larger than the page target, both little-endian.
+    std::string empty_line(1, '\1');
+    put_fixed32_le(&empty_line, 2);
+    put_fixed32_le(&empty_line, 0);
+    std::string long_line(1, '\1');
+    put_fixed32_le(&long_line, 2);
+    put_fixed32_le(&long_line, 256);
+    long_line.resize(9 + 256 * 2 * sizeof(double), '\0');
+    std::string point(21, '\0'); // Big-endian POINT (1 0).
+    point[4] = 1;
+    point[5] = 0x3f;
+    point[6] = static_cast<char>(0xf0);
+    const GeoTypeDescriptor descriptors[] = {
+            {GEO_LOGICAL_TYPE_GEOGRAPHY, GEO_EDGE_ALGORITHM_SPHERICAL, "OGC:CRS84", std::nullopt},
+            {GEO_LOGICAL_TYPE_GEOMETRY, GEO_EDGE_ALGORITHM_PLANAR, "EPSG:3857", 3857},
+            {GEO_LOGICAL_TYPE_GEOMETRY, GEO_EDGE_ALGORITHM_PLANAR, "custom:LocalSurveyGrid-Moscow-2026", std::nullopt},
+    };
+    for (const auto& descriptor : descriptors) {
+        SCOPED_TRACE(descriptor.crs);
+        const auto type = descriptor.logical_type == GEO_LOGICAL_TYPE_GEOGRAPHY ? TYPE_GEOGRAPHY : TYPE_GEOMETRY;
+        auto tablet = std::make_shared<TabletSchema>();
+        TabletColumn key(STORAGE_AGGREGATE_NONE, TYPE_INT, false, 0, sizeof(int32_t));
+        key.set_name("key");
+        key.set_is_key(true);
+        tablet->append_column(key);
+        TabletColumn value(STORAGE_AGGREGATE_NONE, type, true, 1, 0);
+        value.set_name("geo");
+        value.set_geo_descriptor(descriptor);
+        value.set_zstd_compression_page_size(kPageTarget);
+        tablet->append_column(value);
+
+        const auto schema = ChunkHelper::convert_schema(tablet);
+        auto src = ChunkFactory::new_chunk(schema, 4);
+        const Slice input[] = {point, empty_line, long_line, point};
+        const Slice expected[] = {Slice(""), empty_line, long_line, point};
+        auto* src_geo = down_cast<NullableColumn*>(src->get_column_raw_ptr_by_index(1));
+        for (size_t i = 0; i < std::size(input); ++i) {
+            src->get_column_raw_ptr_by_index(0)->append_datum(Datum(static_cast<int32_t>(i)));
+            src_geo->append_datum(Datum(input[i]));
+        }
+        ASSERT_TRUE(src_geo->set_null(0));
+        ASSERT_EQ(point, down_cast<const GeoColumn*>(src_geo->data_column_raw_ptr())->get_wkb(0).to_string());
+
+        const auto filename = kSegmentDir + "/geo_plain_" + descriptor.crs;
+        ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(filename));
+        SegmentWriter writer(std::move(wfile), 0, tablet, {});
+        ASSERT_OK(writer.init());
+        ASSERT_OK(writer.append_chunk(*src));
+        uint64_t file_size, index_size, footer_position;
+        ASSERT_OK(writer.finalize(&file_size, &index_size, &footer_position));
+
+        ASSIGN_OR_ABORT(auto rfile, _fs->new_random_access_file(filename));
+        SegmentFooterPB footer;
+        ASSERT_TRUE(Segment::parse_segment_footer(rfile.get(), &footer, nullptr, nullptr).ok());
+        ASSERT_EQ(type, footer.columns(1).type());
+        ASSERT_EQ(PLAIN_ENCODING, footer.columns(1).encoding());
+
+        auto query_tablet = std::make_shared<TabletSchema>();
+        query_tablet->append_column(key);
+        value.set_geo_descriptor(descriptor);
+        query_tablet->append_column(value);
+        ASSIGN_OR_ABORT(auto segment, Segment::open(_fs, FileInfo{filename}, 0, query_tablet));
+        OlapReaderStatistics stats;
+        SegmentReadOptions opts;
+        opts.fs = _fs;
+        opts.stats = &stats;
+        opts.chunk_size = std::size(input);
+        opts.use_page_cache = false;
+        const auto query_schema = ChunkHelper::convert_schema(query_tablet);
+        ASSIGN_OR_ABORT(auto scan, segment->new_iterator(query_schema, opts));
+        auto dst = ChunkFactory::new_chunk(query_schema, std::size(input));
+        ASSERT_OK(scan->get_next(dst.get()));
+        ASSERT_EQ(std::size(input), dst->num_rows());
+        const auto* nullable = down_cast<const NullableColumn*>(dst->get_column_raw_ptr_by_index(1));
+        const auto* geo = down_cast<const GeoColumn*>(nullable->data_column_raw_ptr());
+        ASSERT_EQ(descriptor, geo->descriptor().type);
+        ASSERT_EQ(dst->num_rows(), geo->size());
+        ASSERT_EQ(geo->size(), nullable->null_column_data().size());
+        ASSERT_TRUE(nullable->has_null());
+        for (size_t i = 0; i < std::size(input); ++i) {
+            EXPECT_EQ(i, dst->get_column_raw_ptr_by_index(0)->get(i).get_int32());
+            EXPECT_EQ(i == 0, nullable->null_column_data()[i]);
+            EXPECT_EQ(expected[i], geo->get_wkb(i));
+        }
+
+        ASSIGN_OR_ABORT(auto col, segment->new_column_iterator(query_tablet->column(1), nullptr));
+        ColumnIteratorOptions col_opts;
+        col_opts.stats = &stats;
+        col_opts.read_file = rfile.get();
+        col_opts.use_page_cache = false;
+        ASSERT_OK(col->init(col_opts));
+        ASSERT_EQ(2, segment->column(1)->num_data_pages());
+        for (rowid_t ordinal : {0u, 3u}) {
+            ASSERT_OK(col->seek_to_ordinal(ordinal));
+            auto* page = down_cast<ScalarColumnIterator*>(col.get())->get_current_page();
+            PageHandle handle;
+            Slice body;
+            PageFooterPB page_footer;
+            ASSERT_OK(
+                    col->get_column_reader()->read_page(col_opts, page->page_pointer(), &handle, &body, &page_footer));
+            const auto& data_footer = page_footer.data_page_footer();
+            ASSERT_EQ(2, data_footer.format_version());
+            ASSERT_EQ(ordinal == 0, data_footer.nullmap_size() != 0);
+            if (ordinal == 0) {
+                BinaryPlainPageDecoder<TYPE_GEOMETRY> decoder(Slice(body.data, body.size - data_footer.nullmap_size()));
+                ASSERT_OK(decoder.init());
+                EXPECT_EQ(0, decoder.string_at_index(0).size);
+                EXPECT_EQ(Slice(empty_line), decoder.string_at_index(1));
+            }
+        }
+
+        const rowid_t rowids[] = {0, 1, 3};
+        auto selected = nullable->clone_empty();
+        ASSERT_OK(col->fetch_values_by_rowid(rowids, std::size(rowids), selected.get()));
+        const auto* selected_null = down_cast<const NullableColumn*>(selected.get());
+        const auto* selected_geo = down_cast<const GeoColumn*>(selected_null->data_column_raw_ptr());
+        ASSERT_EQ(std::size(rowids), selected_geo->size());
+        ASSERT_EQ(selected_geo->size(), selected_null->null_column_data().size());
+        EXPECT_EQ(descriptor, selected_geo->descriptor().type);
+        for (size_t i = 0; i < std::size(rowids); ++i) {
+            EXPECT_EQ(expected[rowids[i]], selected_geo->get_wkb(i));
+            EXPECT_EQ(rowids[i] == 0, selected_null->null_column_data()[i]);
+        }
+
+        auto wrong_crs = descriptor;
+        wrong_crs.crs += "-other";
+        auto wrong_srid = descriptor;
+        wrong_srid.srid = descriptor.srid.has_value() ? std::nullopt : std::optional<int32_t>(4326);
+        for (const auto& wrong : {wrong_crs, wrong_srid}) {
+            auto wrong_dst =
+                    NullableColumn::create(GeoColumn::create(GeoColumnDescriptor{wrong}), NullColumn::create());
+            wrong_dst->append_datum(Datum(Slice(point)));
+            ASSERT_OK(col->seek_to_first());
+            EXPECT_TRUE(col->next_batch(SparseRange<>(0, 2), wrong_dst.get()).is_invalid_argument());
+            size_t count = 2;
+            EXPECT_TRUE(col->next_batch(&count, wrong_dst.get()).is_invalid_argument());
+            EXPECT_TRUE(col->fetch_values_by_rowid(rowids, std::size(rowids), wrong_dst.get()).is_invalid_argument());
+            EXPECT_EQ(1, wrong_dst->size());
+            EXPECT_EQ(1, wrong_dst->null_column_data().size());
+            EXPECT_FALSE(wrong_dst->is_null(0));
+            EXPECT_EQ(Slice(point), wrong_dst->get(0).get_slice());
+        }
+    }
+}
+
+TEST_F(SegmentReaderWriterTest, nullable_geo_plain_adaptive_page_versions) {
+    constexpr size_t kPageTarget = 4096;
+    constexpr rowid_t kV1First = 10;
+    constexpr rowid_t kV1Nulls = 8;
+    constexpr rowid_t kV1Values = 8;
+    constexpr rowid_t kLast = kV1First + kV1Nulls + kV1Values;
+    std::string empty_line(1, '\1');
+    put_fixed32_le(&empty_line, 2);
+    put_fixed32_le(&empty_line, 0);
+    std::string long_line(1, '\1');
+    put_fixed32_le(&long_line, 2);
+    put_fixed32_le(&long_line, 256);
+    long_line.resize(empty_line.size() + 256 * 2 * sizeof(double), '\0');
+    std::string point(21, '\0'); // Big-endian POINT (1 0).
+    point[4] = 1;
+    point[5] = 0x3f;
+    point[6] = static_cast<char>(0xf0);
+
+    // The long WKB closes each of the first two pages. The non-NULL run that
+    // starts with EMPTY crosses from v1 to v2 at kLast.
+    std::vector<Slice> expected(kLast + 1, Slice(point));
+    std::fill_n(expected.begin(), kV1First - 1, Slice(""));
+    expected[kV1First - 1] = long_line;
+    std::fill_n(expected.begin() + kV1First, kV1Nulls, Slice(""));
+    expected[kV1First + kV1Nulls] = empty_line;
+    expected[kLast - 1] = long_line;
+
+    const GeoTypeDescriptor descriptors[] = {
+            {GEO_LOGICAL_TYPE_GEOGRAPHY, GEO_EDGE_ALGORITHM_SPHERICAL, "OGC:CRS84", std::nullopt},
+            {GEO_LOGICAL_TYPE_GEOMETRY, GEO_EDGE_ALGORITHM_PLANAR, "EPSG:3857", 3857},
+    };
+    for (const auto& descriptor : descriptors) {
+        SCOPED_TRACE(descriptor.crs);
+        const auto type = descriptor.logical_type == GEO_LOGICAL_TYPE_GEOGRAPHY ? TYPE_GEOGRAPHY : TYPE_GEOMETRY;
+        auto tablet = std::make_shared<TabletSchema>();
+        TabletColumn key(STORAGE_AGGREGATE_NONE, TYPE_INT, false, 0, sizeof(int32_t));
+        key.set_name("key");
+        key.set_is_key(true);
+        tablet->append_column(key);
+        TabletColumn value(STORAGE_AGGREGATE_NONE, type, true, 1, 0);
+        value.set_name("geo");
+        value.set_geo_descriptor(descriptor);
+        value.set_zstd_compression_page_size(kPageTarget);
+        tablet->append_column(value);
+        const auto schema = ChunkHelper::convert_schema(tablet);
+        auto src = ChunkFactory::new_chunk(schema, expected.size());
+        auto* src_geo = down_cast<NullableColumn*>(src->get_column_raw_ptr_by_index(1));
+        std::vector<rowid_t> all_rows;
+        for (rowid_t i = 0; i < expected.size(); ++i) {
+            all_rows.push_back(i);
+            src->get_column_raw_ptr_by_index(0)->append_datum(Datum(static_cast<int32_t>(i)));
+            src_geo->append_datum(Datum(expected[i].empty() ? Slice(point) : expected[i]));
+            if (expected[i].empty()) {
+                ASSERT_TRUE(src_geo->set_null(i));
+            }
+        }
+
+        const auto filename = kSegmentDir + "/geo_adaptive_" + descriptor.crs;
+        ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(filename));
+        SegmentWriter writer(std::move(wfile), 0, tablet, {});
+        ASSERT_OK(writer.init());
+        ASSERT_OK(writer.append_chunk(*src));
+        uint64_t file_size, index_size, footer_position;
+        ASSERT_OK(writer.finalize(&file_size, &index_size, &footer_position));
+
+        ASSIGN_OR_ABORT(auto segment, Segment::open(_fs, FileInfo{filename}, 0, tablet));
+        ASSIGN_OR_ABORT(auto rfile, _fs->new_random_access_file(filename));
+        const auto* reader_descriptor = segment->column(1)->geo_descriptor();
+        ASSERT_NE(nullptr, reader_descriptor);
+        EXPECT_EQ(descriptor, *reader_descriptor);
+        EXPECT_NE(tablet->column(1).geo_descriptor(), reader_descriptor);
+
+        SegmentFooterPB segment_footer;
+        ASSERT_TRUE(Segment::parse_segment_footer(rfile.get(), &segment_footer, nullptr, nullptr).ok());
+        TabletColumn missing_descriptor(STORAGE_AGGREGATE_NONE, type, true, 1, 0);
+        const TabletColumn* incomplete_schema[] = {nullptr, &missing_descriptor};
+        for (const auto* column : incomplete_schema) {
+            auto meta = segment_footer.columns(1);
+            ASSERT_TRUE(ColumnReader::create(&meta, segment.get(), column).status().is_invalid_argument());
+        }
+        auto int_meta = segment_footer.columns(0);
+        ASSIGN_OR_ABORT(auto int_reader, ColumnReader::create(&int_meta, segment.get(), &value));
+        EXPECT_EQ(nullptr, int_reader->geo_descriptor());
+
+        OlapReaderStatistics stats;
+        ColumnIteratorOptions col_opts;
+        col_opts.stats = &stats;
+        col_opts.read_file = rfile.get();
+        col_opts.use_page_cache = false;
+        ASSIGN_OR_ABORT(auto col, segment->new_column_iterator(tablet->column(1), nullptr));
+        ASSERT_OK(col->init(col_opts));
+        ASSERT_EQ(3, segment->column(1)->num_data_pages());
+        const rowid_t starts[] = {0, kV1First, kLast};
+        const size_t counts[] = {kV1First, kV1Nulls + kV1Values, 1};
+        for (size_t i = 0; i < std::size(starts); ++i) {
+            ASSERT_OK(col->seek_to_ordinal(starts[i]));
+            auto* page = down_cast<ScalarColumnIterator*>(col.get())->get_current_page();
+            PageHandle handle;
+            Slice body;
+            PageFooterPB footer;
+            ASSERT_OK(col->get_column_reader()->read_page(col_opts, page->page_pointer(), &handle, &body, &footer));
+            const auto& data = footer.data_page_footer();
+            ASSERT_EQ(i == 1 ? 1 : 2, data.format_version());
+            ASSERT_EQ(starts[i], data.first_ordinal());
+            ASSERT_EQ(counts[i], data.num_values());
+            ASSERT_EQ(i < 2, data.nullmap_size() != 0);
+            if (i == 1) {
+                const size_t data_size = body.size - data.nullmap_size();
+                BinaryPlainPageDecoder<TYPE_GEOMETRY> decoder(Slice(body.data, data_size));
+                ASSERT_OK(decoder.init());
+                ASSERT_EQ(kV1Values, decoder.count());
+                RleDecoder<bool> flags(reinterpret_cast<const uint8_t*>(body.data + data_size), data.nullmap_size(), 1);
+                // Read the full runs, including any flags beyond the logical row count.
+                bool is_null = false;
+                EXPECT_EQ(kV1Nulls, flags.GetNextRun(&is_null, data.num_values() + 1));
+                EXPECT_TRUE(is_null);
+                EXPECT_EQ(decoder.count(), flags.GetNextRun(&is_null, data.num_values() + 1));
+                EXPECT_FALSE(is_null);
+                EXPECT_EQ(0, flags.GetNextRun(&is_null, 1));
+                EXPECT_EQ(Slice(empty_line), decoder.string_at_index(0));
+            }
+        }
+
+        const auto check_values = [&](const Column* column, const std::vector<rowid_t>& rowids) {
+            const auto* nullable = down_cast<const NullableColumn*>(column);
+            const auto* geo = down_cast<const GeoColumn*>(nullable->data_column_raw_ptr());
+            ASSERT_EQ(descriptor, geo->descriptor().type);
+            ASSERT_EQ(rowids.size(), geo->size());
+            ASSERT_EQ(geo->size(), nullable->null_column_data().size());
+            for (size_t i = 0; i < rowids.size(); ++i) {
+                EXPECT_EQ(expected[rowids[i]], geo->get_wkb(i)) << rowids[i];
+                EXPECT_EQ(expected[rowids[i]].empty(), nullable->null_column_data()[i]) << rowids[i];
+            }
+        };
+
+        SegmentReadOptions opts;
+        opts.fs = _fs;
+        opts.stats = &stats;
+        opts.chunk_size = expected.size();
+        opts.use_page_cache = false;
+        ASSIGN_OR_ABORT(auto scan, segment->new_iterator(schema, opts));
+        auto dst = ChunkFactory::new_chunk(schema, expected.size());
+        ASSERT_OK(scan->get_next(dst.get()));
+        ASSERT_EQ(expected.size(), dst->num_rows());
+        for (rowid_t row : all_rows) {
+            EXPECT_EQ(row, dst->get_column_raw_ptr_by_index(0)->get(row).get_int32());
+        }
+        check_values(dst->get_column_raw_ptr_by_index(1), all_rows);
+
+        const std::vector<rowid_t> rowids = {
+                0, kV1First - 1, kV1First + kV1Nulls - 1, kV1First + kV1Nulls, kLast - 2, kLast - 1, kLast};
+        auto selected = src_geo->clone_empty();
+        ASSERT_OK(col->fetch_values_by_rowid(rowids.data(), rowids.size(), selected.get()));
+        check_values(selected.get(), rowids);
+
+        auto wrong_crs = descriptor;
+        wrong_crs.crs += "-other";
+        auto wrong_srid = descriptor;
+        wrong_srid.srid = descriptor.srid.has_value() ? std::nullopt : std::optional<int32_t>(4326);
+        for (const auto& wrong : {wrong_crs, wrong_srid}) {
+            auto rejected = NullableColumn::create(GeoColumn::create(GeoColumnDescriptor{wrong}), NullColumn::create());
+            rejected->append_datum(Datum(Slice(point)));
+            ASSERT_OK(col->seek_to_ordinal(kV1First));
+            EXPECT_TRUE(col->next_batch(SparseRange<>(kV1First, kV1First + 2), rejected.get()).is_invalid_argument());
+            EXPECT_TRUE(col->fetch_values_by_rowid(rowids.data(), rowids.size(), rejected.get()).is_invalid_argument());
+            ASSERT_EQ(1, rejected->size());
+            ASSERT_EQ(1, rejected->null_column_data().size());
+            EXPECT_FALSE(rejected->is_null(0));
+            EXPECT_EQ(Slice(point), rejected->get(0).get_slice());
+        }
+    }
 }
 
 TEST_F(SegmentReaderWriterTest, estimate_segment_size) {

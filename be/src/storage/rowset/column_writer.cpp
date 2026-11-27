@@ -41,6 +41,7 @@
 #include "base/simd/simd.h"
 #include "column/binary_column.h"
 #include "column/column_helper.h"
+#include "column/geo_column.h"
 #include "column/nullable_column.h"
 #include "column/raw_data_visitor.h"
 #include "common/config_compression_fwd.h"
@@ -61,6 +62,7 @@
 #include "base/utility/alignment.h"
 #include "common/bloom_filter.h"
 #include "storage/rowset/array_column_writer.h"
+#include "storage/rowset/binary_plain_page.h"
 #include "storage/rowset/bitmap_index_writer.h"
 #include "storage/rowset/bitshuffle_page.h"
 #include "storage/rowset/bloom_filter_index_writer.h"
@@ -74,6 +76,7 @@
 #include "storage/rowset/struct_column_writer.h"
 #include "storage/rowset/zone_map_index.h"
 #include "storage/storage_metrics.h"
+#include "types/geo_type_info.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
@@ -339,6 +342,21 @@ private:
 
 StatusOr<std::unique_ptr<ColumnWriter>> ColumnWriter::create(const ColumnWriterOptions& opts,
                                                              const TabletColumn* column, WritableFile* wfile) {
+    if (column->type() == TYPE_GEOGRAPHY || column->type() == TYPE_GEOMETRY) {
+        const auto* descriptor = column->geo_descriptor();
+        if (descriptor == nullptr || !column->is_nullable() || opts.page_format != 2 ||
+            (opts.meta->encoding() != DEFAULT_ENCODING && opts.meta->encoding() != PLAIN_ENCODING)) {
+            return Status::InvalidArgument(
+                    "GEO segment storage requires a descriptor, a nullable column, page format v2, and "
+                    "DEFAULT_ENCODING or PLAIN_ENCODING");
+        }
+        // The shared resolver assumes the descriptor kind matches the column type.
+        const auto kind = column->type() == TYPE_GEOGRAPHY ? GEO_LOGICAL_TYPE_GEOGRAPHY : GEO_LOGICAL_TYPE_GEOMETRY;
+        if (descriptor->logical_type != kind) {
+            return Status::InvalidArgument("GEO field descriptor kind does not match the logical type");
+        }
+        return std::make_unique<ScalarColumnWriter>(opts, get_type_info(*column), wfile);
+    }
     TypeInfoPtr type_info = get_type_info(*column);
     DCHECK(type_info.get() != nullptr);
     if (is_string_type(delegate_type(column->type()))) {
@@ -423,7 +441,7 @@ Status ScalarColumnWriter::init() {
     if (is_nullable()) {
         _null_map_builder_v1 = std::make_unique<NullMapRLEBuilder>();
         NullEncodingPB default_null_encoding = NullEncodingPB::BITSHUFFLE_NULL;
-        if (config::null_encoding == 1) {
+        if (config::null_encoding == 1 || get_geo_type_descriptor(_type_info.get()) != nullptr) {
             default_null_encoding = NullEncodingPB::LZ4_NULL;
         }
         _null_map_builder_v2 = std::make_unique<NullFlagsBuilder>(default_null_encoding);
@@ -883,6 +901,20 @@ Status ScalarColumnWriter::finish_current_page() {
 }
 
 Status ScalarColumnWriter::append(const Column& column) {
+    if (const auto* descriptor = get_geo_type_descriptor(_type_info.get()); descriptor != nullptr) {
+        const auto* nullable = dynamic_cast<const NullableColumn*>(&column);
+        const auto* geo =
+                nullable == nullptr ? nullptr : dynamic_cast<const GeoColumn*>(nullable->data_column_raw_ptr());
+        if (geo == nullptr || geo->descriptor().type != *descriptor) {
+            return Status::InvalidArgument("GEO writer column does not match the storage schema");
+        }
+        const auto* flags = nullable->null_column_data().data();
+        _slice_buf.resize(geo->size());
+        for (size_t i = 0; i < geo->size(); ++i) {
+            _slice_buf[i] = flags[i] != 0 ? Slice("") : geo->get_wkb(i);
+        }
+        return append(column, _slice_buf);
+    }
     _total_mem_footprint += column.byte_size();
     // Currently, ColumnWriter does not support null-only columns
     const uint8_t* null = ColumnHelper::get_null_data_ptr(&column);
@@ -949,14 +981,23 @@ Status ScalarColumnWriter::append_array_offsets(const Column& column) {
 }
 
 Status ScalarColumnWriter::_append(const uint8_t* data, const uint8_t* null_flags, size_t count, bool has_null) {
-    const size_t field_size = type_info()->size();
+    const bool geo = get_geo_type_descriptor(_type_info.get()) != nullptr;
+    const size_t field_size = geo ? sizeof(Slice) : type_info()->size();
+    const auto add_values = [&](const uint8_t* values, size_t rows) -> StatusOr<size_t> {
+        if (geo) {
+            auto* builder = down_cast<BinaryPlainPageBuilder*>(_page_builder.get());
+            return builder->add_geo(reinterpret_cast<const Slice*>(values), rows, _compress_codec);
+        }
+        return _page_builder->add(values, rows);
+    };
     size_t remaining = count;
     while (remaining > 0) {
         bool page_full = false;
         bool has_null_in_page = false;
         size_t num_written = 0;
+        Status add_status;
         if (_curr_page_format == 2) {
-            num_written = _page_builder->add(data, remaining);
+            ASSIGN_OR_RETURN(num_written, add_values(data, remaining));
             page_full = num_written < remaining;
             if (_null_map_builder_v2 != nullptr) {
                 _null_map_builder_v2->add_null_flags(null_flags, num_written);
@@ -967,20 +1008,29 @@ Status ScalarColumnWriter::_append(const uint8_t* data, const uint8_t* null_flag
                 _null_map_builder_v2->set_has_null(has_null_in_page);
             }
         } else if (!has_null) {
-            num_written = _page_builder->add(data, remaining);
+            ASSIGN_OR_RETURN(num_written, add_values(data, remaining));
             page_full = num_written < remaining;
             if (_null_map_builder_v1 != nullptr) {
                 _null_map_builder_v1->add_run(false, num_written);
             }
         } else {
             const uint8_t* ptr = data;
-            ByteIterator iter(null_flags, std::min(remaining, _opts.data_page_size / field_size));
+            const size_t batch_size =
+                    _opts.data_page_size == 0
+                            ? remaining
+                            : std::min(remaining, std::max<size_t>(1, _opts.data_page_size / field_size));
+            ByteIterator iter(null_flags, batch_size);
             for (auto pair = iter.next(); pair.first > 0 && !page_full; pair = iter.next()) {
                 auto [run, is_null] = pair;
                 size_t num_add = run;
                 if (!is_null) {
-                    num_add = _page_builder->add(ptr, run);
-                    _null_map_builder_v1->add_run(false, run);
+                    auto added = add_values(ptr, run);
+                    if (!added.ok()) {
+                        add_status = added.status();
+                        break;
+                    }
+                    num_add = *added;
+                    _null_map_builder_v1->add_run(false, num_add);
                 } else {
                     _null_map_builder_v1->add_run(true, run);
                     has_null_in_page = true;
@@ -1023,6 +1073,7 @@ Status ScalarColumnWriter::_append(const uint8_t* data, const uint8_t* null_flag
         }
 
         _next_rowid += num_written;
+        RETURN_IF_ERROR(add_status);
         data += field_size * num_written;
         null_flags += num_written;
         if (page_full) {

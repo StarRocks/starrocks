@@ -36,12 +36,14 @@
 
 #include <iostream>
 
+#include "base/coding.h"
 #include "base/compression/block_compression.h"
 #include "base/compression/zstd_dict.h"
 #include "base/testutil/assert.h"
 #include "base/types/decimal12.h"
 #include "base/uid_util.h"
 #include "base/utility/defer_op.h"
+#include "cache/mem_cache/page_handle.h"
 #include "column/array_column.h"
 #include "column/binary_column.h"
 #include "column/chunk_factory.h"
@@ -50,6 +52,7 @@
 #include "column/column_helper.h"
 #include "column/datum_convert.h"
 #include "column/fixed_length_column.h"
+#include "column/geo_column.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
 #include "common/config_rowset_fwd.h"
@@ -109,7 +112,8 @@ protected:
     void test_numeric_types();
 
     std::unique_ptr<ColumnIterator> create_and_init_iterator(ColumnMetaPB& meta, Segment* segment,
-                                                             const std::string& fname);
+                                                             const std::string& fname,
+                                                             const TabletColumn* column = nullptr);
 
     template <LogicalType type>
     static TabletColumn make_tablet_column();
@@ -152,8 +156,9 @@ TabletColumn ColumnReaderWriterTest::make_tablet_column() {
 }
 
 std::unique_ptr<ColumnIterator> ColumnReaderWriterTest::create_and_init_iterator(ColumnMetaPB& meta, Segment* segment,
-                                                                                 const std::string& fname) {
-    ASSIGN_OR_ABORT(_reader, ColumnReader::create(&meta, segment, nullptr));
+                                                                                 const std::string& fname,
+                                                                                 const TabletColumn* column) {
+    ASSIGN_OR_ABORT(_reader, ColumnReader::create(&meta, segment, column));
     ASSIGN_OR_ABORT(auto iter, _reader->new_iterator());
     ASSIGN_OR_ABORT(_read_file, _fs->new_random_access_file(fname));
 
@@ -577,7 +582,192 @@ TEST_F(ColumnReaderWriterTest, test_datetime) {
     test_nullable_data<TYPE_DATETIME, BIT_SHUFFLE, 2>(*col, "1");
 }
 
+TEST_F(ColumnReaderWriterTest, geo_create_preserves_writer_requirements) {
+    const GeoTypeDescriptor geography{GEO_LOGICAL_TYPE_GEOGRAPHY, GEO_EDGE_ALGORITHM_SPHERICAL, "OGC:CRS84"};
+    const GeoTypeDescriptor geometry{GEO_LOGICAL_TYPE_GEOMETRY, GEO_EDGE_ALGORITHM_PLANAR, "EPSG:3857", 3857};
+    ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(TEST_DIR + "/geo_writer_requirements"));
+    for (const auto type : {TYPE_GEOGRAPHY, TYPE_GEOMETRY}) {
+        SCOPED_TRACE(type);
+        TabletColumn column(STORAGE_AGGREGATE_NONE, type, true, 0, 0);
+        ColumnMetaPB meta;
+        auto opts = make_writer_opts<TYPE_GEOGRAPHY, DEFAULT_ENCODING, 2>(&meta, true, false);
+        meta.set_type(type);
+        const auto create = [&] { return ColumnWriter::create(opts, &column, wfile.get()); };
+
+        EXPECT_TRUE(create().status().is_invalid_argument());
+        column.set_geo_descriptor(type == TYPE_GEOGRAPHY ? geometry : geography);
+        const auto mismatched = create().status();
+        ASSERT_TRUE(mismatched.is_invalid_argument());
+        EXPECT_EQ("GEO field descriptor kind does not match the logical type", mismatched.message());
+
+        column.set_geo_descriptor(type == TYPE_GEOGRAPHY ? geography : geometry);
+        column.set_is_nullable(false);
+        meta.set_is_nullable(false);
+        EXPECT_TRUE(create().status().is_invalid_argument());
+        column.set_is_nullable(true);
+        meta.set_is_nullable(true);
+
+        opts.page_format = 1;
+        EXPECT_TRUE(create().status().is_invalid_argument());
+        opts.page_format = 2;
+        meta.set_encoding(DICT_ENCODING);
+        EXPECT_TRUE(create().status().is_invalid_argument());
+        meta.set_encoding(PLAIN_ENCODING);
+        EXPECT_OK(create().status());
+    }
+}
+
 // NOLINTNEXTLINE
+TEST_F(ColumnReaderWriterTest, geo_rejects_oversized_value_in_v2_and_v1) {
+    const GeoTypeDescriptor descriptor{GEO_LOGICAL_TYPE_GEOMETRY, GEO_EDGE_ALGORITHM_PLANAR, "EPSG:3857", 3857};
+    TabletColumn column(STORAGE_AGGREGATE_NONE, TYPE_GEOMETRY, true, 0, 0);
+    column.set_geo_descriptor(descriptor);
+    ColumnMetaPB meta;
+    auto opts = make_writer_opts<TYPE_GEOMETRY, DEFAULT_ENCODING, 2>(&meta, true, false);
+    opts.data_page_size = 2 * sizeof(uint32_t);
+    meta.set_compression(NO_COMPRESSION);
+    const auto fname = TEST_DIR + "/geo_oversized";
+    ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(fname));
+    ASSIGN_OR_ABORT(auto writer, ColumnWriter::create(opts, &column, wfile.get()));
+    ASSERT_OK(writer->init());
+
+    auto src = NullableColumn::create(GeoColumn::create(GeoColumnDescriptor{descriptor}), NullColumn::create());
+    std::string empty_line(1, '\1');
+    put_fixed32_le(&empty_line, 2);
+    put_fixed32_le(&empty_line, 0);
+    src->append_datum(Datum(Slice(empty_line)));
+    // The writer must reject the length before inspecting the bytes or attempting a page flush.
+    const Buffer<Slice> oversized{Slice("", UINT32_MAX)};
+    auto* scalar = down_cast<ScalarColumnWriter*>(writer.get());
+    ASSERT_TRUE(scalar->append(*src, oversized).is_invalid_argument());
+    EXPECT_EQ(0, writer->get_next_rowid());
+    EXPECT_EQ(0, wfile->size());
+
+    src->reset_column();
+    ASSERT_TRUE(src->append_nulls(2));
+    ASSERT_OK(writer->append(*src));
+    ASSERT_OK(writer->finish_current_page()); // The all-NULL v2 page selects v1.
+
+    src->reset_column();
+    src->append_datum(Datum(Slice(empty_line)));
+    ASSERT_TRUE(scalar->append(*src, oversized).is_invalid_argument());
+    EXPECT_EQ(2, writer->get_next_rowid());
+
+    src->reset_column();
+    ASSERT_TRUE(src->append_nulls(1));
+    src->append_datum(Datum(Slice(empty_line)));
+    const Buffer<Slice> mixed{Slice(""), oversized[0]};
+    ASSERT_TRUE(scalar->append(*src, mixed).is_invalid_argument());
+    EXPECT_EQ(3, writer->get_next_rowid());
+    EXPECT_EQ(0, wfile->size());
+
+    src->reset_column();
+    src->append_datum(Datum(Slice(empty_line)));
+    ASSERT_OK(writer->append(*src));
+    flush_column_writer(writer.get());
+    ASSERT_OK(wfile->close());
+
+    auto segment = create_dummy_segment(fname);
+    auto iter = create_and_init_iterator(meta, segment.get(), fname, &column);
+    ASSERT_EQ(2, _reader->num_data_pages());
+    ASSERT_OK(iter->seek_to_ordinal(2));
+    const auto* page = down_cast<ScalarColumnIterator*>(iter.get())->get_current_page();
+    ColumnIteratorOptions page_opts;
+    page_opts.stats = &_stats;
+    page_opts.read_file = _read_file.get();
+    page_opts.use_page_cache = false;
+    PageHandle handle;
+    Slice body;
+    PageFooterPB footer;
+    ASSERT_OK(_reader->read_page(page_opts, page->page_pointer(), &handle, &body, &footer));
+    EXPECT_EQ(1, footer.data_page_footer().format_version());
+
+    ASSERT_OK(iter->seek_to_first());
+    auto dst = src->clone_empty();
+    size_t n = 4;
+    ASSERT_OK(iter->next_batch(&n, dst.get()));
+    ASSERT_EQ(4, n);
+    ASSERT_EQ(n, dst->size());
+    EXPECT_TRUE(dst->is_null(0));
+    EXPECT_TRUE(dst->is_null(1));
+    EXPECT_TRUE(dst->is_null(2));
+    EXPECT_FALSE(dst->is_null(3));
+    EXPECT_EQ(Slice(empty_line), dst->get(3).get_slice());
+}
+
+TEST_F(ColumnReaderWriterTest, geo_v2_corruption_preserves_previous_page) {
+    const GeoTypeDescriptor descriptor{GEO_LOGICAL_TYPE_GEOGRAPHY, GEO_EDGE_ALGORITHM_SPHERICAL, "OGC:CRS84"};
+    TabletColumn column(STORAGE_AGGREGATE_NONE, TYPE_GEOGRAPHY, true, 0, 0);
+    column.set_geo_descriptor(descriptor);
+    std::string empty_line(1, '\1');
+    put_fixed32_le(&empty_line, 2);
+    put_fixed32_le(&empty_line, 0);
+
+    PageBuilderOptions page_opts;
+    BinaryPlainPageBuilder builder(page_opts);
+    const Slice values[] = {Slice(""), Slice(empty_line)};
+    ASSERT_EQ(2, builder.add(reinterpret_cast<const uint8_t*>(values), 2));
+    const auto* plain = builder.finish();
+    const BlockCompressionCodec* lz4 = nullptr;
+    ASSERT_OK(get_block_compression_codec(LZ4, &lz4));
+    const uint8_t flags[] = {1, 0};
+    std::string compressed(lz4->max_compressed_len(sizeof(flags)), '\0');
+    Slice nullmap(compressed);
+    ASSERT_OK(lz4->compress(Slice(flags, sizeof(flags)), &nullmap));
+
+    for (bool corrupt_checksum : {false, true}) {
+        SCOPED_TRACE(corrupt_checksum);
+        ColumnMetaPB meta;
+        make_writer_opts<TYPE_GEOGRAPHY, PLAIN_ENCODING, 2>(&meta, true, false);
+        meta.set_compression(NO_COMPRESSION);
+        const auto fname = TEST_DIR + (corrupt_checksum ? "/geo_v2_bad_checksum" : "/geo_v2_short_trailer");
+        ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(fname));
+        OrdinalIndexWriter index;
+        PagePointer ptr;
+        for (rowid_t first : {0u, 2u}) {
+            const bool short_trailer = first != 0 && !corrupt_checksum;
+            const Slice payload = short_trailer ? Slice("abc") : Slice(*plain);
+            const size_t null_size = short_trailer ? 0 : nullmap.size;
+            PageFooterPB footer;
+            footer.set_type(DATA_PAGE);
+            footer.set_uncompressed_size(payload.size + null_size);
+            auto* data = footer.mutable_data_page_footer();
+            data->set_first_ordinal(first);
+            data->set_num_values(2);
+            data->set_nullmap_size(null_size);
+            data->set_null_encoding(LZ4_NULL);
+            data->set_format_version(2);
+            ASSERT_OK(PageIO::write_page(wfile.get(), {payload, Slice(nullmap.data, null_size)}, footer, &ptr));
+            index.append_entry(first, ptr);
+        }
+        ASSERT_OK(index.finish(wfile.get(), meta.add_indexes()));
+        ASSERT_OK(wfile->close());
+        if (corrupt_checksum) {
+            std::string file;
+            ASSERT_OK(_fs->read_file(fname, &file));
+            file[ptr.offset + ptr.size - 1] ^= 1;
+            WritableFileOptions replace_opts{.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+            ASSIGN_OR_ABORT(auto replacement, _fs->new_writable_file(replace_opts, fname));
+            ASSERT_OK(replacement->append(Slice(file)));
+            ASSERT_OK(replacement->close());
+        }
+        auto segment = create_dummy_segment(fname);
+        auto iter = create_and_init_iterator(meta, segment.get(), fname, &column);
+        ASSERT_OK(iter->seek_to_first());
+        auto dst = NullableColumn::create(GeoColumn::create(GeoColumnDescriptor{descriptor}), NullColumn::create());
+        size_t n = 4;
+        const auto status = iter->next_batch(&n, dst.get());
+        ASSERT_TRUE(status.is_corruption()) << status;
+        const char* message = corrupt_checksum ? "checksum mismatch" : "not enough bytes for trailer";
+        EXPECT_NE(std::string_view::npos, status.message().find(message)) << status;
+        ASSERT_EQ(2, dst->size());
+        ASSERT_EQ(2, dst->null_column_data().size());
+        EXPECT_TRUE(dst->is_null(0));
+        EXPECT_FALSE(dst->is_null(1));
+        EXPECT_EQ(Slice(empty_line), dst->get(1).get_slice());
+    }
+}
+
 TEST_F(ColumnReaderWriterTest, test_binary) {
     auto c = low_cardinality_strings(10000);
     test_nullable_data<TYPE_VARCHAR, DICT_ENCODING, 1>(*c, "0");

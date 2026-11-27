@@ -68,6 +68,8 @@ class Column;
 
 namespace starrocks {
 
+class BlockCompressionCodec;
+
 class BinaryPlainPageBuilder final : public PageBuilder {
 public:
     // delta_offset: when true, the offset trailer stores per-value deltas (string lengths)
@@ -99,6 +101,8 @@ public:
         }
         return count;
     }
+
+    StatusOr<size_t> add_geo(const Slice* slices, size_t count, const BlockCompressionCodec* codec);
 
     bool add_slice(const Slice& s) {
         if (is_page_full()) {
@@ -198,6 +202,8 @@ private:
 
 template <LogicalType Type>
 class BinaryPlainPageDecoder final : public PageDecoder {
+    static constexpr bool kGeo = Type == TYPE_GEOGRAPHY || Type == TYPE_GEOMETRY;
+
 public:
     // delta_offset must match how the page was written (selected by the column encoding:
     // PLAIN_ENCODING_DELTA_OFFSET -> true). When true, init() reconstructs absolute offsets
