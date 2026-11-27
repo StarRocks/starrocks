@@ -788,36 +788,12 @@ When aggregation spilling is enabled, grouping keys that cannot be sorted, such 
 
 ### tablet_internal_parallel_mode
 
-<<<<<<< HEAD
 * **Description**: Internal Parallel Scan strategy of tablets. Valid Values:
   * `auto`: When the number of Tablets to be scanned on BE or CN nodes is less than the Degree of Parallelism (DOP), the system automatically determines whether Parallel Scan is needed based on the estimated size of the Tablets.
   * `force_split`: Forces the splitting of Tablets and performs Parallel Scan.
 * **Default**: auto
 * **Data type**: String
 * **Introduced in**: v2.5.0
-=======
-* **Description**: When enabled, the optimizer applies Rule-Based (RBO) table pruning for cardinality-preserving joins in the current session. The optimizer runs a sequence of rewrite and pruning steps (partition pruning, project merge/separate, `UniquenessBasedTablePruneRule`, join reorder, and `RboTablePruneRule`) to remove unnecessary table scan alternatives and reduce scanned partitions/rows in joins. Enabling this option also disables join-equivalence derivation (`context.setEnableJoinEquivalenceDerive(false)`) while logical rule rewrite is running to avoid conflicting transformations. The pruning flow may additionally run `PrimaryKeyUpdateTableRule` for update statements if `enable_table_prune_on_update` is set. The rule is only executed when a query contains prunable joins (checked via `Utils.hasPrunableJoin(tree)`).
-* **Scope**: Session
-* **Default**: `false`
-* **Data Type**: boolean
-* **Introduced in**: v3.2.0
-
-### enable_rewrite_groupingsets_to_union_all
-
-* **Scope**: Session
-* **Description**: When enabled, the optimizer applies the RewriteGroupingSetsByCTERule to transform SQL GROUPING SETS (including ROLLUP and CUBE semantics) into equivalent plans expressed as multiple aggregation branches combined with UNION ALL (implemented via CTEs). The system will conditionally run the iterative rewrite pass. This rewrite can improve compatibility with existing aggregation planning rules and enable further rule-based optimizations, but it typically expands the plan into multiple aggregation/union branches which may increase intermediate rows, memory usage, and planning time. If `cbo_push_down_grouping_set` is also set to `true`, the optimizer may additionally attempt push-down of grouping-set aggregates after or instead of this rewrite.
-* **Default**: `false`
-* **Data Type**: boolean
-* **Introduced in**: v3.2.0
-
-### enable_runtime_adaptive_dop
-
-* **Scope**: Session
-* **Description**: When enabled for a session, the planner and fragment builder will mark pipeline-capable fragments that support runtime adaptive DOP to use adaptive degree-of-parallelism at runtime. This option only takes effect when `enable_pipeline_engine` is true and spill is not enabled: with `enable_spill` set to true, or when a statement turns spill on itself (for example, writing to an Iceberg, Hive or FILES() table with `enable_connector_sink_spill` on), runtime adaptive DOP is not used. Enabling it causes fragments to call `enableAdaptiveDop()` during plan construction, and has runtime implications: join probes may wait for all build phases to complete (which conflicts with `group_execution` behavior), and enabling runtime adaptive DOP will disable pipeline-level multi-partitioned runtime filters (the setter clears `enablePipelineLevelMultiPartitionedRf`). The flag is recorded in the query profile and can be toggled per-session.
-* **Default**: `false`
-* **Data type**: boolean
-* **Introduced in**: v3.2.0
->>>>>>> 086e6d2 ([BugFix] Do not use runtime adaptive DOP together with spill (#84447))
 
 ### enable_scan_datacache
 

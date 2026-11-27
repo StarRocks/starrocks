@@ -583,19 +583,6 @@ public class InsertPlanner {
                 throw new SemanticException("Unknown table type " + insertStmt.getTargetTable().getType());
             }
 
-<<<<<<< HEAD
-            // enable spill for connector sink
-            if (session.getSessionVariable().isEnableConnectorSinkSpill() && (targetTable instanceof IcebergTable
-                    || targetTable instanceof HiveTable || targetTable instanceof TableFunctionTable)) {
-                session.getSessionVariable().setEnableSpill(true);
-                if (currentVariable.getConnectorSinkSpillMemLimitThreshold() < currentVariable.getSpillMemLimitThreshold()) {
-                    currentVariable.setSpillMemLimitThreshold(currentVariable.getConnectorSinkSpillMemLimitThreshold());
-                }
-            }
-
-=======
-            ConnectorSinkShuffleSpec.forTable(targetTable).ifPresent(spec -> spec.applyToExecPlan(execPlan, dataSink));
->>>>>>> 086e6d2 ([BugFix] Do not use runtime adaptive DOP together with spill (#84447))
             PlanFragment sinkFragment = execPlan.getFragments().get(0);
             if (canUsePipeline && (targetTable instanceof OlapTable || targetTable.isIcebergTable() ||
                     targetTable.isHiveTable() || targetTable.isTableFunctionTable())) {
