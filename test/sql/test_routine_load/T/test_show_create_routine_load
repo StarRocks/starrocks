@@ -40,3 +40,28 @@ FROM KAFKA (
 SHOW CREATE ROUTINE LOAD testherbavro;
 
 STOP ROUTINE LOAD for testherbavro;
+
+-- name: test_show_create_routine_load_without_partitions
+create database db_${uuid0};
+
+use db_${uuid0};
+
+create table no_parts_tbl (k int, v bigint)
+DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ( "replication_num" = "1" );
+
+CREATE ROUTINE LOAD db_${uuid0}.no_parts_job on no_parts_tbl
+PROPERTIES (
+"desired_concurrent_number"="1",
+"format"="json")
+FROM KAFKA (
+"kafka_broker_list"="172.26.194.239:9092",
+"kafka_topic"="herb-avro"
+);
+
+SHOW CREATE ROUTINE LOAD no_parts_job;
+
+STOP ROUTINE LOAD for no_parts_job;
+
+drop database db_${uuid0} force;

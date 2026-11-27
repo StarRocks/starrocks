@@ -16,11 +16,15 @@
 package com.starrocks.analysis;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionNames;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Pair;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.load.routineload.KafkaProgress;
 import com.starrocks.load.routineload.KafkaRoutineLoadJob;
 import com.starrocks.load.routineload.RoutineLoadJob;
 import com.starrocks.load.routineload.RoutineLoadMgr;
@@ -30,6 +34,7 @@ import com.starrocks.qe.ShowResultMetaFactory;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.sql.ast.ColumnSeparator;
+import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.sql.ast.ImportColumnDesc;
 import com.starrocks.sql.ast.LabelName;
 import com.starrocks.sql.ast.ShowCreateRoutineLoadStmt;
@@ -45,6 +50,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Map;
 
 public class ShowCreateRoutineLoadStmtTest {
     private static ConnectContext ctx;
@@ -175,5 +181,91 @@ public class ShowCreateRoutineLoadStmtTest {
         String whereDdl = buildDDL(whereOnly);
         Assertions.assertFalse(whereDdl.contains("testTbl,"), whereDdl);
         Assertions.assertTrue(whereDdl.contains("on testTbl\nWHERE "), whereDdl);
+    }
+
+    // Like baseJob(), but with a real broker list / topic and the real
+    // KafkaRoutineLoadJob.dataSourcePropertiesToSql(), so the FROM KAFKA clause is exercised too.
+    private KafkaRoutineLoadJob kafkaJob() {
+        KafkaRoutineLoadJob job = new KafkaRoutineLoadJob(1L, "testJob", 10000L, 20000L, "localhost:9092", "topic");
+        new Expectations(job) {
+            {
+                job.jobPropertiesToSql();
+                minTimes = 0;
+                result = "(\n\"desired_concurrent_number\" = \"1\"\n)\n";
+            }
+        };
+        return job;
+    }
+
+    // ===== A job created without kafka_partitions must not print them back. currentKafkaPartitions is
+    // runtime state: always empty on a follower FE, where the scheduler never runs (so the DDL carried
+    // "kafka_partitions"="", which CREATE ROUTINE LOAD rejects), and every discovered partition on the
+    // leader (so re-creating from the DDL would pin the job to them). =====
+    @Test
+    public void testShowCreateRoutineLoadOmitsUnspecifiedKafkaPartitions() throws Exception {
+        KafkaRoutineLoadJob job = kafkaJob();
+        // follower FE: nothing discovered yet
+        String followerDdl = buildDDL(job);
+        // leader FE: the scheduler filled in the topic's partitions
+        Deencapsulation.setField(job, "currentKafkaPartitions", Lists.newArrayList(0, 1, 2));
+        String leaderDdl = buildDDL(job);
+
+        Assertions.assertEquals(followerDdl, leaderDdl);
+        Assertions.assertTrue(leaderDdl.endsWith(
+                "FROM KAFKA\n(\n\"kafka_broker_list\"=\"localhost:9092\",\n\"kafka_topic\"=\"topic\"\n);"), leaderDdl);
+
+        // The DDL passes the CREATE ROUTINE LOAD data-source analysis and still pins no partition.
+        CreateRoutineLoadStmt stmt = (CreateRoutineLoadStmt) SqlParser.parse(leaderDdl, ctx.getSessionVariable()).get(0);
+        stmt.checkDataSourceProperties();
+        Assertions.assertEquals("localhost:9092", stmt.getKafkaBrokerList());
+        Assertions.assertEquals("topic", stmt.getKafkaTopic());
+        Assertions.assertTrue(stmt.getKafkaPartitionOffsets().isEmpty());
+
+        // What a follower FE used to print is rejected by that same analysis.
+        String oldFollowerDdl = leaderDdl.replace("\"kafka_topic\"=\"topic\"\n",
+                "\"kafka_topic\"=\"topic\",\n\"kafka_partitions\"=\"\"\n");
+        CreateRoutineLoadStmt oldStmt =
+                (CreateRoutineLoadStmt) SqlParser.parse(oldFollowerDdl, ctx.getSessionVariable()).get(0);
+        Assertions.assertThrows(AnalysisException.class, oldStmt::checkDataSourceProperties);
+    }
+
+    @Test
+    public void testShowCreateRoutineLoadKeepsSpecifiedKafkaPartitions() throws Exception {
+        KafkaRoutineLoadJob job = kafkaJob();
+        Deencapsulation.setField(job, "customeKafkaPartitionOffsets",
+                Lists.newArrayList(Pair.create(1, 100L), Pair.create(0, KafkaProgress.OFFSET_BEGINNING_VAL)));
+        Deencapsulation.setField(job, "customKafkaPartitions", Lists.newArrayList(1, 0));
+        Deencapsulation.setField(job, "currentKafkaPartitions", Lists.newArrayList(1, 0));
+
+        String ddl = buildDDL(job);
+        Assertions.assertTrue(ddl.endsWith("FROM KAFKA\n(\n\"kafka_broker_list\"=\"localhost:9092\",\n"
+                + "\"kafka_topic\"=\"topic\",\n\"kafka_partitions\"=\"0,1\",\n"
+                + "\"kafka_offsets\"=\"OFFSET_BEGINNING,100\"\n);"), ddl);
+
+        // The DDL parses back to the same partitions and offsets.
+        CreateRoutineLoadStmt stmt = (CreateRoutineLoadStmt) SqlParser.parse(ddl, ctx.getSessionVariable()).get(0);
+        stmt.checkDataSourceProperties();
+        Assertions.assertEquals(
+                Lists.newArrayList(Pair.create(0, KafkaProgress.OFFSET_BEGINNING_VAL), Pair.create(1, 100L)),
+                stmt.getKafkaPartitionOffsets());
+    }
+
+    // ALTER ROUTINE LOAD enabled kafka_partition_discovery on a job created without kafka_partitions: the
+    // property alone is rejected by CREATE ROUTINE LOAD, so the DDL leaves it out and stays runnable.
+    @Test
+    public void testShowCreateRoutineLoadDropsPartitionDiscoveryWithoutPartitions() throws Exception {
+        KafkaRoutineLoadJob job = kafkaJob();
+        Map<String, String> customProperties = Maps.newHashMap();
+        customProperties.put(CreateRoutineLoadStmt.KAFKA_PARTITION_DISCOVERY, "true");
+        Deencapsulation.setField(job, "customProperties", customProperties);
+        Deencapsulation.setField(job, "currentKafkaPartitions", Lists.newArrayList(0, 1, 2));
+
+        String ddl = buildDDL(job);
+        Assertions.assertFalse(ddl.contains("kafka_partition_discovery"), ddl);
+        Assertions.assertFalse(ddl.contains("kafka_partitions"), ddl);
+        CreateRoutineLoadStmt stmt = (CreateRoutineLoadStmt) SqlParser.parse(ddl, ctx.getSessionVariable()).get(0);
+        stmt.checkDataSourceProperties();
+        Assertions.assertTrue(stmt.getKafkaPartitionOffsets().isEmpty());
+        Assertions.assertFalse(stmt.isKafkaPartitionDiscovery());
     }
 }
