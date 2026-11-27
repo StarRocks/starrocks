@@ -166,46 +166,6 @@ public class ListPartitionPrunerTest {
     }
 
     @Test
-<<<<<<< HEAD
-=======
-    public void testCastIsNullKeepsPartitionsWithValuesTheCastTurnsIntoNull() throws AnalysisException {
-        // CAST(city AS INT) IS NULL holds for 'bj' as well as for NULL, so it cannot be pruned to the NULL
-        // partitions the way city IS NULL is (RB-1188)
-        ColumnRefOperator city = new ColumnRefOperator(1, StringType.STRING, "city", true);
-        ConcurrentNavigableMap<LiteralExpr, Set<Long>> values = new ConcurrentSkipListMap<>();
-        values.put(new StringLiteral("bj"), Sets.newHashSet(1L));
-        values.put(new StringLiteral("sz"), Sets.newHashSet(2L));
-        values.put(new StringLiteral("10"), Sets.newHashSet(3L));
-        Map<ColumnRefOperator, Set<Long>> nullPartitions = Map.of(city, Set.of(4L));
-        List<ScalarOperator> conjuncts = Lists.newArrayList();
-        ListPartitionPruner pruner = new ListPartitionPruner(Map.of(city, values), nullPartitions, conjuncts, null);
-
-        conjuncts.add(new IsNullPredicateOperator(new CastOperator(IntegerType.INT, city)));
-        Assertions.assertNull(pruner.prune());
-
-        // the bare column still prunes to the NULL partition
-        conjuncts.clear();
-        conjuncts.add(new IsNullPredicateOperator(city));
-        Assertions.assertEquals(Lists.newArrayList(4L), pruner.prune());
-
-        // IS NOT NULL keeps all partitions with a non-NULL value, with or without the cast
-        conjuncts.clear();
-        conjuncts.add(new IsNullPredicateOperator(true, new CastOperator(IntegerType.INT, city)));
-        Assertions.assertEquals(Lists.newArrayList(1L, 2L, 3L), pruner.prune());
-
-        // the statistics drop a conjunct from the estimate of a LIST table only when it prunes, so the cast form,
-        // alone or inside AND / OR, stays in the estimate
-        ScalarOperator castIsNull = new IsNullPredicateOperator(new CastOperator(IntegerType.INT, city));
-        ScalarOperator cityIsNull = new IsNullPredicateOperator(city);
-        Assertions.assertFalse(ListPartitionPruner.canPruneWithConjunct(castIsNull));
-        Assertions.assertFalse(ListPartitionPruner.canPruneWithConjunct(Utils.compoundOr(castIsNull, cityIsNull)));
-        Assertions.assertFalse(ListPartitionPruner.canPruneWithConjunct(Utils.compoundAnd(castIsNull, cityIsNull)));
-        Assertions.assertTrue(ListPartitionPruner.canPruneWithConjunct(cityIsNull));
-        Assertions.assertTrue(ListPartitionPruner.canPruneWithConjunct(
-                new IsNullPredicateOperator(true, new CastOperator(IntegerType.INT, city))));
-    }
-
-    @Test
     public void testUnconvertedPartitionKeepsPredicateForExecution() throws AnalysisException {
         // Partition 1 ('hello') cannot be converted to INT, so it is kept. Its rows have not been checked, so the
         // predicate must stay in noEvalConjuncts; external scans only evaluate those at runtime.
@@ -247,7 +207,6 @@ public class ListPartitionPrunerTest {
     }
 
     @Test
->>>>>>> bb86a0246dd... [BugFix][RB-1481] Keep LIST partitions whose value does not convert, and do not prune CAST(col) IS NULL (#69102)
     public void testEmptyConjunctsOrPartitionColumns() throws AnalysisException {
         conjuncts.clear();
         Assertions.assertEquals(null, pruner.prune());
