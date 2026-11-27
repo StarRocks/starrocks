@@ -59,18 +59,12 @@ import java.util.stream.Collectors;
 public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable {
     private static final Logger LOG = LogManager.getLogger(CachedStatisticStorage.class);
 
-<<<<<<< HEAD
-    private final Executor statsCacheRefresherExecutor = Executors.newFixedThreadPool(Config.statistic_cache_thread_pool_size,
-            new ThreadFactoryBuilder().setDaemon(true).setNameFormat("stats-cache-refresher-%d").build());
-=======
     // Target partition/column rows per explicit refresh query. A single column can exceed this target.
     private static final int PARTITION_STATS_REFRESH_BATCH_ROWS = 100_000;
     private static final int PARTITION_STATS_REFRESH_BATCH_COLUMNS = 32;
 
-    private final Executor statsCacheRefresherExecutor =
-            ThreadPoolManager.newDaemonFixedThreadPoolWithUnboundedQueue(Config.statistic_cache_thread_pool_size,
-                    "stats-cache-refresher", true);
->>>>>>> b6505c7 ([BugFix] Bound partition statistics refresh batches (#82916))
+    private final Executor statsCacheRefresherExecutor = Executors.newFixedThreadPool(Config.statistic_cache_thread_pool_size,
+            new ThreadFactoryBuilder().setDaemon(true).setNameFormat("stats-cache-refresher-%d").build());
 
     AsyncLoadingCache<TableStatsCacheKey, Optional<Long>> tableStatsCache =
             createAsyncLoadingCache(new TableStatsCacheLoader());
