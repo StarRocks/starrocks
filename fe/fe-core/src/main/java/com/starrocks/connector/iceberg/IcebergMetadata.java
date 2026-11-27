@@ -97,6 +97,7 @@ import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.PartitionDesc;
+import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.ast.TruncateTablePartitionStmt;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -115,6 +116,7 @@ import com.starrocks.thrift.TSinkCommitInfo;
 import com.starrocks.type.DateType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.VarcharType;
+import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.apache.iceberg.AppendFiles;
 import org.apache.iceberg.BaseFileScanTask;
 import org.apache.iceberg.BaseTable;
@@ -482,10 +484,24 @@ public class IcebergMetadata implements ConnectorMetadata {
         }
 
         IcebergAlterTableExecutor executor = new IcebergAlterTableExecutor(stmt, table, icebergCatalog, context, hdfsEnvironment);
-        ShowResultSet resultSet = executor.execute();
+        ShowResultSet resultSet;
+        try {
+            resultSet = executor.execute();
+        } catch (Exception e) {
+            // The change may have been applied although the statement fails, as in truncateTable. indexOfType,
+            // unlike Throwables.getCausalChain, does not throw on a cause loop and replace e.
+            if (ExceptionUtils.indexOfType(e, CommitStateUnknownException.class) >= 0) {
+                LOG.warn("Commit state of ALTER TABLE {}.{}.{} is unknown, dropping the cached table",
+                        catalogName, dbName, tableName, e);
+                invalidateCachedTableEverywhere(dbName, tableName);
+            }
+            throw e;
+        }
 
+        Optional<String> newTableName = renamedTo(stmt);
         synchronized (this) {
             tables.remove(TableIdentifier.of(dbName, tableName));
+            newTableName.ifPresent(name -> tables.remove(TableIdentifier.of(dbName, name)));
             try {
                 icebergCatalog.refreshTable(dbName, tableName, context, jobPlanningExecutor);
             } catch (Exception exception) {
@@ -493,13 +509,24 @@ public class IcebergMetadata implements ConnectorMetadata {
                 icebergCatalog.invalidateCache(dbName, tableName);
             }
             asyncRefreshOthersFeMetadataCache(dbName, tableName);
+            // as for the old name, the fallback for a peer the wait below misses or skips (a timeout of 0 or less)
+            newTableName.ifPresent(name -> asyncRefreshOthersFeMetadataCache(dbName, name));
         }
         // Schema and property changes, branches and tags, and the table procedures (rollback, cherry-pick,
-        // expire snapshots, ...) all commit new table metadata. A rename drops the old name.
+        // expire snapshots, ...) all commit new table metadata. A rename drops the old name, and the new one too:
+        // a peer may still cache a table that had it before, dropped by another engine.
         if (!commitsOnlyThroughSink(stmt)) {
             invalidateOthersFeTable(dbName, tableName);
+            newTableName.ifPresent(name -> invalidateOthersFeTable(dbName, name));
         }
         return resultSet;
+    }
+
+    private static Optional<String> renamedTo(AlterTableStmt stmt) {
+        return stmt.getAlterClauseList().stream()
+                .filter(TableRenameClause.class::isInstance)
+                .map(clause -> ((TableRenameClause) clause).getNewTableName())
+                .findFirst();
     }
 
     // rewrite_data_files commits through finishSink, which has already told the other FEs: do not wait for them twice
@@ -807,7 +834,7 @@ public class IcebergMetadata implements ConnectorMetadata {
             ConnectorMetricsMgr.increaseDeleteTotalFail(ConnectorMetricsMgr.CONNECTOR_ICEBERG, e, deleteType);
             if (e instanceof CommitStateUnknownException) {
                 // The delete may have been applied: drop the cached table everywhere, as truncateTable does
-                invalidateCachesAfterDelete(dbName, tableName);
+                invalidateCachedTableEverywhere(dbName, tableName);
             }
             throw new StarRocksConnectorException(
                     String.format("Failed to execute metadata delete on %s.%s", dbName, tableName), e);
@@ -816,10 +843,10 @@ public class IcebergMetadata implements ConnectorMetadata {
                     System.currentTimeMillis() - startMs, deleteType);
         }
 
-        invalidateCachesAfterDelete(dbName, tableName);
+        invalidateCachedTableEverywhere(dbName, tableName);
     }
 
-    private void invalidateCachesAfterDelete(String dbName, String tableName) {
+    private void invalidateCachedTableEverywhere(String dbName, String tableName) {
         invalidateCacheAfterCommit(dbName, tableName);
         asyncRefreshOthersFeMetadataCache(dbName, tableName);
         invalidateOthersFeTable(dbName, tableName);

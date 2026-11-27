@@ -490,6 +490,26 @@ public class CachingIcebergCatalogTest {
     }
 
     @Test
+    public void testRenameTableDropsTheNewNameToo(@Mocked IcebergCatalog icebergCatalog) {
+        // A table that had the new name before, dropped by another engine, may still be cached under it
+        Table formerTable = createBaseTableWithManifests(1, 1);
+        new Expectations() {
+            {
+                icebergCatalog.getTable(connectContext, "db1", "tbl2");
+                result = formerTable;
+                times = 2; // cached before the rename, loaded again after it
+            }
+        };
+        CachingIcebergCatalog cachingIcebergCatalog = new CachingIcebergCatalog(CATALOG_NAME, icebergCatalog,
+                DEFAULT_CATALOG_PROPERTIES, Executors.newSingleThreadExecutor());
+        cachingIcebergCatalog.getTable(connectContext, "db1", "tbl2");
+
+        cachingIcebergCatalog.renameTable(connectContext, "db1", "tbl1", "tbl2");
+
+        cachingIcebergCatalog.getTable(connectContext, "db1", "tbl2");
+    }
+
+    @Test
     public void testTableCacheEnabled_hitsDelegateOnce(@Mocked IcebergCatalog delegate,
                                                        @Mocked IcebergCatalogProperties props,
                                                        @Mocked ConnectContext ctx) throws Exception {
