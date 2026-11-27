@@ -54,6 +54,58 @@ PARALLEL_TEST(VecFieldFunctionsTest, fieldStringTest) {
     }
 }
 
+// FIELD(NULL, ...) is 0 (RB-1216). A NULL row of a non-constant first argument used to be compared by the value
+// left under its null flag, so it returned the position of an argument equal to that value.
+static ColumnPtr nullable_int_column(const std::vector<int32_t>& values, const std::vector<uint8_t>& nulls) {
+    auto data = Int32Column::create();
+    auto null_column = NullColumn::create();
+    for (size_t i = 0; i < values.size(); i++) {
+        data->append(values[i]);
+        null_column->append(nulls[i]);
+    }
+    return NullableColumn::create(std::move(data), std::move(null_column));
+}
+
+PARALLEL_TEST(VecFieldFunctionsTest, fieldNullFirstArgumentMatchesNothing) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    Columns columns;
+    // Row 0 is NULL with 1 under the flag, row 1 is 2.
+    columns.emplace_back(nullable_int_column({1, 2}, {1, 0}));
+    auto arg1 = Int32Column::create();
+    arg1->append(1);
+    arg1->append(1);
+    auto arg2 = Int32Column::create();
+    arg2->append(2);
+    arg2->append(2);
+    columns.emplace_back(std::move(arg1));
+    columns.emplace_back(std::move(arg2));
+
+    ColumnPtr result = StringFunctions::field<TYPE_INT>(ctx.get(), columns).value();
+    auto v = ColumnHelper::as_column<Int32Column>(result);
+    ASSERT_EQ(0, v->immutable_data()[0]);
+    ASSERT_EQ(2, v->immutable_data()[1]);
+}
+
+PARALLEL_TEST(VecFieldFunctionsTest, fieldNullFirstArgumentMatchesNoConstant) {
+    const TypeDescriptor int_type(TYPE_INT);
+    std::unique_ptr<FunctionContext> ctx(
+            FunctionContext::create_test_context({int_type, int_type, int_type}, int_type));
+    Columns columns;
+    // Rows 0 and 2 are NULL with 3 and 1 under the flag; the other arguments are the constants 1 and 3.
+    columns.emplace_back(nullable_int_column({3, 3, 1}, {1, 0, 1}));
+    columns.emplace_back(ColumnHelper::create_const_column<TYPE_INT>(1, 3));
+    columns.emplace_back(ColumnHelper::create_const_column<TYPE_INT>(3, 3));
+    ctx->set_constant_columns({nullptr, columns[1], columns[2]});
+    ASSERT_TRUE(StringFunctions::field_prepare<TYPE_INT>(ctx.get(), FunctionContext::FRAGMENT_LOCAL).ok());
+    ColumnPtr result = StringFunctions::field<TYPE_INT>(ctx.get(), columns).value();
+    ASSERT_TRUE(StringFunctions::field_close<TYPE_INT>(ctx.get(), FunctionContext::FRAGMENT_LOCAL).ok());
+
+    auto v = ColumnHelper::as_column<Int32Column>(result);
+    ASSERT_EQ(0, v->immutable_data()[0]);
+    ASSERT_EQ(2, v->immutable_data()[1]);
+    ASSERT_EQ(0, v->immutable_data()[2]);
+}
+
 PARALLEL_TEST(VecFieldFunctionsTest, fieldIntTest) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     Columns columns;
