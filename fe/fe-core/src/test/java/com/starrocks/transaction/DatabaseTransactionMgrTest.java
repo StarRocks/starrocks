@@ -72,6 +72,9 @@ import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.lake.compaction.CompactionMgr;
+import com.starrocks.load.InsertOverwriteJob;
+import com.starrocks.load.InsertOverwriteJobMgr;
+import com.starrocks.load.InsertOverwriteJobState;
 import com.starrocks.load.loadv2.ManualLoadTxnCommitAttachment;
 import com.starrocks.load.routineload.KafkaProgress;
 import com.starrocks.load.routineload.KafkaRoutineLoadJob;
@@ -1111,6 +1114,56 @@ public class DatabaseTransactionMgrTest {
         assertEquals(0, masterDbTransMgr.getFinishedTxnNums());
         assertEquals(7, masterDbTransMgr.getTransactionNum());
         assertNull(masterDbTransMgr.unprotectedGetTxnIdsByLabel(GlobalStateMgrTestUtil.testTxnLable1));
+    }
+
+    @Test
+    public void testRetainVisibleTxnUntilOverwriteReplacementCompletes() throws AnalysisException {
+        DatabaseTransactionMgr dbTxnMgr =
+                masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
+        long txnId = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable1);
+        InsertOverwriteJobMgr overwriteMgr = masterGlobalStateMgr.getInsertOverwriteJobMgr();
+        InsertOverwriteJob job = new InsertOverwriteJob(91003L, GlobalStateMgrTestUtil.testDbId1,
+                GlobalStateMgrTestUtil.testTableId1, List.of(), false);
+        job.setTxnId(txnId);
+        job.setJobState(InsertOverwriteJobState.OVERWRITE_WAITING_VISIBLE);
+        overwriteMgr.registerOverwriteJob(job);
+        try {
+            Config.label_keep_max_second = -1;
+            dbTxnMgr.removeExpiredTxns(System.currentTimeMillis());
+            assertNotNull(dbTxnMgr.getTransactionState(txnId));
+        } finally {
+            overwriteMgr.deregisterOverwriteJob(job.getJobId());
+        }
+
+        dbTxnMgr.removeExpiredTxns(System.currentTimeMillis());
+        assertNull(dbTxnMgr.getTransactionState(txnId));
+    }
+
+    @Test
+    public void testReplayRetainsExpiredVisibleTxnReferencedByOverwrite() throws AnalysisException {
+        long dbId = GlobalStateMgrTestUtil.testDbId1;
+        long txnId = 99003L;
+        DatabaseTransactionMgr dbTxnMgr = masterTransMgr.getDatabaseTransactionMgr(dbId);
+        InsertOverwriteJobMgr overwriteMgr = masterGlobalStateMgr.getInsertOverwriteJobMgr();
+        InsertOverwriteJob job = new InsertOverwriteJob(99004L, dbId,
+                GlobalStateMgrTestUtil.testTableId1, List.of(), false);
+        job.setTxnId(txnId);
+        job.setJobState(InsertOverwriteJobState.OVERWRITE_WAITING_VISIBLE);
+        overwriteMgr.registerOverwriteJob(job);
+        int oldRetention = Config.label_keep_max_second;
+        try {
+            Config.label_keep_max_second = 1;
+            TransactionState visible = new TransactionState(dbId, List.of(), txnId, "replayed_overwrite", null,
+                    TransactionState.LoadJobSourceType.INSERT_STREAMING,
+                    new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE, "localfe"), -1, -1);
+            visible.setTransactionStatus(TransactionStatus.VISIBLE);
+            visible.setFinishTime(System.currentTimeMillis() - 2000);
+            dbTxnMgr.replayUpsertTransactionState(visible);
+            assertNotNull(dbTxnMgr.getTransactionState(txnId));
+        } finally {
+            Config.label_keep_max_second = oldRetention;
+            overwriteMgr.deregisterOverwriteJob(job.getJobId());
+        }
     }
 
     @Test

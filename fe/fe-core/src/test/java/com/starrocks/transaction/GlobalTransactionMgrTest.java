@@ -59,6 +59,9 @@ import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.ha.FrontendNodeType;
+import com.starrocks.load.InsertOverwriteJob;
+import com.starrocks.load.InsertOverwriteJobMgr;
+import com.starrocks.load.InsertOverwriteJobState;
 import com.starrocks.load.loadv2.ManualLoadTxnCommitAttachment;
 import com.starrocks.load.routineload.KafkaProgress;
 import com.starrocks.load.routineload.KafkaRoutineLoadJob;
@@ -920,8 +923,53 @@ public class GlobalTransactionMgrTest {
         SRMetaBlockReader srMetaBlockReader = new SRMetaBlockReaderV2(new JsonReader(new InputStreamReader(dis)));
         masterTransMgr.loadTransactionStateV2(srMetaBlockReader);
         dis.close();
+        // Image loading defers expiration until the overwrite job image has also been loaded.
+        Assertions.assertEquals(2, masterTransMgr.getDatabaseTransactionMgr(dbId).getTransactionNum());
+        masterTransMgr.removeExpiredTxns();
         Assertions.assertEquals(1, masterTransMgr.getDatabaseTransactionMgr(dbId).getTransactionNum());
         tempFile.delete();
+    }
+
+    @Test
+    public void testImageLoadRetainsExpiredVisibleTxnReferencedByOverwrite() throws Exception {
+        long dbId = GlobalStateMgrTestUtil.testDbId1;
+        long txnId = 99001L;
+        int oldRetention = Config.label_keep_max_second;
+        try {
+            Config.label_keep_max_second = 1;
+            TransactionState visible = new TransactionState(dbId, List.of(), txnId, "overwrite_visible", null,
+                    LoadJobSourceType.INSERT_STREAMING, transactionSource, -1, -1);
+            visible.setTransactionStatus(TransactionStatus.VISIBLE);
+            visible.setFinishTime(System.currentTimeMillis() - 2000);
+            masterTransMgr.getDatabaseTransactionMgr(dbId).unprotectUpsertTransactionState(visible);
+
+            UtFrameUtils.PseudoImage image = new UtFrameUtils.PseudoImage();
+            masterTransMgr.saveTransactionStateV2(image.getImageWriter());
+            masterTransMgr.removeDatabaseTransactionMgr(dbId);
+            masterTransMgr.addDatabaseTransactionMgr(dbId);
+
+            SRMetaBlockReader reader = new SRMetaBlockReaderV2(image.getJsonReader());
+            masterTransMgr.loadTransactionStateV2(reader);
+            reader.close();
+            Assertions.assertNotNull(masterTransMgr.getTransactionState(dbId, txnId));
+
+            InsertOverwriteJobMgr overwriteMgr = masterGlobalStateMgr.getInsertOverwriteJobMgr();
+            InsertOverwriteJob job = new InsertOverwriteJob(99002L, dbId,
+                    GlobalStateMgrTestUtil.testTableId1, List.of(), false);
+            job.setTxnId(txnId);
+            job.setJobState(InsertOverwriteJobState.OVERWRITE_WAITING_VISIBLE);
+            overwriteMgr.registerOverwriteJob(job);
+            try {
+                masterTransMgr.removeExpiredTxns();
+                Assertions.assertNotNull(masterTransMgr.getTransactionState(dbId, txnId));
+            } finally {
+                overwriteMgr.deregisterOverwriteJob(job.getJobId());
+            }
+            masterTransMgr.removeExpiredTxns();
+            Assertions.assertNull(masterTransMgr.getTransactionState(dbId, txnId));
+        } finally {
+            Config.label_keep_max_second = oldRetention;
+        }
     }
 
     @Test

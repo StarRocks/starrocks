@@ -43,6 +43,9 @@ public class InsertOverwriteStateChangeInfo implements Writable {
     @SerializedName(value = "txnId")
     private long txnId = -1;
 
+    @SerializedName(value = "commitTime")
+    private long commitTime = -1;
+
     public InsertOverwriteStateChangeInfo(long jobId, InsertOverwriteJobState fromState,
                                           InsertOverwriteJobState toState,
                                           List<Long> sourcePartitionIds, 
@@ -62,6 +65,15 @@ public class InsertOverwriteStateChangeInfo implements Writable {
                                           List<String> sourcePartitionNames,
                                           List<Long> tmpPartitionIds,
                                           long txnId) {
+        this(jobId, fromState, toState, sourcePartitionIds, sourcePartitionNames, tmpPartitionIds, txnId, -1);
+    }
+
+    public InsertOverwriteStateChangeInfo(long jobId, InsertOverwriteJobState fromState,
+                                          InsertOverwriteJobState toState,
+                                          List<Long> sourcePartitionIds,
+                                          List<String> sourcePartitionNames,
+                                          List<Long> tmpPartitionIds,
+                                          long txnId, long commitTime) {
         this.jobId = jobId;
         this.fromState = fromState;
         this.toState = toState;
@@ -69,6 +81,7 @@ public class InsertOverwriteStateChangeInfo implements Writable {
         this.sourcePartitionNames = sourcePartitionNames;
         this.tmpPartitionIds = tmpPartitionIds;
         this.txnId = txnId;
+        this.commitTime = commitTime;
     }
 
     public long getJobId() {
@@ -97,6 +110,10 @@ public class InsertOverwriteStateChangeInfo implements Writable {
 
     public long getTxnId() {
         return txnId;
+    }
+
+    public long getCommitTime() {
+        return commitTime;
     }
 
     @Override
