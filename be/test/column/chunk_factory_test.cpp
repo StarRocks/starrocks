@@ -173,7 +173,6 @@ TEST(ChunkFactoryTest, rejects_missing_or_mismatched_geo_descriptor) {
     }
 }
 
-
 TEST(ChunkFactoryTest, column_from_field_type_variant) {
     // Regression test for #84783: field_type_dispatch_column was missing
     // TYPE_VARIANT, causing SIGABRT when building columns for VARIANT fields.
