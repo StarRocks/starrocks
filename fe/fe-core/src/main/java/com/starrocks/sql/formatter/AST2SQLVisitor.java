@@ -77,6 +77,15 @@ public class AST2SQLVisitor extends AST2StringVisitor {
     }
 
     /**
+     * Whether the text keeps its historical form. Persisted SQL digest blacklists and SPM baselines depend on it, and
+     * SPM keeps it while serializing concrete plan bindings with literals, so it is separate from the literal
+     * placeholders that {@code options.isEnableDigest()} controls.
+     */
+    protected boolean useLegacyDigestText() {
+        return options.isEnableDigest();
+    }
+
+    /**
      * Always writes the NULL ordering. Which ordering a bare ASC / DESC means depends on the sql_mode the text is
      * parsed under (SORT_NULLS_LAST), and a view definition is parsed again under the sql_mode it was created with,
      * so leaving out the "default" would change the ordering for a mode where it is not the default. The digest
@@ -84,7 +93,7 @@ public class AST2SQLVisitor extends AST2StringVisitor {
      */
     @Override
     protected String renderOrderByElement(OrderByElement node, String renderedExpr) {
-        if (options.isEnableDigest() || node.getNullsFirstParam() == null) {
+        if (useLegacyDigestText() || node.getNullsFirstParam() == null) {
             return super.renderOrderByElement(node, renderedExpr);
         }
         return renderedExpr + (node.getIsAsc() ? " ASC" : " DESC") +
