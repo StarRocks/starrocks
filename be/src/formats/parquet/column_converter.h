@@ -22,6 +22,7 @@
 #include "column/runtime_type_traits.h"
 #include "common/status.h"
 #include "exprs/function_context.h"
+#include "formats/parquet/calendar_rebase.h"
 #include "formats/parquet/types.h"
 #include "formats/parquet/utils.h"
 #include "gen_cpp/parquet_types.h"
@@ -67,8 +68,10 @@ public:
 
 class ColumnConverterFactory {
 public:
+    // `calendar` says whether the file stores pre-Gregorian dates in the hybrid calendar (see calendar_rebase.h).
     static Status create_converter(const ParquetField& field, const TypeDescriptor& typeDescriptor,
-                                   const std::string& timezone, std::unique_ptr<ColumnConverter>* converter);
+                                   const std::string& timezone, std::unique_ptr<ColumnConverter>* converter,
+                                   const LegacyCalendar& calendar = {});
 };
 
 } // namespace starrocks::parquet

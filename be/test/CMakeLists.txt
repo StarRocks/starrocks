@@ -121,6 +121,7 @@ set(EXEC_FILES
         ./formats/parquet/file_reader_test.cpp
         ./formats/parquet/file_writer_test.cpp
         ./formats/parquet/iceberg_schema_evolution_file_reader_test.cpp
+        ./formats/parquet/calendar_rebase_test.cpp
         ./formats/parquet/column_converter_test.cpp
         ./formats/parquet/column_reader_factory_test.cpp
         ./formats/parquet/parquet_file_writer_test.cpp

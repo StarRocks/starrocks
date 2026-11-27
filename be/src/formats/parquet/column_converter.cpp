@@ -636,7 +636,8 @@ public:
 
 Status ColumnConverterFactory::create_converter(const ParquetField& field, const TypeDescriptor& typeDescriptor,
                                                 const std::string& timezone,
-                                                std::unique_ptr<ColumnConverter>* converter) {
+                                                std::unique_ptr<ColumnConverter>* converter,
+                                                const LegacyCalendar& calendar) {
     LogicalType col_type = typeDescriptor.type;
     bool need_convert = false;
     tparquet::Type::type parquet_type = field.physical_type;
@@ -859,6 +860,7 @@ Status ColumnConverterFactory::create_converter(const ParquetField& field, const
         *converter = std::make_unique<ColumnConverter>();
     }
     (*converter)->init_info(need_convert, parquet_type);
+    *converter = wrap_legacy_calendar_converter(std::move(*converter), schema_element, col_type, calendar);
     return Status::OK();
 }
 

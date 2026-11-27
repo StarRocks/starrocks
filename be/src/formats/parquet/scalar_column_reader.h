@@ -73,6 +73,10 @@ public:
               _chunk_metadata(reader._chunk_metadata) {}
     ~RawColumnReader() override = default;
 
+    LegacyCalendar legacy_calendar() const {
+        return _opts.file_meta_data != nullptr ? _opts.file_meta_data->legacy_calendar() : LegacyCalendar{};
+    }
+
     Status prepare() override {
         return StoredColumnReader::create(_opts, get_column_parquet_field(), get_chunk_metadata(), &_reader);
     }
@@ -190,7 +194,7 @@ public:
 
     Status prepare() override {
         RETURN_IF_ERROR(ColumnConverterFactory::create_converter(*get_column_parquet_field(), *_col_type,
-                                                                 _opts.timezone, &_converter));
+                                                                 _opts.timezone, &_converter, legacy_calendar()));
         // Adaptive lazy dict-decode (_can_lazy_dict_decode) is disabled when a
         // converter exists, because the automatic decode-on-first-touch path
         // would materialise values directly into dst, bypassing conversion.

@@ -53,6 +53,9 @@ Status FileMetaData::init(tparquet::FileMetaData& t_metadata, bool case_sensitiv
     } else {
         _writer_version = ApplicationVersion("unknown 0.0.0");
     }
+    if (_t_metadata.__isset.key_value_metadata) {
+        _legacy_calendar = LegacyCalendar::from_key_value_metadata(_t_metadata.key_value_metadata);
+    }
     return Status::OK();
 }
 
