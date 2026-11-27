@@ -739,6 +739,18 @@ public class StatisticUtils {
     }
 
     public static Type getQueryStatisticsColumnType(Table table, String column) {
+        Type type = findQueryStatisticsColumnType(table, column);
+        if (type == null) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_FIELD_ERROR, column, table.getName());
+        }
+        return type;
+    }
+
+    /**
+     * Resolves the type of a statistics column name, or returns null when the table has no such column
+     * (or struct subfield).
+     */
+    public static Type findQueryStatisticsColumnType(Table table, String column) {
         // Try the full column name first so that columns with dots in their
         // names (e.g. "customer.is_verified_email") resolve correctly.
         Column directMatch = table.getColumn(column);
@@ -765,7 +777,6 @@ public class StatisticUtils {
             }
         }
 
-        ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_FIELD_ERROR, column, table.getName());
         return null;
     }
 

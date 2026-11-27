@@ -33,6 +33,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Histogram;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
+import com.starrocks.statistic.StatisticExecutor;
 import com.starrocks.thrift.TStatisticData;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
@@ -41,6 +42,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -104,6 +106,63 @@ public class ConnectorColumnStatsCacheLoaderTest {
         Assertions.assertEquals(0, result.get().getColumnStatistic().getMinValue(), 0.0001);
         Assertions.assertEquals(5, result.get().getColumnStatistic().getDistinctValuesCount(), 0.0001);
         Assertions.assertEquals(0, result.get().getColumnStatistic().getNullsFraction(), 0.0001);
+    }
+
+    @Test
+    public void testColumnsTheTableDoesNotHaveAreNotQueried() {
+        List<List<String>> queried = new ArrayList<>();
+        new MockUp<StatisticExecutor>() {
+            @Mock
+            public List<TStatisticData> queryStatisticSync(ConnectContext context, String tableUUID, Table table,
+                                                           List<String> columnNames) {
+                queried.add(new ArrayList<>(columnNames));
+                return ImmutableList.of();
+            }
+        };
+        new MockUp<StatisticsUtils>() {
+            @Mock
+            public Table getTableByUUID(ConnectContext context, String tableUUID) {
+                return connectContext.getGlobalStateMgr().getMetadataMgr().
+                        getTable(connectContext, "hive0", "tpch", "region");
+            }
+        };
+        ConnectorColumnStatsCacheLoader loader = new ConnectorColumnStatsCacheLoader();
+
+        loader.queryStatisticsData(connectContext, "hive0.tpch.region.1234",
+                List.of("r_regionkey", "no_such_column", "r_name"));
+        loader.queryStatisticsData(connectContext, "hive0.tpch.region.1234", List.of("no_such_column"));
+
+        Assertions.assertEquals(List.of(List.of("r_regionkey", "r_name")), queried);
+    }
+
+    @Test
+    public void testLoadAllLeavesOutColumnsTheTableDoesNotHave() throws Exception {
+        new MockUp<StatisticExecutor>() {
+            @Mock
+            public List<TStatisticData> queryStatisticSync(ConnectContext context, String tableUUID, Table table,
+                                                           List<String> columnNames) {
+                return ImmutableList.of();
+            }
+        };
+        new MockUp<StatisticsUtils>() {
+            @Mock
+            public Table getTableByUUID(ConnectContext context, String tableUUID) {
+                return connectContext.getGlobalStateMgr().getMetadataMgr().
+                        getTable(connectContext, "hive0", "tpch", "region");
+            }
+        };
+        ConnectorTableColumnKey existing = new ConnectorTableColumnKey("hive0.tpch.region.1234", "r_regionkey");
+        ConnectorTableColumnKey missing = new ConnectorTableColumnKey("hive0.tpch.region.1234", "no_such_column");
+        ConnectorColumnStatsCacheLoader loader = new ConnectorColumnStatsCacheLoader();
+
+        Map<ConnectorTableColumnKey, Optional<ConnectorTableColumnStats>> result =
+                loader.asyncLoadAll(List.of(existing, missing), Runnable::run).get();
+        Map<ConnectorTableColumnKey, Optional<ConnectorTableColumnStats>> onlyMissing =
+                loader.asyncLoadAll(List.of(missing), Runnable::run).get();
+
+        // No entry for the missing column, so trigger-analyze never queues an analyze job for it.
+        Assertions.assertEquals(Map.of(existing, Optional.empty()), result);
+        Assertions.assertTrue(onlyMissing.isEmpty());
     }
 
     @Test
