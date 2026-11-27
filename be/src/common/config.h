@@ -1588,6 +1588,40 @@ CONF_Bool(aws_sdk_enable_compliant_rfc3986_encoding, "false");
 // use poco client to replace default curl client
 CONF_Bool(enable_poco_client_for_aws_sdk, "false");
 
+// Fast retry for small requests to shared-data storage.
+// Object storage now and then answers a small request one or two seconds late, while the same request sent
+// again is answered at once. With fast retry, the SDK's first attempt of a small PutObject or a HeadObject that
+// starlet sends carries a short whole-request timeout. When a send with the short timeout times out, it is aborted
+// and the same signed request is sent again at once, without the SDK's retry back-off. Once the sends that may
+// carry the short timeout are used up or the budget has no token, the next send uses the usual timeouts. The SDK's
+// own retries and the object storage clients that BE creates for external tables, unload and backup are not
+// affected.
+// Can be changed at runtime and applies to the requests sent after the change. The BE process installs the HTTP
+// client that does it at startup whenever the AWS SDK uses its curl client; while this is false, that client sends
+// every request as the SDK's own client does. It has no effect when enable_poco_client_for_aws_sdk is true.
+CONF_mBool(enable_object_storage_fast_retry, "false");
+// Short timeout of a PutObject whose body is at most object_storage_fast_retry_put_max_bytes. It covers the
+// whole request: connection setup, TLS, waiting for 100 Continue, sending the body and waiting for the response.
+// 0 turns fast retry off for PutObject.
+CONF_mInt64(object_storage_fast_retry_put_timeout_ms, "300");
+// Largest number of sends of such a PutObject that carry the short timeout, 1 to 3. Once these sends are used up or
+// the budget has no token, the next send uses the usual timeouts. Each timeout adds at most one short timeout to
+// the time of the request; the time of the next send and any wait for a free connection come on top.
+CONF_mInt32(object_storage_fast_retry_put_short_attempts, "1");
+// Largest PutObject body that fast retry covers.
+CONF_mInt64(object_storage_fast_retry_put_max_bytes, "1048576");
+// Short timeout of a HeadObject. 0 turns fast retry off for HeadObject.
+CONF_mInt64(object_storage_fast_retry_head_timeout_ms, "300");
+// Largest number of sends of a HeadObject that carry the short timeout, 1 to 3. They work as for PutObject.
+CONF_mInt32(object_storage_fast_retry_head_short_attempts, "1");
+// Upper bound of the extra requests that fast retry sends, in percent of the requests of each class on each
+// client. When sends that time out use up this budget, requests go without the short timeout until enough
+// requests complete normally. Each client starts with 100 tokens per class and holds at most 100. A request takes a
+// token before it is sent with the short timeout and gives it back unless that send times out, so concurrent
+// requests cannot exceed the budget; a request that finds no token goes without the short timeout. 0 turns fast
+// retry off.
+CONF_mInt32(object_storage_fast_retry_budget_percent, "2");
+
 // default: 16MB
 CONF_mInt64(experimental_s3_max_single_part_size, "16777216");
 // default: 16MB

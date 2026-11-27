@@ -654,7 +654,14 @@
         "aws_sdk_logging_trace_enabled",
         "aws_sdk_logging_trace_level",
         "aws_sdk_enable_compliant_rfc3986_encoding",
-        "enable_poco_client_for_aws_sdk"
+        "enable_poco_client_for_aws_sdk",
+        "enable_object_storage_fast_retry",
+        "object_storage_fast_retry_put_timeout_ms",
+        "object_storage_fast_retry_put_short_attempts",
+        "object_storage_fast_retry_put_max_bytes",
+        "object_storage_fast_retry_head_timeout_ms",
+        "object_storage_fast_retry_head_short_attempts",
+        "object_storage_fast_retry_budget_percent"
       ]
     },
     {
