@@ -743,7 +743,11 @@ Status ColumnReader::bloom_filter(const std::vector<const ColumnPredicate*>& pre
                                          KeyCache::instance().unwrap_encryption_meta(e.encryption_meta));
                     }
                     ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(idx_path));
-                    ASSIGN_OR_RETURN(idg_file_holder, fs->new_random_access_file(raf_opts, idx_path));
+                    FileInfo idx_info{.path = idx_path};
+                    if (e.file_size > 0) {
+                        idx_info.size = e.file_size;
+                    }
+                    ASSIGN_OR_RETURN(idg_file_holder, fs->new_random_access_file(raf_opts, idx_info));
 
                     lake::IndexFileReader idx_reader;
                     RETURN_IF_ERROR(idx_reader.init(idg_file_holder.get()));
