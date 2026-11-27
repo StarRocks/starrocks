@@ -1,0 +1,14 @@
+-- name: test_field_null_first_argument
+-- FIELD(NULL, ...) is 0. A NULL row of a non-constant first argument was compared by the value stored under its
+-- null flag (0 / '') and returned the position of an argument equal to it (RB-1216, RB-1390).
+create table t_field (k int, v int, s varchar(20)) duplicate key(k) distributed by hash(k) buckets 1 properties ("replication_num" = "1");
+insert into t_field values (1, 0, ''), (2, NULL, NULL), (3, 2, 'b'), (4, NULL, NULL);
+select k, field(v, 0, 1, 2) from t_field order by k;
+select k, field(v, k - k, 2) from t_field order by k;
+select k, field(s, '', 'b') from t_field order by k;
+select k, field(s, concat(s, ''), 'b') from t_field order by k;
+select k, field(cast(s as int) / 1, 0, 2) from t_field order by k;
+select k, field(NULL, 0, 1), field(cast(NULL as int), v) from t_field order by k;
+create table t_product (product_id int not null, product_name varchar(50) null) duplicate key(product_id) distributed by hash(product_id) buckets 3 properties ("replication_num" = "1");
+insert into t_product values (1, 'apple'), (2, 'bread'), (3, 'hammer'), (4, 'saw'), (5, 'robot'), (6, 'ball'), (7, 'mystery'), (8, 'apple');
+select product_id, field((product_name :: FLOAT) / ((CAST(product_name AS BOOLEAN)) IN ('saw', 'mystery')), NOT ((CASE WHEN product_name THEN product_name END) < 'apple'), product_name IN ('saw', 'saw'), product_name NOT IN ('ball', 'mystery')) from t_product order by product_id;
