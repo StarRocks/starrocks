@@ -227,6 +227,24 @@ public class IcebergPlannerUtils {
         return new ScalarOperatorToIcebergExpr().convert(Collections.singletonList(predicate), icebergContext);
     }
 
+    /**
+     * Turns spill on for a statement that writes through a connector sink, when enable_connector_sink_spill is set.
+     * It must be called before the plan is optimized and built: spill changes what the optimizer may assume
+     * (e.g. join output order) and whether fragments may use runtime adaptive DOP. The session variable is
+     * cloned first, so the change only applies to this statement; StmtExecutor restores the original afterwards.
+     */
+    public static void enableConnectorSinkSpill(ConnectContext session) {
+        if (!session.getSessionVariable().isEnableConnectorSinkSpill()) {
+            return;
+        }
+        SessionVariable sv = (SessionVariable) session.getSessionVariable().clone();
+        session.setSessionVariable(sv);
+        sv.setEnableSpill(true);
+        if (sv.getConnectorSinkSpillMemLimitThreshold() < sv.getSpillMemLimitThreshold()) {
+            sv.setSpillMemLimitThreshold(sv.getConnectorSinkSpillMemLimitThreshold());
+        }
+    }
+
     public static void configureIcebergSinkPipeline(ExecPlan execPlan, ConnectContext session,
                                                      boolean canUsePipeline) {
         if (!canUsePipeline) {
@@ -235,13 +253,6 @@ public class IcebergPlannerUtils {
         }
 
         SessionVariable sv = session.getSessionVariable();
-        if (sv.isEnableConnectorSinkSpill()) {
-            sv.setEnableSpill(true);
-            if (sv.getConnectorSinkSpillMemLimitThreshold() < sv.getSpillMemLimitThreshold()) {
-                sv.setSpillMemLimitThreshold(sv.getConnectorSinkSpillMemLimitThreshold());
-            }
-        }
-
         PlanFragment sinkFragment = execPlan.getFragments().get(0);
         if (sv.getEnableAdaptiveSinkDop()) {
             long warehouseId = session.getCurrentComputeResource().getWarehouseId();

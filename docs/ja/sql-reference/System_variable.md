@@ -977,7 +977,7 @@ StarRocks は 2 種類の RF を提供します：ローカル RF とグロー�
 ### enable_runtime_adaptive_dop
 
 * **スコープ**: Session
-* **説明**: セッションで有効にすると、planner と fragment builder はランタイムの adaptive DOP をサポートするパイプライン対応フラグメントに対して、実行時に adaptive degree-of-parallelism を使用するようマークします。このオプションは `enable_pipeline_engine` が true のときのみ有効になります。有効にするとフラグメントはプラン構築中に `enableAdaptiveDop()` を呼び出すようになり、ランタイム上の影響があります：join の probe はすべての build フェーズが完了するのを待つ可能性があり（これは `group_execution` の動作と衝突します）、ランタイム adaptive DOP を有効にするとパイプラインレベルの multi-partitioned runtime filters が無効になります（setter は `enablePipelineLevelMultiPartitionedRf` をクリアします）。このフラグはクエリプロファイルに記録され、セッション単位で切り替えることができます。
+* **説明**: セッションで有効にすると、planner と fragment builder はランタイムの adaptive DOP をサポートするパイプライン対応フラグメントに対して、実行時に adaptive degree-of-parallelism を使用するようマークします。このオプションは `enable_pipeline_engine` が true で、かつ spill が有効でないときのみ有効になります。`enable_spill` が true の場合、またはステートメント自体が spill を有効にする場合（例：`enable_connector_sink_spill` が有効な状態で Iceberg、Hive、FILES() テーブルに書き込む場合）は、ランタイム adaptive DOP は使用されません。有効にするとフラグメントはプラン構築中に `enableAdaptiveDop()` を呼び出すようになり、ランタイム上の影響があります：join の probe はすべての build フェーズが完了するのを待つ可能性があり（これは `group_execution` の動作と衝突します）、ランタイム adaptive DOP を有効にするとパイプラインレベルの multi-partitioned runtime filters が無効になります（setter は `enablePipelineLevelMultiPartitionedRf` をクリアします）。このフラグはクエリプロファイルに記録され、セッション単位で切り替えることができます。
 * **デフォルト**: `false`
 * **データ型**: boolean
 * **導入バージョン**: v3.2.0
