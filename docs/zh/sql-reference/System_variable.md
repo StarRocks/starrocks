@@ -750,6 +750,13 @@ FROM test;
 * 数据类型：Boolean
 * 引入版本：v3.5.16、v4.0.9
 
+### enable_return_query_id
+
+* 描述：是否在查询自身的结果之后追加一个仅包含该查询 `query_id` 的结果集，使客户端在同一次请求往返中即可获取 `query_id`，而无需再单独执行 `SELECT last_query_id()`。该额外结果集通过 MySQL `CLIENT_MULTI_RESULTS` 协议返回，客户端通过 `Statement.getMoreResults()`（JDBC）或 `cursor.nextset()`（pymysql）读取。获取的 `query_id` 可用于 `get_query_profile()` 或 `ANALYZE PROFILE FROM`。开启后客户端必须读取（drain）该额外结果集。该功能仅适用于 MySQL 协议的文本协议查询（`COM_QUERY`）；在发生错误、查询被转发到 Leader FE，以及 HTTP SQL / Arrow Flight SQL 传输时会跳过；且仅对在握手阶段声明了 `CLIENT_MULTI_RESULTS` 的客户端生效。
+* 默认值：false
+* 数据类型：Boolean
+* 引入版本：v4.0
+
 ### enable_lake_prepared_physical_split_scan
 
 * 描述：是否为存算分离集群中的云原生表开启 Prepared Physical Split Scan。开启后，每个 Segment 只裁剪一次，并在同一 Tablet 的各 Split 子任务间共享裁剪后的读取状态，可加速大 Tablet 或数据倾斜 Tablet 的扫描。该优化按 Scan 节点决定是否生效，且要求表为云原生表并且未开启 Query Cache。仅在存算分离集群中生效。

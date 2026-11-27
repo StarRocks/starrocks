@@ -170,6 +170,10 @@ public class ConnectContext {
     protected MysqlCapability serverCapability;
     // the protocol capability after server and client negotiate
     protected MysqlCapability capability;
+    // the protocol capability the client advertised in its handshake response.
+    // Kept separate from the (server-fixed) negotiated capability so features can check
+    // what the client actually supports (e.g. CLIENT_MULTI_RESULTS before sending extra result sets).
+    protected MysqlCapability clientCapability = MysqlCapability.DEFAULT_CAPABILITY;
     // Indicate if this client is killed.
     protected volatile boolean isKilled;
     // Db
@@ -993,6 +997,14 @@ public class ConnectContext {
 
     public MysqlCapability getServerCapability() {
         return serverCapability;
+    }
+
+    public MysqlCapability getClientCapability() {
+        return clientCapability;
+    }
+
+    public void setClientCapability(MysqlCapability clientCapability) {
+        this.clientCapability = clientCapability;
     }
 
     public String getDatabase() {
