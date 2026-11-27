@@ -875,7 +875,40 @@ public class MergeCommitTaskTest extends BatchWriteTestBase {
         }
     }
 
+<<<<<<< HEAD
     private MergeCommitTask createTaskWithState(MergeCommitTask.TaskState targetState) {
+=======
+    @Test
+    public void testScanBytesAreReceivedBytes() throws Exception {
+        MergeCommitTask task = new MergeCommitTask(
+                GlobalStateMgr.getCurrentState().getNextId(),
+                DATABASE_1.getId(),
+                new TableId(DB_NAME_1, TABLE_NAME_1_1),
+                "test_received_bytes_" + DebugUtil.printId(UUIDUtil.genTUniqueId()),
+                UUIDUtil.genTUniqueId(),
+                streamLoadInfo,
+                1000,
+                kvParams,
+                "test_user",
+                warehouseName,
+                new HashSet<>(Arrays.asList(10002L, 10003L)),
+                coordinatorFactory,
+                loadExecuteCallback);
+        stubCoordinatorSuccess();
+        Map<String, String> counters = new HashMap<>();
+        counters.put(LoadEtlTask.DPP_NORMAL_ALL, "100");
+        counters.put(LoadEtlTask.DPP_ABNORMAL_ALL, "0");
+        counters.put(LoadJob.LOADED_BYTES, "1000");
+        counters.put(LoadJob.RECEIVED_BYTES, "4096");
+        when(coordinator.getLoadCounters()).thenReturn(counters);
+        task.run();
+        assertEquals(MergeCommitTask.TaskState.FINISHED, task.getTaskState().first);
+        // the bytes the backends received for the merged requests, not the bytes the sink wrote
+        assertEquals(4096, task.toThrift().get(0).getNum_scan_bytes());
+    }
+
+    private MergeCommitTask createTaskWithState(MergeCommitTask.TaskState targetState) throws Exception {
+>>>>>>> 907ebdd8b07... [BugFix][RB-1881] Fill in Stream Load fields missing or wrong in information_schema.loads (#70869)
         String taskLabel = "test_pending_" + DebugUtil.printId(UUIDUtil.genTUniqueId());
         TUniqueId taskLoadId = UUIDUtil.genTUniqueId();
         MergeCommitTask task = new MergeCommitTask(

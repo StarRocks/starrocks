@@ -890,6 +890,13 @@ public class QueryRuntimeProfile {
         this.loadCounters.put(LoadEtlTask.DPP_ABNORMAL_ALL, String.valueOf(numRowsAbnormal));
         this.loadCounters.put(LoadJob.UNSELECTED_ROWS, String.valueOf(numRowsUnselected));
         this.loadCounters.put(LoadJob.LOADED_BYTES, String.valueOf(numLoadBytesTotal));
+        // Only a load that reads stream load pipes reports the bytes it received, and an older backend never does, so
+        // the counter stays absent until some instance reports it.
+        if (loadCounters.containsKey(LoadJob.RECEIVED_BYTES) || newLoadCounters.containsKey(LoadJob.RECEIVED_BYTES)) {
+            long receivedBytes = getCounterLongValueOrDefault(loadCounters, LoadJob.RECEIVED_BYTES, 0L)
+                    + getCounterLongValueOrDefault(newLoadCounters, LoadJob.RECEIVED_BYTES, 0L);
+            this.loadCounters.put(LoadJob.RECEIVED_BYTES, String.valueOf(receivedBytes));
+        }
     }
 
     private long getCounterLongValueOrDefault(Map<String, String> counters, String key, long defaultValue) {

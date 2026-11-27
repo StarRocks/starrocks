@@ -26,12 +26,16 @@
 #include <utility>
 
 #include "base/testutil/assert.h"
+#include "base/uid_util.h"
 #include "base/utility/defer_op.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "common/status.h"
+#include "compute_env/load/load_stream_mgr.h"
+#include "compute_env/load/stream_load_pipe.h"
 #include "compute_env/load_path/load_path_mgr.h"
 #include "gen_cpp/Descriptors_types.h"
+#include "runtime/byte_buffer.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
 #include "runtime/mem_tracker.h"
@@ -777,6 +781,76 @@ TEST_F(ArrowScannerTest, TestScanArrowStreamMultiBatch) {
     ASSERT_TRUE(res2.status().is_end_of_file());
 
     scanner->close();
+}
+
+// An Arrow stream ends at its end-of-stream marker, so the scanner can finish while the producer keeps the pipe open
+// (a merge commit window). A scanner that read the marker counts what the pipe received, also when it closes right
+// after returning the last rows; one that closes before the marker does not.
+TEST_F(ArrowScannerTest, TestStreamPipeReportsReceivedBytesAtEndOfStream) {
+    std::string file_path;
+    create_arrow_stream_file("test_stream_pipe.arrow", &file_path);
+    std::ifstream file(file_path, std::ios::binary);
+    ASSERT_TRUE(file.is_open());
+    std::stringstream content;
+    content << file.rdbuf();
+    const std::string data = content.str();
+
+    LoadStreamMgr load_stream_mgr;
+    RuntimeServices runtime_services;
+    runtime_services.load_stream_mgr = &load_stream_mgr;
+    QueryExecutionServices query_execution_services;
+    query_execution_services.runtime = &runtime_services;
+
+    SlotTypeDescInfoArray src_slot_infos;
+    src_slot_infos.emplace_back("c0_int", TYPE_INT_DESC, true);
+    src_slot_infos.emplace_back("c1_str", TYPE_VARCHAR_DESC, true);
+    src_slot_infos.emplace_back("c2_double", TYPE_DOUBLE_DESC, true);
+    SlotTypeDescInfoArray dst_slot_infos = src_slot_infos;
+
+    // The default chunk holds all 5 rows, so its read goes on to the marker. A chunk of 2 rows returns before it.
+    struct Case {
+        const char* name;
+        int32_t chunk_size;
+        bool read_to_eof;
+        bool counted;
+    };
+    for (const Case& c :
+         {Case{"closed after the last rows", 0, false, true}, Case{"closed after end of file", 0, true, true},
+          Case{"closed before the marker", 2, false, false}}) {
+        SCOPED_TRACE(c.name);
+        const UniqueId load_id = UniqueId::gen_uid();
+        // A read past what the pipe holds fails instead of waiting for a producer that never finishes it.
+        auto pipe = std::make_shared<StreamLoadPipe>(/*non_blocking_read=*/true, /*non_blocking_wait_us=*/1000,
+                                                     DEFAULT_STREAM_LOAD_PIPE_BUFFERED_BYTES,
+                                                     DEFAULT_STREAM_LOAD_PIPE_CHUNK_SIZE);
+        ASSERT_OK(load_stream_mgr.put(load_id, pipe));
+        DeferOp remove_pipe([&] { load_stream_mgr.remove(load_id); });
+        auto buf = ByteBuffer::allocate_with_tracker(data.size()).value();
+        buf->put_bytes(data.data(), data.size());
+        buf->flip_to_read();
+        ASSERT_OK(pipe->append(std::move(buf)));
+
+        auto ranges = generate_ranges({"stream-load-pipe"}, 3, {});
+        ranges[0].file_type = TFileType::FILE_STREAM;
+        ranges[0].__set_load_id(load_id.to_thrift());
+        auto* desc_tbl = DescTblHelper::generate_desc_tbl(_runtime_state, _obj_pool, {src_slot_infos, dst_slot_infos});
+        auto scanner = create_arrow_scanner("UTC", desc_tbl, {}, ranges, c.chunk_size);
+        scanner->TEST_runtime_state()->set_query_execution_services(&query_execution_services);
+
+        ASSERT_OK(scanner->open());
+        auto res = scanner->get_next();
+        ASSERT_OK(res.status());
+        const size_t expected_rows = c.chunk_size > 0 ? c.chunk_size : 5;
+        ASSERT_EQ(expected_rows, res.value()->num_rows());
+        if (c.read_to_eof) {
+            ASSERT_TRUE(scanner->get_next().status().is_end_of_file());
+        }
+        ASSERT_FALSE(pipe->finished());
+        scanner->close();
+
+        const int64_t expected_bytes = c.counted ? static_cast<int64_t>(data.size()) : 0;
+        EXPECT_EQ(expected_bytes, scanner->TEST_runtime_state()->num_bytes_received_from_stream());
+    }
 }
 
 } // namespace starrocks
