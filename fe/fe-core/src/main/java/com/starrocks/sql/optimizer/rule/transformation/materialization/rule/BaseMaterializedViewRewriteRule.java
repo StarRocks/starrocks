@@ -238,6 +238,17 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
                 continue;
             }
 
+            // An over-limit candidate must not hide a legal base plan or another MV.
+            int partitionLimit = context.getSessionVariable().getScanOlapPartitionNumLimit();
+            if (partitionLimit > 0 && MvUtils.getOlapScanNode(candidate).stream().anyMatch(scan -> {
+                List<Long> selectedPartitionIds = scan.getSelectedPartitionId();
+                return selectedPartitionIds == null || selectedPartitionIds.size() > partitionLimit;
+            })) {
+                logMVRewrite(mvRewriteContext, "skip candidate without a proven partition count within limit {}",
+                        partitionLimit);
+                continue;
+            }
+
             if (queryExpression.getGroupExpression() != null) {
                 int currentRootGroupId = queryExpression.getGroupExpression().getGroup().getId();
                 mvContext.addMatchedGroup(currentRootGroupId);

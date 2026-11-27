@@ -199,6 +199,13 @@ public class RewriteSimpleAggToMetaScanRule extends TransformationRule {
         LogicalAggregationOperator aggregationOperator = (LogicalAggregationOperator) input.getOp();
         LogicalOlapScanOperator scanOperator =
                 (LogicalOlapScanOperator) input.getInputs().get(0).getInputs().get(0).getOp();
+        int partitionLimit = context.getSessionVariable().getScanOlapPartitionNumLimit();
+        List<Long> selectedPartitionIds = scanOperator.getSelectedPartitionId();
+        // Keep the OLAP scan if converting it would bypass the final scan's partition limit.
+        // Do not reject here: a later materialized-view rewrite can still change the selected scan.
+        if (partitionLimit > 0 && (selectedPartitionIds == null || selectedPartitionIds.size() > partitionLimit)) {
+            return false;
+        }
         OlapTable table = (OlapTable) scanOperator.getTable();
         // Direct synchronous-MV query copies retain the source table ID/name, but change their base index.
         // Table-level statistics and row counts describe the original base index, not a filtered/aggregated MV.
