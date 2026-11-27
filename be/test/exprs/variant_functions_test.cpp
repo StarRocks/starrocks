@@ -18,6 +18,7 @@
 #include <gtest/gtest-param-test.h>
 #include <gtest/gtest.h>
 
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -638,6 +639,133 @@ TEST_F(VariantFunctionsTest, get_variant_int_shredded_typed_null_no_fallback_to_
     ASSERT_TRUE(result.ok());
     ASSERT_EQ(1, result.value()->size());
     ASSERT_TRUE(result.value()->is_null(0));
+}
+
+// One row of a shredded file: `paths` in typed_value, `rest_json` in value.
+static VariantColumn::MutablePtr build_one_row_shredded_column(std::vector<std::string> paths,
+                                                               std::vector<TypeDescriptor> types,
+                                                               MutableColumns typed_cols,
+                                                               const std::string& rest_json) {
+    auto column = VariantColumn::create();
+    VariantRowValue rest = create_variant_from_json_text(rest_json);
+    auto rest_metadata = rest.get_metadata().raw();
+    auto rest_value = rest.get_value().raw();
+    auto metadata_col = BinaryColumn::create();
+    auto remain_col = BinaryColumn::create();
+    metadata_col->append(Slice(rest_metadata.data(), rest_metadata.size()));
+    remain_col->append(Slice(rest_value.data(), rest_value.size()));
+    column->set_shredded_columns(std::move(paths), std::move(types), std::move(typed_cols), std::move(metadata_col),
+                                 std::move(remain_col));
+    return column;
+}
+
+static VariantColumn::MutablePtr build_one_row_shredded_column(const std::vector<std::string>& paths,
+                                                               const std::vector<int64_t>& typed,
+                                                               const std::string& rest_json) {
+    std::vector<TypeDescriptor> types;
+    MutableColumns typed_cols;
+    for (int64_t value : typed) {
+        types.emplace_back(TYPE_BIGINT_DESC);
+        typed_cols.emplace_back(build_nullable_int64_column({value}, {0}));
+    }
+    return build_one_row_shredded_column(paths, std::move(types), std::move(typed_cols), rest_json);
+}
+
+static void assert_path_ints(const ColumnPtr& column, const std::string& path,
+                             const std::vector<std::optional<int64_t>>& expected) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    Columns columns{column, ConstColumn::create(ColumnTestHelper::build_column<Slice>({Slice(path)}), column->size())};
+    auto result = VariantFunctions::get_variant_int(ctx.get(), columns);
+    ASSERT_TRUE(result.ok());
+    ASSERT_EQ(expected.size(), result.value()->size());
+    for (size_t i = 0; i < expected.size(); ++i) {
+        ASSERT_EQ(!expected[i].has_value(), result.value()->is_null(i)) << path << " at row " << i;
+        if (expected[i].has_value()) {
+            ASSERT_EQ(*expected[i], result.value()->get(i).get_int64()) << path << " at row " << i;
+        }
+    }
+}
+
+// Path reads see every row after merging columns shredded on different paths.
+TEST_F(VariantFunctionsTest, get_variant_int_after_merging_differently_shredded_columns) {
+    // Shredded and unshredded rows, merged in both orders.
+    {
+        auto shredded = build_one_row_shredded_column({"id"}, {1}, R"({"age":21})");
+        auto unshredded = VariantColumn::create();
+        unshredded->append(create_variant_from_json_text(R"({"id":7,"age":27})"));
+
+        MutableColumnPtr merged = shredded->clone();
+        merged->append(*unshredded, 0, 1);
+        assert_path_ints(std::move(merged), "$.id", {1, 7});
+
+        unshredded->append(*shredded, 0, 1);
+        assert_path_ints(std::move(unshredded), "$.id", {7, 1});
+    }
+    // A path both sides hold typed stays typed; the path one side keeps in remain is folded.
+    {
+        auto merged = build_one_row_shredded_column({"id", "age"}, {1, 21}, R"({"zip":100})");
+        merged->append(*build_one_row_shredded_column({"id"}, {7}, R"({"age":27})"), 0, 1);
+        EXPECT_EQ(std::vector<std::string>{"id"}, merged->shredded_paths());
+        assert_path_ints(std::move(merged), "$.age", {21, 27});
+    }
+    // One side shreds a.b, the other its ancestor a.
+    {
+        auto merged = build_one_row_shredded_column({"a.b"}, {1}, R"({"a":{"c":3}})");
+        MutableColumns typed_a;
+        typed_a.emplace_back(build_nullable_variant_column({create_variant_from_json_text(R"({"b":7,"c":8})")}, {0}));
+        merged->append(*build_one_row_shredded_column({"a"}, {TypeDescriptor(TYPE_VARIANT)}, std::move(typed_a),
+                                                      R"({"zip":200})"),
+                       0, 1);
+        assert_path_ints(std::move(merged), "$.a.b", {1, 7});
+    }
+    // Folding id rebuilds the row metadata; the fallback value {"k":5} of the kept path a must still read right.
+    {
+        VariantRowValue row = create_variant_from_json_text(R"({"id":1,"a":{"k":5}})");
+        auto path_a = VariantPathParser::parse(std::string("$.a"));
+        ASSERT_TRUE(path_a.ok());
+        auto field = VariantPath::seek_view(row.as_ref(), path_a.value());
+        ASSERT_TRUE(field.ok());
+        std::string_view field_raw = field->get_value().raw();
+        std::string_view metadata_raw = row.get_metadata().raw();
+        std::string empty_object;
+        VariantEncoder::append_object_container(&empty_object, {}, {}, {});
+
+        MutableColumns typed_cols;
+        typed_cols.emplace_back(build_nullable_int64_column({1}, {0}));
+        typed_cols.emplace_back(build_nullable_int64_column({0}, {1}));
+        MutableColumns fallback_cols;
+        fallback_cols.emplace_back(nullptr);
+        fallback_cols.emplace_back(VariantColumn::create_fallback_column());
+        fallback_cols[1]->append_datum(Datum(Slice(field_raw.data(), field_raw.size())));
+        auto metadata_col = BinaryColumn::create();
+        metadata_col->append(Slice(metadata_raw.data(), metadata_raw.size()));
+        auto remain_col = BinaryColumn::create();
+        remain_col->append(Slice(empty_object));
+        auto merged = VariantColumn::create();
+        merged->set_shredded_columns({"id", "a"}, {TYPE_BIGINT_DESC, TYPE_BIGINT_DESC}, std::move(typed_cols),
+                                     std::move(fallback_cols), std::move(metadata_col), std::move(remain_col));
+
+        auto unshredded = VariantColumn::create();
+        unshredded->append(create_variant_from_json_text(R"({"id":7})"));
+        merged->append(*unshredded, 0, 1);
+        assert_path_ints(std::move(merged), "$.a.k", {5, std::nullopt});
+    }
+    // Rows appended one at a time (as IF/CASE, unnest and nested-loop join do) come from the right source rows.
+    {
+        auto shredded = build_one_row_shredded_column({"id"}, {1}, R"({"age":21})");
+        shredded->append(*build_one_row_shredded_column({"id"}, {2}, R"({"age":22})"), 0, 1);
+        auto unshredded = VariantColumn::create();
+        unshredded->append(create_variant_from_json_text(R"({"id":7})"));
+        unshredded->append(create_variant_from_json_text(R"({"id":8})"));
+
+        auto merged = VariantColumn::create();
+        merged->append(*shredded, 0, 1);
+        merged->append(*unshredded, 1, 1);
+        const uint32_t second_row = 1;
+        merged->append_selective(*shredded, &second_row, 0, 1);
+        merged->append_value_multiple_times(*unshredded, 0, 2);
+        assert_path_ints(std::move(merged), "$.id", {1, 8, 2, 7, 7});
+    }
 }
 
 // Verifies array-index suffix seek from typed variant payload (e.g. "$.a.c[0]").
