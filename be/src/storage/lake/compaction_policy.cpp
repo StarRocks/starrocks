@@ -398,7 +398,8 @@ StatusOr<std::unique_ptr<SizeTieredLevel>> SizeTieredCompactionPolicy::pick_max_
             ++num_delete_rowsets;
         }
     }
-    // Only gate the delete-version trigger; explicit force and level selection keep their original behavior.
+    // Gate the delete-version trigger here and the level that carries delete rowsets below; explicit force and
+    // the selection among the other levels keep their original behavior.
     force_base_compaction =
             force_base_compaction || (allow_base_compaction && num_delete_rowsets >= config::tablet_max_versions / 10);
     if (forced_base_compaction != nullptr) {
@@ -417,8 +418,6 @@ StatusOr<std::unique_ptr<SizeTieredLevel>> SizeTieredCompactionPolicy::pick_max_
     size_t segment_num = 0;
     int64_t level_multiple = config::size_tiered_level_multiple;
     auto keys_type = metadata.schema().keys_type();
-    auto min_compaction_segment_num =
-            std::max<int64_t>(2, std::min(config::min_cumulative_compaction_num_singleton_deltas, level_multiple));
     int64_t level_size = -1;
     int64_t total_size = 0;
     for (int i = 0, size = rowsets.size(); i < size; ++i) {
@@ -437,41 +436,27 @@ StatusOr<std::unique_ptr<SizeTieredLevel>> SizeTieredCompactionPolicy::pick_max_
             if ((!transient_rowsets.empty() && transient_rowsets[0] == 0) || i == 0) {
                 // do nothing
             } else {
-                // while upper level segment num less min_compaction_segment_num, we can merge into one level
+                // Fold every preceding level into the current one, so that the level carrying this delete
+                // rowset starts at rowset 0 and can be picked as a base compaction. The levels in
+                // |order_levels| are contiguous and start at rowset 0, so the fold always reaches rowset 0.
+                //
+                // Do not skip a level because it has enough segments to be compacted on its own: the FE only
+                // schedules a tablet whose selected level reaches lake_compaction_score_selector_min_score,
+                // so a level below that would neither be compacted nor folded, and nothing older than this
+                // delete rowset would ever be compacted again.
+                DCHECK(!transient_rowsets.empty());
                 int64_t upper_level = order_levels.size() - 1;
-                while (upper_level >= 0) {
-                    if ((order_levels[upper_level]->segment_num < min_compaction_segment_num ||
-                         order_levels[upper_level]->rowsets.front() == 0) &&
-                        transient_rowsets.front() == order_levels[upper_level]->rowsets.back() + 1) {
-                        transient_rowsets.insert(transient_rowsets.begin(), order_levels[upper_level]->rowsets.begin(),
-                                                 order_levels[upper_level]->rowsets.end());
-                        level_size = std::max(order_levels[upper_level]->level_size, level_size);
-                        segment_num += order_levels[upper_level]->segment_num;
-                        total_size += order_levels[upper_level]->total_size;
-                        priority_levels.erase(order_levels[upper_level].get());
-                        upper_level--;
-                    } else {
-                        break;
-                    }
+                while (upper_level >= 0 && transient_rowsets.front() == order_levels[upper_level]->rowsets.back() + 1) {
+                    transient_rowsets.insert(transient_rowsets.begin(), order_levels[upper_level]->rowsets.begin(),
+                                             order_levels[upper_level]->rowsets.end());
+                    level_size = std::max(order_levels[upper_level]->level_size, level_size);
+                    segment_num += order_levels[upper_level]->segment_num;
+                    total_size += order_levels[upper_level]->total_size;
+                    priority_levels.erase(order_levels[upper_level].get());
+                    upper_level--;
                 }
                 order_levels.resize(upper_level + 1);
-
-                // after merge, check if we match base compaction condition
-                if (!transient_rowsets.empty() && transient_rowsets[0] != 0) {
-                    auto level = std::make_unique<SizeTieredLevel>(
-                            transient_rowsets, segment_num, level_size, total_size,
-                            cal_compaction_score(segment_num, level_size, total_size, max_level_size, keys_type,
-                                                 reached_max_version));
-                    priority_levels.emplace(level.get());
-                    order_levels.emplace_back(std::move(level));
-                }
-
-                if (transient_rowsets.empty() || transient_rowsets[0] != 0) {
-                    segment_num = 0;
-                    transient_rowsets.clear();
-                    level_size = -1;
-                    continue;
-                }
+                DCHECK_EQ(0, transient_rowsets.front());
             }
         } else if ((!force_base_compaction || (!transient_rowsets.empty() && transient_rowsets[0] != 0)) &&
                    level_size > config::size_tiered_min_level_size && rowset_size < level_size &&
@@ -502,6 +487,13 @@ StatusOr<std::unique_ptr<SizeTieredLevel>> SizeTieredCompactionPolicy::pick_max_
                                                                        max_level_size, keys_type, reached_max_version));
         priority_levels.emplace(level.get());
         order_levels.emplace_back(std::move(level));
+    }
+
+    // Every delete rowset ends up in the level that starts at rowset 0 (see the fold above). Compacting that
+    // level rewrites everything older than the delete rowsets in order to drop them, which is a base
+    // compaction, so it is not offered while base compaction is not allowed.
+    if (!allow_base_compaction && !force_base_compaction && num_delete_rowsets > 0 && !order_levels.empty()) {
+        priority_levels.erase(order_levels.front().get());
     }
 
     if (priority_levels.empty()) {
@@ -563,8 +555,13 @@ StatusOr<std::vector<RowsetPtr>> SizeTieredCompactionPolicy::pick_rowsets() {
             }
         }
     }
-    // An ordinary size-tiered pick may also start at rowset 0; only a forced pick counts for the base interval.
-    _picked_base_compaction = forced_base_compaction && !input_rowsets.empty() && input_rowsets.front()->index() == 0;
+    // An ordinary size-tiered pick may also start at rowset 0; it counts for the base interval only when it is
+    // forced or when it drops delete rowsets, which rewrites everything older than them.
+    bool drops_delete_rowsets = std::any_of(input_rowsets.begin(), input_rowsets.end(), [&](const RowsetPtr& r) {
+        return _tablet_metadata->rowsets(r->index()).has_delete_predicate();
+    });
+    _picked_base_compaction = (forced_base_compaction || drops_delete_rowsets) && !input_rowsets.empty() &&
+                              input_rowsets.front()->index() == 0;
 
     const int log_level = 3;
     // debug

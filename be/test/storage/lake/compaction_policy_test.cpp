@@ -671,20 +671,25 @@ TEST_F(LakeCompactionPolicyTest, test_size_tiered_backtrace_base_compaction_dele
     _tablet_metadata->set_version(2);
     CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
 
-    ASSERT_EQ(3, compaction_score(_tablet_mgr.get(), _tablet_metadata));
+    // Every level older than the delete rowset is folded into the base level, including the 3-segment
+    // level [3, 4, 5]: it is not compacted on its own first anymore (see test_size_tiered_delete_fence).
+    ASSERT_EQ(7, compaction_score(_tablet_mgr.get(), _tablet_metadata));
 
     ASSIGN_OR_ABORT(auto compaction_policy,
                     CompactionPolicy::create(_tablet_mgr.get(), _tablet_metadata, false /* force_base_compaction */));
-    // compact 3 ~ 5
     ASSIGN_OR_ABORT(auto input_rowsets, compaction_policy->pick_rowsets());
-    // compaction input rowsets: [3, 4, 5]
-    ASSERT_EQ(3, input_rowsets.size());
+    // compaction input rowsets: [1, 2, 3, 4, 5, 6, 7]
+    ASSERT_EQ(7, input_rowsets.size());
     for (int i = 0; i < input_rowsets.size(); ++i) {
-        EXPECT_EQ(i + 3, input_rowsets[i]->id());
+        EXPECT_EQ(i + 1, input_rowsets[i]->id());
     }
 
-    // compaction version 3
+    // A second, independent layout: the delete rowset is still last, but the data in front of it is spread
+    // over three levels ([1, 2], [8], [6]); the fold has to walk through all of them to reach rowset 0.
     // rowsets: [1, 2, 8, 6, 7]
+    // release the Rowset objects of version 2 before the shared metadata is rewritten (Rowset::~Rowset checks
+    // that its index is still inside the metadata it was created from)
+    input_rowsets.clear();
     _tablet_metadata->clear_rowsets();
     add_data_rowset(1, false, 3);
     add_data_rowset(2, false, 3);
@@ -770,6 +775,112 @@ TEST_F(LakeCompactionPolicyTest, test_size_tiered_backtrace_base_compaction_cont
     for (int i = 0; i < input_rowsets.size(); ++i) {
         EXPECT_EQ(i + 1, input_rowsets[i]->id());
     }
+}
+
+// Delete fence: a level with [min_compaction_segment_num, FE min score) segments sits between the base level
+// and a delete rowset. The FE never schedules it (too few segments) and the old fold rule never folded it
+// (too many segments), so the delete rowset was left out of every level and everything older than the
+// newest delete rowset was never compacted again.
+//
+// rowsets:      [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+// rowsets size: [8192000, 1638400, 1638400, 1638400, 327680, 327680, delete, 65536, 65536, delete, 65536, 65536]
+// levels:       [1] [2, 3, 4] [5, 6] (7) [8, 9] (10) [11, 12]
+// compaction input rowsets: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+TEST_F(LakeCompactionPolicyTest, test_size_tiered_delete_fence) {
+    config::enable_size_tiered_compaction_strategy = true;
+    // the fixture caps a compaction at 10 segments, which happens to equal the size of the base level
+    // below; raise the cap so the assertions check the level chosen by the policy rather than the cap
+    config::max_cumulative_compaction_num_singleton_deltas = 20;
+
+    uint32 id = 1;
+    add_data_rowset(id++, false, 4);
+    add_data_rowset(id++, false, 3);
+    add_data_rowset(id++, false, 3);
+    add_data_rowset(id++, false, 3);
+    add_data_rowset(id++, false, 2);
+    add_data_rowset(id++, false, 2);
+    add_delete_rowset(id++);
+    add_data_rowset(id++, false, 1);
+    add_data_rowset(id++, false, 1);
+    add_delete_rowset(id++);
+    add_data_rowset(id++, false, 1);
+    add_data_rowset(id++, false, 1);
+
+    _tablet_metadata->set_version(2);
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+
+    // base level [1 .. 10] = 8 data segments + 2 delete rowsets; [11, 12] is the newest level and is
+    // small enough to be sealed on its own, so it stays outside the base level
+    ASSERT_EQ(10, compaction_score(_tablet_mgr.get(), _tablet_metadata));
+
+    ASSIGN_OR_ABORT(auto compaction_policy,
+                    CompactionPolicy::create(_tablet_mgr.get(), _tablet_metadata, false /* force_base_compaction */));
+    ASSIGN_OR_ABORT(auto input_rowsets, compaction_policy->pick_rowsets());
+    ASSERT_EQ(10, input_rowsets.size());
+    for (int i = 0; i < input_rowsets.size(); ++i) {
+        EXPECT_EQ(i + 1, input_rowsets[i]->id());
+    }
+}
+
+// Same layout as test_size_tiered_delete_fence. Compacting the base level [1 .. 10] drops the delete rowsets by
+// rewriting everything older than them, so it is a base compaction: it is not offered inside a forbidden time
+// range or before the minimum base compaction interval has elapsed, and it counts for that interval when it runs.
+TEST_F(LakeCompactionPolicyTest, test_size_tiered_delete_fold_respects_base_restrictions) {
+    config::enable_size_tiered_compaction_strategy = true;
+    config::max_cumulative_compaction_num_singleton_deltas = 20;
+
+    uint32 id = 1;
+    add_data_rowset(id++, false, 4);
+    add_data_rowset(id++, false, 3);
+    add_data_rowset(id++, false, 3);
+    add_data_rowset(id++, false, 3);
+    add_data_rowset(id++, false, 2);
+    add_data_rowset(id++, false, 2);
+    add_delete_rowset(id++);
+    add_data_rowset(id++, false, 1);
+    add_data_rowset(id++, false, 1);
+    add_delete_rowset(id++);
+    add_data_rowset(id++, false, 1);
+    add_data_rowset(id++, false, 1);
+
+    _tablet_metadata->set_version(2);
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+
+    ASSIGN_OR_ABORT(auto allowed, CompactionPolicy::create(_tablet_mgr.get(), _tablet_metadata, false));
+    ASSIGN_OR_ABORT(auto base_rowsets, allowed->pick_rowsets());
+    ASSERT_EQ(10, base_rowsets.size());
+    EXPECT_EQ(1, base_rowsets.front()->id());
+    EXPECT_TRUE(allowed->picked_base_compaction());
+
+    // forbidden time range: the only other level is [11, 12], which is too small to be compacted
+    ASSIGN_OR_ABORT(auto forbidden, CompactionPolicy::create(_tablet_mgr.get(), _tablet_metadata, false, false, false));
+    ASSIGN_OR_ABORT(auto forbidden_rowsets, forbidden->pick_rowsets());
+    EXPECT_TRUE(forbidden_rowsets.empty());
+    EXPECT_FALSE(forbidden->picked_base_compaction());
+
+    // inside the minimum interval the base level is neither picked nor reported as the compaction score
+    config::base_compaction_interval_seconds_since_last_operation = 3600;
+    _tablet_metadata->set_last_base_compaction_time(time(nullptr));
+    EXPECT_EQ(2, compaction_score(_tablet_mgr.get(), _tablet_metadata));
+    ASSIGN_OR_ABORT(auto cooling, CompactionPolicy::create(_tablet_mgr.get(), _tablet_metadata, false));
+    ASSIGN_OR_ABORT(auto cooling_rowsets, cooling->pick_rowsets());
+    EXPECT_TRUE(cooling_rowsets.empty());
+    EXPECT_FALSE(cooling->picked_base_compaction());
+
+    _tablet_metadata->set_last_base_compaction_time(time(nullptr) - 3601);
+    EXPECT_EQ(10, compaction_score(_tablet_mgr.get(), _tablet_metadata));
+    ASSIGN_OR_ABORT(auto ready, CompactionPolicy::create(_tablet_mgr.get(), _tablet_metadata, false));
+    ASSIGN_OR_ABORT(auto ready_rowsets, ready->pick_rowsets());
+    ASSERT_EQ(10, ready_rowsets.size());
+    EXPECT_TRUE(ready->picked_base_compaction());
+
+    // an explicit manual compaction ignores both restrictions
+    _tablet_metadata->set_last_base_compaction_time(time(nullptr));
+    ASSIGN_OR_ABORT(auto manual, CompactionPolicy::create(_tablet_mgr.get(), _tablet_metadata, true, false, false));
+    ASSIGN_OR_ABORT(auto manual_rowsets, manual->pick_rowsets());
+    ASSERT_EQ(12, manual_rowsets.size());
+    EXPECT_EQ(1, manual_rowsets.front()->id());
+    EXPECT_TRUE(manual->picked_base_compaction());
 }
 
 // Build a primary-key tablet whose rowsets carry explicit num_dels (so the policy does not need
