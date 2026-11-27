@@ -19,14 +19,16 @@ products: [oss, enterprise, cloud, anywhere]
 ## 構文
 
 ```Plain
-BIGINT window_funnel(BIGINT window, DATE|DATETIME time, INT mode, array[cond1, cond2, ..., condN])
+BIGINT window_funnel(BIGINT window, DATE|DATETIME|INT|BIGINT time, INT mode, array[cond1, cond2, ..., condN])
 ```
 
 ## パラメータ
 
 - `window`: スライディングウィンドウの長さ。サポートされるデータ型は BIGINT です。単位は `time` パラメータに依存します。`time` のデータ型が DATE の場合、単位は日です。`time` のデータ型が DATETIME の場合、単位は秒です。
+  - 0 以上のウィンドウでは、上限を含む `event_time <= first_event_time + window` の判定を維持します。INT および BIGINT 入力では、ウィンドウの単位は入力値と同じです。
+  - `-1` は、各チェーンを最初のイベントが発生した UTC 暦日に制限します。DATE 入力は同じ日付である必要があります。DATETIME 値はセッションのタイムゾーンを適用せず UTC として解釈します。このモードでは、INT および BIGINT 入力はミリ秒単位の Unix タイムスタンプである必要があります。`-1` 未満の値は無効です。
 
-- `time`: タイムスタンプを含む列。DATE と DATETIME 型がサポートされています。
+- `time`: タイムスタンプを含む列。DATE、DATETIME、INT、および BIGINT 型がサポートされています。
 
 - `mode`: イベントチェーンがフィルタリングされるモード。サポートされるデータ型は INT です。値の範囲: 0, 1, 2。
   - `0` はデフォルト値で、一般的なファネル計算を示します。
@@ -35,6 +37,7 @@ BIGINT window_funnel(BIGINT window, DATE|DATETIME time, INT mode, array[cond1, c
   - `4` は `INCREASE` モードを示し、フィルタリングされたイベントは厳密に増加するタイムスタンプを持たなければなりません。重複するタイムスタンプはイベントチェーンを乱します。このモードはバージョン 2.5 からサポートされています。
 
 - `array`: 定義されたイベントチェーン。配列でなければなりません。
+  - `mode = 4` では、`[event_type = 'A', event_type = 'A']` や `[event_type = 'A', event_type = 'B', event_type = 'B']` のように条件を繰り返すことができます。各ステップには厳密に増加するタイムスタンプが必要です。1 行、または同じタイムスタンプを持つ複数行では、連続するステップを満たせません。そのため、タイムスタンプが増加する 2 つの A イベントは最初の例を完了できます。他のフィルタリングモードの既存のルールは維持されます。
 
 ## 戻り値
 
