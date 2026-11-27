@@ -95,6 +95,12 @@ public class SPMAst2SQLBuilder {
             return options;
         }
 
+        /** SPM persists both digest and bound SQL text; its literal policy remains controlled by enableSPMDigest. */
+        @Override
+        protected boolean useLegacyDigestText() {
+            return true;
+        }
+
         @Override
         protected String printWithParentheses(ParseNode node) {
             if (node instanceof SlotRef || node instanceof LiteralExpr) {
