@@ -3177,7 +3177,10 @@ public class OlapTable extends Table {
             }
         }
 
-        if (isFileBundling() && isCloudNativeTable()) {
+        // Printed whichever way it is set. Left out, it would fall back to Config.enable_file_bundling
+        // when this DDL is replayed (CREATE TABLE LIKE, rebuilding a table from SHOW CREATE TABLE), and
+        // the new table would use another publish path and metadata format than the one it describes.
+        if (isCloudNativeTable()) {
             properties.put(PropertyAnalyzer.PROPERTIES_FILE_BUNDLING, isFileBundling().toString());
         }
 
