@@ -370,6 +370,8 @@ public class CachingIcebergCatalog implements IcebergCatalog {
             throws StarRocksConnectorException {
         delegate.renameTable(connectContext, dbName, tblName, newTblName);
         invalidateCache(new IcebergTableName(dbName, tblName));
+        // a table that had the new name before, dropped by another engine, may still be cached under it
+        invalidateCache(new IcebergTableName(dbName, newTblName));
     }
 
     @Override

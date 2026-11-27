@@ -2121,6 +2121,50 @@ public class IcebergMetadataTest extends TableTestBase {
     }
 
     @Test
+    public void testAlterTableRenameInvalidatesBothNamesOnOtherFes(@Mocked IcebergHiveCatalog icebergHiveCatalog)
+            throws StarRocksException {
+        // A peer may still cache a table that had the new name before, dropped by another engine
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), null);
+        List<String> invalidated = recordOtherFeInvalidations(() -> {
+        });
+
+        metadata.alterTable(new ConnectContext(), new AlterTableStmt(createTableRef(new TableName("db", "tbl")),
+                Lists.newArrayList(new TableRenameClause("newTbl"))));
+
+        Assertions.assertEquals(List.of(invalidationOf("db", "tbl"), invalidationOf("db", "newTbl")), invalidated);
+    }
+
+    @Test
+    public void testAlterTableInvalidatesCachesWhenCommitStateIsUnknown() throws Exception {
+        // The ALTER may have been applied although its commit reported an unknown state, as in truncateTable
+        String dbName = "iceberg_db";
+        String tableName = "iceberg_table";
+        TestTables.TestTable stateUnknownTable = TestTables.tableWithCommitSucceedButStateUnknown(tableDir, "tb");
+        IcebergCatalog icebergCatalog = Mockito.mock(IcebergCatalog.class);
+        Mockito.when(icebergCatalog.getTable(Mockito.any(), Mockito.eq(dbName), Mockito.eq(tableName)))
+                .thenReturn(stateUnknownTable);
+        Mockito.when(icebergCatalog.getIcebergCatalogType()).thenReturn(IcebergCatalogType.HIVE_CATALOG);
+        List<String> invalidated = recordOtherFeInvalidations(() -> {
+        });
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergCatalog,
+                Executors.newSingleThreadExecutor(), DEFAULT_CATALOG_PROPERTIES);
+
+        ColumnDef added = new ColumnDef("c1", new TypeDef(TypeFactory.createType(PrimitiveType.INT)), true);
+        AlterTableStmt stmt = new AlterTableStmt(createTableRef(new TableName(CATALOG_NAME, dbName, tableName)),
+                Lists.newArrayList(new AddColumnClause(added, null, null, new HashMap<>())));
+        Exception exception = Assertions.assertThrows(Exception.class, () -> metadata.alterTable(connectContext, stmt));
+
+        stateUnknownTable.refresh();
+        Assertions.assertAll(
+                () -> Assertions.assertTrue(exception instanceof CommitStateUnknownException
+                        || exception.getCause() instanceof CommitStateUnknownException, exception.toString()),
+                () -> Assertions.assertNotNull(stateUnknownTable.schema().findField("c1"), "the ALTER was applied"),
+                () -> Mockito.verify(icebergCatalog).invalidateTableCache(dbName, tableName),
+                () -> Assertions.assertEquals(List.of(invalidationOf(dbName, tableName)), invalidated));
+    }
+
+    @Test
     public void testDropTableInvalidatesOtherFes() {
         // Otherwise the other FEs keep serving the dropped table, also to a query of a table re-created under its name
         String dbName = "iceberg_db";
