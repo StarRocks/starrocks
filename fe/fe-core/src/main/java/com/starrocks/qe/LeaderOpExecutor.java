@@ -234,10 +234,14 @@ public class LeaderOpExecutor {
         TMasterOpRequest params = createTMasterOpRequest(ctx, forwardTimes);
         LOG.info("Forward statement {} to Leader {}", ctx.getStmtId(), thriftAddress);
 
+        // Send once. After a broken connection the leader may already be running the statement, and
+        // sending it again runs it a second time. Idle pooled connections the leader has closed are
+        // replaced on borrow (ThriftConnectionPool.frontendPool), so a retry is not needed for those.
         result = ThriftRPCRequestExecutor.call(
                 ThriftConnectionPool.frontendPool,
                 thriftAddress,
                 thriftTimeoutMs,
+                1,
                 client -> client.forward(params));
     }
 

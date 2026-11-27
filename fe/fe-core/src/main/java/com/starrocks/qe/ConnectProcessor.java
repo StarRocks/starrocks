@@ -1500,9 +1500,14 @@ public class ConnectProcessor {
             }
         }
 
-        // If stmt is also forwarded during execution, just return the forward result.
+        // If stmt is also forwarded during execution, return the leader's result. A forward from this FE that got
+        // no answer (for example 5402, result unknown) falls through to this FE's own error state: a null result
+        // would reach the forwarding FE only as "forward failed: unknown result".
         if (executor != null && executor.getIsForwardToLeaderOrInit(false)) {
-            return executor.getLeaderOpExecutor().getResult();
+            LeaderOpExecutor leaderOpExecutor = executor.getLeaderOpExecutor();
+            if (leaderOpExecutor != null && leaderOpExecutor.getResult() != null) {
+                return leaderOpExecutor.getResult();
+            }
         }
 
         // no matter the master execute success or fail, the master must transfer the result to follower
