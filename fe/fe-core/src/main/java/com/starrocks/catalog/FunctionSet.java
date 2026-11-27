@@ -271,6 +271,8 @@ public class FunctionSet {
     public static final String HEX = "hex";
     public static final String UNHEX = "unhex";
     public static final String SUBSTR = "substr";
+    // Trino format(), rewritten into concat() in the analyzer
+    public static final String TRINO_FORMAT = "trino_format";
     public static final String SUBSTRING = "substring";
     public static final String SPACE = "space";
     public static final String PARSE_URL = "parse_url";

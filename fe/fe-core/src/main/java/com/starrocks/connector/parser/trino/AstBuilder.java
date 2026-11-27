@@ -147,6 +147,7 @@ import io.trino.sql.tree.ExplainAnalyze;
 import io.trino.sql.tree.ExplainType;
 import io.trino.sql.tree.Expression;
 import io.trino.sql.tree.Extract;
+import io.trino.sql.tree.Format;
 import io.trino.sql.tree.FrameBound;
 import io.trino.sql.tree.FunctionCall;
 import io.trino.sql.tree.GenericDataType;
@@ -1183,6 +1184,22 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
                 Lists.newArrayList((Expr) visit(node.getExpression(), context)));
         return Objects.requireNonNullElseGet(expr, () -> new FunctionCallExpr(fieldString,
                 new FunctionParams(Lists.newArrayList((Expr) visit(node.getExpression(), context)))));
+    }
+
+    @Override
+    protected ParseNode visitFormat(Format node, ParseTreeContext context) {
+        List<Expr> arguments = visit(node.getArguments(), context, Expr.class);
+        if (!(arguments.get(0) instanceof com.starrocks.sql.ast.expression.StringLiteral)) {
+            throw trinoParserUnsupportedException(
+                    String.format("format() requires a literal format string [%s]", node));
+        }
+        String format = ((com.starrocks.sql.ast.expression.StringLiteral) arguments.get(0)).getStringValue();
+        try {
+            TrinoFormatFunction.parse(format, arguments.size() - 1);
+        } catch (IllegalArgumentException e) {
+            throw trinoParserUnsupportedException(String.format("format() %s [%s]", e.getMessage(), node));
+        }
+        return new FunctionCallExpr(FunctionSet.TRINO_FORMAT, arguments);
     }
 
     @Override

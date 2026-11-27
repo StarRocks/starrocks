@@ -38,6 +38,7 @@ import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
+import com.starrocks.connector.parser.trino.TrinoFormatFunction;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.SqlModeHelper;
@@ -1136,6 +1137,18 @@ public class ExpressionAnalyzer {
                 node.clearChildren();
                 node.addChild(dateExpr);
 
+                return visitFunctionCall(node, scope);
+            }
+
+            if (fnName.equalsIgnoreCase(FunctionSet.TRINO_FORMAT)) {
+                // Trino's format() depends on the argument types, so it is rewritten here into a concat().
+                List<Expr> pieces = TrinoFormatFunction.rewrite(node, expr -> {
+                    visit(expr, scope);
+                    return expr;
+                });
+                node.resetFnName("", FunctionSet.CONCAT);
+                node.clearChildren();
+                node.addChildren(pieces);
                 return visitFunctionCall(node, scope);
             }
  
