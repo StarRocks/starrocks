@@ -757,8 +757,8 @@ StarRocksクラスターの監視サービスを構築する方法の詳細に�
 
 - 単位: カウント
 - タイプ: 累積
-- ラベル: `request` (`put_object` または `head_object`)、`result` (`expired`、`resend_fast`、`resend_slow`、`resend_error`、または `no_budget`)
-- 説明: 共有データクラスタのオブジェクトストレージへの小さなリクエストに対する高速再送（`enable_object_storage_fast_retry`）のイベント数。`expired`: 短いタイムアウトを設定した送信が時間内に応答を受け取れず、中断されました。`resend_fast`: 再送が短いタイムアウト以内に応答を受け取りました。`resend_slow`: 再送は応答を受け取りましたが、短いタイムアウトより長くかかりました。`resend_error`: 再送がネットワークエラーで終了し、その後は SDK が通常どおりリクエストをリトライします。`no_budget`: 予算（`object_storage_fast_retry_budget_percent`）が尽きたため、短いタイムアウトなしで送信されました。`enable_poco_client_for_aws_sdk` が `false` の場合に登録されます。
+- ラベル: `request` (`put_object`、`head_object`、または `get_object`)、`result` (`expired`、`resend_fast`、`resend_slow`、`resend_error`、または `no_budget`)
+- 説明: 共有データクラスタのオブジェクトストレージへの小さなリクエストに対する高速再送（`enable_object_storage_fast_retry`）のイベント数。`expired`: 短いタイムアウトを設定した送信が時間内に応答を受け取れず、中断されました。`get_object` の場合は、無受信時間の上限を超えてもデータを受信できなかった送信です。`resend_fast`: 再送が短いタイムアウト以内に応答を受け取りました。`resend_slow`: 再送は応答を受け取りましたが、短いタイムアウトより長くかかりました。`resend_error`: 再送がネットワークエラーで終了し、その後は SDK が通常どおりリクエストをリトライします。`no_budget`: 予算（`object_storage_fast_retry_budget_percent`）が尽きたため、短いタイムアウトなしで送信されました。`get_object` の場合は、無受信時間の上限を超えたものの、予算が尽きていたため中断されなかった送信です。`enable_poco_client_for_aws_sdk` が `false` の場合に登録されます。
 
 ## `ordinal_index_mem_bytes`
 

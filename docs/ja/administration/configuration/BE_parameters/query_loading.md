@@ -587,7 +587,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - タイプ: Boolean
 - 単位: -
 - 変更可能: はい
-- 説明: 共有データクラスタのオブジェクトストレージへの、遅い小さなリクエストをすぐに再送するかどうか。`true` の場合、starlet が送信する PutObject（body が `object_storage_fast_retry_put_max_bytes` 以下）と HeadObject について、SDK の最初の試行にリクエスト全体に対する短いタイムアウト（`object_storage_fast_retry_put_timeout_ms`、`object_storage_fast_retry_head_timeout_ms`）を設定します。タイムアウトするとそのリクエストを中断し、SDK のリトライの back-off を経ずに、同じ署名済みリクエストを新しい接続ですぐに再送します。1 つのリクエストで短いタイムアウトを設定する送信は最大で `object_storage_fast_retry_put_short_attempts` または `object_storage_fast_retry_head_short_attempts` 回で、送信のたびに予算（`object_storage_fast_retry_budget_percent`）からトークンを取得する必要があります。回数を使い切るか、トークンを取得できない場合、次の送信は通常のタイムアウトを使用します。タイムアウトするたびに、リクエストの所要時間は最大で短いタイムアウト 1 回分増えます。次の送信自体の所要時間と空き接続を待つ時間は別です。SDK 自身のリトライ、マルチパートアップロード、および BE が外部テーブル、アンロード、バックアップ用に作成するオブジェクトストレージクライアントには影響しません。中断された PutObject が、再送の後にオブジェクトストレージで実行される可能性があります。バージョニングが有効なバケットでは、中断されたもののオブジェクトストレージで実行された PutObject により、同じ内容のバージョンが 1 つ余分に残るため、ライフサイクルルールで非最新バージョンを削除してください。`enable_poco_client_for_aws_sdk` が `true` の場合は効果がありません。変更は再起動なしで、変更後に送信されるリクエストに適用されます。有効になっているかどうかはメトリクス `object_storage_fast_retry_total` で確認できます。
+- 説明: 共有データクラスタのオブジェクトストレージへの、遅い小さなリクエストをすぐに再送するかどうか。`true` の場合、starlet が送信する PutObject（body が `object_storage_fast_retry_put_max_bytes` 以下）と HeadObject について、SDK の最初の試行にリクエスト全体に対する短いタイムアウト（`object_storage_fast_retry_put_timeout_ms`、`object_storage_fast_retry_head_timeout_ms`）を設定します。範囲が `object_storage_fast_retry_get_max_bytes` 以下の範囲指定の GetObject には、代わりにデータを受信しないまま待てる時間の上限（`object_storage_fast_retry_get_idle_ms`）を設定するため、遅くてもデータを受信し続けている転送は中断されません。タイムアウトするとそのリクエストを中断し、SDK のリトライの back-off を経ずに、同じ署名済みリクエストを新しい接続ですぐに再送します。1 つのリクエストで短いタイムアウトを設定する送信は最大で `object_storage_fast_retry_put_short_attempts` または `object_storage_fast_retry_head_short_attempts` 回で、送信のたびに予算（`object_storage_fast_retry_budget_percent`）からトークンを取得する必要があります。回数を使い切るか、トークンを取得できない場合、次の送信は通常のタイムアウトを使用します。タイムアウトするたびに、リクエストの所要時間は最大で短いタイムアウト 1 回分増えます。次の送信自体の所要時間と空き接続を待つ時間は別です。SDK 自身のリトライ、マルチパートアップロード、および BE が外部テーブル、アンロード、バックアップ用に作成するオブジェクトストレージクライアントには影響しません。中断された PutObject が、再送の後にオブジェクトストレージで実行される可能性があります。バージョニングが有効なバケットでは、中断されたもののオブジェクトストレージで実行された PutObject により、同じ内容のバージョンが 1 つ余分に残るため、ライフサイクルルールで非最新バージョンを削除してください。`enable_poco_client_for_aws_sdk` が `true` の場合は効果がありません。変更は再起動なしで、変更後に送信されるリクエストに適用されます。有効になっているかどうかはメトリクス `object_storage_fast_retry_total` で確認できます。
 - 導入バージョン: -
 
 ### object_storage_fast_retry_put_timeout_ms
@@ -635,13 +635,40 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: 1 つの HeadObject で短いタイムアウトを設定する送信の最大回数。有効な値: 1 ～ 3。回数を使い切るか、予算（`object_storage_fast_retry_budget_percent`）からトークンを取得できない場合、次の送信は通常のタイムアウトを使用します。
 - 導入バージョン: -
 
+### object_storage_fast_retry_get_idle_ms
+
+- デフォルト: 2000
+- タイプ: Int
+- 単位: ミリ秒
+- 変更可能: はい
+- 説明: 高速再送の対象となる範囲指定の GetObject（`enable_object_storage_fast_retry` を参照）が、送信開始からデータを 1 バイトも受信しないまま待てる最長時間。これを超えるとその送信を中断し、同じ署名済みリクエストを新しい接続ですぐに再送します。データを受信し続けている転送は、どれだけ時間がかかっても中断されません。データが届かない間はおよそ 1 秒ごとに確認するため、中断は最大 1 秒遅れることがあります。`0` は GetObject の高速再送を無効にします。
+- 導入バージョン: -
+
+### object_storage_fast_retry_get_short_attempts
+
+- デフォルト: 1
+- タイプ: Int
+- 単位: -
+- 変更可能: はい
+- 説明: 1 つの GetObject で無受信時間の上限（`object_storage_fast_retry_get_idle_ms`）を設定する送信の最大回数。有効な値: 1 ～ 3。回数を使い切るか、予算（`object_storage_fast_retry_budget_percent`）からトークンを取得できない場合、次の送信は通常のタイムアウトを使用します。
+- 導入バージョン: -
+
+### object_storage_fast_retry_get_max_bytes
+
+- デフォルト: 1048576
+- タイプ: Int
+- 単位: Bytes
+- 変更可能: はい
+- 説明: 高速再送の対象となる GetObject の最大読み取り範囲。再送では範囲の先頭バイトから範囲全体を読み直すため、範囲が大きいほど再送のコストが高くなります。閉じた範囲（`bytes=first-last`）を指定しない GetObject は対象外です。
+- 導入バージョン: -
+
 ### object_storage_fast_retry_budget_percent
 
 - デフォルト: 2
 - タイプ: Int
 - 単位: -
 - 変更可能: はい
-- 説明: 高速再送が送信する追加リクエストの上限で、各オブジェクトストレージクライアントにおける種類ごと（PutObject、HeadObject）のリクエスト数に対する割合です。タイムアウトした送信がこの予算を使い切ると、十分な数のリクエストが正常に完了するまで、リクエストは短いタイムアウトなしで送信されます。そのため、オブジェクトストレージ全体が遅い場合、高速再送は自動的に停止します。各クライアントは種類ごとに 100 個のトークンで開始し、残高は最大 100 個です。リクエストは短いタイムアウトを設定して送信する前にトークンを 1 個取得し、その送信がタイムアウトしなければ返却するため、同時に送信されるリクエストが予算を超えることはありません。トークンが残っていないリクエストは短いタイムアウトなしで送信されます。有効な値: 0 ～ 100。`0` は高速再送を無効にします。
+- 説明: 高速再送が送信する追加リクエストの上限で、各オブジェクトストレージクライアントにおける種類ごと（PutObject、HeadObject、GetObject）のリクエスト数に対する割合です。タイムアウトした送信がこの予算を使い切ると、十分な数のリクエストが正常に完了するまで、リクエストは短いタイムアウトなしで送信されます。そのため、オブジェクトストレージ全体が遅い場合、高速再送は自動的に停止します。各クライアントは種類ごとに 100 個のトークンで開始し、残高は最大 100 個です。リクエストは短いタイムアウトを設定して送信する前にトークンを 1 個取得し、その送信がタイムアウトしなければ返却するため、同時に送信されるリクエストが予算を超えることはありません。トークンが残っていないリクエストは短いタイムアウトなしで送信されます。GetObject は無受信時間の上限を超えて送信を中断するときにだけトークンを取得するため、送信中はトークンを保持しません。トークンを取得できない場合は中断しません。有効な値: 0 ～ 100。`0` は高速再送を無効にします。
 - 導入バージョン: -
 
 ### parquet_late_materialization_enable

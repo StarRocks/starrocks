@@ -77,18 +77,44 @@ inline bool send_all(int fd, std::string_view data) {
     return true;
 }
 
+// The first and last byte of "Range: bytes=first-last", or nullopt for any other value.
+inline std::optional<std::pair<int64_t, int64_t>> parse_range(const std::string& value) {
+    int64_t first = 0;
+    int64_t last = 0;
+    char dash = 0;
+    std::istringstream in(value.rfind("bytes=", 0) == 0 ? value.substr(6) : std::string());
+    std::string tail;
+    if (!(in >> first >> dash >> last) || dash != '-' || first < 0 || last < first || (in >> tail)) {
+        return std::nullopt;
+    }
+    return std::make_pair(first, last);
+}
+
 } // namespace detail
 
 // A loopback HTTP/1.1 server that answers each request with 200 after a delay that the test chooses for it. It
 // reads the whole request before the delay and answers "Expect: 100-continue" at once, like object storage that is
 // slow to process a request it has already received. Connections stay open between requests.
+// A GET of a byte range (Range: bytes=first-last) is answered 206 with those bytes of an object whose byte at offset
+// i is object_byte(i). Its body can be paced to stall halfway or to trickle in.
 class DelayingHttpServer {
 public:
     // Delay in milliseconds before answering the index-th request the server receives, counted from 0. A negative
     // value closes the connection without answering.
     using DelayFn = std::function<int64_t(size_t index, const ReceivedRequest& request)>;
 
-    explicit DelayingHttpServer(DelayFn delay_ms) : _delay_ms(std::move(delay_ms)) {
+    // How the body of a ranged GET is sent: in pieces of chunk_bytes with a pause of pause_ms after each piece but
+    // the last. A negative pause holds the rest of the body until the server stops. chunk_bytes 0 sends it at once.
+    struct Pacing {
+        size_t chunk_bytes = 0;
+        int64_t pause_ms = 0;
+    };
+    using PacingFn = std::function<Pacing(size_t index, const ReceivedRequest& request)>;
+
+    static char object_byte(int64_t offset) { return static_cast<char>('a' + offset % 26); }
+
+    explicit DelayingHttpServer(DelayFn delay_ms, PacingFn pacing = nullptr)
+            : _delay_ms(std::move(delay_ms)), _pacing(std::move(pacing)) {
         _listener = ::socket(AF_INET, SOCK_STREAM, 0);
         if (_listener < 0) {
             ADD_FAILURE() << "socket() failed, errno=" << errno;
@@ -163,6 +189,13 @@ private:
             if (delay_ms < 0 || (delay_ms > 0 && !sleep_unless_stopped(delay_ms))) {
                 break;
             }
+            if (std::optional<std::pair<int64_t, int64_t>> range = detail::parse_range(request->header("range"));
+                request->method == "GET" && range.has_value()) {
+                if (!send_range(fd, index, *request, range->first, range->second)) {
+                    break;
+                }
+                continue;
+            }
             const std::string body = request->method == "GET" ? "hello" : "";
             const std::string response =
                     "HTTP/1.1 200 OK\r\nETag: \"etag\"\r\nContent-Length: " + std::to_string(body.size()) + "\r\n\r\n" +
@@ -177,6 +210,33 @@ private:
             _connections.erase(std::remove(_connections.begin(), _connections.end(), fd), _connections.end());
         }
         ::close(fd);
+    }
+
+    // Answers a ranged GET. Returns false when the connection or the server is gone.
+    bool send_range(int fd, size_t index, const ReceivedRequest& request, int64_t first, int64_t last) {
+        std::string body;
+        for (int64_t offset = first; offset <= last; ++offset) {
+            body.push_back(object_byte(offset));
+        }
+        const std::string head = "HTTP/1.1 206 Partial Content\r\nETag: \"etag\"\r\nContent-Range: bytes " +
+                                 std::to_string(first) + "-" + std::to_string(last) +
+                                 "/*\r\nContent-Length: " + std::to_string(body.size()) + "\r\n\r\n";
+        if (!detail::send_all(fd, head)) {
+            return false;
+        }
+        const Pacing pacing = _pacing ? _pacing(index, request) : Pacing{};
+        std::string_view rest(body);
+        while (!rest.empty()) {
+            const size_t piece = pacing.chunk_bytes == 0 ? rest.size() : std::min(pacing.chunk_bytes, rest.size());
+            if (!detail::send_all(fd, rest.substr(0, piece))) {
+                return false;
+            }
+            rest.remove_prefix(piece);
+            if (!rest.empty() && !sleep_unless_stopped(pacing.pause_ms < 0 ? kHoldForeverMs : pacing.pause_ms)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     // Reads one request from the connection. `buffer` keeps the bytes received after it.
@@ -271,7 +331,10 @@ private:
         }
     }
 
+    static constexpr int64_t kHoldForeverMs = 3600 * 1000;
+
     const DelayFn _delay_ms;
+    const PacingFn _pacing;
     int _listener = -1;
     int _port = 0;
     std::thread _acceptor;

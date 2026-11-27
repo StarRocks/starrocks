@@ -662,6 +662,9 @@
         "object_storage_fast_retry_put_max_bytes",
         "object_storage_fast_retry_head_timeout_ms",
         "object_storage_fast_retry_head_short_attempts",
+        "object_storage_fast_retry_get_idle_ms",
+        "object_storage_fast_retry_get_short_attempts",
+        "object_storage_fast_retry_get_max_bytes",
         "object_storage_fast_retry_budget_percent"
       ]
     },
