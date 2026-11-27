@@ -613,7 +613,7 @@ This topic introduces the following types of BE configurations:
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: Whether to resend slow small requests to shared-data object storage at once. When `true`, the SDK's first attempt of a PutObject whose body is at most `object_storage_fast_retry_put_max_bytes`, and of a HeadObject, that starlet sends carries a short timeout over the whole request (`object_storage_fast_retry_put_timeout_ms`, `object_storage_fast_retry_head_timeout_ms`). When a send with the short timeout times out, it is aborted and the same signed request is sent again at once on a new connection, without the SDK's retry back-off. At most `object_storage_fast_retry_put_short_attempts` or `object_storage_fast_retry_head_short_attempts` sends of a request carry the short timeout, and each needs a token from the budget (`object_storage_fast_retry_budget_percent`). Once they are used up or no token is left, the next send uses the usual timeouts. Each timeout adds at most one short timeout to the time of the request; the time of the next send and any wait for a free connection come on top. The SDK's own retries, multipart uploads, and the object storage clients that BE creates for external tables, unload, and backup are not affected. The object storage may still carry out an aborted PutObject after the resend. On a bucket with versioning enabled, an aborted PutObject that the object storage carried out leaves an extra version of the object with the same content; use a lifecycle rule to remove noncurrent versions. The setting has no effect when `enable_poco_client_for_aws_sdk` is `true`. A change applies to the requests sent after it, without a restart. The metric `object_storage_fast_retry_total` shows whether it takes effect.
+- Description: Whether to resend slow small requests to shared-data object storage at once. When `true`, the SDK's first attempt of a PutObject whose body is at most `object_storage_fast_retry_put_max_bytes`, and of a HeadObject, that starlet sends carries a short timeout over the whole request (`object_storage_fast_retry_put_timeout_ms`, `object_storage_fast_retry_head_timeout_ms`). A ranged GetObject of at most `object_storage_fast_retry_get_max_bytes` gets a limit on the time it may go without receiving a byte (`object_storage_fast_retry_get_idle_ms`) instead, so that a transfer that is slow but still receiving data is never cut. When a send with the short timeout times out, it is aborted and the same signed request is sent again at once on a new connection, without the SDK's retry back-off. At most `object_storage_fast_retry_put_short_attempts` or `object_storage_fast_retry_head_short_attempts` sends of a request carry the short timeout, and each needs a token from the budget (`object_storage_fast_retry_budget_percent`). Once they are used up or no token is left, the next send uses the usual timeouts. Each timeout adds at most one short timeout to the time of the request; the time of the next send and any wait for a free connection come on top. The SDK's own retries, multipart uploads, and the object storage clients that BE creates for external tables, unload, and backup are not affected. The object storage may still carry out an aborted PutObject after the resend. On a bucket with versioning enabled, an aborted PutObject that the object storage carried out leaves an extra version of the object with the same content; use a lifecycle rule to remove noncurrent versions. The setting has no effect when `enable_poco_client_for_aws_sdk` is `true`. A change applies to the requests sent after it, without a restart. The metric `object_storage_fast_retry_total` shows whether it takes effect.
 - Introduced in: -
 
 ### object_storage_fast_retry_put_timeout_ms
@@ -661,13 +661,40 @@ This topic introduces the following types of BE configurations:
 - Description: The largest number of sends of a HeadObject that carry the short timeout. Valid values: 1 to 3. Once these sends are used up or no token is left in the budget (`object_storage_fast_retry_budget_percent`), the next send uses the usual timeouts.
 - Introduced in: -
 
+### object_storage_fast_retry_get_idle_ms
+
+- Default: 2000
+- Type: Int
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: The longest time a ranged GetObject that fast retry covers (see `enable_object_storage_fast_retry`) may go without receiving a byte, counted from the start of the send. A send that goes longer is aborted, and the same signed request is sent again at once on a new connection. A transfer that keeps receiving bytes is never aborted, however long it takes. The check runs about once per second while no data arrives, so the abort can come up to a second later. `0` turns fast retry off for GetObject.
+- Introduced in: -
+
+### object_storage_fast_retry_get_short_attempts
+
+- Default: 1
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The largest number of sends of a GetObject that carry the idle limit (`object_storage_fast_retry_get_idle_ms`). Valid values: 1 to 3. Once these sends are used up or no token is left in the budget (`object_storage_fast_retry_budget_percent`), the next send uses the usual timeouts.
+- Introduced in: -
+
+### object_storage_fast_retry_get_max_bytes
+
+- Default: 1048576
+- Type: Int
+- Unit: Bytes
+- Is mutable: Yes
+- Description: The largest byte range of a GetObject that fast retry covers. A resend reads the whole range again from its first byte, so a larger range costs more to resend. A GetObject without a closed byte range (`bytes=first-last`) is never covered.
+- Introduced in: -
+
 ### object_storage_fast_retry_budget_percent
 
 - Default: 2
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: The upper bound of the extra requests that fast retry sends, as a percentage of the requests of each kind (PutObject, HeadObject) on each object storage client. When sends that time out use up this budget, requests are sent without the short timeout until enough requests complete normally, so fast retry stops by itself when the object storage is slow as a whole. Each client starts with 100 tokens for each kind of request and never holds more than 100. A request takes a token before it is sent with the short timeout and gives it back if that send does not time out, so concurrent requests cannot exceed the budget; a request that finds no token left is sent without the short timeout. Valid values: 0 to 100. `0` turns fast retry off.
+- Description: The upper bound of the extra requests that fast retry sends, as a percentage of the requests of each kind (PutObject, HeadObject, GetObject) on each object storage client. When sends that time out use up this budget, requests are sent without the short timeout until enough requests complete normally, so fast retry stops by itself when the object storage is slow as a whole. Each client starts with 100 tokens for each kind of request and never holds more than 100. A request takes a token before it is sent with the short timeout and gives it back if that send does not time out, so concurrent requests cannot exceed the budget; a request that finds no token left is sent without the short timeout. A GetObject takes its token only when its idle limit runs out, to abort the send, so it holds none while it runs; without a token it is not aborted. Valid values: 0 to 100. `0` turns fast retry off.
 - Introduced in: -
 
 ### parquet_late_materialization_enable

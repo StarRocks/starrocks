@@ -38,6 +38,7 @@
 #include <mutex>
 #include <optional>
 #include <set>
+#include <sstream>
 #include <streambuf>
 #include <string>
 #include <thread>
@@ -138,6 +139,9 @@ protected:
         _saved_put_max_bytes = config::object_storage_fast_retry_put_max_bytes;
         _saved_head_timeout_ms = config::object_storage_fast_retry_head_timeout_ms;
         _saved_head_short_attempts = config::object_storage_fast_retry_head_short_attempts;
+        _saved_get_idle_ms = config::object_storage_fast_retry_get_idle_ms;
+        _saved_get_short_attempts = config::object_storage_fast_retry_get_short_attempts;
+        _saved_get_max_bytes = config::object_storage_fast_retry_get_max_bytes;
         _saved_budget_percent = config::object_storage_fast_retry_budget_percent;
 
         config::enable_object_storage_fast_retry = true;
@@ -146,6 +150,9 @@ protected:
         config::object_storage_fast_retry_put_max_bytes = 1048576;
         config::object_storage_fast_retry_head_timeout_ms = 300;
         config::object_storage_fast_retry_head_short_attempts = 1;
+        config::object_storage_fast_retry_get_idle_ms = 300;
+        config::object_storage_fast_retry_get_short_attempts = 1;
+        config::object_storage_fast_retry_get_max_bytes = 1048576;
         config::object_storage_fast_retry_budget_percent = 2;
     }
 
@@ -156,6 +163,9 @@ protected:
         config::object_storage_fast_retry_put_max_bytes = _saved_put_max_bytes;
         config::object_storage_fast_retry_head_timeout_ms = _saved_head_timeout_ms;
         config::object_storage_fast_retry_head_short_attempts = _saved_head_short_attempts;
+        config::object_storage_fast_retry_get_idle_ms = _saved_get_idle_ms;
+        config::object_storage_fast_retry_get_short_attempts = _saved_get_short_attempts;
+        config::object_storage_fast_retry_get_max_bytes = _saved_get_max_bytes;
         config::object_storage_fast_retry_budget_percent = _saved_budget_percent;
     }
 
@@ -200,6 +210,27 @@ protected:
         return make_request(url, Aws::Http::HttpMethod::HTTP_HEAD);
     }
 
+    static std::shared_ptr<Aws::Http::HttpRequest> get_request(const std::string& url, const std::string& range) {
+        auto request = make_request(url, Aws::Http::HttpMethod::HTTP_GET);
+        request->SetHeaderValue("range", range.c_str());
+        return request;
+    }
+
+    // The bytes [first, last] of the test server's object.
+    static std::string object_bytes(int64_t first, int64_t last) {
+        std::string bytes;
+        for (int64_t offset = first; offset <= last; ++offset) {
+            bytes.push_back(DelayingHttpServer::object_byte(offset));
+        }
+        return bytes;
+    }
+
+    static std::string body_of(Aws::Http::HttpResponse& response) {
+        std::ostringstream body;
+        body << response.GetResponseBody().rdbuf();
+        return body.str();
+    }
+
     static FastRetryBudget& budget_of(FastRetryCurlHttpClient& client, FastRetryRequestClass request_class) {
         return client._budgets[static_cast<size_t>(request_class)];
     }
@@ -211,6 +242,9 @@ private:
     int64_t _saved_put_max_bytes = 0;
     int64_t _saved_head_timeout_ms = 0;
     int32_t _saved_head_short_attempts = 0;
+    int64_t _saved_get_idle_ms = 0;
+    int32_t _saved_get_short_attempts = 0;
+    int64_t _saved_get_max_bytes = 0;
     int32_t _saved_budget_percent = 0;
 };
 
@@ -391,6 +425,8 @@ TEST_F(ObjectStorageFastRetryTest, metrics_are_registered_per_class_and_result) 
     EXPECT_EQ("0", expired->to_string());
     EXPECT_NE(nullptr, registry.get_metric("object_storage_fast_retry_total",
                                            MetricLabels().add("request", "put_object").add("result", "no_budget")));
+    EXPECT_NE(nullptr, registry.get_metric("object_storage_fast_retry_total",
+                                           MetricLabels().add("request", "get_object").add("result", "expired")));
 }
 
 TEST_F(ObjectStorageFastRetryTest, resends_slow_put_at_once) {
@@ -552,6 +588,197 @@ TEST_F(ObjectStorageFastRetryTest, other_requests_are_sent_once) {
     for (size_t r = 0; r < kNumFastRetryResults; ++r) {
         EXPECT_EQ(0, results(static_cast<FastRetryResult>(r))) << r;
     }
+}
+
+TEST_F(ObjectStorageFastRetryTest, classify_ranged_get) {
+    const std::string object = "http://127.0.0.1:1/bucket/dir/key";
+    EXPECT_EQ("get_object", class_of(*get_request(object, "bytes=0-1048575")));
+    EXPECT_EQ("get_object", class_of(*get_request(object, "bytes=7-7")));
+
+    // Only a closed byte range has a known size.
+    for (const char* range : {"bytes=100-", "bytes=-100", "bytes=5-1", "bytes=0-1,4-5", "items=0-1", "bytes=a-b",
+                              "bytes=0-9223372036854775807"}) {
+        EXPECT_EQ("none", class_of(*get_request(object, range))) << range;
+    }
+    // The SDK's own retries, object versions and other sub-resources.
+    auto retry = get_request(object, "bytes=0-99");
+    retry->SetHeaderValue(Aws::Http::SDK_REQUEST_HEADER, "attempt=2; max=3");
+    EXPECT_EQ("none", class_of(*retry));
+    EXPECT_EQ("none", class_of(*get_request(object + "?versionId=v1", "bytes=0-99")));
+    EXPECT_EQ("none", class_of(*get_request("http://127.0.0.1:1/", "bytes=0-99")));
+
+    config::object_storage_fast_retry_get_idle_ms = 1500;
+    config::object_storage_fast_retry_get_short_attempts = 2;
+    config::object_storage_fast_retry_get_max_bytes = 4096;
+    FastRetryPolicy get = fast_retry_policy(FastRetryRequestClass::GET_OBJECT);
+    EXPECT_EQ(1500, get.timeout_ms);
+    EXPECT_EQ(2, get.short_attempts);
+    EXPECT_EQ(4096, get.max_body_bytes);
+    EXPECT_TRUE(get.enabled());
+    config::object_storage_fast_retry_get_idle_ms = 0;
+    EXPECT_FALSE(fast_retry_policy(FastRetryRequestClass::GET_OBJECT).enabled());
+}
+
+TEST_F(ObjectStorageFastRetryTest, resends_get_that_stalls_halfway_at_once) {
+    // The first send stops after half of the body and never sends the rest; the resend gets all of it at once.
+    constexpr int64_t kLast = 64 * 1024 - 1;
+    DelayingHttpServer server(
+            [](size_t, const ReceivedRequest&) { return 0; },
+            [](size_t index, const ReceivedRequest&) {
+                return index == 0 ? DelayingHttpServer::Pacing{32 * 1024, -1} : DelayingHttpServer::Pacing{};
+            });
+    FastRetryCurlHttpClient client(client_config());
+    ResultCounter results(FastRetryRequestClass::GET_OBJECT);
+
+    auto start = std::chrono::steady_clock::now();
+    auto response = client.MakeRequest(get_request(server.url("/bucket/get-key"), "bytes=0-" + std::to_string(kLast)));
+    int64_t elapsed_ms = ms_since(start);
+
+    ASSERT_FALSE(response->HasClientError()) << response->GetClientErrorMessage();
+    EXPECT_EQ(Aws::Http::HttpResponseCode::PARTIAL_CONTENT, response->GetResponseCode());
+    // Only the resend's bytes are in the body, from the first byte of the range.
+    EXPECT_EQ(object_bytes(0, kLast), body_of(*response));
+    // It waited for the idle limit, checked about once per second, not for the stalled body.
+    EXPECT_GE(elapsed_ms, 250);
+    EXPECT_LT(elapsed_ms, 3000);
+
+    std::vector<ReceivedRequest> requests = server.requests();
+    ASSERT_EQ(2u, requests.size());
+    for (const char* header : {"authorization", "x-amz-date", "amz-sdk-request", "range"}) {
+        EXPECT_FALSE(requests[0].header(header).empty()) << header;
+        EXPECT_EQ(requests[0].header(header), requests[1].header(header)) << header;
+    }
+    EXPECT_EQ(1, results(FastRetryResult::EXPIRED));
+    EXPECT_EQ(1, results(FastRetryResult::RESEND_FAST) + results(FastRetryResult::RESEND_SLOW));
+    EXPECT_EQ(0, results(FastRetryResult::RESEND_ERROR));
+}
+
+TEST_F(ObjectStorageFastRetryTest, resends_get_without_a_response_at_once) {
+    DelayingHttpServer server([](size_t index, const ReceivedRequest&) { return index == 0 ? 5000 : 0; });
+    FastRetryCurlHttpClient client(client_config());
+    ResultCounter results(FastRetryRequestClass::GET_OBJECT);
+
+    auto start = std::chrono::steady_clock::now();
+    auto response = client.MakeRequest(get_request(server.url("/bucket/get-late"), "bytes=10-4105"));
+    int64_t elapsed_ms = ms_since(start);
+
+    ASSERT_FALSE(response->HasClientError()) << response->GetClientErrorMessage();
+    EXPECT_EQ(object_bytes(10, 4105), body_of(*response));
+    EXPECT_LT(elapsed_ms, 3000);
+    EXPECT_EQ(2u, server.requests().size());
+    EXPECT_EQ(1, results(FastRetryResult::EXPIRED));
+}
+
+TEST_F(ObjectStorageFastRetryTest, get_that_keeps_receiving_is_not_cut) {
+    // 1 KiB every 100 ms: the transfer takes about 1.5 s, five times the idle limit, but is never idle that long.
+    constexpr int64_t kLast = 16 * 1024 - 1;
+    DelayingHttpServer server([](size_t, const ReceivedRequest&) { return 0; },
+                              [](size_t, const ReceivedRequest&) {
+                                  return DelayingHttpServer::Pacing{1024, 100};
+                              });
+    FastRetryCurlHttpClient client(client_config());
+    ResultCounter results(FastRetryRequestClass::GET_OBJECT);
+
+    auto start = std::chrono::steady_clock::now();
+    auto response = client.MakeRequest(get_request(server.url("/bucket/trickle"), "bytes=0-" + std::to_string(kLast)));
+    int64_t elapsed_ms = ms_since(start);
+
+    ASSERT_FALSE(response->HasClientError()) << response->GetClientErrorMessage();
+    EXPECT_EQ(object_bytes(0, kLast), body_of(*response));
+    EXPECT_GE(elapsed_ms, 1000);
+    EXPECT_EQ(1u, server.requests().size());
+    for (size_t r = 0; r < kNumFastRetryResults; ++r) {
+        EXPECT_EQ(0, results(static_cast<FastRetryResult>(r))) << r;
+    }
+}
+
+TEST_F(ObjectStorageFastRetryTest, get_above_the_range_limit_is_sent_once) {
+    config::object_storage_fast_retry_get_max_bytes = 4096;
+    constexpr int64_t kDelayMs = 800;
+    DelayingHttpServer server([](size_t, const ReceivedRequest&) { return kDelayMs; });
+    FastRetryCurlHttpClient client(client_config());
+    ResultCounter results(FastRetryRequestClass::GET_OBJECT);
+
+    for (const char* range : {"bytes=0-4096", "bytes=0-"}) {
+        auto start = std::chrono::steady_clock::now();
+        auto response = client.MakeRequest(get_request(server.url("/bucket/large"), range));
+        ASSERT_FALSE(response->HasClientError()) << range << ": " << response->GetClientErrorMessage();
+        EXPECT_GE(ms_since(start), kDelayMs - 50) << range;
+    }
+    EXPECT_EQ(2u, server.requests().size());
+    for (size_t r = 0; r < kNumFastRetryResults; ++r) {
+        EXPECT_EQ(0, results(static_cast<FastRetryResult>(r))) << r;
+    }
+}
+
+TEST_F(ObjectStorageFastRetryTest, stalled_get_without_a_token_is_not_aborted) {
+    // A GET takes its token only when its idle limit runs out. With none left the send goes on and ends normally.
+    DelayingHttpServer server([](size_t, const ReceivedRequest&) { return 1500; });
+    FastRetryCurlHttpClient client(client_config());
+    FastRetryBudget& budget = budget_of(client, FastRetryRequestClass::GET_OBJECT);
+    while (budget.try_acquire()) {
+    }
+    ResultCounter results(FastRetryRequestClass::GET_OBJECT);
+
+    auto start = std::chrono::steady_clock::now();
+    auto response = client.MakeRequest(get_request(server.url("/bucket/no-token"), "bytes=0-99"));
+    ASSERT_FALSE(response->HasClientError()) << response->GetClientErrorMessage();
+    EXPECT_EQ(object_bytes(0, 99), body_of(*response));
+    EXPECT_GE(ms_since(start), 1500 - 50);
+    EXPECT_EQ(1u, server.requests().size());
+    EXPECT_EQ(1, results(FastRetryResult::NO_BUDGET));
+    EXPECT_EQ(0, results(FastRetryResult::EXPIRED));
+}
+
+TEST_F(ObjectStorageFastRetryTest, gets_in_flight_hold_no_token) {
+    // More GETs in flight than the budget has tokens: none of them takes one, so all are watched and none counts as
+    // no_budget.
+    constexpr int kGets = 16;
+    DelayingHttpServer server([](size_t, const ReceivedRequest&) { return 300; });
+    Aws::Client::ClientConfiguration config = client_config();
+    config.maxConnections = kGets;
+    config::object_storage_fast_retry_get_idle_ms = 1500;
+    FastRetryCurlHttpClient client(config);
+    FastRetryBudget& budget = budget_of(client, FastRetryRequestClass::GET_OBJECT);
+    while (budget.tokens() > 2) {
+        ASSERT_TRUE(budget.try_acquire());
+    }
+    ResultCounter results(FastRetryRequestClass::GET_OBJECT);
+
+    std::vector<std::thread> threads;
+    std::atomic<int> errors{0};
+    for (int i = 0; i < kGets; ++i) {
+        threads.emplace_back([&, i] {
+            auto response =
+                    client.MakeRequest(get_request(server.url("/bucket/many-" + std::to_string(i)), "bytes=0-99"));
+            if (response->HasClientError()) ++errors;
+        });
+    }
+    for (auto& thread : threads) thread.join();
+    EXPECT_EQ(0, errors.load());
+    EXPECT_EQ(static_cast<size_t>(kGets), server.requests().size());
+    EXPECT_EQ(0, results(FastRetryResult::NO_BUDGET));
+    EXPECT_EQ(0, results(FastRetryResult::EXPIRED));
+    EXPECT_EQ(2, budget.tokens());
+}
+
+TEST_F(ObjectStorageFastRetryTest, idle_watch_does_not_reach_later_requests) {
+    // A ranged GET answered at once, then a GET without a range on the same client and thread that is slower than
+    // the idle limit. With a single handle the second GET reuses the first one's handle, and must not inherit its
+    // progress callback, whose watch no longer exists.
+    DelayingHttpServer server([](size_t index, const ReceivedRequest&) { return index == 0 ? 0 : 1500; });
+    Aws::Client::ClientConfiguration config = client_config();
+    config.maxConnections = 1;
+    FastRetryCurlHttpClient client(config);
+
+    auto ranged = client.MakeRequest(get_request(server.url("/bucket/fast-get"), "bytes=0-99"));
+    ASSERT_FALSE(ranged->HasClientError()) << ranged->GetClientErrorMessage();
+
+    auto start = std::chrono::steady_clock::now();
+    auto plain = client.MakeRequest(make_request(server.url("/bucket/slow-get"), Aws::Http::HttpMethod::HTTP_GET));
+    ASSERT_FALSE(plain->HasClientError()) << plain->GetClientErrorMessage();
+    EXPECT_GE(ms_since(start), 1500 - 50);
+    EXPECT_EQ(2u, server.requests().size());
 }
 
 TEST_F(ObjectStorageFastRetryTest, switch_is_read_for_every_request) {
