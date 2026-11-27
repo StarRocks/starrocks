@@ -1,0 +1,39 @@
+-- name: test_self_compare_range_derive
+CREATE TABLE t_self_${uuid0} (k INT, v SMALLINT NOT NULL, w SMALLINT NULL)
+DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO t_self_${uuid0} VALUES (1, 0, 0), (2, 5, 5), (3, 7, NULL);
+-- result:
+-- !result
+SELECT k, v FROM t_self_${uuid0} WHERE v > v AND 1 < v AND (v BETWEEN v AND v) IS NULL;
+-- result:
+-- !result
+SELECT k, w FROM t_self_${uuid0} WHERE w > w AND 1 < w AND (w BETWEEN w AND w) IS NULL;
+-- result:
+-- !result
+SELECT count(*) FROM t_self_${uuid0} WHERE v > v AND 1 < v AND v IS NULL;
+-- result:
+0
+-- !result
+SELECT count(*) FROM t_self_${uuid0} WHERE v >= v AND 1 < v AND v IS NULL;
+-- result:
+0
+-- !result
+SELECT count(*) FROM t_self_${uuid0} WHERE w >= w AND 1 < w AND w IS NOT NULL;
+-- result:
+1
+-- !result
+SELECT k FROM t_self_${uuid0} WHERE w <= w AND w < 6 AND w IS NOT NULL ORDER BY k;
+-- result:
+1
+2
+-- !result
+SELECT k FROM t_self_${uuid0} WHERE v > 3 AND 1 < v AND (v BETWEEN v AND v) IS NOT NULL ORDER BY k;
+-- result:
+2
+3
+-- !result
+DROP TABLE t_self_${uuid0};
+-- result:
+-- !result
