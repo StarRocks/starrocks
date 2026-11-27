@@ -48,7 +48,7 @@ SQL interface and query coordination layer:
   - `qe/` - Query execution coordination and session management
 - `fe/fe-common/` - Common frontend utilities
 - `fe/plugin-common/` - Plugin framework common components
-- `fe/spark-dpp/` - Spark data preprocessing integration
+- `fe/plugin/spark-dpp/` - Spark data preprocessing integration
 - `fe/hive-udf/` - Hive UDF compatibility layer
 
 **Key Responsibilities:**
