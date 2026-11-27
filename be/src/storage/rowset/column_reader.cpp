@@ -1336,7 +1336,11 @@ StatusOr<std::unique_ptr<ColumnIterator>> ColumnReader::_new_json_iterator(Colum
                 // target: b.b2
                 // source: b.b2.b3
                 if (target_types[k] != TYPE_JSON && !is_string_type(target_types[k])) {
-                    // don't need column and remain
+                    // The sub-columns below hold objects, which read as NULL in this type: only the remain can hold
+                    // a value of the target, of another kind in other rows. Another target may need the remain
+                    // already, so only ever add the need.
+                    const auto& key = target_leafs[k]->path();
+                    need_remain |= _remain_filter == nullptr || _remain_filter->test_bytes(key.data(), key.size());
                     break;
                 }
 
