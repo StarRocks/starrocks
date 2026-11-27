@@ -985,6 +985,7 @@ INSTANTIATE_TEST_SUITE_P(JsonBoolExtractionCases, JsonBoolExtractionTest,
                                            std::make_tuple(R"({"bool_field": "1"})", true),
                                            std::make_tuple(R"({"bool_field": "0"})", false)));
 
+<<<<<<< HEAD
 TEST(JsonMergerTest, NonObjectRootDoesNotMatchParentPath) {
     const std::vector<std::string> values = {"null", "[]", "[1,2]", "1", "1.5", R"("text")", "true", "false"};
     for (const auto& path : {"o", "o.n", "\"o.x\""}) {
@@ -1003,6 +1004,108 @@ TEST(JsonMergerTest, NonObjectRootDoesNotMatchParentPath) {
         for (size_t i = 0; i < values.size(); ++i) {
             EXPECT_TRUE(result->is_null(i)) << path << ": " << values[i];
         }
+=======
+// A key can hold objects in some rows and other values in others while the paths below it are sub-columns: a
+// compaction flattens the paths of one input's objects and keeps another input's values of the key in the remain.
+// A read of the key itself must give each row's value, from the remain when it is not an object.
+TEST_F(JsonFlattenerTest, testReadKeyHoldingObjectsAndOtherValues) {
+    const std::vector<std::string> inputs = {
+            R"({"id": 1, "q": 0})",         R"({"id": 2, "q": {"6": 15893, "7": 22485}})",
+            R"({"id": 3, "q": {"6": 50}})", R"({"id": 4, "q": 0})",
+            R"({"id": 5, "q": [1, 2]})",    R"({"id": 6})",
+            R"({"id": 7, "q": null})",      R"({"id": 8, "q": {}})"};
+    auto json_column = JsonColumn::create();
+    for (const auto& json : inputs) {
+        ASSIGN_OR_ABORT(auto jv, JsonValue::parse(json));
+        json_column->append(&jv);
+    }
+    JsonFlattener flattener({"id", "q.6"}, {TYPE_BIGINT, TYPE_BIGINT}, true);
+    flattener.flatten(json_column.get());
+    Columns flat_columns;
+    for (auto& c : flattener.mutable_result()) {
+        flat_columns.emplace_back(std::move(c));
+    }
+
+    // q as JSON, the way a JSON-typed access path or json_query reads it ("NULL": no value)
+    const std::vector<std::string> want_json = {
+            "0", R"({"6": 15893, "7": 22485})", R"({"6": 50})", "0", "[1, 2]", "NULL", "null", "{}"};
+    {
+        HyperJsonTransformer transformer({"q"}, {TYPE_JSON}, false);
+        transformer.init_read_task({"id", "q.6"}, {TYPE_BIGINT, TYPE_BIGINT}, true);
+        ASSERT_OK(transformer.trans(flat_columns));
+        auto result = transformer.mutable_result();
+        ASSERT_EQ(1, result.size());
+        ASSERT_EQ(inputs.size(), result[0]->size());
+        const auto* json =
+                down_cast<const JsonColumn*>(down_cast<const NullableColumn*>(result[0].get())->data_column().get());
+        for (size_t row = 0; row < inputs.size(); row++) {
+            if (want_json[row] == "NULL") {
+                EXPECT_TRUE(result[0]->is_null(row)) << "row " << row << ": " << result[0]->debug_item(row);
+                continue;
+            }
+            ASSERT_FALSE(result[0]->is_null(row)) << "row " << row;
+            // JsonValue::parse() reads a text that does not start with {, [ or " as a JSON string, so the
+            // number 0 and the JSON null are built directly.
+            JsonValue want = want_json[row] == "0"
+                                     ? JsonValue::from_int(0)
+                                     : want_json[row] == "null" ? JsonValue::from_null()
+                                                                : JsonValue::parse(want_json[row]).value();
+            EXPECT_EQ(0, want.compare(*json->get_object(row)))
+                    << "row " << row << ": " << json->get_object(row)->to_string_uncheck();
+        }
+    }
+    // q as a number, the way get_json_int(c, '$.q') reads it: the objects read as NULL, the numbers from the remain
+    {
+        HyperJsonTransformer transformer({"q"}, {TYPE_BIGINT}, false);
+        transformer.init_read_task({"id", "q.6"}, {TYPE_BIGINT, TYPE_BIGINT}, true);
+        ASSERT_OK(transformer.trans(flat_columns));
+        auto result = transformer.mutable_result();
+        ASSERT_EQ(1, result.size());
+        EXPECT_EQ("[0, NULL, NULL, 0, NULL, NULL, NULL, NULL]", result[0]->debug_string());
+    }
+}
+
+// flat_column_to_json rebuilds a VARCHAR sub-column as JSON strings -- a JSON-looking value stays a string --
+// keeps NULL rows NULL, unfolds a constant input, and leaves its source (owned by the caller) unchanged.
+TEST_F(JsonFlattenerTest, testFlatColumnToJsonKeepsStringsAndReadsSource) {
+    auto strings = BinaryColumn::create();
+    strings->append(Slice(R"({"a":1})"));
+    strings->append_default();
+    strings->append(Slice("plain"));
+    auto nulls = NullColumn::create();
+    nulls->append(0);
+    nulls->append(1);
+    nulls->append(0);
+    ColumnPtr source = NullableColumn::create(std::move(strings), std::move(nulls));
+    const Column* source_data = down_cast<const NullableColumn*>(source.get())->data_column().get();
+
+    auto result = flat_json::flat_column_to_json(source, TYPE_VARCHAR);
+    ASSERT_EQ(3, result->size());
+    ASSERT_TRUE(result->is_nullable());
+    EXPECT_FALSE(result->is_null(0));
+    EXPECT_TRUE(result->is_null(1));
+    EXPECT_FALSE(result->is_null(2));
+    const auto* json =
+            down_cast<const JsonColumn*>(down_cast<const NullableColumn*>(result.get())->data_column().get());
+    EXPECT_EQ(0, JsonValue::from_string(R"({"a":1})").compare(*json->get_object(0)));
+    EXPECT_TRUE(json->get_object(0)->to_vslice().isString());
+    EXPECT_EQ(0, JsonValue::from_string("plain").compare(*json->get_object(2)));
+    // the source is unchanged
+    EXPECT_EQ(source_data, down_cast<const NullableColumn*>(source.get())->data_column().get());
+    EXPECT_EQ(R"({"a":1})", source_data->get(0).get_slice().to_string());
+
+    // a constant input is unfolded to one value per row
+    auto one = BinaryColumn::create();
+    one->append(Slice("[1]"));
+    ColumnPtr constant = ConstColumn::create(std::move(one), 2);
+    auto from_const = flat_json::flat_column_to_json(constant, TYPE_VARCHAR);
+    ASSERT_EQ(2, from_const->size());
+    const auto* const_json =
+            down_cast<const JsonColumn*>(down_cast<const NullableColumn*>(from_const.get())->data_column().get());
+    for (size_t i = 0; i < 2; i++) {
+        EXPECT_FALSE(from_const->is_null(i));
+        EXPECT_EQ(0, JsonValue::from_string("[1]").compare(*const_json->get_object(i)));
+>>>>>>> f7e2d65 ([BugFix] Read a JSON key's values from the remain when the paths below it are sub-columns (#84754))
     }
 }
 

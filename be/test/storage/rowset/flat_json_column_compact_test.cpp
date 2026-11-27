@@ -2900,4 +2900,54 @@ TEST_F(FlatJsonColumnCompactTest, testReadVarcharSubColumnAsJsonKeepsStrings) {
     }
 }
 
+// A compaction can flatten the paths below a key that another input keeps in its remain (partial paths): the paths of
+// one input's objects become sub-columns, and the other input's values of the key stay in the remain, which a
+// streaming compaction writes as the reader gives it. get_json_int(c, '$.q') must read those values from the remain.
+TEST_F(FlatJsonColumnCompactTest, testReadKeyWithPathsBelowAndValuesInRemain) {
+    const int64_t saved_mem_limit = config::compaction_memory_limit_per_worker;
+    DeferOp restore([&]() { config::compaction_memory_limit_per_worker = saved_mem_limit; });
+    // Threshold limit/8 = 1 byte: streaming starts with the first chunk and keeps the layout of the chunks.
+    config::compaction_memory_limit_per_worker = 8;
+
+    // The layout the compaction reader gives every chunk: q.6 and q.7, the paths of an input whose q held objects,
+    // and the remain, which keeps the q of an input whose q held numbers.
+    const std::vector<std::string> paths = {"q.6", "q.7"};
+    const std::vector<LogicalType> types = {TYPE_JSON, TYPE_JSON};
+    auto read_layout = [&](const std::vector<std::string>& rows) -> MutableColumnPtr {
+        auto source = JsonColumn::create();
+        for (const auto& row : rows) {
+            ASSIGN_OR_ABORT(auto jv, JsonValue::parse(row));
+            source->append(&jv);
+        }
+        JsonFlattener flattener(paths, types, true);
+        flattener.flatten(source.get());
+        auto json_col = JsonColumn::create();
+        json_col->set_flat_columns(paths, types, flattener.mutable_result());
+        return json_col;
+    };
+    MutableColumns jsons;
+    jsons.emplace_back(read_layout({R"({"id": 1, "q": {"6": 15893, "7": 22485}})", R"({"id": 2, "q": {"6": 50}})"}));
+    jsons.emplace_back(read_layout({R"({"id": 3, "q": 0})", R"({"id": 4, "q": 7})"}));
+
+    auto handle = write_segment(jsons, /*need_flat=*/true, "/key_with_paths_below_and_values_in_remain.data");
+    ASSERT_TRUE(handle.meta->json_meta().is_flat());
+    ASSERT_TRUE(handle.meta->json_meta().has_remain());
+    ASSERT_EQ(3, handle.meta->children_columns_size());
+    EXPECT_EQ("q.6", handle.meta->children_columns(0).name());
+    EXPECT_EQ("q.7", handle.meta->children_columns(1).name());
+    EXPECT_EQ("remain", handle.meta->children_columns(2).name());
+
+    ASSIGN_OR_ABORT(auto root, ColumnAccessPath::create(TAccessPathType::FIELD, "root", 0));
+    ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_BIGINT, "q");
+    for (auto mode : {ReadMode::kBatch, ReadMode::kRange, ReadMode::kByRowid}) {
+        MutableColumnPtr col = JsonColumn::create();
+        ASSERT_OK(read_segment(handle, mode, col.get(), root.get()));
+        ASSERT_EQ(4, col->size()) << "mode=" << static_cast<int>(mode);
+        EXPECT_EQ("{q: NULL}", col->debug_item(0)) << "mode=" << static_cast<int>(mode);
+        EXPECT_EQ("{q: NULL}", col->debug_item(1)) << "mode=" << static_cast<int>(mode);
+        EXPECT_EQ("{q: 0}", col->debug_item(2)) << "mode=" << static_cast<int>(mode);
+        EXPECT_EQ("{q: 7}", col->debug_item(3)) << "mode=" << static_cast<int>(mode);
+    }
+}
+
 } // namespace starrocks
