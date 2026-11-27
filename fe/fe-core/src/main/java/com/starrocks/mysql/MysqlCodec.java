@@ -31,6 +31,9 @@ public class MysqlCodec {
     public static final int CHARSET_BINARY = 63;
     public static final int CHARSET_UTF8 = 33;
 
+    // ColumnDefinition41 flag, see include/mysql_com.h in the MySQL source
+    public static final int BINARY_FLAG = 0x80;
+
     public static byte readByte(ByteBuffer buffer) {
         return buffer.get();
     }
@@ -223,7 +226,7 @@ public class MysqlCodec {
         // Column type: one byte integer
         writeInt1(out, toMysqlType(type.getPrimitiveType()).getCode());
         // Flags: two byte integer
-        writeInt2(out, 0);
+        writeInt2(out, getMysqlResultSetFieldFlags(type));
         // Decimals: one byte integer
         writeInt1(out, getMysqlResultSetFieldDecimals(type));
         // filler: two byte integer
@@ -345,6 +348,18 @@ public class MysqlCodec {
                 // Treat ARRAY/MAP/STRUCT as VARCHAR(-1)
                 return 60;
         }
+    }
+
+    /**
+     * @return BINARY_FLAG for VARBINARY and GEOGRAPHY, 0 for others
+     * <p>
+     * Both are sent as MYSQL_TYPE_BLOB, and Connector/J reads a BLOB without BINARY_FLAG as TEXT,
+     * so binary results would surface as strings. GEOGRAPHY is WKB and must describe itself exactly
+     * like VARBINARY. Other types keep 0 to leave their client mapping unchanged.
+     */
+    public static int getMysqlResultSetFieldFlags(Type type) {
+        PrimitiveType primitiveType = type.getPrimitiveType();
+        return primitiveType == PrimitiveType.VARBINARY || primitiveType == PrimitiveType.GEOGRAPHY ? BINARY_FLAG : 0;
     }
 
     /**
