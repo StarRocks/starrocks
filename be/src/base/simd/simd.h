@@ -42,10 +42,71 @@ concept Integer32BitType = std::is_same_v<T, int32_t> || std::is_same_v<T, uint3
 // Count the number of zeros of 8-bit integers.
 template <Integer8BitType T>
 inline size_t count_zero(const T* data, size_t size) {
+    if (size == 0) {
+        return 0;
+    }
     size_t count = 0;
     const T* end = data + size;
 
-#if defined(__SSE2__) && defined(__POPCNT__)
+#if defined(__AVX2__)
+    const __m256i zero256 = _mm256_setzero_si256();
+    const T* end256 = data + (size / 256 * 256);
+    for (; data < end256; data += 256) {
+        __m256i acc0 = _mm256_setzero_si256();
+        __m256i acc1 = _mm256_setzero_si256();
+        acc0 = _mm256_sub_epi8(acc0,
+                               _mm256_cmpeq_epi8(_mm256_loadu_si256(reinterpret_cast<const __m256i*>(data)), zero256));
+        acc1 = _mm256_sub_epi8(
+                acc1, _mm256_cmpeq_epi8(_mm256_loadu_si256(reinterpret_cast<const __m256i*>(data + 32)), zero256));
+        acc0 = _mm256_sub_epi8(
+                acc0, _mm256_cmpeq_epi8(_mm256_loadu_si256(reinterpret_cast<const __m256i*>(data + 64)), zero256));
+        acc1 = _mm256_sub_epi8(
+                acc1, _mm256_cmpeq_epi8(_mm256_loadu_si256(reinterpret_cast<const __m256i*>(data + 96)), zero256));
+        acc0 = _mm256_sub_epi8(
+                acc0, _mm256_cmpeq_epi8(_mm256_loadu_si256(reinterpret_cast<const __m256i*>(data + 128)), zero256));
+        acc1 = _mm256_sub_epi8(
+                acc1, _mm256_cmpeq_epi8(_mm256_loadu_si256(reinterpret_cast<const __m256i*>(data + 160)), zero256));
+        acc0 = _mm256_sub_epi8(
+                acc0, _mm256_cmpeq_epi8(_mm256_loadu_si256(reinterpret_cast<const __m256i*>(data + 192)), zero256));
+        acc1 = _mm256_sub_epi8(
+                acc1, _mm256_cmpeq_epi8(_mm256_loadu_si256(reinterpret_cast<const __m256i*>(data + 224)), zero256));
+        const __m256i sad = _mm256_add_epi64(_mm256_sad_epu8(acc0, zero256), _mm256_sad_epu8(acc1, zero256));
+        const __m128i sad128 = _mm_add_epi64(_mm256_castsi256_si128(sad), _mm256_extracti128_si256(sad, 1));
+        count += static_cast<size_t>(_mm_cvtsi128_si64(sad128) + _mm_extract_epi64(sad128, 1));
+    }
+
+    const T* end64 = data + ((end - data) / 64 * 64);
+
+    for (; data < end64; data += 64) {
+        const __m256i v0 = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(data));
+        const __m256i v1 = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(data + 32));
+        const uint32_t m0 = static_cast<uint32_t>(_mm256_movemask_epi8(_mm256_cmpeq_epi8(v0, zero256)));
+        const uint32_t m1 = static_cast<uint32_t>(_mm256_movemask_epi8(_mm256_cmpeq_epi8(v1, zero256)));
+        count += __builtin_popcountll(static_cast<uint64_t>(m0) | (static_cast<uint64_t>(m1) << 32u));
+    }
+
+    if (end - data >= 32) {
+        const __m256i v = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(data));
+        const uint32_t m = static_cast<uint32_t>(_mm256_movemask_epi8(_mm256_cmpeq_epi8(v, zero256)));
+        count += __builtin_popcount(m);
+        data += 32;
+    }
+
+    if (end - data >= 16) {
+        const __m128i v = _mm_loadu_si128(reinterpret_cast<const __m128i*>(data));
+        const uint32_t m = static_cast<uint32_t>(_mm_movemask_epi8(_mm_cmpeq_epi8(v, _mm_setzero_si128())));
+        count += __builtin_popcount(m);
+        data += 16;
+    }
+
+    const size_t rem = static_cast<size_t>(end - data);
+    if (rem > 0 && size >= 16) {
+        const __m128i v = _mm_loadu_si128(reinterpret_cast<const __m128i*>(end - 16));
+        const uint32_t m = static_cast<uint32_t>(_mm_movemask_epi8(_mm_cmpeq_epi8(v, _mm_setzero_si128())));
+        count += __builtin_popcount(m >> (16 - rem));
+        return count;
+    }
+#elif defined(__SSE2__) && defined(__POPCNT__)
     const __m128i zero16 = _mm_setzero_si128();
     const T* end64 = data + (size / 64 * 64);
 
@@ -62,16 +123,59 @@ inline size_t count_zero(const T* data, size_t size) {
                                                _mm_loadu_si128(reinterpret_cast<const __m128i*>(data + 48)), zero16)))
                                        << 48u));
     }
-#elif defined(__ARM_NEON) && defined(__aarch64__)
-    const T* end16 = data + (size / 16 * 16);
+
+    const T* end16 = data + ((end - data) / 16 * 16);
     for (; data < end16; data += 16) {
-        uint8x16_t vdata = vld1q_u8(reinterpret_cast<const uint8_t*>(data));
-        // result[i] = vdata[i] == 0 ? 0xFF : 0x00
-        uint8x16_t result = vceqq_u8(vdata, vdupq_n_u8(0));
-        // result[i] = result[i] & 0x1
-        result = vandq_u8(result, vdupq_n_u8(1));
-        count += vaddvq_u8(result);
+        count += __builtin_popcount(static_cast<uint32_t>(
+                _mm_movemask_epi8(_mm_cmpeq_epi8(_mm_loadu_si128(reinterpret_cast<const __m128i*>(data)), zero16))));
     }
+
+    const size_t rem = static_cast<size_t>(end - data);
+    if (rem > 0 && size >= 16) {
+        const __m128i v = _mm_loadu_si128(reinterpret_cast<const __m128i*>(end - 16));
+        const uint32_t m = static_cast<uint32_t>(_mm_movemask_epi8(_mm_cmpeq_epi8(v, _mm_setzero_si128())));
+        count += __builtin_popcount(m >> (16 - rem));
+        return count;
+    }
+#elif defined(__ARM_NEON) && defined(__aarch64__)
+    const uint8x16_t zero_vec = vdupq_n_u8(0);
+    const T* end256 = data + (size / 256 * 256);
+
+    for (; data < end256; data += 256) {
+        uint8x16_t acc = vdupq_n_u8(0);
+        acc = vsubq_u8(acc, vceqq_u8(vld1q_u8(reinterpret_cast<const uint8_t*>(data)), zero_vec));
+        acc = vsubq_u8(acc, vceqq_u8(vld1q_u8(reinterpret_cast<const uint8_t*>(data + 16)), zero_vec));
+        acc = vsubq_u8(acc, vceqq_u8(vld1q_u8(reinterpret_cast<const uint8_t*>(data + 32)), zero_vec));
+        acc = vsubq_u8(acc, vceqq_u8(vld1q_u8(reinterpret_cast<const uint8_t*>(data + 48)), zero_vec));
+        acc = vsubq_u8(acc, vceqq_u8(vld1q_u8(reinterpret_cast<const uint8_t*>(data + 64)), zero_vec));
+        acc = vsubq_u8(acc, vceqq_u8(vld1q_u8(reinterpret_cast<const uint8_t*>(data + 80)), zero_vec));
+        acc = vsubq_u8(acc, vceqq_u8(vld1q_u8(reinterpret_cast<const uint8_t*>(data + 96)), zero_vec));
+        acc = vsubq_u8(acc, vceqq_u8(vld1q_u8(reinterpret_cast<const uint8_t*>(data + 112)), zero_vec));
+        acc = vsubq_u8(acc, vceqq_u8(vld1q_u8(reinterpret_cast<const uint8_t*>(data + 128)), zero_vec));
+        acc = vsubq_u8(acc, vceqq_u8(vld1q_u8(reinterpret_cast<const uint8_t*>(data + 144)), zero_vec));
+        acc = vsubq_u8(acc, vceqq_u8(vld1q_u8(reinterpret_cast<const uint8_t*>(data + 160)), zero_vec));
+        acc = vsubq_u8(acc, vceqq_u8(vld1q_u8(reinterpret_cast<const uint8_t*>(data + 176)), zero_vec));
+        acc = vsubq_u8(acc, vceqq_u8(vld1q_u8(reinterpret_cast<const uint8_t*>(data + 192)), zero_vec));
+        acc = vsubq_u8(acc, vceqq_u8(vld1q_u8(reinterpret_cast<const uint8_t*>(data + 208)), zero_vec));
+        acc = vsubq_u8(acc, vceqq_u8(vld1q_u8(reinterpret_cast<const uint8_t*>(data + 224)), zero_vec));
+        acc = vsubq_u8(acc, vceqq_u8(vld1q_u8(reinterpret_cast<const uint8_t*>(data + 240)), zero_vec));
+        count += vaddlvq_u8(acc);
+    }
+
+    uint8x16_t tail_acc = vdupq_n_u8(0);
+    const T* end64 = data + ((end - data) / 64 * 64);
+    for (; data < end64; data += 64) {
+        tail_acc = vsubq_u8(tail_acc, vceqq_u8(vld1q_u8(reinterpret_cast<const uint8_t*>(data)), zero_vec));
+        tail_acc = vsubq_u8(tail_acc, vceqq_u8(vld1q_u8(reinterpret_cast<const uint8_t*>(data + 16)), zero_vec));
+        tail_acc = vsubq_u8(tail_acc, vceqq_u8(vld1q_u8(reinterpret_cast<const uint8_t*>(data + 32)), zero_vec));
+        tail_acc = vsubq_u8(tail_acc, vceqq_u8(vld1q_u8(reinterpret_cast<const uint8_t*>(data + 48)), zero_vec));
+    }
+
+    const T* end16 = data + ((end - data) / 16 * 16);
+    for (; data < end16; data += 16) {
+        tail_acc = vsubq_u8(tail_acc, vceqq_u8(vld1q_u8(reinterpret_cast<const uint8_t*>(data)), zero_vec));
+    }
+    count += vaddlvq_u8(tail_acc);
 #endif
 
     for (; data < end; ++data) {
@@ -83,37 +187,110 @@ inline size_t count_zero(const T* data, size_t size) {
 // Count the number of zeros of 32-bit integers.
 template <Integer32BitType T>
 inline size_t count_zero(const T* data, size_t size) {
+    if (size == 0) {
+        return 0;
+    }
     size_t count = 0;
     const T* end = data + size;
 
-#if defined(__SSE2__) && defined(__POPCNT__)
-    // count per 16 int
+#if defined(__AVX2__)
+    const __m256i zero256 = _mm256_setzero_si256();
+    // Count per 16 ints (64 bytes per iteration)
+    const T* end16 = data + (size / 16 * 16);
+
+    for (; data < end16; data += 16) {
+        const __m256i v0 = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(data));
+        const __m256i v1 = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(data + 8));
+        const uint32_t m0 =
+                static_cast<uint32_t>(_mm256_movemask_ps(_mm256_castsi256_ps(_mm256_cmpeq_epi32(v0, zero256))));
+        const uint32_t m1 =
+                static_cast<uint32_t>(_mm256_movemask_ps(_mm256_castsi256_ps(_mm256_cmpeq_epi32(v1, zero256))));
+        count += __builtin_popcount(m0 | (m1 << 8u));
+    }
+
+    if (end - data >= 8) {
+        const __m256i v = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(data));
+        const uint32_t m =
+                static_cast<uint32_t>(_mm256_movemask_ps(_mm256_castsi256_ps(_mm256_cmpeq_epi32(v, zero256))));
+        count += __builtin_popcount(m);
+        data += 8;
+    }
+
+    if (end - data >= 4) {
+        const __m128i v = _mm_loadu_si128(reinterpret_cast<const __m128i*>(data));
+        const uint32_t m =
+                static_cast<uint32_t>(_mm_movemask_ps(_mm_castsi128_ps(_mm_cmpeq_epi32(v, _mm_setzero_si128()))));
+        count += __builtin_popcount(m);
+        data += 4;
+    }
+
+    const size_t rem = static_cast<size_t>(end - data);
+    if (rem > 0 && size >= 4) {
+        const __m128i v = _mm_loadu_si128(reinterpret_cast<const __m128i*>(end - 4));
+        const uint32_t m =
+                static_cast<uint32_t>(_mm_movemask_ps(_mm_castsi128_ps(_mm_cmpeq_epi32(v, _mm_setzero_si128()))));
+        count += __builtin_popcount(m >> (4 - rem));
+        return count;
+    }
+#elif defined(__SSE2__) && defined(__POPCNT__)
+    // Count per 16 ints
     const __m128i zero16 = _mm_setzero_si128();
     const T* end16 = data + (size / 16 * 16);
 
     for (; data < end16; data += 16) {
-        count += __builtin_popcountll(static_cast<uint64_t>(_mm_movemask_ps(_mm_cvtepi32_ps(_mm_cmpeq_epi32(
+        count += __builtin_popcountll(static_cast<uint64_t>(_mm_movemask_ps(_mm_castsi128_ps(_mm_cmpeq_epi32(
                                               _mm_loadu_si128(reinterpret_cast<const __m128i*>(data)), zero16)))) |
-                                      (static_cast<uint64_t>(_mm_movemask_ps(_mm_cvtepi32_ps(_mm_cmpeq_epi32(
+                                      (static_cast<uint64_t>(_mm_movemask_ps(_mm_castsi128_ps(_mm_cmpeq_epi32(
                                                _mm_loadu_si128(reinterpret_cast<const __m128i*>(data + 4)), zero16))))
                                        << 4u) |
-                                      (static_cast<uint64_t>(_mm_movemask_ps(_mm_cvtepi32_ps(_mm_cmpeq_epi32(
+                                      (static_cast<uint64_t>(_mm_movemask_ps(_mm_castsi128_ps(_mm_cmpeq_epi32(
                                                _mm_loadu_si128(reinterpret_cast<const __m128i*>(data + 8)), zero16))))
                                        << 8u) |
-                                      (static_cast<uint64_t>(_mm_movemask_ps(_mm_cvtepi32_ps(_mm_cmpeq_epi32(
+                                      (static_cast<uint64_t>(_mm_movemask_ps(_mm_castsi128_ps(_mm_cmpeq_epi32(
                                                _mm_loadu_si128(reinterpret_cast<const __m128i*>(data + 12)), zero16))))
                                        << 12u));
     }
-#elif defined(__ARM_NEON) && defined(__aarch64__)
-    const T* end4 = data + (size / 4 * 4);
+
+    const T* end4 = data + ((end - data) / 4 * 4);
     for (; data < end4; data += 4) {
-        uint32x4_t vdata = vld1q_u32(data);
-        // result[i] = vdata[i] == 0 ? 0xFF : 0x00
-        uint32x4_t result = vceqq_u32(vdata, vdupq_n_u32(0));
-        // result[i] = result[i] & 0x1
-        result = vandq_u32(result, vdupq_n_u32(1));
-        count += vaddvq_u32(result);
+        count += __builtin_popcount(static_cast<uint32_t>(_mm_movemask_ps(
+                _mm_castsi128_ps(_mm_cmpeq_epi32(_mm_loadu_si128(reinterpret_cast<const __m128i*>(data)), zero16)))));
     }
+
+    const size_t rem = static_cast<size_t>(end - data);
+    if (rem > 0 && size >= 4) {
+        const __m128i v = _mm_loadu_si128(reinterpret_cast<const __m128i*>(end - 4));
+        const uint32_t m =
+                static_cast<uint32_t>(_mm_movemask_ps(_mm_castsi128_ps(_mm_cmpeq_epi32(v, _mm_setzero_si128()))));
+        count += __builtin_popcount(m >> (4 - rem));
+        return count;
+    }
+#elif defined(__ARM_NEON) && defined(__aarch64__)
+    const uint32x4_t zero32 = vdupq_n_u32(0);
+    uint32x4_t acc = vdupq_n_u32(0);
+
+    const T* end16 = data + (size / 16 * 16);
+    for (; data < end16; data += 16) {
+        const uint32_t* udata = reinterpret_cast<const uint32_t*>(data);
+        uint32x4_t v0 = vld1q_u32(udata);
+        uint32x4_t v1 = vld1q_u32(udata + 4);
+        uint32x4_t v2 = vld1q_u32(udata + 8);
+        uint32x4_t v3 = vld1q_u32(udata + 12);
+
+        acc = vsubq_u32(acc, vceqq_u32(v0, zero32));
+        acc = vsubq_u32(acc, vceqq_u32(v1, zero32));
+        acc = vsubq_u32(acc, vceqq_u32(v2, zero32));
+        acc = vsubq_u32(acc, vceqq_u32(v3, zero32));
+    }
+
+    const T* end4 = data + ((end - data) / 4 * 4);
+    for (; data < end4; data += 4) {
+        const uint32_t* udata = reinterpret_cast<const uint32_t*>(data);
+        uint32x4_t v = vld1q_u32(udata);
+        acc = vsubq_u32(acc, vceqq_u32(v, zero32));
+    }
+
+    count += vaddlvq_u32(acc);
 #endif
 
     for (; data < end; ++data) {
@@ -211,11 +388,16 @@ inline size_t find_nonzero(const Container& list, size_t start, size_t count) {
     return find_byte(list, start, count, static_cast<T>(1));
 }
 
+template <Integer8BitType T>
+inline bool contain_zero(const T* data, size_t size) {
+    return size > 0 && std::memchr(data, 0, size) != nullptr;
+}
+
 template <typename Container, typename T = typename Container::value_type>
 inline bool contain_zero(const Container& list) {
     static_assert(std::is_integral<T>::value && (sizeof(T) == sizeof(uint8_t)),
                   "only 8-bit integral types are supported");
-    return find_zero(list, 0) < list.size();
+    return contain_zero(reinterpret_cast<const uint8_t*>(list.data()), list.size());
 }
 
 template <typename Container, typename T = typename Container::value_type>
@@ -260,7 +442,7 @@ inline bool contains_nonzero_bit(const T* data, size_t size) {
     constexpr size_t W = 16;
     const T* end16 = data + (size / W * W);
     for (; data < end16; data += W) {
-        uint8x16_t vdata = vld1q_u8(data);
+        uint8x16_t vdata = vld1q_u8(reinterpret_cast<const uint8_t*>(data));
         if (vmaxvq_u8(vdata) != 0) {
             return true;
         }
@@ -274,6 +456,13 @@ inline bool contains_nonzero_bit(const T* data, size_t size) {
     }
 
     return false;
+}
+
+template <typename Container, typename T = typename Container::value_type>
+inline bool contains_nonzero_bit(const Container& data) {
+    static_assert(std::is_integral<T>::value && sizeof(T) == sizeof(uint8_t),
+                  "only 8-bit integral types are supported");
+    return contains_nonzero_bit(data.data(), data.size());
 }
 
 /// Check if all bytes are zero (early exit on first non-zero).
@@ -296,7 +485,7 @@ inline bool all_zeros(const Container& data) {
 template <Integer8BitType T>
 inline bool all_ones(const T* data, size_t size) {
     // memchr is extremely fast for finding a byte - uses SIMD internally in glibc/musl.
-    return std::memchr(data, 0, size) == nullptr;
+    return size == 0 || std::memchr(data, 0, size) == nullptr;
 }
 
 template <typename Container, typename T = typename Container::value_type>
