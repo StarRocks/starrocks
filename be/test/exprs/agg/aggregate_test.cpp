@@ -3091,7 +3091,6 @@ TEST_F(AggregateTest, test_ds_theta_count_distinct) {
     ASSERT_EQ(5, result_column->get_data()[0]);
 }
 
-<<<<<<< HEAD
 // A state that is not trivially destructible and counts how many of it are alive.
 struct LiveCountedState {
     static inline int64_t live = 0;
@@ -3217,7 +3216,8 @@ TEST_F(AggregateTest, test_state_function_const_null_column) {
     func->finalize_to_column(ctx, merged->state(), final_column.get());
     ASSERT_EQ(1, final_column->size());
     ASSERT_TRUE(final_column->is_null(0));
-=======
+}
+
 namespace {
 
 // One serialized approx_top_k(BIGINT) state, as ApproxTopKAggregateFunction::serialize_state lays it out:
@@ -3439,7 +3439,6 @@ TEST_F(AggregateTest, test_approx_top_k_convert_to_serialize_format_nullable) {
     const std::vector<std::string> expected = {"NULL:585", "36:185", "35:180", "34:175", "33:170"};
     ASSERT_EQ(expected, approx_top_k_bigint_result(*updated_result));
     ASSERT_EQ(expected, approx_top_k_bigint_result(*merged_result));
->>>>>>> 19975a0 ([BugFix] Clear approx_top_k counters on reset so pass-through stays linear (#82907))
 }
 
 } // namespace starrocks
