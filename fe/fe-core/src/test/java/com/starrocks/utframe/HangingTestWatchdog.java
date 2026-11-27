@@ -67,6 +67,8 @@ public class HangingTestWatchdog implements TestExecutionListener {
 
     @Override
     public synchronized void testPlanExecutionStarted(TestPlan testPlan) {
+        // independent of the stall threshold: records who calls System.exit in this test JVM
+        ExitTraceHook.install();
         if (thresholdNanos <= 0 || checker != null) {
             return;
         }
@@ -92,12 +94,14 @@ public class HangingTestWatchdog implements TestExecutionListener {
     @Override
     public void executionStarted(TestIdentifier testIdentifier) {
         running.put(testIdentifier.getUniqueId(), System.nanoTime());
+        ExitTraceHook.testStarted(testIdentifier.getUniqueId());
         progress();
     }
 
     @Override
     public void executionFinished(TestIdentifier testIdentifier, TestExecutionResult testExecutionResult) {
         running.remove(testIdentifier.getUniqueId());
+        ExitTraceHook.testFinished(testIdentifier.getUniqueId());
         progress();
     }
 
