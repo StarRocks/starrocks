@@ -50,6 +50,7 @@ CREATE TABLE starrocks_audit_db__.starrocks_audit_tbl__ (
   `planCpuCosts` DOUBLE COMMENT "查询规划阶段CPU占用（纳秒）",
   `planMemCosts` DOUBLE COMMENT "查询规划阶段内存占用（字节）",
   `pendingTimeMs` BIGINT COMMENT "查询在队列中等待的时间（毫秒）",
+  `queryFeMemory` BIGINT COMMENT "查询申请FE内存（字节）",
   `candidateMVs` VARCHAR(65533) NULL COMMENT "候选物化视图列表",
   `hitMvs` VARCHAR(65533) NULL COMMENT "命中MV列表",
   `QueriedRelations` ARRAY<VARCHAR(65533)> NULL COMMENT "SQL 直接引用的表和视图列表",

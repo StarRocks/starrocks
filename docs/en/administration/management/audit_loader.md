@@ -55,6 +55,7 @@ CREATE TABLE starrocks_audit_db__.starrocks_audit_tbl__ (
   `planCpuCosts` DOUBLE COMMENT "CPU usage during query planning (nanoseconds)",
   `planMemCosts` DOUBLE COMMENT "Memory usage during query planning (bytes)",
   `pendingTimeMs` BIGINT COMMENT "Time the query waited in the queue (milliseconds)",
+  `queryFeMemory` BIGINT COMMENT "Memory allocated by the query on the FE (bytes)",
   `candidateMVs` VARCHAR(65533) NULL COMMENT "List of candidate materialized views",
   `hitMvs` VARCHAR(65533) NULL COMMENT "List of matched materialized views",
   `QueriedRelations` ARRAY<VARCHAR(65533)> NULL COMMENT "List of directly referenced tables and views",
