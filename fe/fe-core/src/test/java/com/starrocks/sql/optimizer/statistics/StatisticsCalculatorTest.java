@@ -1136,8 +1136,13 @@ public class StatisticsCalculatorTest {
             connectContext.getSessionVariable().setUseCorrelatedJoinEstimate(true);
             connectContext.getSessionVariable().setCboDeriveRangeJoinPredicate(true);
             Statistics joined = estimateJoin(joinType, equality, left, right);
+            // branch-4.0 lacks #73489, so a FULL OUTER JOIN keeps the older row-count and null-fraction estimate
+            // (max(1, L + R - inner)); only the restored key bounds are checked for it.
+            boolean checkRowCount = !joinType.isFullOuterJoin();
             // Repeated matches avoid input-statistic restoration by the nullable-side padding loop.
-            Assertions.assertEquals(72_000, joined.getOutputRowCount(), 0.001);
+            if (checkRowCount) {
+                Assertions.assertEquals(72_000, joined.getOutputRowCount(), 0.001);
+            }
             for (ColumnRefOperator key : List.of(leftKey, rightKey)) {
                 ColumnStatistic original = key == leftKey ? leftStatistic : rightStatistic;
                 ColumnStatistic actual = joined.getColumnStatistic(key);
@@ -1145,8 +1150,10 @@ public class StatisticsCalculatorTest {
                         (joinType.isLeftOuterJoin() ? key == leftKey : key == rightKey);
                 Assertions.assertEquals(preserved ? original.getMinString() : null, actual.getMinString());
                 Assertions.assertEquals(preserved ? original.getMaxString() : null, actual.getMaxString());
-                Assertions.assertEquals(preserved ? original.getNullsFraction() * 10_000 / 72_000 : 0,
-                        actual.getNullsFraction(), 0.000001);
+                if (checkRowCount) {
+                    Assertions.assertEquals(preserved ? original.getNullsFraction() * 10_000 / 72_000 : 0,
+                            actual.getNullsFraction(), 0.000001);
+                }
             }
             Statistics innerJoined = estimateJoin(JoinOperator.INNER_JOIN, equality, left, right);
             for (ColumnRefOperator key : List.of(leftKey, rightKey)) {
@@ -1200,7 +1207,8 @@ public class StatisticsCalculatorTest {
         Statistics joined = estimateJoin(JoinOperator.FULL_OUTER_JOIN,
                 new BinaryPredicateOperator(BinaryType.EQ, leftKey, rightKey), left, right);
 
-        Assertions.assertTrue(joined.getOutputRowCount() > 10_000);
+        // branch-4.0 lacks #73489, so the FULL OUTER JOIN row count and null fractions follow the older estimate
+        // (max(1, L + R - inner)); only the restored key domains are checked here.
         ColumnStatistic leftStat = joined.getColumnStatistic(leftKey);
         ColumnStatistic rightStat = joined.getColumnStatistic(rightKey);
         Assertions.assertEquals(1000, leftStat.getDistinctValuesCount(), 0.001);
@@ -1209,8 +1217,6 @@ public class StatisticsCalculatorTest {
         Assertions.assertEquals(1000, rightStat.getDistinctValuesCount(), 0.001);
         Assertions.assertEquals(500, rightStat.getMinValue(), 0.001);
         Assertions.assertEquals(1500, rightStat.getMaxValue(), 0.001);
-        Assertions.assertEquals(1000.0 / joined.getOutputRowCount(), leftStat.getNullsFraction(), 0.000001);
-        Assertions.assertEquals(2000.0 / joined.getOutputRowCount(), rightStat.getNullsFraction(), 0.000001);
     }
 
     @ParameterizedTest
@@ -1288,12 +1294,8 @@ public class StatisticsCalculatorTest {
                 Assertions.assertTrue(leftStatistic.getNullsFraction() > 0);
                 Assertions.assertTrue(rightStatistic.getNullsFraction() > 0);
             }
-            Statistics leftFiltered = PredicateStatisticsCalculator.statisticsCalculate(
-                    new BinaryPredicateOperator(BinaryType.LT, leftKey, ConstantOperator.createBigint(500)), joined);
-            Statistics rightFiltered = PredicateStatisticsCalculator.statisticsCalculate(
-                    new BinaryPredicateOperator(BinaryType.GT, rightKey, ConstantOperator.createBigint(1000)), joined);
-            Assertions.assertEquals(500, leftFiltered.getOutputRowCount(), 0.001);
-            Assertions.assertEquals(500, rightFiltered.getOutputRowCount(), 0.001);
+            // The filtered row counts asserted on main depend on the FULL OUTER JOIN null fractions of #73489,
+            // which branch-4.0 does not have.
         } finally {
             connectContext.getSessionVariable().setCboEnableHistogramJoinEstimation(originalHistogramEnabled);
             connectContext.getSessionVariable().setUseCorrelatedJoinEstimate(correlatedEstimate);
