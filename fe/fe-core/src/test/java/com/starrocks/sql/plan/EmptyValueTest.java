@@ -277,6 +277,23 @@ public class EmptyValueTest extends PlanTestBase {
     }
 
     @Test
+    public void testScanSelectionRulesIgnoredInDisabledRules() throws Exception {
+        // these rules select the partitions and tablets a scan reads; disabling them must not empty the scan
+        for (String rule : new String[] {"TF_DISTRIBUTION_PRUNE", "GP_PARTITION_PRUNE", "TF_PARTITION_PRUNE"}) {
+            connectContext.getSessionVariable().setCboDisabledRules(rule);
+            try {
+                for (String sql : new String[] {"select v1, v2 from t0", "select L_ORDERKEY from lineitem_partition"}) {
+                    String plan = getFragmentPlan(sql);
+                    assertNotContains(plan, "EMPTYSET");
+                    assertContains(plan, "OlapScanNode");
+                }
+            } finally {
+                connectContext.getSessionVariable().setCboDisabledRules("");
+            }
+        }
+    }
+
+    @Test
     public void testOther() throws Exception {
         String sql = "select *, (select L_LINENUMBER from lineitem_partition p where L_SHIPDATE = '2000-01-01') x " +
                 "from t0;";

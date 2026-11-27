@@ -312,7 +312,7 @@ SET GLOBAL broadcast_mem_exceeded_penalty_factor = 10.0;
 
 ### cbo_disabled_rules
 
-* **描述**: 以逗号分隔的优化器规则名称列表，用于在当前会话中禁用规则。每个名称必须与 `RuleType` 枚举值匹配，且仅可禁用名称以 `TF_`（转换规则）或 `GP_`（组组合规则）开头的规则。该会话变量存储在 `SessionVariable`（`getCboDisabledRules` / `setCboDisabledRules`）中，并由优化器通过 `OptimizerOptions.applyDisableRuleFromSessionVariable()` 应用；该方法解析列表并清除对应的规则开关，从而在规划期间跳过这些规则。通过 SET 语句设置时，值会被校验，服务器会以明确错误信息拒绝未知名称或不以 `TF_`/`GP_` 开头的名称（例如 "Unknown rule name(s): ..." 或 "Only TF_ ... and GP_ ... can be disabled"）。在规划器运行时，未知的规则名称会被忽略并记录警告（记录为 "Ignoring unknown rule name: ... (may be from different version)"）。名称必须与枚举标识符完全匹配（区分大小写）。名称周围的空白会被修剪；空条目会被忽略。
+* **描述**: 以逗号分隔的优化器规则名称列表，用于在当前会话中禁用规则。每个名称必须与 `RuleType` 枚举值匹配，且仅可禁用名称以 `TF_`（转换规则）或 `GP_`（组组合规则）开头的规则。该会话变量存储在 `SessionVariable`（`getCboDisabledRules` / `setCboDisabledRules`）中，并由优化器通过 `OptimizerOptions.applyDisableRuleFromSessionVariable()` 应用；该方法解析列表并清除对应的规则开关，从而在规划期间跳过这些规则。`GP_PARTITION_PRUNE`、`TF_PARTITION_PRUNE` 和 `TF_DISTRIBUTION_PRUNE` 可以写入但不生效：这三条规则决定扫描读取哪些分区和 Tablet，因此不会被禁用。通过 SET 语句设置时，值会被校验，服务器会以明确错误信息拒绝未知名称或不以 `TF_`/`GP_` 开头的名称（例如 "Unknown rule name(s): ..." 或 "Only TF_ ... and GP_ ... can be disabled"）。在规划器运行时，未知的规则名称会被忽略并记录警告（记录为 "Ignoring unknown rule name: ... (may be from different version)"）。名称必须与枚举标识符完全匹配（区分大小写）。名称周围的空白会被修剪；空条目会被忽略。
 * **作用域**: Session
 * **默认值**: `""`（无被禁用规则）
 * **数据类型**: String
