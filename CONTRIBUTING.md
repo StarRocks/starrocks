@@ -32,7 +32,7 @@ Contributions to StarRocks are cordially welcome from everyone. Contributing to 
 
 |Contribution|Details|
 |------------|-------|
-|Report a bug|You can [file an issue](https://github.com/StarRocks/starrocks/issues/new/choose) To report a bug with StarRock.|
+|Report a bug|You can [file an issue](https://github.com/StarRocks/starrocks/issues/new/choose) to report a bug with StarRocks.|
 |Contribute code|You can contribute your code by fixing a bug or implementing a feature.|
 |Contribute test case|You can contribute your test cases.|
 |Help review code|If you are an active contributor or committer of StarRocks, you can help us review the pull requests (PRs).|
@@ -104,7 +104,7 @@ TBC
 
 - You should relate the issue you worked on in the PR body.
 - It is recommended to submit ONE commit in ONE PR.
-See [PR template](https://github.com/StarRocks/starrocks/blob/main/.github/PULL_REQUEST_TEMPLATE.md) for more inforamtion.
+See [PR template](https://github.com/StarRocks/starrocks/blob/main/.github/PULL_REQUEST_TEMPLATE.md) for more information.
 
 #### Contributor License Agreement
 
