@@ -118,6 +118,9 @@ public:
     StatusOr<std::vector<std::pair<int64_t, int64_t>>> get_io_range_vec(const SparseRange<>& range,
                                                                         Column* dst) override;
 
+    StatusOr<std::vector<std::pair<int64_t, int64_t>>> get_io_range_vec_by_ordinal(const OrdinalSparseRange& range,
+                                                                                   Column* dst) override;
+
     std::string name() const override { return "ScalarColumnIterator"; }
 
     void reserve_col(size_t n, Column* column) override {
@@ -131,6 +134,9 @@ public:
     bool support_push_down_predicate(const std::vector<const ColumnPredicate*>& compound_and_predicates) override;
 
 private:
+    template <typename RangeType>
+    StatusOr<std::vector<std::pair<int64_t, int64_t>>> _get_io_range_vec(const RangeType& range, Column* dst);
+
     static Status _seek_to_pos_in_page(ParsedPage* page, ordinal_t offset_in_page);
     Status _load_next_page(bool* eos);
     Status _read_data_page(const OrdinalPageIndexIterator& iter);
