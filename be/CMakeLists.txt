@@ -647,7 +647,7 @@ endif()
 
 set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS}
     ${STARROCKS_STATIC_LINK_LIBS}
-    ${WL_LINK_DYNAMIC} -lresolv -liberty -lc -lm -ldl -rdynamic -pthread ${WRAP_LINKER_FLAGS}
+    ${WL_LINK_DYNAMIC} -lresolv -lc -lm -ldl -rdynamic -pthread ${WRAP_LINKER_FLAGS}
 )
 
 # link gcov if WITH_GCOV is on
