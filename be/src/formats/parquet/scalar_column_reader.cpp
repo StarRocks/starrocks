@@ -106,6 +106,10 @@ void RawColumnReader::collect_column_io_range(std::vector<SharedBufferedInputStr
 }
 
 void RawColumnReader::select_offset_index(const SparseRange<uint64_t>& range, const uint64_t rg_first_row) {
+    if (_offset_index_unusable) {
+        // Read every page through the plain reader, which follows the page headers.
+        return;
+    }
     if (_offset_index_ctx == nullptr) {
         if (!get_chunk_metadata()->__isset.offset_index_offset) {
             return;
@@ -117,6 +121,10 @@ void RawColumnReader::select_offset_index(const SparseRange<uint64_t>& range, co
     }
     size_t page_num = _offset_index_ctx->offset_index.page_locations.size();
     size_t range_size = range.size();
+    if (page_num == 0 || range_size == 0) {
+        // Nothing to map the range onto; keep reading every page through the plain reader.
+        return;
+    }
 
     size_t range_idx = 0;
     Range<uint64_t> r = range[range_idx++];
@@ -316,6 +324,19 @@ StatusOr<bool> RawColumnReader::_page_index_zone_map_filter(const std::vector<co
 
     const size_t page_num = column_index.min_values.size();
     const std::vector<bool> null_pages = column_index.null_pages;
+    // The loops below index all of these by page. A file whose ColumnIndex and OffsetIndex disagree on the
+    // page count cannot be pruned safely, so read it without page filtering. Neither index can be trusted
+    // then, so keep the OffsetIndex out of the read path too (see select_offset_index()).
+    if (offset_index->page_locations.size() != page_num) {
+        _offset_index_unusable = true;
+    }
+    if (page_num == 0 || offset_index->page_locations.size() != page_num || null_pages.size() != page_num ||
+        column_index.max_values.size() != page_num) {
+        LOG(INFO) << "Skip page index filtering, inconsistent page index: column index pages " << page_num
+                  << ", max values " << column_index.max_values.size() << ", null pages " << null_pages.size()
+                  << ", offset index pages " << offset_index->page_locations.size();
+        return false;
+    }
 
     MutableColumnPtr min_column = ColumnHelper::create_column(col_type, true);
     MutableColumnPtr max_column = ColumnHelper::create_column(col_type, true);

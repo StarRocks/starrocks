@@ -90,8 +90,12 @@ public:
 
     StatusOr<tparquet::OffsetIndex*> get_offset_index(const uint64_t rg_first_row) override {
         if (_offset_index_ctx == nullptr) {
-            _offset_index_ctx = std::make_unique<ColumnOffsetIndexCtx>();
-            _offset_index_ctx->rg_first_row = rg_first_row;
+            // Build the context aside and publish it only after the offset index has been read and parsed.
+            // Page index filtering is optional, so callers swallow a failure here; a context published
+            // before a failed read would leave an empty OffsetIndex behind, and the next caller would index
+            // its page_locations with the page count of the ColumnIndex.
+            auto ctx = std::make_unique<ColumnOffsetIndexCtx>();
+            ctx->rg_first_row = rg_first_row;
             int64_t offset_index_offset = get_chunk_metadata()->offset_index_offset;
             uint32_t offset_index_length = get_chunk_metadata()->offset_index_length;
             std::vector<uint8_t> offset_index_data;
@@ -111,13 +115,12 @@ public:
                                                 offset_index_data.data(), offset_index_length, &plaintext));
                 auto plaintext_len = static_cast<uint32_t>(plaintext.size());
                 RETURN_IF_ERROR(deserialize_thrift_msg(reinterpret_cast<const uint8_t*>(plaintext.data()),
-                                                       &plaintext_len, TProtocolType::COMPACT,
-                                                       &_offset_index_ctx->offset_index));
-                return &_offset_index_ctx->offset_index;
+                                                       &plaintext_len, TProtocolType::COMPACT, &ctx->offset_index));
+            } else {
+                RETURN_IF_ERROR(deserialize_thrift_msg(offset_index_data.data(), &offset_index_length,
+                                                       TProtocolType::COMPACT, &ctx->offset_index));
             }
-
-            RETURN_IF_ERROR(deserialize_thrift_msg(offset_index_data.data(), &offset_index_length,
-                                                   TProtocolType::COMPACT, &_offset_index_ctx->offset_index));
+            _offset_index_ctx = std::move(ctx);
         }
         return &_offset_index_ctx->offset_index;
     }
@@ -174,6 +177,10 @@ protected:
 
     const tparquet::ColumnChunk* _chunk_metadata = nullptr;
     std::unique_ptr<ColumnOffsetIndexCtx> _offset_index_ctx;
+    // Set when the OffsetIndex disagrees with the ColumnIndex on the page count. Either may be the broken
+    // one, so the OffsetIndex is not trusted for indexed reading either: StoredColumnReaderWithIndex stops
+    // after the pages it lists, and a truncated index would drop the remaining pages.
+    bool _offset_index_unusable = false;
 
     // LOGICAL column saved when a PHYSICAL column is swapped into the slot
     // during read_range().  Restored by _restore_physical_column() or at
