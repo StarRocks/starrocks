@@ -543,6 +543,38 @@ public class PartitionPruneTest extends PlanTestBase {
                 .explainContains("partitions=1/3");
     }
 
+    /**
+     * Comparing a string LIST partition column with a number casts every partition value to the
+     * number's type. A value that does not convert ('hello' to double) used to fail the query; its
+     * partition must instead be kept for the rows to decide, while the values that do convert still
+     * prune.
+     */
+    @Test
+    public void testListPruneKeepsPartitionValueThatDoesNotCast() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE t_list_uncastable (id int, s varchar(20)) DUPLICATE KEY(id)"
+                + " PARTITION BY LIST(s) (PARTITION p1 VALUES IN ('hello'), PARTITION p2 VALUES IN ('1'),"
+                + " PARTITION p3 VALUES IN ('3'))"
+                + " DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES('replication_num'='1')");
+        try {
+            // p2 ('1') is pruned, p1 ('hello') is kept, p3 ('3') matches.
+            starRocksAssert.query("select id from t_list_uncastable where s > 1.5")
+                    .explainContains("partitions=2/3");
+            starRocksAssert.query("select id from t_list_uncastable where cast(s as int) = 1")
+                    .explainContains("partitions=2/3");
+            starRocksAssert.query("select id from t_list_uncastable where cast(s as int) in (3, 4)")
+                    .explainContains("partitions=2/3");
+            // A predicate that needs no cast prunes as before.
+            starRocksAssert.query("select id from t_list_uncastable where s = 'hello'")
+                    .explainContains("partitions=1/3");
+            // CAST('hello' AS INT) is NULL at run time, so IS NULL over the CAST can hold in p1 even
+            // though s itself is never NULL there.
+            starRocksAssert.query("select id from t_list_uncastable where cast(s as int) is null")
+                    .explainContains("partitions=3/3");
+        } finally {
+            starRocksAssert.dropTable("t_list_uncastable");
+        }
+    }
+
     @Test
     public void testGeneratedColumnPruneSkipsCaseWhen() throws Exception {
         // A guard, not a regression test: nothing here is known to be broken today.
