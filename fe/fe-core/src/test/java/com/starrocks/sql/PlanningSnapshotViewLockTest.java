@@ -381,6 +381,13 @@ public class PlanningSnapshotViewLockTest extends ConnectorPlanTestBase {
         assertSyncMVBaseTableCopiedUnderItsLock("SELECT count(*) FROM test.t1 GROUP BY CUBE (v4, " + read + ")");
     }
 
+    /** The parser moves the FROM clause of a PIVOT under it: a [_SYNC_MV_] read there is analyzed like any other. */
+    @Test
+    public void testSyncMVReadUnderPivot() throws Exception {
+        assertSyncMVBaseTableCopiedUnderItsLock("SELECT * FROM test." + SYNC_MV + " [_SYNC_MV_] "
+                + "PIVOT (count(*) FOR k1 IN (1 AS a))");
+    }
+
     /**
      * CREATE VIEW analyzes its query without the planner lock, and the analyzer still copies the base table of a
      * [_SYNC_MV_] read: 2-g, exempted until the analyzer stops copying. Here so that dropping the exemption before
@@ -502,6 +509,16 @@ public class PlanningSnapshotViewLockTest extends ConnectorPlanTestBase {
         assertEveryCopyWasLockedOf("SELECT count(*) FROM test.t0 GROUP BY GROUPING SETS ((v1), (" + read + "))", "t1");
         assertEveryCopyWasLockedOf("SELECT count(*) FROM test.t0 GROUP BY ROLLUP (v1, " + read + ")", "t1");
         assertEveryCopyWasLockedOf("SELECT count(*) FROM test.t0 GROUP BY CUBE (v1, " + read + ")", "t1");
+        Assertions.assertEquals(0, reLocks.get());
+    }
+
+    /** The same for a table read only under a PIVOT, which the parser moves the FROM clause under. */
+    @Test
+    public void testNoReLockForATableReadUnderPivot() throws Exception {
+        AtomicInteger reLocks = countReLocks();
+        assertEveryCopyWasLockedOf("SELECT * FROM test.t1 PIVOT (sum(v5) FOR v4 IN (1 AS a))", "t1");
+        assertEveryCopyWasLockedOf("SELECT * FROM test.t0 JOIN test.t1 ON v1 = v4 PIVOT (sum(v5) FOR v4 IN (1 AS a))",
+                "t1");
         Assertions.assertEquals(0, reLocks.get());
     }
 
