@@ -14,7 +14,11 @@
 
 package com.starrocks.catalog;
 
+import com.google.gson.Gson;
+import com.starrocks.common.Config;
 import com.starrocks.common.Range;
+import com.starrocks.common.io.DeepCopy;
+import com.starrocks.persist.gson.DefaultGsonBuilderFactory;
 import com.starrocks.proto.TabletRangePB;
 import com.starrocks.proto.TuplePB;
 import com.starrocks.proto.VariantPB;
@@ -28,7 +32,9 @@ import com.starrocks.type.VarcharType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
+import java.util.List;
 
 public class TabletRangeTest {
 
@@ -90,14 +96,14 @@ public class TabletRangeTest {
 
         // All Variant values are encoded via the `value` field.
         Assertions.assertTrue(lowerInt.isSetValue());
-        Assertions.assertEquals("1", lowerInt.getValue());
+        Assertions.assertEquals("1", new String(lowerInt.getValue(), StandardCharsets.UTF_8));
         Assertions.assertTrue(lowerStr.isSetValue());
-        Assertions.assertEquals("a", lowerStr.getValue());
+        Assertions.assertEquals("a", new String(lowerStr.getValue(), StandardCharsets.UTF_8));
 
         Assertions.assertTrue(upperInt.isSetValue());
-        Assertions.assertEquals("5", upperInt.getValue());
+        Assertions.assertEquals("5", new String(upperInt.getValue(), StandardCharsets.UTF_8));
         Assertions.assertTrue(upperStr.isSetValue());
-        Assertions.assertEquals("z", upperStr.getValue());
+        Assertions.assertEquals("z", new String(upperStr.getValue(), StandardCharsets.UTF_8));
     }
 
     @Test
@@ -129,14 +135,14 @@ public class TabletRangeTest {
         VariantPB upperStr = upperPB.values.get(1);
 
         Assertions.assertEquals(VariantTypePB.NORMAL_VALUE, lowerInt.variantType);
-        Assertions.assertEquals("1", lowerInt.value);
+        Assertions.assertEquals("1", new String(lowerInt.value, StandardCharsets.UTF_8));
         Assertions.assertEquals(VariantTypePB.NORMAL_VALUE, lowerStr.variantType);
-        Assertions.assertEquals("a", lowerStr.value);
+        Assertions.assertEquals("a", new String(lowerStr.value, StandardCharsets.UTF_8));
 
         Assertions.assertEquals(VariantTypePB.NORMAL_VALUE, upperInt.variantType);
-        Assertions.assertEquals("5", upperInt.value);
+        Assertions.assertEquals("5", new String(upperInt.value, StandardCharsets.UTF_8));
         Assertions.assertEquals(VariantTypePB.NORMAL_VALUE, upperStr.variantType);
-        Assertions.assertEquals("z", upperStr.value);
+        Assertions.assertEquals("z", new String(upperStr.value, StandardCharsets.UTF_8));
     }
 
     @Test
@@ -155,7 +161,7 @@ public class TabletRangeTest {
 
         TVariant tv = tRange.getLower_bound().getValues().get(0);
         Assertions.assertTrue(tv.isSetValue());
-        Assertions.assertEquals("10", tv.getValue());
+        Assertions.assertEquals("10", new String(tv.getValue(), StandardCharsets.UTF_8));
     }
 
     @Test
@@ -174,7 +180,7 @@ public class TabletRangeTest {
 
         TVariant tv = tRange.getUpper_bound().getValues().get(0);
         Assertions.assertTrue(tv.isSetValue());
-        Assertions.assertEquals("100", tv.getValue());
+        Assertions.assertEquals("100", new String(tv.getValue(), StandardCharsets.UTF_8));
     }
 
     @Test
@@ -197,9 +203,9 @@ public class TabletRangeTest {
         TVariant lowerInt = tRange.getLower_bound().getValues().get(0);
         TVariant upperInt = tRange.getUpper_bound().getValues().get(0);
         Assertions.assertTrue(lowerInt.isSetValue());
-        Assertions.assertEquals("1", lowerInt.getValue());
+        Assertions.assertEquals("1", new String(lowerInt.getValue(), StandardCharsets.UTF_8));
         Assertions.assertTrue(upperInt.isSetValue());
-        Assertions.assertEquals("5", upperInt.getValue());
+        Assertions.assertEquals("5", new String(upperInt.getValue(), StandardCharsets.UTF_8));
     }
 
     @Test
@@ -222,9 +228,9 @@ public class TabletRangeTest {
         TVariant lowerInt = tRange.getLower_bound().getValues().get(0);
         TVariant upperInt = tRange.getUpper_bound().getValues().get(0);
         Assertions.assertTrue(lowerInt.isSetValue());
-        Assertions.assertEquals("1", lowerInt.getValue());
+        Assertions.assertEquals("1", new String(lowerInt.getValue(), StandardCharsets.UTF_8));
         Assertions.assertTrue(upperInt.isSetValue());
-        Assertions.assertEquals("5", upperInt.getValue());
+        Assertions.assertEquals("5", new String(upperInt.getValue(), StandardCharsets.UTF_8));
     }
 
     @Test
@@ -247,10 +253,101 @@ public class TabletRangeTest {
 
         // Dates should be encoded via the `value` field.
         Assertions.assertTrue(lowerDate.isSetValue());
-        Assertions.assertFalse(lowerDate.getValue().isEmpty());
+        Assertions.assertTrue(lowerDate.getValue().length > 0);
 
         Assertions.assertTrue(upperDate.isSetValue());
-        Assertions.assertFalse(upperDate.getValue().isEmpty());
+        Assertions.assertTrue(upperDate.getValue().length > 0);
+    }
+
+    // A TabletRange as the released writer persisted it, pinned verbatim.
+    private static final String LEGACY_TABLET_RANGE =
+            "{\"range\":{\"lowerBound\":{\"values\":[{\"clazz\":\"IntVariant\",\"value\":1,"
+                    + "\"type\":{\"type\":\"INT\",\"len\":-1,\"precision\":0,\"scale\":0}},"
+                    + "{\"clazz\":\"StringVariant\",\"value\":\"a\",\"type\":{\"type\":\"VARCHAR\",\"len\":-1,"
+                    + "\"precision\":0,\"scale\":0}}]},\"upperBound\":{\"values\":[{\"clazz\":\"IntVariant\","
+                    + "\"value\":5,\"type\":{\"type\":\"INT\",\"len\":-1,\"precision\":0,\"scale\":0}},"
+                    + "{\"clazz\":\"StringVariant\",\"value\":\"z\",\"type\":{\"type\":\"VARCHAR\",\"len\":-1,"
+                    + "\"precision\":0,\"scale\":0}}]},\"lowerBoundIncluded\":true}}";
+
+    @Test
+    public void testLegacyTupleInPersistedRanges() {
+        boolean saved = Config.metadata_ignore_unknown_subtype;
+        try {
+            for (boolean ignoreUnknown : new boolean[] {false, true}) {
+                Config.metadata_ignore_unknown_subtype = ignoreUnknown;
+                Gson gson = new DefaultGsonBuilderFactory().create().create();
+                TabletRange loaded = gson.fromJson(LEGACY_TABLET_RANGE, TabletRange.class);
+                Tuple lower = loaded.getRange().getLowerBound();
+                Tuple upper = loaded.getRange().getUpperBound();
+                Assertions.assertEquals(2, lower.getValues().size());
+                Assertions.assertEquals(2, upper.getValues().size());
+                Assertions.assertInstanceOf(IntVariant.class, lower.getValues().get(0));
+                Assertions.assertInstanceOf(StringVariant.class, lower.getValues().get(1));
+                Assertions.assertEquals(VarcharType.VARCHAR.getPrimitiveType(),
+                        lower.getValues().get(1).getType().getPrimitiveType());
+                Assertions.assertEquals(1, lower.getValues().get(0).getLongValue());
+                Assertions.assertArrayEquals("a".getBytes(StandardCharsets.UTF_8), lower.getValues().get(1).getBytesValue());
+                Assertions.assertEquals(5, upper.getValues().get(0).getLongValue());
+                Assertions.assertArrayEquals("z".getBytes(StandardCharsets.UTF_8), upper.getValues().get(1).getBytesValue());
+
+                String json = gson.toJson(loaded);
+                Assertions.assertTrue(json.contains("\"clazz\":\"StringVariant\""), json);
+                Assertions.assertTrue(json.contains("\"value\":\"a\""), json);
+                Assertions.assertEquals(loaded, gson.fromJson(json, TabletRange.class));
+            }
+        } finally {
+            Config.metadata_ignore_unknown_subtype = saved;
+        }
+    }
+
+    @Test
+    public void testInvalidUtf8TupleInPersistedRanges() {
+        boolean saved = Config.metadata_ignore_unknown_subtype;
+        try {
+            byte[] lowerBytes = {'a', (byte) 0xFF};
+            byte[] upperBytes = {'z', 0, (byte) 0xC3};
+            TabletRange original = new TabletRange(Range.gelt(
+                    new Tuple(Arrays.asList(new IntVariant(IntegerType.INT, 1),
+                            Variant.of(VarcharType.VARCHAR, lowerBytes))),
+                    new Tuple(Arrays.asList(new IntVariant(IntegerType.INT, 5),
+                            Variant.of(VarcharType.VARCHAR, upperBytes)))));
+            for (boolean ignoreUnknown : new boolean[] {false, true}) {
+                Config.metadata_ignore_unknown_subtype = ignoreUnknown;
+                Gson gson = new DefaultGsonBuilderFactory().create().create();
+                String json = gson.toJson(original);
+                Assertions.assertTrue(json.contains("\"clazz\":\"StringVariant\""), json);
+                TabletRange loaded = gson.fromJson(json, TabletRange.class);
+                List<Variant> lower = loaded.getRange().getLowerBound().getValues();
+                List<Variant> upper = loaded.getRange().getUpperBound().getValues();
+                Assertions.assertEquals(2, lower.size());
+                Assertions.assertEquals(2, upper.size());
+                Assertions.assertEquals(1, lower.get(0).getLongValue());
+                Assertions.assertArrayEquals(lowerBytes, lower.get(1).getBytesValue());
+                Assertions.assertEquals(5, upper.get(0).getLongValue());
+                Assertions.assertArrayEquals(upperBytes, upper.get(1).getBytesValue());
+                Assertions.assertEquals(original, loaded);
+            }
+        } finally {
+            Config.metadata_ignore_unknown_subtype = saved;
+        }
+    }
+
+    @Test
+    public void testDeepCopyKeepsBytes() {
+        byte[] lowerBytes = new byte[12];
+        Arrays.fill(lowerBytes, 0, 10, (byte) 'p');
+        lowerBytes[10] = (byte) 0xC3;
+        lowerBytes[11] = (byte) 0xA9;
+        byte[] upperBytes = Arrays.copyOf(lowerBytes, 13);
+        upperBytes[12] = (byte) 0xFF;
+        Tuple lower = new Tuple(Arrays.asList(new StringVariant(VarcharType.VARCHAR, lowerBytes)));
+        Tuple upper = new Tuple(Arrays.asList(new StringVariant(VarcharType.VARCHAR, upperBytes)));
+        TabletRange original = new TabletRange(Range.gelt(lower, upper));
+
+        TabletRange copy = DeepCopy.copyWithGson(original, TabletRange.class);
+
+        Assertions.assertNotNull(copy);
+        Assertions.assertArrayEquals(lowerBytes, copy.getRange().getLowerBound().getValues().get(0).getBytesValue());
+        Assertions.assertArrayEquals(upperBytes, copy.getRange().getUpperBound().getValues().get(0).getBytesValue());
     }
 }
-

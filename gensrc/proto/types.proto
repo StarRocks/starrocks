@@ -218,7 +218,8 @@ enum VariantTypePB {
 
 message VariantPB {
     optional PTypeDesc type = 1;
-    optional string value = 2;
+    // Raw bytes of the value; need not be valid UTF-8.
+    optional bytes value = 2;
     optional VariantTypePB variant_type = 3;
 }
 

@@ -39,6 +39,11 @@ import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.Utils;
 import com.starrocks.lake.compaction.CompactionMgr;
 import com.starrocks.persist.EditLog;
+<<<<<<< HEAD
+=======
+import com.starrocks.persist.WALApplier;
+import com.starrocks.planner.RangeDistributionPrunerTest;
+>>>>>>> e183bb1 ([BugFix] Keep tablet range boundary values as raw bytes on FE (#84763))
 import com.starrocks.proto.AggregatePublishVersionRequest;
 import com.starrocks.proto.PublishVersionRequest;
 import com.starrocks.proto.PublishVersionResponse;
@@ -57,6 +62,7 @@ import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionStatus;
 import com.starrocks.type.IntegerType;
+import com.starrocks.type.VarcharType;
 import com.starrocks.utframe.MockedBackend.MockLakeService;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -69,6 +75,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -893,8 +900,10 @@ public class SplitTabletJobTest {
                 && !oldRange.lowerBound.values.isEmpty();
         boolean hasUpper = oldRange.upperBound != null && oldRange.upperBound.values != null
                 && !oldRange.upperBound.values.isEmpty();
-        int upperIfBounded = hasUpper ? Integer.parseInt(oldRange.upperBound.values.get(0).value) : 0;
-        int lowerValue = hasLower ? Integer.parseInt(oldRange.lowerBound.values.get(0).value)
+        int upperIfBounded = hasUpper
+                ? Integer.parseInt(new String(oldRange.upperBound.values.get(0).value, StandardCharsets.UTF_8)) : 0;
+        int lowerValue = hasLower
+                ? Integer.parseInt(new String(oldRange.lowerBound.values.get(0).value, StandardCharsets.UTF_8))
                 : (hasUpper ? upperIfBounded - step * count : 0);
         int upperValue = hasUpper ? upperIfBounded : lowerValue + step * count;
         int width = Math.max(1, (upperValue - lowerValue) / count);
@@ -1386,6 +1395,95 @@ public class SplitTabletJobTest {
                 List.of(new SplitTabletJob.ExpectedSplit(1L, List.of(11L, 12L, 13L), tabletRange(100, 300)));
         assertRejected(expected, Map.of(12L, tabletRange(100, 300)), "returned");
         assertRejected(expected, Map.of(11L, tabletRange(100, 200), 12L, tabletRange(200, 300)), "returned");
+    }
+
+    // A boundary that is not valid UTF-8: 'p' x 10, then the two bytes of U+00E9 followed by a stray 0xFF.
+    private static byte[] nonUtf8Boundary() {
+        byte[] prefix = "pppppppppp".getBytes(StandardCharsets.UTF_8);
+        byte[] bytes = Arrays.copyOf(prefix, prefix.length + 3);
+        bytes[prefix.length] = (byte) 0xC3;
+        bytes[prefix.length + 1] = (byte) 0xA9;
+        bytes[prefix.length + 2] = (byte) 0xFF;
+        return bytes;
+    }
+
+    private static Tuple varcharTuple(byte[] value) {
+        return new Tuple(List.of(Variant.of(VarcharType.VARCHAR, value)));
+    }
+
+    @Test
+    public void testSplitResultWithNonUtf8BoundaryIsInstalled() throws Exception {
+        starRocksAssert.withTable("create table split_non_utf8_boundary (k varchar(100), v int)\n"
+                + "order by(k)\n"
+                + "properties('replication_num' = '1', 'file_bundling' = 'true');");
+        OlapTable varcharTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), "split_non_utf8_boundary");
+        PhysicalPartition physicalPartition = varcharTable.getAllPhysicalPartitions().iterator().next();
+        MaterializedIndex oldIndex = physicalPartition.getLatestBaseIndex();
+        Tablet oldTablet = oldIndex.getTablets().get(0);
+
+        byte[] boundary = nonUtf8Boundary();
+        // The compute node reports the children's shared boundary as raw bytes: (-inf, B) and [B, +inf).
+        installLakeServiceMock((info, out) -> {
+            if (info.splittingTabletInfo != null) {
+                List<Long> newTabletIds = info.splittingTabletInfo.newTabletIds;
+                Assertions.assertEquals(2, newTabletIds.size());
+                out.put(newTabletIds.get(0), new TabletRange(Range.lt(varcharTuple(boundary))).toProto());
+                out.put(newTabletIds.get(1), new TabletRange(Range.ge(varcharTuple(boundary))).toProto());
+            }
+        });
+
+        SplitTabletClause clause = new SplitTabletClause(null, new TabletList(List.of(oldTablet.getId())),
+                Map.of(PropertyAnalyzer.PROPERTIES_TABLET_RESHARD_TARGET_SIZE, "-2"));
+        clause.setTabletReshardTargetSize(-2);
+        SplitTabletJob splitJob = (SplitTabletJob) new SplitTabletJobFactory(db, varcharTable, clause)
+                .createTabletReshardJob();
+        splitJob.init();
+        for (int i = 0; i < 10 && !splitJob.isDone(); i++) {
+            splitJob.run();
+        }
+
+        Assertions.assertEquals(TabletReshardJob.JobState.FINISHED, splitJob.getJobState());
+        Assertions.assertEquals("", splitJob.getInfo().getError_message());
+        MaterializedIndex newIndex = physicalPartition.getLatestBaseIndex();
+        Assertions.assertNotSame(oldIndex, newIndex);
+        Assertions.assertEquals(2, newIndex.getTablets().size());
+        TabletRange first = newIndex.getTablets().get(0).getRange();
+        TabletRange second = newIndex.getTablets().get(1).getRange();
+        Assertions.assertArrayEquals(boundary,
+                first.getRange().getUpperBound().getValues().get(0).getBytesValue());
+        Assertions.assertArrayEquals(boundary,
+                second.getRange().getLowerBound().getValues().get(0).getBytesValue());
+    }
+
+    // Two cuts that differ only in a byte that is not valid UTF-8 decode to the same text under lossy decoding,
+    // which made the middle child look empty and the split result be rejected.
+    @Test
+    public void testCheckSplitTabletRangesAcceptsCutsThatAreNotValidUtf8() throws Exception {
+        byte[] cut1 = {'a', (byte) 0xC3};
+        byte[] cut2 = {'a', (byte) 0xFF};
+        Assertions.assertEquals(new String(cut1, StandardCharsets.UTF_8), new String(cut2, StandardCharsets.UTF_8));
+        TabletRange first = rangeFromWire(null, cut1);
+        TabletRange middle = rangeFromWire(cut1, cut2);
+        TabletRange last = rangeFromWire(cut2, null);
+        SplitTabletJob.checkSplitTabletRanges(
+                List.of(new SplitTabletJob.ExpectedSplit(1L, List.of(11L, 12L, 13L), allRange())),
+                Map.of(11L, first, 12L, middle, 13L, last));
+    }
+
+    // Builds a range [lower, upper) the way a compute node's publish response reaches FE: the boundary bytes are
+    // written into the wire message and decoded by the protobuf codec, never passing through a String.
+    private static TabletRange rangeFromWire(byte[] lower, byte[] upper) throws Exception {
+        TabletRangePB pb = new TabletRangePB();
+        if (lower != null) {
+            pb.lowerBound = RangeDistributionPrunerTest.tuplePBFromWire(lower);
+            pb.lowerBoundIncluded = true;
+        }
+        if (upper != null) {
+            pb.upperBound = RangeDistributionPrunerTest.tuplePBFromWire(upper);
+            pb.upperBoundIncluded = false;
+        }
+        return TabletRange.fromProto(pb);
     }
 
     /**
