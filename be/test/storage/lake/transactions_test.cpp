@@ -538,6 +538,9 @@ TEST_F(NoOpPublishTest, single_to_batch_conversion_keeps_base_version_in_sync) {
     const int64_t txn_id_2 = next_id();
     const int64_t txn_id_3 = next_id();
 
+    // Every base records itself as the garbage link of the next version.
+    ConfigResetGuard<int64_t> distance_guard(&config::lake_max_garbage_version_distance, 1);
+
     // txn_id_1 already published: meta@2 exists, its txnlog is gone.
     auto meta_v2 = std::make_shared<TabletMetadataPB>(*_tablet_metadata);
     meta_v2->set_version(2);
@@ -578,6 +581,8 @@ TEST_F(NoOpPublishTest, single_to_batch_conversion_keeps_base_version_in_sync) {
 
     auto new_metadata = result.value();
     ASSERT_EQ(4, new_metadata->version());
+    // meta@2 is in storage, so it stays in the garbage chain like any other base.
+    ASSERT_EQ(2, new_metadata->prev_garbage_version());
 }
 
 // Coverage test for the i>0 + missing-txnlog + !force_publish branch (legacy
