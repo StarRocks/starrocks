@@ -579,7 +579,8 @@ public class MergeCommitTask extends AbstractStreamLoadTask implements Runnable 
         long normalBytes = Long.parseLong(loadCounters.getOrDefault(LoadJob.LOADED_BYTES, "0"));
         long abnormalRows = Long.parseLong(loadCounters.getOrDefault(LoadEtlTask.DPP_ABNORMAL_ALL, "0"));
         long unselectedRows = Long.parseLong(loadCounters.getOrDefault(LoadJob.UNSELECTED_ROWS, "0"));
-        return new LoadStats(normalRows, normalBytes, abnormalRows, unselectedRows,
+        long receivedBytes = Long.parseLong(loadCounters.getOrDefault(LoadJob.RECEIVED_BYTES, "-1"));
+        return new LoadStats(normalRows, normalBytes, abnormalRows, unselectedRows, receivedBytes,
                 coordinator.getTrackingUrl(), coordinator.getRejectedRecordPaths());
     }
 
@@ -916,8 +917,9 @@ public class MergeCommitTask extends AbstractStreamLoadTask implements Runnable 
                     info.setRejected_record_path(Joiner.on(", ").join(rejectedPaths));
                 }
                 info.setNum_scan_rows(stats.normalRows + stats.abnormalRows + stats.unselectedRows);
-                // not have stat for scan bytes, and use normal bytes an approximation
-                info.setNum_scan_bytes(stats.normalBytes);
+                // the bytes the backends received for the merged requests; an older backend does not report them,
+                // and the bytes the sink wrote stand in
+                info.setNum_scan_bytes(stats.receivedBytes >= 0 ? stats.receivedBytes : stats.normalBytes);
                 info.setNum_sink_rows(stats.normalRows);
                 info.setNum_filtered_rows(stats.abnormalRows);
                 info.setNum_unselected_rows(stats.unselectedRows);
@@ -1258,15 +1260,18 @@ public class MergeCommitTask extends AbstractStreamLoadTask implements Runnable 
         final long normalBytes;
         final long abnormalRows;
         final long unselectedRows;
+        // -1 when the backends did not report it
+        final long receivedBytes;
         final Optional<String> errorTrackingUrl;
         final Optional<List<String>> rejectedRecordPaths;
 
-        public LoadStats(long normalRows, long normalBytes, long abnormalRows, long unselectedRows,
+        public LoadStats(long normalRows, long normalBytes, long abnormalRows, long unselectedRows, long receivedBytes,
                          String errorTrackingUrl, List<String> rejectedRecordPaths) {
             this.normalRows = normalRows;
             this.normalBytes = normalBytes;
             this.abnormalRows = abnormalRows;
             this.unselectedRows = unselectedRows;
+            this.receivedBytes = receivedBytes;
             this.errorTrackingUrl = Optional.ofNullable(errorTrackingUrl);
             this.rejectedRecordPaths = Optional.ofNullable(rejectedRecordPaths);
         }

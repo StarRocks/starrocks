@@ -83,6 +83,23 @@ PARALLEL_TEST(StreamLoadPipeTest, append_bytes) {
     t1.join();
 }
 
+// Both append paths count the bytes the producer put into the pipe, and only the first reader claims them.
+PARALLEL_TEST(StreamLoadPipeTest, total_appended_bytes) {
+    StreamLoadPipe pipe;
+    ASSERT_OK(pipe.append("abc", 3));
+    auto buf = ByteBuffer::allocate_with_tracker(5).value();
+    buf->put_bytes("defgh", 5);
+    buf->flip_to_read();
+    ASSERT_OK(pipe.append(std::move(buf)));
+    // "abc" is still in the write buffer until the pipe is finished.
+    ASSERT_EQ(5, pipe.total_appended_bytes());
+    ASSERT_OK(pipe.finish());
+    ASSERT_EQ(8, pipe.total_appended_bytes());
+
+    ASSERT_TRUE(pipe.claim_received_bytes());
+    ASSERT_FALSE(pipe.claim_received_bytes());
+}
+
 PARALLEL_TEST(StreamLoadPipeTest, append_bytes2) {
     StreamLoadPipe pipe(66, 64);
 

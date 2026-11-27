@@ -375,7 +375,8 @@ Status TransactionMgr::_commit_transaction(StreamLoadContext* ctx, bool prepare)
     ctx->last_active_ts = UnixSeconds();
     ctx->load_cost_nanos = MonotonicNanos() - ctx->start_nanos;
     transaction_streaming_load_duration_ms.increment(ctx->load_cost_nanos / 1000000);
-    transaction_streaming_load_bytes.increment(ctx->receive_bytes);
+    // receive_bytes only covers the last load request of the transaction
+    transaction_streaming_load_bytes.increment(ctx->total_receive_bytes);
 
     return Status::OK();
 }

@@ -18,8 +18,10 @@ import com.starrocks.common.util.Counter;
 import com.starrocks.common.util.ProfileKeyDictionary;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.scheduler.dag.JobSpec;
+import com.starrocks.task.LoadEtlTask;
 import com.starrocks.thrift.FrontendServiceVersion;
 import com.starrocks.thrift.TCounterAggregateType;
 import com.starrocks.thrift.TReportExecStatusParams;
@@ -32,6 +34,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.Map;
 import java.util.Optional;
 
 public class QueryRuntimeProfileTest {
@@ -58,6 +61,22 @@ public class QueryRuntimeProfileTest {
                 minTimes = 0;
             }
         };
+    }
+
+    @Test
+    public void testReceivedBytesAggregateOnlyWhenReported() {
+        QueryRuntimeProfile profile = new QueryRuntimeProfile(connectContext, jobSpec, false);
+        // An instance that reads no stream load pipe, or runs on an older backend, does not report them.
+        profile.updateLoadInformation(null, new TReportExecStatusParams()
+                .setLoad_counters(Map.of(LoadEtlTask.DPP_NORMAL_ALL, "7", LoadJob.LOADED_BYTES, "100")));
+        Assertions.assertFalse(profile.getLoadCounters().containsKey(LoadJob.RECEIVED_BYTES));
+
+        for (int i = 0; i < 2; i++) {
+            profile.updateLoadInformation(null, new TReportExecStatusParams()
+                    .setLoad_counters(Map.of(LoadEtlTask.DPP_NORMAL_ALL, "0", LoadJob.RECEIVED_BYTES, "64")));
+        }
+        Assertions.assertEquals("128", profile.getLoadCounters().get(LoadJob.RECEIVED_BYTES));
+        Assertions.assertEquals("7", profile.getLoadCounters().get(LoadEtlTask.DPP_NORMAL_ALL));
     }
 
     @Test

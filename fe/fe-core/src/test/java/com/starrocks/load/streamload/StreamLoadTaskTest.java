@@ -15,6 +15,8 @@
 package com.starrocks.load.streamload;
 
 import com.google.common.collect.Maps;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Config;
@@ -28,6 +30,7 @@ import com.starrocks.http.rest.TransactionResult;
 import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.load.loadv2.ManualLoadTxnCommitAttachment;
 import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.qe.scheduler.Coordinator;
@@ -36,10 +39,12 @@ import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.task.LoadEtlTask;
 import com.starrocks.thrift.TLoadInfo;
+import com.starrocks.thrift.TManualLoadTxnCommitAttachment;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.TransactionState;
+import com.starrocks.transaction.TxnCommitAttachment;
 import com.starrocks.warehouse.Warehouse;
 import com.starrocks.warehouse.WarehouseIdleChecker;
 import mockit.Expectations;
@@ -191,6 +196,56 @@ public class StreamLoadTaskTest {
         Assertions.assertEquals(trackingUrl, recordedTrackingUrl);
     }
 
+    // An FE-coordinated load learns the bytes its backends received from the load counters of its fragments.
+    @Test
+    public void testCoordinatedLoadRecordsReceivedBytes() {
+        Map<String, String> loadCounters = Maps.newHashMap();
+        loadCounters.put(LoadEtlTask.DPP_NORMAL_ALL, "3");
+        loadCounters.put(LoadEtlTask.DPP_ABNORMAL_ALL, "0");
+        loadCounters.put(LoadJob.UNSELECTED_ROWS, "0");
+        loadCounters.put(LoadJob.LOADED_BYTES, "100");
+        loadCounters.put(LoadJob.RECEIVED_BYTES, "64");
+        // a successful load names its table in the transaction it prepares
+        Deencapsulation.setField(streamLoadTask, "dbName", "db");
+        Deencapsulation.setField(streamLoadTask, "tableName", "tbl");
+
+        streamLoadTask.setCoordinator(coord);
+        new Expectations() {
+            {
+                coord.join(anyInt);
+                result = true;
+                coord.getExecStatus();
+                result = Status.OK;
+                coord.getLoadCounters();
+                result = loadCounters;
+            }
+        };
+        Deencapsulation.invoke(streamLoadTask, "unprotectedWaitCoordFinish");
+
+        Assertions.assertEquals(64L, streamLoadTask.toThrift().get(0).getNum_scan_bytes());
+    }
+
+    @Test
+    public void testReplayCoordinatedLoadKeepsReceivedBytes() {
+        StreamLoadTxnCommitAttachment attachment =
+                new StreamLoadTxnCommitAttachment(0, 0, 0, 0, 0, 3, 0, 0, 100, null);
+        attachment.setReceivedBytes(64);
+        String json = GsonUtils.GSON.toJson(attachment, TxnCommitAttachment.class);
+
+        TransactionState txnState = new TransactionState();
+        txnState.setTxnCommitAttachment(GsonUtils.GSON.fromJson(json, TxnCommitAttachment.class));
+        txnState.setFinishTime(System.currentTimeMillis());
+        streamLoadTask.replayOnVisible(txnState);
+        Assertions.assertEquals(64L, streamLoadTask.toThrift().get(0).getNum_scan_bytes());
+
+        // An attachment written before the field existed has no received bytes.
+        JsonObject oldJson = JsonParser.parseString(json).getAsJsonObject();
+        oldJson.remove("receivedBytes");
+        StreamLoadTxnCommitAttachment oldAttachment =
+                (StreamLoadTxnCommitAttachment) GsonUtils.GSON.fromJson(oldJson, TxnCommitAttachment.class);
+        Assertions.assertEquals(-1L, oldAttachment.getReceivedBytes());
+    }
+
     @Test
     public void testCancelledLoadReportsCancelReason() {
         streamLoadTask.setCoordinator(coord);
@@ -222,17 +277,73 @@ public class StreamLoadTaskTest {
         when(attachment.getBeginTxnTime()).thenReturn(100L);
         when(attachment.getReceiveDataTime()).thenReturn(200L);
         when(attachment.getPlanTime()).thenReturn(300L);
+        when(attachment.getReceivedBytes()).thenReturn(4096L);
 
         streamLoadTask.setLoadState(attachment, "Error message");
 
         TLoadInfo loadInfo = streamLoadTask.toThrift().get(0);
 
+        Assertions.assertEquals(115L, loadInfo.getNum_scan_rows());
         Assertions.assertEquals(100L, loadInfo.getNum_sink_rows());
         Assertions.assertEquals(10L, loadInfo.getNum_filtered_rows());
         Assertions.assertEquals(5L, loadInfo.getNum_unselected_rows());
-        Assertions.assertEquals(1000L, loadInfo.getNum_scan_bytes());
+        // the bytes the backend received, not the bytes its sink wrote
+        Assertions.assertEquals(4096L, loadInfo.getNum_scan_bytes());
         Assertions.assertEquals("http://error.log", loadInfo.getUrl());
         Assertions.assertEquals("Error message", loadInfo.getError_msg());
+    }
+
+    @Test
+    public void testToThriftBeforeLoadReportsCounters() {
+        // A load that has not reported its counters has no known row total or bytes.
+        TLoadInfo loadInfo = streamLoadTask.toThrift().get(0);
+
+        Assertions.assertFalse(loadInfo.isSetNum_scan_rows());
+        Assertions.assertEquals(-1L, loadInfo.getNum_sink_rows());
+        Assertions.assertEquals(-1L, loadInfo.getNum_scan_bytes());
+    }
+
+    @Test
+    public void testScanBytesOfLoadWithoutReceivedBytes() {
+        // An FE-coordinated channel load reports only the bytes its sink wrote.
+        Deencapsulation.setField(streamLoadTask, "numLoadBytesTotal", 1000L);
+
+        Assertions.assertEquals(1000L, streamLoadTask.toThrift().get(0).getNum_scan_bytes());
+    }
+
+    @Test
+    public void testUnknownReceivedBytesFallBackToSinkBytes() {
+        // a backend that does not send the received bytes
+        TManualLoadTxnCommitAttachment tAttachment = new TManualLoadTxnCommitAttachment();
+        tAttachment.setLoadedRows(100L);
+        tAttachment.setLoadedBytes(1000L);
+        ManualLoadTxnCommitAttachment attachment = new ManualLoadTxnCommitAttachment(tAttachment);
+        Assertions.assertEquals(-1L, attachment.getReceivedBytes());
+
+        // an attachment persisted before the received bytes were
+        JsonObject json = JsonParser.parseString(GsonUtils.GSON.toJson(attachment, TxnCommitAttachment.class))
+                .getAsJsonObject();
+        json.remove("rb");
+        ManualLoadTxnCommitAttachment persisted =
+                (ManualLoadTxnCommitAttachment) GsonUtils.GSON.fromJson(json, TxnCommitAttachment.class);
+        Assertions.assertEquals(-1L, persisted.getReceivedBytes());
+
+        streamLoadTask.setLoadState(persisted, "");
+        Assertions.assertEquals(1000L, streamLoadTask.toThrift().get(0).getNum_scan_bytes());
+    }
+
+    @Test
+    public void testMarkLoadingStartedKeepsFirstTime() {
+        Assertions.assertFalse(streamLoadTask.toThrift().get(0).isSetLoad_start_time_ms());
+
+        streamLoadTask.markLoadingStarted();
+        long startMs = streamLoadTask.toThrift().get(0).getLoad_start_time_ms();
+        Assertions.assertTrue(startMs > 0);
+
+        // A transaction stream load asks for its plan again on a later request.
+        Deencapsulation.setField(streamLoadTask, "startLoadingTimeMs", 1_700_000_000_000L);
+        streamLoadTask.markLoadingStarted();
+        Assertions.assertEquals(1_700_000_000_000L, streamLoadTask.toThrift().get(0).getLoad_start_time_ms());
     }
 
     @Test
@@ -243,11 +354,14 @@ public class StreamLoadTaskTest {
         when(attachment.getUnselectedRows()).thenReturn(10L);
         when(attachment.getLoadedBytes()).thenReturn(2000L);
         when(attachment.getErrorLogUrl()).thenReturn("http://error.log.rl");
+        when(attachment.getReceivedBytes()).thenReturn(8192L);
 
         streamLoadTask.setLoadState(attachment, "Another error message");
 
         TLoadInfo loadInfo = streamLoadTask.toThrift().get(0);
 
+        Assertions.assertEquals(230L, loadInfo.getNum_scan_rows());
+        Assertions.assertEquals(8192L, loadInfo.getNum_scan_bytes());
         Assertions.assertEquals(200L, loadInfo.getNum_sink_rows());
         Assertions.assertEquals(20L, loadInfo.getNum_filtered_rows());
         Assertions.assertEquals(10L, loadInfo.getNum_unselected_rows());
