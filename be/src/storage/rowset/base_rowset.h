@@ -44,33 +44,6 @@ public:
     // iterator uninitialized and crashed the CN.
     virtual StatusOr<std::vector<SegmentSharedPtr>> get_segments_checked() { return get_segments(); }
 
-<<<<<<< HEAD
-=======
-    // get_segments() with the nullptr placeholders removed. A null entry appears only for a lake rowset
-    // when experimental_lake_ignore_lost_segment dropped a physically-missing segment (local rowsets
-    // never produce nulls). Use this from consumers that just iterate the segments and do NOT need
-    // positional alignment with the segment metadata (e.g. scan-split planning, compaction sizing);
-    // consumers that derive an rssid from a segment's position must use get_segments() instead and
-    // handle the null slots themselves.
-    std::vector<SegmentSharedPtr> get_non_null_segments() {
-        std::vector<SegmentSharedPtr> segments = get_segments();
-        segments.erase(std::remove(segments.begin(), segments.end(), nullptr), segments.end());
-        return segments;
-    }
-
-    // get_segments_checked() with the nullptr placeholders removed: the checked counterpart of
-    // get_non_null_segments() for consumers that must not mistake a failed load for an empty rowset.
-    StatusOr<std::vector<SegmentSharedPtr>> get_non_null_segments_checked() {
-        auto segments_or = get_segments_checked();
-        if (!segments_or.ok()) {
-            return segments_or.status();
-        }
-        std::vector<SegmentSharedPtr> segments = std::move(segments_or).value();
-        segments.erase(std::remove(segments.begin(), segments.end(), nullptr), segments.end());
-        return segments;
-    }
-
->>>>>>> 943e54f ([BugFix] Return segment load errors from the logical split morsel queue (#84865))
     virtual Status load() { return Status::OK(); };
 
     virtual bool has_data_files() const = 0;

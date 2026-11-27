@@ -903,8 +903,11 @@ BaseRowset* LogicalSplitMorselQueue::_find_largest_rowset(const std::vector<Base
     return largest_rowset;
 }
 
-SegmentSharedPtr LogicalSplitMorselQueue::_find_largest_segment(BaseRowset* rowset) const {
-    const auto& segments = rowset->get_segments();
+StatusOr<SegmentSharedPtr> LogicalSplitMorselQueue::_find_largest_segment(BaseRowset* rowset) const {
+    // Load the segments with the checked call and return its error. On a segment-load failure (e.g. a StarMgr
+    // GetShard timeout) the unchecked get_segments() returns an empty list, which made the split treat the rowset
+    // as having no segment.
+    ASSIGN_OR_RETURN(const auto segments, rowset->get_segments_checked());
     if (segments.empty()) {
         return nullptr;
     }
@@ -922,9 +925,10 @@ SegmentSharedPtr LogicalSplitMorselQueue::_find_largest_segment(BaseRowset* rows
 StatusOr<SegmentGroupPtr> LogicalSplitMorselQueue::_create_segment_group(BaseRowset* rowset) {
     std::vector<SegmentSharedPtr> segments;
     if (rowset->is_overlapped()) {
-        segments.emplace_back(_find_largest_segment(rowset));
+        ASSIGN_OR_RETURN(auto largest, _find_largest_segment(rowset));
+        segments.emplace_back(std::move(largest));
     } else {
-        segments = rowset->get_segments();
+        ASSIGN_OR_RETURN(segments, rowset->get_segments_checked());
     }
 
     for (const auto& segment : segments) {
