@@ -164,4 +164,17 @@ public class SessionVariableTest {
         Assertions.assertThrows(IllegalArgumentException.class,
                 () -> sessionVariable.setBinaryEncodingLevel("invalid"));
     }
+
+    @Test
+    public void testRuntimeAdaptiveDopIsOffWithSpill() {
+        SessionVariable variables = new SessionVariable();
+        variables.setEnableRuntimeAdaptiveDop(true);
+        Assertions.assertTrue(variables.isEnableRuntimeAdaptiveDop());
+
+        variables.setEnableSpill(true);
+        Assertions.assertFalse(variables.isEnableRuntimeAdaptiveDop());
+
+        variables.setEnableSpill(false);
+        Assertions.assertTrue(variables.isEnableRuntimeAdaptiveDop());
+    }
 }
