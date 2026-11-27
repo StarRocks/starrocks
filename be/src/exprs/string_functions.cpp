@@ -3545,6 +3545,8 @@ Status StringFunctions::regexp_replace_prepare(FunctionContext* context, Functio
         const auto rpl_column = context->get_constant_column(2);
         const auto rpl_slice = ColumnHelper::get_const_value<TYPE_VARCHAR>(rpl_column);
         state->opt_const_rpl = rpl_slice.to_string();
+        state->opt_const_rpl_template.emplace();
+        state->opt_const_rpl_template->parse(rpl_slice);
     }
     return Status::OK();
 }
@@ -3877,118 +3879,515 @@ StatusOr<ColumnPtr> StringFunctions::regexp_extract_all(FunctionContext* context
     return regexp_extract_all_general(context, options, columns);
 }
 
-static ColumnPtr regexp_replace_general(FunctionContext* context, re2::RE2::Options* options, const Columns& columns) {
+void RegexpReplaceTemplate::parse(const Slice& rpl) {
+    literal_bytes.clear();
+    segments.clear();
+    nsubmatch = 1;
+    max_submatch = 0;
+    has_invalid_escape = false;
+
+    literal_bytes.reserve(rpl.size);
+    const char* const begin = rpl.data;
+    const char* const end = begin + rpl.size;
+    uint32_t lit_start = 0;
+
+    auto flush_literal = [&]() {
+        const auto lit_len = static_cast<uint32_t>(literal_bytes.size()) - lit_start;
+        if (lit_len > 0) {
+            segments.push_back(Segment{-1, lit_start, lit_len});
+            lit_start = static_cast<uint32_t>(literal_bytes.size());
+        }
+    };
+
+    for (const char* s = begin; s < end; ++s) {
+        if (*s != '\\') {
+            if (!has_invalid_escape) {
+                literal_bytes.push_back(*s);
+            }
+            continue;
+        }
+        ++s;
+        if (s == end) {
+            // Trailing '\': RE2::Rewrite treats this as an invalid escape and stops.
+            // Break here so the loop increment does not advance `s` past `end`.
+            if (!has_invalid_escape) {
+                flush_literal();
+                has_invalid_escape = true;
+            }
+            break;
+        }
+        const auto c = static_cast<unsigned char>(*s);
+        if (c >= '0' && c <= '9') {
+            const int grp = c - '0';
+            if (grp > max_submatch) {
+                max_submatch = grp;
+            }
+            if (!has_invalid_escape) {
+                flush_literal();
+                segments.push_back(Segment{grp, 0, 0});
+            }
+        } else if (c == '\\') {
+            if (!has_invalid_escape) {
+                literal_bytes.push_back('\\');
+            }
+        } else {
+            // Invalid escape: RE2::Rewrite stops emitting further tokens here,
+            // while RE2::MaxSubmatch continues scanning the rest of `rpl` for `\d`.
+            if (!has_invalid_escape) {
+                flush_literal();
+                has_invalid_escape = true;
+            }
+        }
+    }
+    if (!has_invalid_escape) {
+        flush_literal();
+    }
+    nsubmatch = 1 + max_submatch;
+}
+
+static ALWAYS_INLINE uint8_t* copy_bytes_to_ptr(uint8_t* dst, const char* data, size_t size) {
+    if (size > 0) {
+        strings::memcpy_inlined(dst, data, size);
+        return dst + size;
+    }
+    return dst;
+}
+
+static ALWAYS_INLINE void append_bytes(BinaryColumn::Bytes& dst_bytes, const char* data, size_t size) {
+    if (size > 0) {
+        const size_t old_size = dst_bytes.size();
+        dst_bytes.resize(old_size + size);
+        strings::memcpy_inlined(dst_bytes.data() + old_size, data, size);
+    }
+}
+
+static ALWAYS_INLINE uint8_t* copy_rewrite_template_to_ptr(uint8_t* dst, const RegexpReplaceTemplate& tmpl,
+                                                           const re2::StringPiece* vec) {
+    const char* const lit_base = tmpl.literal_bytes.data();
+    for (const auto& seg : tmpl.segments) {
+        if (seg.group_idx < 0) {
+            dst = copy_bytes_to_ptr(dst, lit_base + seg.offset, seg.length);
+        } else {
+            const re2::StringPiece& snip = vec[seg.group_idx];
+            dst = copy_bytes_to_ptr(dst, snip.data(), snip.size());
+        }
+    }
+    return dst;
+}
+
+static ALWAYS_INLINE void append_rewrite_template(BinaryColumn::Bytes& dst_bytes, const RegexpReplaceTemplate& tmpl,
+                                                  const re2::StringPiece* vec) {
+    const size_t add_len = tmpl.rendered_size(vec);
+    if (add_len > 0) {
+        const size_t old_size = dst_bytes.size();
+        dst_bytes.resize(old_size + add_len);
+        copy_rewrite_template_to_ptr(dst_bytes.data() + old_size, tmpl, vec);
+    }
+}
+
+// Matches RE2::_GlobalReplace (re2.cc:508-537) + fullrune/chartorune (util/rune.cc)
+// when stepping past a disallowed empty match at `lastend`.
+static inline size_t re2_utf8_empty_match_step(const re2::RE2* re, const char* p, const char* ep) {
+    const ptrdiff_t avail = ep - p;
+    if (avail <= 0) {
+        return 0;
+    }
+    if (re->options().encoding() != re2::RE2::Options::EncodingUTF8) {
+        return 1;
+    }
+    const auto c0 = static_cast<uint8_t>(p[0]);
+    if (c0 < 0x80) {
+        return 1;
+    }
+    // Check fullrune(p, min(4, avail)) and chartorune validity (non-overlong, <= 0x10FFFF).
+    // Note: RE2's chartorune does NOT reject UTF-16 surrogates (0xD800..0xDFFF); it only
+    // checks continuation bits (0x80..0xBF), non-overlong bounds (> 0x7F, > 0x7FF, > 0xFFFF),
+    // and r <= 0x10FFFF.
+    if (c0 < 0xE0) {
+        if (avail >= 2 && c0 >= 0xC2 && (static_cast<uint8_t>(p[1]) & 0xC0) == 0x80) {
+            return 2;
+        }
+        return 1;
+    }
+    if (c0 < 0xF0) {
+        if (avail >= 3) {
+            const auto c1 = static_cast<uint8_t>(p[1]);
+            const auto c2 = static_cast<uint8_t>(p[2]);
+            if ((c1 & 0xC0) == 0x80 && (c2 & 0xC0) == 0x80) {
+                const uint32_t rune = ((c0 & 0x0Fu) << 12) | ((c1 & 0x3Fu) << 6) | (c2 & 0x3Fu);
+                if (rune > 0x7FFu) {
+                    return 3;
+                }
+            }
+        }
+        return 1;
+    }
+    if (c0 < 0xF8) {
+        if (avail >= 4) {
+            const auto c1 = static_cast<uint8_t>(p[1]);
+            const auto c2 = static_cast<uint8_t>(p[2]);
+            const auto c3 = static_cast<uint8_t>(p[3]);
+            if ((c1 & 0xC0) == 0x80 && (c2 & 0xC0) == 0x80 && (c3 & 0xC0) == 0x80) {
+                const uint32_t rune = ((c0 & 0x07u) << 18) | ((c1 & 0x3Fu) << 12) | ((c2 & 0x3Fu) << 6) | (c3 & 0x3Fu);
+                if (rune > 0xFFFFu && rune <= 0x10FFFFu) {
+                    return 4;
+                }
+            }
+        }
+        return 1;
+    }
+    return 1;
+}
+
+// Cap speculative byte reservation beyond known prefix bytes at 1 MiB so replacements
+// over large multi-megabyte string chunks do not over-reserve memory up front.
+constexpr size_t REGEXP_REPLACE_SPECULATIVE_RESERVE_LIMIT = 1 << 20;
+
+static inline size_t regexp_replace_initial_reserve(size_t prefix_bytes, size_t remaining_src_bytes,
+                                                    size_t matched_row_in_bytes, size_t matched_row_out_hint,
+                                                    size_t remaining_rows) {
+    size_t speculative_remaining = std::min(remaining_src_bytes, REGEXP_REPLACE_SPECULATIVE_RESERVE_LIMIT);
+    if (matched_row_out_hint < matched_row_in_bytes) {
+        const size_t scaled_by_rows =
+                (remaining_rows > 0 && matched_row_out_hint > REGEXP_REPLACE_SPECULATIVE_RESERVE_LIMIT / remaining_rows)
+                        ? REGEXP_REPLACE_SPECULATIVE_RESERVE_LIMIT
+                        : remaining_rows * matched_row_out_hint;
+        speculative_remaining = std::min(speculative_remaining, scaled_by_rows);
+    }
+    return capped_string_function_initial_reserve(prefix_bytes + speculative_remaining);
+}
+
+template <bool global_mode, typename EnsureDstFn>
+static ALWAYS_INLINE bool regexp_replace_match_and_append(const re2::RE2* re, const char* data, size_t size,
+                                                          const RegexpReplaceTemplate& tmpl, re2::StringPiece* vec,
+                                                          EnsureDstFn&& ensure_dst) {
+    const re2::StringPiece str_sp(data, size);
+    if constexpr (!global_mode) {
+        if (UNLIKELY(tmpl.has_invalid_escape || tmpl.exceeds_groups(*re))) {
+            return false;
+        }
+        if (!re->Match(str_sp, 0, size, re2::RE2::UNANCHORED, vec, tmpl.nsubmatch)) {
+            return false;
+        }
+        const size_t prefix_len = static_cast<size_t>(vec[0].data() - data);
+        const char* const match_end = vec[0].data() + vec[0].size();
+        const size_t suffix_len = static_cast<size_t>((data + size) - match_end);
+        const size_t rpl_len = tmpl.rendered_size(vec);
+        const size_t out_row_len = prefix_len + rpl_len + suffix_len;
+        BinaryColumn::Bytes& dst_bytes = ensure_dst(out_row_len);
+        const size_t old_size = dst_bytes.size();
+        dst_bytes.resize(old_size + out_row_len);
+        uint8_t* out = dst_bytes.data() + old_size;
+        out = copy_bytes_to_ptr(out, data, prefix_len);
+        out = copy_rewrite_template_to_ptr(out, tmpl, vec);
+        copy_bytes_to_ptr(out, match_end, suffix_len);
+        return true;
+    } else {
+        // Note: Unlike RE2::Replace (which checks the bool return of RE2::Rewrite and aborts on
+        // invalid escapes), RE2::GlobalReplace ignores RE2::Rewrite's return value and retains the
+        // partial rewrite prefix emitted before the invalid escape.
+        if (UNLIKELY(tmpl.exceeds_groups(*re))) {
+            return false;
+        }
+        const char* p = data;
+        const char* const ep = data + size;
+        const char* lastend = nullptr;
+        int count = 0;
+        BinaryColumn::Bytes* dst_bytes_ptr = nullptr;
+        while (p <= ep) {
+            if (!re->Match(str_sp, static_cast<size_t>(p - data), size, re2::RE2::UNANCHORED, vec, tmpl.nsubmatch)) {
+                break;
+            }
+            if (vec[0].data() == lastend && vec[0].empty()) {
+                const size_t step = re2_utf8_empty_match_step(re, p, ep);
+                if (step > 0) {
+                    append_bytes(*dst_bytes_ptr, p, step);
+                    p += step;
+                } else {
+                    break;
+                }
+                continue;
+            }
+            if (count == 0) {
+                const size_t first_out_row_hint = (size - vec[0].size()) + tmpl.rendered_size(vec);
+                dst_bytes_ptr = &ensure_dst(first_out_row_hint);
+            }
+            if (p < vec[0].data()) {
+                append_bytes(*dst_bytes_ptr, p, static_cast<size_t>(vec[0].data() - p));
+            }
+            append_rewrite_template(*dst_bytes_ptr, tmpl, vec);
+            p = vec[0].data() + vec[0].size();
+            lastend = p;
+            count++;
+        }
+        if (count == 0) {
+            return false;
+        }
+        if (p < ep) {
+            append_bytes(*dst_bytes_ptr, p, static_cast<size_t>(ep - p));
+        }
+        return true;
+    }
+}
+
+static StatusOr<ColumnPtr> regexp_replace_general(FunctionContext* context, re2::RE2::Options* options,
+                                                  const Columns& columns) {
     auto str_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
     auto ptn_viewer = ColumnViewer<TYPE_VARCHAR>(columns[1]);
     auto rpl_viewer = ColumnViewer<TYPE_VARCHAR>(columns[2]);
 
-    auto size = columns[0]->size();
-    ColumnBuilder<TYPE_VARCHAR> result(size);
-    for (int row = 0; row < size; ++row) {
+    const size_t num_rows = columns[0]->size();
+    const bool all_const = ColumnHelper::is_all_const(columns);
+    const size_t eval_rows = all_const ? 1 : num_rows;
+
+    auto dst = RunTimeColumnType<TYPE_VARCHAR>::create();
+    const BinaryColumn* src_binary = ColumnHelper::get_binary_column(columns[0].get());
+    const size_t initial_bytes =
+            columns[0]->is_constant() ? src_binary->get_slice(0).size * eval_rows : src_binary->get_offset().back();
+    auto& dst_bytes = dst->get_bytes();
+    auto& dst_offsets = dst->get_offset();
+    dst_offsets.reserve(eval_rows + 1);
+    bool bytes_reserved = false;
+
+    NullColumn::MutablePtr null_col = nullptr;
+    RegexpReplaceTemplate tmpl;
+    re2::StringPiece vec[10];
+
+    for (size_t row = 0; row < eval_rows; ++row) {
         if (str_viewer.is_null(row) || ptn_viewer.is_null(row) || rpl_viewer.is_null(row)) {
-            result.append_null();
+            if (null_col == nullptr) {
+                null_col = NullColumn::create(row, 0);
+                null_col->reserve(eval_rows);
+            }
+            null_col->append(1);
+            dst_offsets.push_back(dst_bytes.size());
             continue;
         }
 
-        std::string ptn_value = ptn_viewer.value(row).to_string();
-        re2::RE2 local_re(ptn_value, *options);
-        if (!local_re.ok()) {
-            context->set_error(strings::Substitute("Invalid regex: $0", ptn_value).c_str());
-            result.append_null();
+        const auto ptn_slice = ptn_viewer.value(row);
+        re2::RE2 local_re(re2::StringPiece(ptn_slice.data, ptn_slice.size), *options);
+        if (UNLIKELY(!local_re.ok())) {
+            context->set_error(strings::Substitute("Invalid regex: $0", ptn_slice.to_string()).c_str());
+            if (null_col == nullptr) {
+                null_col = NullColumn::create(row, 0);
+                null_col->reserve(eval_rows);
+            }
+            null_col->append(1);
+            dst_offsets.push_back(dst_bytes.size());
             continue;
         }
 
-        auto rpl_value = rpl_viewer.value(row);
-        re2::StringPiece rpl_str = re2::StringPiece(rpl_value.get_data(), rpl_value.get_size());
-        auto str_value = str_viewer.value(row);
-        std::string result_str(str_value.get_data(), str_value.get_size());
-        re2::RE2::GlobalReplace(&result_str, local_re, rpl_str);
-        result.append(Slice(result_str.data(), result_str.size()));
+        if (null_col != nullptr) {
+            null_col->append(0);
+        }
+
+        const auto rpl_value = rpl_viewer.value(row);
+        tmpl.parse(rpl_value);
+        const auto str_value = str_viewer.value(row);
+        const char* const str_data = str_value.data != nullptr ? str_value.data : "";
+        auto ensure_dst = [&](size_t first_out_row_hint) -> BinaryColumn::Bytes& {
+            if (!bytes_reserved) {
+                dst_bytes.reserve(regexp_replace_initial_reserve(0, initial_bytes, str_value.size, first_out_row_hint,
+                                                                 eval_rows - row));
+                bytes_reserved = true;
+            }
+            return dst_bytes;
+        };
+        if (!regexp_replace_match_and_append<true>(&local_re, str_data, str_value.size, tmpl, vec, ensure_dst)) {
+            if (!bytes_reserved) {
+                dst_bytes.reserve(regexp_replace_initial_reserve(0, initial_bytes, str_value.size, str_value.size,
+                                                                 eval_rows - row));
+                bytes_reserved = true;
+            }
+            append_bytes(dst_bytes, str_data, str_value.size);
+        }
+        dst_offsets.push_back(dst_bytes.size());
     }
 
-    return result.build(ColumnHelper::is_all_const(columns));
+    dst->invalidate_slice_cache();
+    THROW_RUNTIME_ERROR_IF_EXCEED_LIMIT(dst, regexp_replace);
+
+    if (null_col != nullptr) {
+        ColumnPtr res = NullableColumn::create(std::move(dst), std::move(null_col));
+        return all_const ? ConstColumn::create(std::move(res), num_rows) : res;
+    }
+    if (all_const) {
+        return ConstColumn::create(std::move(dst), num_rows);
+    }
+    return dst;
 }
 
 template <bool global_mode>
-static ColumnPtr regexp_replace_const_pattern_and_rpl(re2::RE2* const_re, const Columns& columns,
-                                                      const std::string& rpl) {
-    auto str_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
-    re2::StringPiece rpl_str = re2::StringPiece(rpl);
-    auto size = columns[0]->size();
-    ColumnBuilder<TYPE_VARCHAR> result(size);
-    std::string result_str;
-    for (int row = 0; row < size; ++row) {
-        if (str_viewer.is_null(row)) {
-            result.append_null();
-            continue;
-        }
-
-        auto str_value = str_viewer.value(row);
-        re2::StringPiece str_str = re2::StringPiece(str_value.get_data(), str_value.get_size());
-        result_str.clear();
-#ifdef __APPLE__
-        // macOS RE2 API only supports 3-parameter GlobalReplace
-        result_str = std::string(str_str.data(), str_str.size());
-        if constexpr (global_mode) {
-            re2::RE2::GlobalReplace(&result_str, *const_re, rpl_str);
-        } else {
-            re2::RE2::Replace(&result_str, *const_re, rpl_str);
-        }
-#else
-        // Linux RE2 API supports 4-parameter GlobalReplace
-        if constexpr (global_mode) {
-            re2::RE2::GlobalReplace(str_str, *const_re, rpl_str, result_str);
-        } else {
-            result_str = std::string(str_str.data(), str_str.size());
-            re2::RE2::Replace(&result_str, *const_re, rpl_str);
-        }
-#endif
-        result.append(Slice(result_str.data(), result_str.size()));
+static StatusOr<ColumnPtr> regexp_replace_const_pattern_and_rpl(re2::RE2* const_re, const Columns& columns,
+                                                                const RegexpReplaceTemplate& tmpl) {
+    const size_t num_rows = columns[0]->size();
+    if (num_rows == 0) {
+        return ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), columns[0]->is_nullable());
     }
 
-    return result.build(ColumnHelper::is_all_const(columns));
+    const bool is_src_const = columns[0]->is_constant();
+    DCHECK(!is_src_const || ColumnHelper::is_all_const(columns));
+
+    if (UNLIKELY(tmpl.exceeds_groups(*const_re) || (!global_mode && tmpl.has_invalid_escape))) {
+        return columns[0];
+    }
+
+    const size_t eval_rows = is_src_const ? 1 : num_rows;
+    const BinaryColumn* src_binary = ColumnHelper::get_binary_column(columns[0].get());
+    const uint8_t* null_data =
+            (!is_src_const && columns[0]->is_nullable() && columns[0]->has_null())
+                    ? down_cast<const NullableColumn*>(columns[0].get())->immutable_null_column_data().data()
+                    : nullptr;
+
+    const char* const src_base = src_binary->get_string_begin();
+    re2::StringPiece vec[10];
+    bool any_match = false;
+    BinaryColumn::MutablePtr dst;
+
+    src_binary->get_offset().visit_storage([&](const auto& src_offsets) {
+        const size_t src_total_bytes = static_cast<size_t>(src_offsets[eval_rows]);
+        size_t non_null_prefix_bytes = 0;
+        for (size_t row = 0; row < eval_rows; ++row) {
+            if (null_data != nullptr && null_data[row]) {
+                if (any_match) {
+                    dst->get_offset().push_back(dst->get_bytes().size());
+                }
+                continue;
+            }
+            const size_t row_start = static_cast<size_t>(src_offsets[row]);
+            const size_t row_size = static_cast<size_t>(src_offsets[row + 1]) - row_start;
+            const char* const row_data = src_base + row_start;
+
+            auto ensure_dst = [&](size_t first_out_row_hint) -> BinaryColumn::Bytes& {
+                if (!any_match) {
+                    dst = RunTimeColumnType<TYPE_VARCHAR>::create();
+                    const size_t remaining_src_bytes = src_total_bytes - row_start;
+                    const size_t reserve_bytes = regexp_replace_initial_reserve(
+                            non_null_prefix_bytes, remaining_src_bytes, row_size, first_out_row_hint, eval_rows - row);
+                    dst->reserve(eval_rows, reserve_bytes);
+                    if (row > 0) {
+                        if (null_data == nullptr) {
+                            dst->append(*src_binary, 0, row);
+                        } else {
+                            auto& dst_bytes = dst->get_bytes();
+                            auto& dst_offsets = dst->get_offset();
+                            for (size_t prev = 0; prev < row; ++prev) {
+                                if (!null_data[prev]) {
+                                    const size_t p_start = static_cast<size_t>(src_offsets[prev]);
+                                    const size_t p_size = static_cast<size_t>(src_offsets[prev + 1]) - p_start;
+                                    append_bytes(dst_bytes, src_base + p_start, p_size);
+                                }
+                                dst_offsets.push_back(dst_bytes.size());
+                            }
+                        }
+                    }
+                    any_match = true;
+                }
+                return dst->get_bytes();
+            };
+
+            const bool matched =
+                    regexp_replace_match_and_append<global_mode>(const_re, row_data, row_size, tmpl, vec, ensure_dst);
+            if (matched) {
+                dst->get_offset().push_back(dst->get_bytes().size());
+            } else if (any_match) {
+                append_bytes(dst->get_bytes(), row_data, row_size);
+                dst->get_offset().push_back(dst->get_bytes().size());
+            } else {
+                non_null_prefix_bytes += row_size;
+            }
+        }
+    });
+
+    if (!any_match) {
+        return columns[0];
+    }
+
+    dst->invalidate_slice_cache();
+    THROW_RUNTIME_ERROR_IF_EXCEED_LIMIT(dst, regexp_replace);
+
+    if (is_src_const) {
+        return ConstColumn::create(std::move(dst), num_rows);
+    }
+
+    if (null_data != nullptr) {
+        const auto* src_nullable = down_cast<const NullableColumn*>(columns[0].get());
+        return NullableColumn::create(
+                std::move(dst), NullColumn::static_pointer_cast(std::move(*src_nullable->null_column()).mutate()));
+    }
+    return dst;
 }
 
 template <bool global_mode>
-static ColumnPtr regexp_replace_const(re2::RE2* const_re, const Columns& columns) {
+static StatusOr<ColumnPtr> regexp_replace_const(re2::RE2* const_re, const Columns& columns) {
     auto str_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
     auto rpl_viewer = ColumnViewer<TYPE_VARCHAR>(columns[2]);
 
-    auto size = columns[0]->size();
-    ColumnBuilder<TYPE_VARCHAR> result(size);
-    std::string result_str;
-    for (int row = 0; row < size; ++row) {
+    const size_t num_rows = columns[0]->size();
+    const bool all_const = ColumnHelper::is_all_const(columns);
+    const size_t eval_rows = all_const ? 1 : num_rows;
+
+    auto dst = RunTimeColumnType<TYPE_VARCHAR>::create();
+    const BinaryColumn* src_binary = ColumnHelper::get_binary_column(columns[0].get());
+    const size_t initial_bytes =
+            columns[0]->is_constant() ? src_binary->get_slice(0).size * eval_rows : src_binary->get_offset().back();
+    auto& dst_bytes = dst->get_bytes();
+    auto& dst_offsets = dst->get_offset();
+    dst_offsets.reserve(eval_rows + 1);
+    bool bytes_reserved = false;
+
+    NullColumn::MutablePtr null_col = nullptr;
+    RegexpReplaceTemplate tmpl;
+    re2::StringPiece vec[10];
+
+    for (size_t row = 0; row < eval_rows; ++row) {
         if (str_viewer.is_null(row) || rpl_viewer.is_null(row)) {
-            result.append_null();
+            if (null_col == nullptr) {
+                null_col = NullColumn::create(row, 0);
+                null_col->reserve(eval_rows);
+            }
+            null_col->append(1);
+            dst_offsets.push_back(dst_bytes.size());
             continue;
         }
 
-        auto rpl_value = rpl_viewer.value(row);
-        re2::StringPiece rpl_str = re2::StringPiece(rpl_value.get_data(), rpl_value.get_size());
-        auto str_value = str_viewer.value(row);
-        re2::StringPiece str_str = re2::StringPiece(str_value.get_data(), str_value.get_size());
-        result_str.clear();
-#ifdef __APPLE__
-        // macOS RE2 API only supports 3-parameter GlobalReplace
-        result_str = std::string(str_str.data(), str_str.size());
-        if constexpr (global_mode) {
-            re2::RE2::GlobalReplace(&result_str, *const_re, rpl_str);
-        } else {
-            re2::RE2::Replace(&result_str, *const_re, rpl_str);
+        if (null_col != nullptr) {
+            null_col->append(0);
         }
-#else
-        // Linux RE2 API supports 4-parameter GlobalReplace
-        if constexpr (global_mode) {
-            re2::RE2::GlobalReplace(str_str, *const_re, rpl_str, result_str);
-        } else {
-            result_str = std::string(str_str.data(), str_str.size());
-            re2::RE2::Replace(&result_str, *const_re, rpl_str);
+
+        const auto rpl_value = rpl_viewer.value(row);
+        tmpl.parse(rpl_value);
+        const auto str_value = str_viewer.value(row);
+        auto ensure_dst = [&](size_t first_out_row_hint) -> BinaryColumn::Bytes& {
+            if (!bytes_reserved) {
+                dst_bytes.reserve(regexp_replace_initial_reserve(0, initial_bytes, str_value.size, first_out_row_hint,
+                                                                 eval_rows - row));
+                bytes_reserved = true;
+            }
+            return dst_bytes;
+        };
+        if (!regexp_replace_match_and_append<global_mode>(const_re, str_value.data, str_value.size, tmpl, vec,
+                                                          ensure_dst)) {
+            if (!bytes_reserved) {
+                dst_bytes.reserve(regexp_replace_initial_reserve(0, initial_bytes, str_value.size, str_value.size,
+                                                                 eval_rows - row));
+                bytes_reserved = true;
+            }
+            append_bytes(dst_bytes, str_value.data, str_value.size);
         }
-#endif
-        result.append(Slice(result_str.data(), result_str.size()));
+        dst_offsets.push_back(dst_bytes.size());
     }
 
-    return result.build(ColumnHelper::is_all_const(columns));
+    dst->invalidate_slice_cache();
+    THROW_RUNTIME_ERROR_IF_EXCEED_LIMIT(dst, regexp_replace);
+
+    if (null_col != nullptr) {
+        return NullableColumn::create(std::move(dst), std::move(null_col));
+    }
+    if (all_const) {
+        return ConstColumn::create(std::move(dst), num_rows);
+    }
+    return dst;
 }
 
 static StatusOr<ColumnPtr> hyperscan_vec_evaluate(const BinaryColumn* src, StringFunctionsState* state,
@@ -4206,6 +4605,11 @@ StatusOr<ColumnPtr> StringFunctions::regexp_replace_use_hyperscan(StringFunction
 }
 
 StatusOr<ColumnPtr> StringFunctions::regexp_replace(FunctionContext* context, const Columns& columns) {
+    for (const auto& col : columns) {
+        if (col->only_null()) {
+            return ColumnHelper::create_const_null_column(columns[0]->size());
+        }
+    }
     auto state = reinterpret_cast<StringFunctionsState*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
 
     if (state->const_pattern) {
@@ -4217,11 +4621,12 @@ StatusOr<ColumnPtr> StringFunctions::regexp_replace(FunctionContext* context, co
             }
         } else {
             re2::RE2* const_re = get_thread_local_regex(context, state);
-            if (state->opt_const_rpl.has_value()) {
+            if (state->opt_const_rpl_template.has_value()) {
+                const RegexpReplaceTemplate& tmpl = state->opt_const_rpl_template.value();
                 if (state->global_mode) {
-                    return regexp_replace_const_pattern_and_rpl<true>(const_re, columns, state->opt_const_rpl.value());
+                    return regexp_replace_const_pattern_and_rpl<true>(const_re, columns, tmpl);
                 } else {
-                    return regexp_replace_const_pattern_and_rpl<false>(const_re, columns, state->opt_const_rpl.value());
+                    return regexp_replace_const_pattern_and_rpl<false>(const_re, columns, tmpl);
                 }
             } else {
                 if (state->global_mode) {
