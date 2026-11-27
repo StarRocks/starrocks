@@ -190,4 +190,37 @@ public class SessionVariableTest {
                 SessionVariable.SCAN_HIVE_PARTITION_NUM_LIMIT + "\": 512}");
         Assertions.assertEquals(4096, sessionVariable.getScanLakePartitionNumLimit());
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testGroupedRangeModeIsSessionOnlyAndIndependentOfParallel() throws Exception {
+        SessionVariable variables = new SessionVariable();
+        Assertions.assertFalse(variables.isRangeScanExecutionOverride());
+        variables.setRangeScanExecutionMode("GROUPED");
+        Assertions.assertTrue(variables.isGroupedRangeScan());
+        Assertions.assertFalse(variables.isParallelRangeScan());
+        Assertions.assertEquals("grouped", variables.clone().getRangeScanExecutionMode());
+        var field = SessionVariable.class.getDeclaredField("rangeScanExecutionMode");
+        Assertions.assertEquals(VariableMgr.SESSION_ONLY, field.getAnnotation(VariableMgr.VarAttr.class).flag());
+        Assertions.assertThrows(IllegalArgumentException.class, () -> variables.setRangeScanExecutionMode("auto"));
+        Assertions.assertTrue(variables.isGroupedRangeScan());
+        variables.setRangeScanExecutionMode("parallel");
+        Assertions.assertTrue(variables.isParallelRangeScan());
+        Assertions.assertFalse(variables.isGroupedRangeScan());
+    }
+
+    @Test
+    public void testRuntimeAdaptiveDopIsOffWithSpill() {
+        SessionVariable variables = new SessionVariable();
+        variables.setEnableRuntimeAdaptiveDop(true);
+        Assertions.assertTrue(variables.isEnableRuntimeAdaptiveDop());
+
+        variables.setEnableSpill(true);
+        Assertions.assertFalse(variables.isEnableRuntimeAdaptiveDop());
+
+        variables.setEnableSpill(false);
+        Assertions.assertTrue(variables.isEnableRuntimeAdaptiveDop());
+    }
+>>>>>>> 086e6d2 ([BugFix] Do not use runtime adaptive DOP together with spill (#84447))
 }

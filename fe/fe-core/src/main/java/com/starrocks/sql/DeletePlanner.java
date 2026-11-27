@@ -188,6 +188,10 @@ public class DeletePlanner {
         boolean isEnablePipeline = session.getSessionVariable().isEnablePipelineEngine();
         boolean canUsePipeline = isEnablePipeline && DataSink.canTableSinkUsePipeline(table);
         boolean forceDisablePipeline = isEnablePipeline && !canUsePipeline;
+        if (table instanceof IcebergTable && canUsePipeline) {
+            // Before planning, so the optimizer and the fragments see spill on.
+            IcebergPlannerUtils.enableConnectorSinkSpill(session);
+        }
         boolean prevIsEnableLocalShuffleAgg = session.getSessionVariable().isEnableLocalShuffleAgg();
         try {
             if (forceDisablePipeline) {
@@ -368,15 +372,6 @@ public class DeletePlanner {
         if (!canUsePipeline) {
             execPlan.getFragments().get(0).setPipelineDop(1);
             return;
-        }
-
-        // enable spill for connector sink
-        SessionVariable sv = session.getSessionVariable();
-        if (sv.isEnableConnectorSinkSpill()) {
-            sv.setEnableSpill(true);
-            if (sv.getConnectorSinkSpillMemLimitThreshold() < sv.getSpillMemLimitThreshold()) {
-                sv.setSpillMemLimitThreshold(sv.getConnectorSinkSpillMemLimitThreshold());
-            }
         }
 
         PlanFragment sinkFragment = execPlan.getFragments().get(0);

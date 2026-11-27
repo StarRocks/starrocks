@@ -90,6 +90,10 @@ public class UpdatePlanner {
         boolean isEnablePipeline = session.getSessionVariable().isEnablePipelineEngine();
         boolean canUsePipeline = isEnablePipeline && DataSink.canTableSinkUsePipeline(updateStmt.getTable());
         boolean forceDisablePipeline = isEnablePipeline && !canUsePipeline;
+        if (targetTable instanceof IcebergTable && canUsePipeline) {
+            // Before planning, so the optimizer and the fragments see spill on.
+            IcebergPlannerUtils.enableConnectorSinkSpill(session);
+        }
         boolean prevIsEnableLocalShuffleAgg = session.getSessionVariable().isEnableLocalShuffleAgg();
         try {
             if (forceDisablePipeline) {
