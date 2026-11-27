@@ -925,8 +925,12 @@ StatusOr<SegmentSharedPtr> LogicalSplitMorselQueue::_find_largest_segment(BaseRo
 StatusOr<SegmentGroupPtr> LogicalSplitMorselQueue::_create_segment_group(BaseRowset* rowset) {
     std::vector<SegmentSharedPtr> segments;
     if (rowset->is_overlapped()) {
+        // _find_largest_segment returns nullptr only if the rowset has no segment left
+        // (experimental_lake_ignore_lost_segment) -- then there is no segment to add.
         ASSIGN_OR_RETURN(auto largest, _find_largest_segment(rowset));
-        segments.emplace_back(std::move(largest));
+        if (largest != nullptr) {
+            segments.emplace_back(std::move(largest));
+        }
     } else {
         ASSIGN_OR_RETURN(segments, rowset->get_segments_checked());
     }
