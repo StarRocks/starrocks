@@ -1,0 +1,59 @@
+-- name: test_non_eq_correlated_subquery
+-- Correlated subqueries whose correlation predicate is not a conjunction of equalities, outside the conjuncts of
+-- the WHERE clause (scalar subqueries, and EXISTS in a projection, a CASE or an OR). They are evaluated once per
+-- distinct value of the referenced outer columns and joined back null-safely.
+
+CREATE TABLE ne_outer (
+  id int,
+  k int,
+  ts int
+) ENGINE=OLAP
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 2
+PROPERTIES("replication_num" = "1");
+
+CREATE TABLE ne_inner (
+  k int,
+  ts int,
+  v int
+) ENGINE=OLAP
+DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 2
+PROPERTIES("replication_num" = "1");
+
+INSERT INTO ne_outer VALUES (1, 1, 10), (2, 1, 20), (3, 2, 5), (4, NULL, 7), (5, 1, NULL), (6, 1, 20), (7, 3, 0);
+
+INSERT INTO ne_inner VALUES (1, 5, 100), (1, 15, 200), (1, 25, 300), (2, 1, 400), (NULL, 1, 500), (3, 1, 600);
+
+-- count is 0, not NULL, when no inner row qualifies; ids 2 and 6 share one distinct correlation value
+SELECT id, (SELECT count(*) FROM ne_inner i WHERE i.k = o.k AND i.ts < o.ts) c FROM ne_outer o ORDER BY id;
+
+SELECT id, (SELECT max(v) FROM ne_inner i WHERE i.k = o.k AND i.ts < o.ts) m FROM ne_outer o ORDER BY id;
+
+-- several aggregations and two subqueries over the same outer row
+SELECT id, (SELECT sum(v) FROM ne_inner i WHERE i.k = o.k AND i.ts <= o.ts) s, (SELECT count(v) FROM ne_inner i WHERE i.k = o.k AND i.ts > o.ts) c FROM ne_outer o ORDER BY id;
+
+-- count_if is also 0, not NULL, when no inner row qualifies
+SELECT id, (SELECT count_if(i.v > 150) FROM ne_inner i WHERE i.k = o.k AND i.ts < o.ts) c FROM ne_outer o ORDER BY id;
+
+-- HAVING on a correlated count: a row it rejects is NULL, an empty input is 0 only when HAVING accepts it
+SELECT id, (SELECT count(*) FROM ne_inner i WHERE i.k = o.k HAVING count(*) > 1) a, (SELECT count(*) FROM ne_inner i WHERE i.k = o.k HAVING count(*) = 0) b FROM ne_outer o ORDER BY id;
+
+SELECT id, (SELECT count_if(i.v > 150) FROM ne_inner i WHERE i.k = o.k HAVING count_if(i.v > 150) < 2) c FROM ne_outer o ORDER BY id;
+
+-- a NULL outer value must still match its own distinct row: the predicate is true for id 4 (k IS NULL)
+SELECT id, (SELECT count(*) FROM ne_inner i WHERE i.k = 1 AND (o.k IS NULL OR i.ts < o.ts)) c FROM ne_outer o ORDER BY id;
+
+-- EXISTS in a projection, NOT EXISTS in a CASE
+SELECT id, EXISTS (SELECT 1 FROM ne_inner i WHERE i.k = o.k AND i.ts > o.ts) e FROM ne_outer o ORDER BY id;
+
+SELECT id, CASE WHEN NOT EXISTS (SELECT 1 FROM ne_inner i WHERE i.k = o.k AND i.ts <> o.ts) THEN 'none' ELSE 'some' END x FROM ne_outer o ORDER BY id;
+
+-- EXISTS under OR, without any equality
+SELECT id FROM ne_outer o WHERE id > 6 OR EXISTS (SELECT 1 FROM ne_inner i WHERE i.ts > o.ts + 10) ORDER BY id;
+
+-- a non-aggregated scalar subquery that returns at most one row per outer row
+SELECT id, (SELECT v FROM ne_inner i WHERE i.k = o.k AND i.ts < o.ts AND i.ts > o.ts - 10) v FROM ne_outer o ORDER BY id;
+
+-- the outer input is an aggregation
+SELECT k, (SELECT count(*) FROM ne_inner i WHERE i.k = g.k AND i.ts < g.mts) c FROM (SELECT k, max(ts) mts FROM ne_outer GROUP BY k) g ORDER BY k;

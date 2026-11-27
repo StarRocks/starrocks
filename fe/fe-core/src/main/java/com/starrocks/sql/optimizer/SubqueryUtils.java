@@ -205,6 +205,11 @@ public class SubqueryUtils {
         return false;
     }
 
+    // check whether any predicate of the expression tree uses one of the column refs
+    public static boolean containsColumnRef(List<ColumnRefOperator> cro, OptExpression expression) {
+        return checkPredicateContainColumnRef(cro, expression);
+    }
+
     // GroupExpression
     private static boolean checkPredicateContainColumnRef(List<ColumnRefOperator> cro, OptExpression expression) {
         LogicalOperator logicalOperator = (LogicalOperator) expression.getOp();

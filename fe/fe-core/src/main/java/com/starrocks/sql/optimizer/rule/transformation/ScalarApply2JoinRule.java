@@ -92,7 +92,11 @@ public class ScalarApply2JoinRule extends TransformationRule {
                                                    OptimizerContext context) {
         // check correlation filter
         if (!SubqueryUtils.checkAllIsBinaryEQ(Utils.extractConjuncts(apply.getCorrelationConjuncts()))) {
-            throw new SemanticException(SubqueryUtils.EXIST_NON_EQ_PREDICATE);
+            if (apply.getSubqueryOperator() == null) {
+                // lateral join
+                throw new SemanticException(SubqueryUtils.EXIST_NON_EQ_PREDICATE);
+            }
+            return transformNonEQCorrelate(input, apply, context);
         }
 
         if (apply.isNeedCheckMaxRows()) {
@@ -198,6 +202,18 @@ public class ScalarApply2JoinRule extends TransformationRule {
         // Mapping subquery's output to anyValue
         projectMap.put(apply.getOutput(), anyValue);
         // Add assertion column
+        CallOperator assertTrueCallOp = buildMaxOneRowAssertion(countRows);
+        ColumnRefOperator assertion =
+                factory.create("subquery_assertion", assertTrueCallOp.getType(), assertTrueCallOp.isNullable());
+        projectMap.put(assertion, assertTrueCallOp);
+        OptExpression newProjectOpt =
+                OptExpression.create(new LogicalProjectOperator(projectMap), newLeftOuterJoinOpt);
+
+        return Collections.singletonList(newProjectOpt);
+    }
+
+    // assert_true(countRows IS NULL OR countRows <= 1)
+    private static CallOperator buildMaxOneRowAssertion(ColumnRefOperator countRows) {
         IsNullPredicateOperator countRowsIsNullPredicate = new IsNullPredicateOperator(countRows);
         BinaryPredicateOperator countRowsLEOneRowPredicate =
                 new BinaryPredicateOperator(BinaryType.LE, countRows,
@@ -208,16 +224,56 @@ public class ScalarApply2JoinRule extends TransformationRule {
         Function assertTrueFn =
                 ExprUtils.getBuiltinFunction(FunctionSet.ASSERT_TRUE, new Type[] {BooleanType.BOOLEAN, VarcharType.VARCHAR},
                         Function.CompareMode.IS_IDENTICAL);
-        CallOperator assertTrueCallOp = new CallOperator(FunctionSet.ASSERT_TRUE, BooleanType.BOOLEAN,
+        return new CallOperator(FunctionSet.ASSERT_TRUE, BooleanType.BOOLEAN,
                 Lists.newArrayList(countRowsPredicate,
                         ConstantOperator.createVarchar("correlate scalar subquery result must 1 row")), assertTrueFn);
-        ColumnRefOperator assertion =
-                factory.create("subquery_assertion", assertTrueCallOp.getType(), assertTrueCallOp.isNullable());
-        projectMap.put(assertion, assertTrueCallOp);
-        OptExpression newProjectOpt =
-                OptExpression.create(new LogicalProjectOperator(projectMap), newLeftOuterJoinOpt);
+    }
 
-        return Collections.singletonList(newProjectOpt);
+    /*
+     * e.g.
+     *   SELECT t0.v1, (SELECT t1.v5 FROM t1 WHERE t1.v4 = t0.v1 AND t1.v6 < t0.v2) FROM t0
+     *
+     * The correlation predicate is not a conjunction of equalities, so the inner rows are grouped by the distinct
+     * outer correlation columns instead of by a join key, see NonEqCorrelationApplyRewriter:
+     *   with cte as (select * from t0)
+     *   select cte.*, r.anyValue, assert_true(r.countRows IS NULL OR r.countRows <= 1)
+     *   from cte left outer join (
+     *       select d.v1, d.v2, count(1) as countRows, any_value(t1.v5) as anyValue
+     *       from (select distinct v1, v2 from cte) d inner join t1 on t1.v4 = d.v1 and t1.v6 < d.v2
+     *       group by d.v1, d.v2) r
+     *     on cte.v1 <=> r.v1 and cte.v2 <=> r.v2
+     */
+    private List<OptExpression> transformNonEQCorrelate(OptExpression input, LogicalApplyOperator apply,
+                                                        OptimizerContext context) {
+        ColumnRefFactory factory = context.getColumnRefFactory();
+        Map<ColumnRefOperator, CallOperator> aggregates = Maps.newHashMap();
+
+        CallOperator countRowsCallOp = SubqueryUtils.createCountRowsOperator();
+        ColumnRefOperator countRows =
+                factory.create("countRows", countRowsCallOp.getType(), countRowsCallOp.isNullable());
+        aggregates.put(countRows, countRowsCallOp);
+
+        ScalarOperator subqueryOperator = apply.getSubqueryOperator();
+        CallOperator anyValueCallOp = SubqueryUtils.createAnyValueOperator(subqueryOperator);
+        if (anyValueCallOp.getFunction() == null) {
+            throw new SemanticException(String.format(
+                    "NOT support scalar correlated sub-query of type %s",
+                    subqueryOperator.getType().toSql()));
+        }
+        ColumnRefOperator anyValue = factory.create("anyValue", anyValueCallOp.getType(), anyValueCallOp.isNullable());
+        aggregates.put(anyValue, anyValueCallOp);
+
+        Map<ColumnRefOperator, ScalarOperator> extraOutputs = Maps.newHashMap();
+        if (apply.isNeedCheckMaxRows()) {
+            CallOperator assertTrueCallOp = buildMaxOneRowAssertion(countRows);
+            ColumnRefOperator assertion =
+                    factory.create("subquery_assertion", assertTrueCallOp.getType(), assertTrueCallOp.isNullable());
+            extraOutputs.put(assertion, assertTrueCallOp);
+        }
+
+        OptExpression result = new NonEqCorrelationApplyRewriter(input, context).rewrite(input.inputAt(1),
+                apply.getCorrelationConjuncts(), apply.getPredicate(), aggregates, anyValue, extraOutputs);
+        return Collections.singletonList(result);
     }
 
     private List<OptExpression> transformCorrelateWithoutCheckOneRows(OptExpression input, LogicalApplyOperator apply,
