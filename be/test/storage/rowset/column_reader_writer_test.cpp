@@ -34,6 +34,7 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <iostream>
 
 #include "base/compression/block_compression.h"
@@ -42,6 +43,7 @@
 #include "base/types/decimal12.h"
 #include "base/uid_util.h"
 #include "base/utility/defer_op.h"
+#include "cache/scan/shared_buffered_input_stream.h"
 #include "column/array_column.h"
 #include "column/binary_column.h"
 #include "column/chunk_factory.h"
@@ -841,6 +843,70 @@ TEST_F(ColumnReaderWriterTest, test_scalar_column_total_mem_footprint) {
         ASSERT_EQ(1024, meta.num_rows());
         ASSERT_EQ(1024 * 4 + 1024, reader->total_mem_footprint());
     }
+}
+
+// A descending scan splits the row ranges and reverses them (SparseRange::split_and_reverse). Two neighbouring row
+// ranges usually end/begin in the same data page, so the page range collected for each of them must not be reported
+// twice, otherwise SharedBufferedInputStream rejects the (overlapped) io ranges with "io ranges are overlapped".
+TEST_F(ColumnReaderWriterTest, test_io_range_of_reversed_sparse_range_should_not_overlap) {
+    constexpr size_t num_rows = 100000;
+    auto col = ChunkFactory::column_from_field_type(TYPE_INT, false);
+    col->reserve(num_rows);
+    for (int32_t i = 0; i < num_rows; ++i) {
+        (void)col->append_numbers(&i, sizeof(int32_t));
+    }
+
+    ColumnMetaPB meta;
+    const std::string fname = strings::Substitute("$0/test_io_range_of_reversed_sparse_range.data", TEST_DIR);
+    auto segment = create_dummy_segment(fname);
+
+    {
+        ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(fname));
+        ColumnWriterOptions writer_opts = make_writer_opts<TYPE_INT, BIT_SHUFFLE, 2>(&meta, false);
+        // small pages, so that the column has many pages
+        writer_opts.data_page_size = 4096;
+
+        TabletColumn column(STORAGE_AGGREGATE_NONE, TYPE_INT);
+        ASSIGN_OR_ABORT(auto writer, ColumnWriter::create(writer_opts, &column, wfile.get()));
+        ASSERT_OK(writer->init());
+        ASSERT_OK(writer->append(*col));
+        flush_column_writer(writer.get());
+        ASSERT_OK(wfile->close());
+    }
+
+    ASSIGN_OR_ABORT(auto reader, ColumnReader::create(&meta, segment.get(), nullptr));
+    ASSIGN_OR_ABORT(auto iter, reader->new_iterator());
+    ASSIGN_OR_ABORT(auto read_file, _fs->new_random_access_file(fname));
+    ASSIGN_OR_ABORT(auto file_size, read_file->get_size());
+    auto shared_stream = std::make_shared<SharedBufferedInputStream>(read_file->stream(), fname, file_size);
+
+    ColumnIteratorOptions iter_opts;
+    iter_opts.stats = &_stats;
+    iter_opts.read_file = shared_stream.get();
+    iter_opts.is_io_coalesce = true;
+    ASSERT_OK(iter->init(iter_opts));
+
+    // the same thing a descending scan does in SegmentIterator::_init()
+    SparseRange<> range(0, num_rows);
+    range.split_and_reverse(10, 4096);
+    ASSERT_GT(range.size(), 1);
+
+    ASSIGN_OR_ABORT(auto io_ranges, iter->get_io_range_vec(range, nullptr));
+    ASSERT_FALSE(io_ranges.empty());
+    std::sort(io_ranges.begin(), io_ranges.end());
+    int64_t total_size = 0;
+    for (size_t i = 0; i < io_ranges.size(); ++i) {
+        total_size += io_ranges[i].second;
+        if (i > 0) {
+            ASSERT_LE(io_ranges[i - 1].first + io_ranges[i - 1].second, io_ranges[i].first)
+                    << "io range " << i << " overlaps the previous one";
+        }
+    }
+    // the whole column is requested and pages are contiguous, so the ranges must cover all pages exactly once
+    ASSERT_EQ(io_ranges.back().first + io_ranges.back().second - io_ranges.front().first, total_size);
+
+    // and the shared buffered stream must accept them
+    ASSERT_OK(iter->convert_sparse_range_to_io_range(range));
 }
 
 TEST_F(ColumnReaderWriterTest, test_large_varchar_column_writer) {
