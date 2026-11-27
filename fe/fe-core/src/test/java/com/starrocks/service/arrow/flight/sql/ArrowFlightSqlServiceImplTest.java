@@ -34,7 +34,9 @@ import com.starrocks.sql.common.AuditEncryptionChecker;
 import com.starrocks.thrift.TUniqueId;
 import mockit.Expectations;
 import mockit.Mocked;
+import org.apache.arrow.flight.Action;
 import org.apache.arrow.flight.CallHeaders;
+import org.apache.arrow.flight.CallStatus;
 import org.apache.arrow.flight.CloseSessionRequest;
 import org.apache.arrow.flight.CloseSessionResult;
 import org.apache.arrow.flight.Criteria;
@@ -44,6 +46,7 @@ import org.apache.arrow.flight.FlightDescriptor;
 import org.apache.arrow.flight.FlightInfo;
 import org.apache.arrow.flight.FlightProducer;
 import org.apache.arrow.flight.FlightRuntimeException;
+import org.apache.arrow.flight.FlightStatusCode;
 import org.apache.arrow.flight.FlightStream;
 import org.apache.arrow.flight.Location;
 import org.apache.arrow.flight.NoOpSessionOptionValueVisitor;
@@ -70,8 +73,11 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.net.ConnectException;
 import java.nio.channels.Channels;
 import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -91,6 +97,7 @@ import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockStatic;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -110,6 +117,7 @@ public class ArrowFlightSqlServiceImplTest {
      */
     private static class TestableArrowFlightSqlServiceImpl extends ArrowFlightSqlServiceImpl {
         private boolean proxyEnabled = false;
+        private FlightClient createdClient;
 
         public TestableArrowFlightSqlServiceImpl(ArrowFlightSqlSessionManager sessionManager, Location feEndpoint) {
             super(sessionManager, feEndpoint);
@@ -117,6 +125,15 @@ public class ArrowFlightSqlServiceImplTest {
 
         public void setProxyEnabled(boolean enabled) {
             this.proxyEnabled = enabled;
+        }
+
+        public void setCreatedClient(FlightClient client) {
+            this.createdClient = client;
+        }
+
+        @Override
+        protected FlightClient createClient(String host, int port) {
+            return createdClient != null ? createdClient : super.createClient(host, port);
         }
 
         @Override
@@ -466,19 +483,19 @@ public class ArrowFlightSqlServiceImplTest {
 
     @Test
     public void testGetStreamResultFromBERetrySuccess() throws Exception {
-        FlightClient mockBeClient = mock(FlightClient.class);
+        FlightClient staleClient = mock(FlightClient.class);
+        FlightClient newClient = mock(FlightClient.class);
         FlightStream mockBeStream = mock(FlightStream.class);
         VectorSchemaRoot mockRoot = mock(VectorSchemaRoot.class);
 
-        // Mock the cache to always return our mock client
-        Cache<String, FlightClient> mockCache = mock(Cache.class);
-        when(mockCache.get(anyString(), any())).thenReturn(mockBeClient);
-        setFinalField(service, "clientCache", mockCache);
+        TestableArrowFlightSqlServiceImpl testService =
+                new TestableArrowFlightSqlServiceImpl(sessionManager, Location.forGrpcInsecure("localhost", 1234));
+        testService.addToCacheForTesting("127.0.0.1:9400", staleClient);
+        testService.setCreatedClient(newClient);
 
-        // First call throws exception, second call succeeds
-        when(mockBeClient.getStream(any(Ticket.class)))
-                .thenThrow(new RuntimeException("Connection refused"))
-                .thenReturn(mockBeStream);
+        // The cached client throws an exception, the client that replaces it succeeds
+        when(staleClient.getStream(any(Ticket.class))).thenThrow(new RuntimeException("Connection refused"));
+        when(newClient.getStream(any(Ticket.class))).thenReturn(mockBeStream);
         when(mockBeStream.getRoot()).thenReturn(mockRoot);
         when(mockBeStream.next()).thenReturn(true).thenReturn(false);
 
@@ -488,7 +505,7 @@ public class ArrowFlightSqlServiceImplTest {
                 .build();
         FlightProducer.ServerStreamListener listener = mock(FlightProducer.ServerStreamListener.class);
 
-        service.getStreamStatement(ticket, mockCallContext, listener);
+        testService.getStreamStatement(ticket, mockCallContext, listener);
 
         // Verify success after retry
         verify(listener).start(mockRoot);
@@ -496,8 +513,11 @@ public class ArrowFlightSqlServiceImplTest {
         verify(listener).completed();
         verify(mockBeStream).close();
 
-        // Verify getStream was called twice (initial + retry)
-        verify(mockBeClient, org.mockito.Mockito.times(2)).getStream(any(Ticket.class));
+        // Verify getStream was called once on each client, and the failed client was closed and replaced
+        verify(staleClient).getStream(any(Ticket.class));
+        verify(newClient).getStream(any(Ticket.class));
+        verify(staleClient).close();
+        assertSame(newClient, testService.getClientFromCacheForTesting("127.0.0.1:9400"));
     }
 
     @Test
@@ -1000,18 +1020,19 @@ public class ArrowFlightSqlServiceImplTest {
 
     @Test
     public void testGetStreamWithRetry_withBearerToken() throws Exception {
-        FlightClient mockFeClient = mock(FlightClient.class);
+        FlightClient staleClient = mock(FlightClient.class);
+        FlightClient newClient = mock(FlightClient.class);
         FlightStream mockFeStream = mock(FlightStream.class);
         VectorSchemaRoot mockRoot = mock(VectorSchemaRoot.class);
 
-        Cache<String, FlightClient> mockCache = mock(Cache.class);
-        when(mockCache.get(anyString(), any())).thenReturn(mockFeClient);
-        setFinalField(service, "clientCache", mockCache);
+        TestableArrowFlightSqlServiceImpl testService =
+                new TestableArrowFlightSqlServiceImpl(sessionManager, Location.forGrpcInsecure("localhost", 1234));
+        testService.addToCacheForTesting("remote-fe:9408", staleClient);
+        testService.setCreatedClient(newClient);
 
-        // First call fails, retry with bearer token succeeds
-        when(mockFeClient.getStream(any(Ticket.class), any()))
-                .thenThrow(new RuntimeException("First attempt failed"))
-                .thenReturn(mockFeStream);
+        // The cached client fails, the retry with bearer token on the client that replaces it succeeds
+        when(staleClient.getStream(any(Ticket.class), any())).thenThrow(new RuntimeException("First attempt failed"));
+        when(newClient.getStream(any(Ticket.class), any())).thenReturn(mockFeStream);
         when(mockFeStream.getRoot()).thenReturn(mockRoot);
         when(mockFeStream.next()).thenReturn(true).thenReturn(false);
 
@@ -1020,10 +1041,44 @@ public class ArrowFlightSqlServiceImplTest {
                 .setStatementHandle(ByteString.copyFromUtf8(remoteFeTicket)).build();
         FlightProducer.ServerStreamListener listener = mock(FlightProducer.ServerStreamListener.class);
 
-        service.getStreamStatement(ticket, mockCallContext, listener);
+        testService.getStreamStatement(ticket, mockCallContext, listener);
 
-        verify(mockFeClient, org.mockito.Mockito.times(2)).getStream(any(Ticket.class), any());
-        verify(mockCache).invalidate(anyString());
+        verify(staleClient).getStream(any(Ticket.class), any());
+        verify(newClient).getStream(any(Ticket.class), any());
+        verify(staleClient).close();
+        assertSame(newClient, testService.getClientFromCacheForTesting("remote-fe:9408"));
+        verify(listener).completed();
+    }
+
+    @Test
+    public void testGetStreamWithRetry_keepsClientReplacedByAnotherCaller() throws Exception {
+        FlightClient staleClient = mock(FlightClient.class);
+        FlightClient replacement = mock(FlightClient.class);
+        FlightStream mockFeStream = mock(FlightStream.class);
+
+        TestableArrowFlightSqlServiceImpl testService =
+                new TestableArrowFlightSqlServiceImpl(sessionManager, Location.forGrpcInsecure("localhost", 1234));
+        testService.addToCacheForTesting("remote-fe:9408", staleClient);
+
+        // While the call on the stale client is failing, another caller replaces the stale client in the cache.
+        when(staleClient.getStream(any(Ticket.class), any())).thenAnswer(invocation -> {
+            testService.addToCacheForTesting("remote-fe:9408", replacement);
+            throw new RuntimeException("Connection refused");
+        });
+        when(replacement.getStream(any(Ticket.class), any())).thenReturn(mockFeStream);
+        when(mockFeStream.getRoot()).thenReturn(mock(VectorSchemaRoot.class));
+
+        String remoteFeTicket = "token-with-bearer|queryId|remote-fe:9408";
+        FlightSql.TicketStatementQuery ticket = FlightSql.TicketStatementQuery.newBuilder()
+                .setStatementHandle(ByteString.copyFromUtf8(remoteFeTicket)).build();
+        FlightProducer.ServerStreamListener listener = mock(FlightProducer.ServerStreamListener.class);
+
+        testService.getStreamStatement(ticket, mockCallContext, listener);
+
+        // The retry uses the other caller's replacement and leaves it open in the cache.
+        verify(replacement).getStream(any(Ticket.class), any());
+        verify(replacement, never()).close();
+        assertSame(replacement, testService.getClientFromCacheForTesting("remote-fe:9408"));
         verify(listener).completed();
     }
 
@@ -1306,6 +1361,165 @@ public class ArrowFlightSqlServiceImplTest {
                     testService.getFlightInfoCatalogs(catalogsCmd, callContext, descriptor));
             assertTrue(ex.getMessage().contains("Invalid token format"));
         }
+    }
+
+    private static FlightRuntimeException connectFailure() {
+        return CallStatus.UNAVAILABLE.withDescription("io exception")
+                .withCause(new ConnectException("Connection refused")).toRuntimeException();
+    }
+
+    private FlightProducer.CallContext remoteFeCallContext() {
+        String remoteToken = "remote-fe|some-uuid-token";
+        FlightProducer.CallContext callContext = mock(FlightProducer.CallContext.class);
+        when(callContext.peerIdentity()).thenReturn(remoteToken);
+        when(sessionManager.isLocalToken(remoteToken)).thenReturn(false);
+        return callContext;
+    }
+
+    /**
+     * A proxy-enabled service that has {@code cachedClient} cached for remote-fe:9408 and builds {@code newClient}
+     * when it needs another client.
+     */
+    private TestableArrowFlightSqlServiceImpl newProxyService(FlightClient cachedClient, FlightClient newClient) {
+        Config.arrow_flight_port = 9408;
+        TestableArrowFlightSqlServiceImpl testService =
+                new TestableArrowFlightSqlServiceImpl(sessionManager, Location.forGrpcInsecure("localhost", 1234));
+        testService.setProxyEnabled(true);
+        testService.setCreatedClient(newClient);
+        testService.addToCacheForTesting("remote-fe:9408", cachedClient);
+        return testService;
+    }
+
+    @Test
+    public void testProxyForwarding_connectFailure_retriesOnNewClient() throws Exception {
+        FlightProducer.CallContext callContext = remoteFeCallContext();
+
+        // The cached client still dials the address the remote FE had before it restarted.
+        FlightClient staleClient = mock(FlightClient.class);
+        Iterator<Result> staleResults = mock(Iterator.class);
+        when(staleResults.hasNext()).thenThrow(connectFailure());
+        when(staleClient.getInfo(any(FlightDescriptor.class), any())).thenThrow(connectFailure());
+        when(staleClient.doAction(any(Action.class), any())).thenReturn(staleResults);
+        when(staleClient.setSessionOptions(any(SetSessionOptionsRequest.class), any())).thenThrow(connectFailure());
+        when(staleClient.closeSession(any(CloseSessionRequest.class), any())).thenThrow(connectFailure());
+
+        FlightClient newClient = mock(FlightClient.class);
+        FlightInfo flightInfo = mock(FlightInfo.class);
+        Result actionResult = new Result(new byte[0]);
+        SetSessionOptionsResult setResult = new SetSessionOptionsResult(new HashMap<>());
+        CloseSessionResult closeResult = new CloseSessionResult(CloseSessionResult.Status.CLOSED);
+        when(newClient.getInfo(any(FlightDescriptor.class), any())).thenReturn(flightInfo);
+        when(newClient.doAction(any(Action.class), any())).thenAnswer(invocation -> List.of(actionResult).iterator());
+        when(newClient.setSessionOptions(any(SetSessionOptionsRequest.class), any())).thenReturn(setResult);
+        when(newClient.closeSession(any(CloseSessionRequest.class), any())).thenReturn(closeResult);
+
+        TestableArrowFlightSqlServiceImpl testService = newProxyService(staleClient, newClient);
+
+        FlightSql.CommandStatementQuery stmtCmd = FlightSql.CommandStatementQuery.newBuilder().setQuery("SELECT 1").build();
+        assertSame(flightInfo,
+                testService.getFlightInfoStatement(stmtCmd, callContext, FlightDescriptor.command("".getBytes())));
+        assertSame(newClient, testService.getClientFromCacheForTesting("remote-fe:9408"));
+        verify(staleClient).close();
+
+        testService.addToCacheForTesting("remote-fe:9408", staleClient);
+        FlightSql.ActionCreatePreparedStatementRequest createReq =
+                FlightSql.ActionCreatePreparedStatementRequest.newBuilder().setQuery("SELECT 1").build();
+        FlightProducer.StreamListener<Result> actionListener = mock(FlightProducer.StreamListener.class);
+        testService.createPreparedStatement(createReq, callContext, actionListener);
+        verify(actionListener, timeout(5000)).onCompleted();
+        verify(actionListener).onNext(actionResult);
+        verify(actionListener, never()).onError(any());
+        assertSame(newClient, testService.getClientFromCacheForTesting("remote-fe:9408"));
+
+        testService.addToCacheForTesting("remote-fe:9408", staleClient);
+        FlightProducer.StreamListener<SetSessionOptionsResult> setListener = mock(FlightProducer.StreamListener.class);
+        testService.setSessionOptions(mock(SetSessionOptionsRequest.class), callContext, setListener);
+        verify(setListener, timeout(5000)).onCompleted();
+        verify(setListener).onNext(setResult);
+        assertSame(newClient, testService.getClientFromCacheForTesting("remote-fe:9408"));
+
+        testService.addToCacheForTesting("remote-fe:9408", staleClient);
+        FlightProducer.StreamListener<CloseSessionResult> closeListener = mock(FlightProducer.StreamListener.class);
+        testService.closeSession(new CloseSessionRequest(), callContext, closeListener);
+        verify(closeListener).onNext(closeResult);
+        verify(closeListener).onCompleted();
+        assertSame(newClient, testService.getClientFromCacheForTesting("remote-fe:9408"));
+
+        // Each request went to the stale client once and to the new client once.
+        for (FlightClient client : List.of(staleClient, newClient)) {
+            verify(client).getInfo(any(FlightDescriptor.class), any());
+            verify(client).doAction(any(Action.class), any());
+            verify(client).setSessionOptions(any(SetSessionOptionsRequest.class), any());
+            verify(client).closeSession(any(CloseSessionRequest.class), any());
+        }
+    }
+
+    @Test
+    public void testProxyForwarding_connectFailure_retriesOnlyOnce() throws Exception {
+        FlightProducer.CallContext callContext = remoteFeCallContext();
+
+        // The remote FE is still down: the new client cannot connect either.
+        FlightClient staleClient = mock(FlightClient.class);
+        FlightClient newClient = mock(FlightClient.class);
+        when(staleClient.getInfo(any(FlightDescriptor.class), any())).thenThrow(connectFailure());
+        when(newClient.getInfo(any(FlightDescriptor.class), any())).thenThrow(connectFailure());
+
+        TestableArrowFlightSqlServiceImpl testService = newProxyService(staleClient, newClient);
+
+        FlightSql.CommandStatementQuery stmtCmd = FlightSql.CommandStatementQuery.newBuilder().setQuery("SELECT 1").build();
+        FlightRuntimeException ex = assertThrows(FlightRuntimeException.class, () ->
+                testService.getFlightInfoStatement(stmtCmd, callContext, FlightDescriptor.command("".getBytes())));
+        assertEquals(FlightStatusCode.UNAVAILABLE, ex.status().code());
+        verify(staleClient).getInfo(any(FlightDescriptor.class), any());
+        verify(newClient).getInfo(any(FlightDescriptor.class), any());
+    }
+
+    @Test
+    public void testProxyForwarding_connectFailure_keepsClientReplacedByAnotherCaller() throws Exception {
+        FlightProducer.CallContext callContext = remoteFeCallContext();
+
+        FlightClient staleClient = mock(FlightClient.class);
+        FlightClient replacement = mock(FlightClient.class);
+        FlightInfo flightInfo = mock(FlightInfo.class);
+        TestableArrowFlightSqlServiceImpl testService = newProxyService(staleClient, mock(FlightClient.class));
+
+        // While the call on the stale client is failing, another caller replaces the stale client in the cache.
+        when(staleClient.getInfo(any(FlightDescriptor.class), any())).thenAnswer(invocation -> {
+            testService.addToCacheForTesting("remote-fe:9408", replacement);
+            throw connectFailure();
+        });
+        when(replacement.getInfo(any(FlightDescriptor.class), any())).thenReturn(flightInfo);
+
+        FlightSql.CommandStatementQuery stmtCmd = FlightSql.CommandStatementQuery.newBuilder().setQuery("SELECT 1").build();
+        assertSame(flightInfo,
+                testService.getFlightInfoStatement(stmtCmd, callContext, FlightDescriptor.command("".getBytes())));
+
+        // The retry uses the other caller's replacement and leaves it open in the cache.
+        verify(replacement, never()).close();
+        assertSame(replacement, testService.getClientFromCacheForTesting("remote-fe:9408"));
+    }
+
+    @Test
+    public void testProxyForwarding_remoteError_isNotRetried() throws Exception {
+        FlightProducer.CallContext callContext = remoteFeCallContext();
+
+        // The remote FE received the statement and failed it. Sending it again could execute it twice.
+        FlightClient client = mock(FlightClient.class);
+        FlightClient newClient = mock(FlightClient.class);
+        when(client.getInfo(any(FlightDescriptor.class), any()))
+                .thenThrow(CallStatus.INTERNAL.withDescription("query failed").toRuntimeException());
+
+        TestableArrowFlightSqlServiceImpl testService = newProxyService(client, newClient);
+
+        FlightSql.CommandStatementQuery stmtCmd = FlightSql.CommandStatementQuery.newBuilder().setQuery("SELECT 1").build();
+        FlightRuntimeException ex = assertThrows(FlightRuntimeException.class, () ->
+                testService.getFlightInfoStatement(stmtCmd, callContext, FlightDescriptor.command("".getBytes())));
+        assertEquals(FlightStatusCode.UNAVAILABLE, ex.status().code());
+        assertTrue(ex.getMessage().contains("query failed"));
+        verify(client).getInfo(any(FlightDescriptor.class), any());
+        verify(newClient, never()).getInfo(any(FlightDescriptor.class), any());
+        assertSame(client, testService.getClientFromCacheForTesting("remote-fe:9408"));
+        verify(client, never()).close();
     }
 
 }
