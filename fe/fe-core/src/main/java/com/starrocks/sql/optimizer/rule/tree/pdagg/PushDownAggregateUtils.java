@@ -60,23 +60,4 @@ class PushDownAggregateUtils {
         return false;
     }
 
-    /**
-     * A count pushed without any real grouping key degenerates into a scalar (ungrouped) aggregate, which
-     * always emits exactly one row even when its child has zero input rows. Re-joining that phantom row
-     * through a keyless join (CROSS JOIN, or INNER JOIN with a non-column condition, where neither the
-     * on-predicate nor the post-join-predicate contributed any column) would corrupt the join's
-     * cardinality instead of correctly producing no rows/groups.
-     * <p>
-     * "No real grouping key" is not the same as an empty group-by map: a group-by on a constant
-     * (`group by 1 + 1`) keeps an entry whose expression uses no column at all, and pushing a count under
-     * it is just as ungrouped. Both passes must also check this on the group-by set they actually build,
-     * because they build different ones -- the collector keeps composite expressions spanning both join
-     * sides (`a + b` -> `a + NULL`) while the rewriter flattens group-bys into their component columns.
-     */
-    static boolean isUngroupedCountPush(AggregatePushDownContext context) {
-        if (context.aggregations.values().stream().noneMatch(PushDownAggregateUtils::isCountAgg)) {
-            return false;
-        }
-        return context.groupBys.values().stream().allMatch(g -> g.getUsedColumns().isEmpty());
-    }
 }
