@@ -47,7 +47,9 @@ public class TimeWatcher {
         return t;
     }
 
-    public Optional<Timer> getTimer(String name) {
+    // Readers take the same monitor as scope()/mergeFrom(): a forked tracer can be merged from a
+    // background thread (e.g. DeployScanRangesTask) while the query thread builds the profile.
+    public synchronized Optional<Timer> getTimer(String name) {
         if (!scopedTimers.containsRow(name)) {
             return Optional.empty();
         }
@@ -61,7 +63,7 @@ public class TimeWatcher {
                 .orElse(null));
     }
 
-    public List<Timer> getAllTimerWithOrder() {
+    public synchronized List<Timer> getAllTimerWithOrder() {
         return scopedTimers.values().stream().sorted(Comparator.comparingLong(o -> o.firstTimePointNanoSecond))
                 .collect(Collectors.toList());
     }

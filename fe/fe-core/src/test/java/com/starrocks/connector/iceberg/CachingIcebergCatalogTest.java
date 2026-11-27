@@ -446,6 +446,7 @@ public class CachingIcebergCatalogTest {
 
         ManifestFile manifest = Mockito.mock(ManifestFile.class);
         Mockito.when(manifest.path()).thenReturn("/metadata/m1.avro");
+        Mockito.when(manifest.firstRowId()).thenReturn(null);
         Mockito.when(manifest.partitionSpecId()).thenReturn(0);
         Mockito.when(manifest.addedFilesCount()).thenReturn(1);
         Mockito.when(manifest.existingFilesCount()).thenReturn(1);
@@ -595,12 +596,15 @@ public class CachingIcebergCatalogTest {
     }
 
     @Test
-    public void testGetTableBypassCacheForRestCatalogWhenAuthToken(@Mocked IcebergRESTCatalog restCatalog) {
+    public void testGetTableBypassCacheForRestCatalogForwardingAuthToken(@Mocked IcebergRESTCatalog restCatalog) {
+        // A JWT-security REST catalog loads the table with the session's token, so it must not be cached.
         ConnectContext ctx = new ConnectContext();
         ctx.setAuthToken("token");
         Table nativeTable = createBaseTableWithManifests(1, 1);
         new Expectations() {
             {
+                restCatalog.forwardsSessionToken(ctx);
+                result = true;
                 restCatalog.getTable(ctx, "db3", "tbl3");
                 result = nativeTable;
                 times = 2;
@@ -611,6 +615,29 @@ public class CachingIcebergCatalogTest {
                 DEFAULT_CATALOG_PROPERTIES, Executors.newSingleThreadExecutor());
         Assertions.assertEquals(nativeTable, cachingIcebergCatalog.getTable(ctx, "db3", "tbl3"));
         Assertions.assertEquals(nativeTable, cachingIcebergCatalog.getTable(ctx, "db3", "tbl3"));
+    }
+
+    @Test
+    public void testRestCatalogNotForwardingAuthTokenUsesCache(@Mocked IcebergRESTCatalog restCatalog) {
+        // A REST catalog that authenticates with its own credential (e.g. oauth2) never forwards the session's
+        // JWT, so the table is the same for every user and a JWT session is served from the cache.
+        ConnectContext ctx = new ConnectContext();
+        ctx.setAuthToken("token");
+        Table nativeTable = createBaseTableWithManifests(1, 1);
+        new Expectations() {
+            {
+                restCatalog.forwardsSessionToken(ctx);
+                result = false;
+                restCatalog.getTable(ctx, "db3", "tbl3");
+                result = nativeTable;
+                times = 1;
+            }
+        };
+
+        CachingIcebergCatalog cachingIcebergCatalog = new CachingIcebergCatalog(CATALOG_NAME, restCatalog,
+                DEFAULT_CATALOG_PROPERTIES, Executors.newSingleThreadExecutor());
+        Assertions.assertSame(nativeTable, cachingIcebergCatalog.getTable(ctx, "db3", "tbl3"));
+        Assertions.assertSame(nativeTable, cachingIcebergCatalog.getTable(ctx, "db3", "tbl3"));
     }
 
     @Test

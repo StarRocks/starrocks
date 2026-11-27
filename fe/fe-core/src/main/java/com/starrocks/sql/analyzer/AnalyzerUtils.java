@@ -1208,6 +1208,35 @@ public class AnalyzerUtils {
         new AnalyzerUtils.OlapTableCollector(olapTables, true).visit(statementBase);
     }
 
+    /**
+     * The union that defines {@code cte}, if its name comes into scope partway through its definition; null if it
+     * comes into scope after the whole definition.
+     *
+     * <p>A CTE is in scope only after its own definition: in {@code WITH t0 AS (SELECT * FROM t0)} the inner
+     * {@code t0} is the table. In a WITH RECURSIVE clause a CTE defined by a union is in scope after its anchor, the
+     * first operand, and before its recursive members, the other operands, as
+     * {@code QueryAnalyzer#tryProcessRecursiveCte} has it: a self-reference there is the CTE, not a table. That
+     * analysis takes the operands alone: the union's own with clause is not in scope for them. When it finds no
+     * self-reference, the analyzer analyzes the whole definition again as a CTE that is not recursive, with the
+     * union's own with clause.
+     *
+     * <p>For the walks that run before analysis, which must agree with the analyzer on what is a table. The
+     * parser does not mark a CTE recursive, so {@code AstTraverser#visitCTE} does not leave the recursive members
+     * out of such a walk.
+     *
+     * @param inRecursiveWithClause whether the with clause that defines {@code cte} is WITH RECURSIVE
+     */
+    public static UnionRelation recursiveCteUnion(CTERelation cte, boolean inRecursiveWithClause) {
+        if (!inRecursiveWithClause || cte.getCteQueryStatement() == null) {
+            return null;
+        }
+        if (cte.getCteQueryStatement().getQueryRelation() instanceof UnionRelation union
+                && !union.getRelations().isEmpty()) {
+            return union;
+        }
+        return null;
+    }
+
     /** The olap tables {@link #copyOlapTable} would copy, left in place. */
     public static Set<OlapTable> collectOlapTablesToCopy(StatementBase statementBase) {
         Set<OlapTable> olapTables = new HashSet<>();

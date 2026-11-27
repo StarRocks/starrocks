@@ -362,6 +362,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 変更可能: はい
 - 説明: 共有データクラスタのクエリスキャン（分割の有無を問わない）が Tablet の Segment を開いた後、次に読むインデックスページを非同期でウォームアップするかどうか。対象は各 Segment の短キーインデックス、述語列の zone map、bloom filter、bitmap インデックスのルートページ、読み取り列の ordinal index のルートページです。同様に、等値述語と `IN` 述語の bitmap インデックス検索では、すべての値の辞書ページをまとめて要求し、続いて選択したすべての bitmap のページをまとめて要求してから読み取ります。スキャンはウォームアップの完了を待たず、失敗した場合は通常どおり読み取ります。Segment メタデータフィルター（`enable_lake_segment_metadata_filter`）によってスキャン対象から除外された Segment はウォームアップしません。この項目はクエリにのみ適用され、リモート I/O スケジューラー（`remote_io_scheduler_enable`）が有効な場合にのみ効果があります。`lake_scan_parallel_segment_open` とは独立しています。ウォームアップの状況はクエリプロファイルの `TabletPrepareIndexWarmSegments`、`TabletPrepareIndexWarmRanges`、`TabletPrepareIndexWarmBlocks`、`TabletPrepareIndexWarmSkipped`、`TabletPrepareIndexWarmPrunedSegments` に、bitmap インデックスページの要求状況は `BitmapIndexPrefetchPages` と `BitmapIndexPrefetchBlocks` に記録されます。
 
+### lake_scan_read_ahead_max_blocks
+
+- デフォルト: 2048
+- タイプ: Long
+- 単位: -
+- 変更可能: はい
+- 説明: BE/CN 上のすべてのクエリスキャンが合計で、先読みとして取得を要求し、まだ読んでいない状態で保持できるキャッシュブロック数。`remote_prefetch_window_blocks` により各 Segment が先読みするブロックと、`lake_scan_read_ahead_segments` により早めに開始した Segment のブロックを含みます。先読み中の Segment はこの上限を均等に分け合い、各 Segment が保持できるのは上限を先読み中の Segment 数で割った数（最低 1 ブロック）までです。そのため、後から開始したスキャンも自分の分を確保できます。自分の分より多く保持している Segment は、超過分を読み終えるまで先読みを要求しません。この数に達すると、Segment はそれ以上先読みを要求せず、Tablet スキャンも次の Segment を早めに開始しません。該当するデータは読む時点で取得されます。直後に読むブロックは常に取得されます。ブロックはアトミックに予約されるため、スキャンが並行しても合計がこの値を超えることはありません。`0` は無制限を意味します。メトリクス `lake_scan_read_ahead_blocks`、`lake_scan_read_ahead_windows`、`lake_scan_read_ahead_capped_total` が、現在の合計、上限を分け合う Segment 数、上限が先読みを抑えた回数を示します。
+- 導入バージョン: -
+
 ### lake_scan_read_ahead_segments
 
 - デフォルト: 16
@@ -495,13 +504,22 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: 遅延マテリアライゼーションでは、述語を満たす行のためだけに読む列は、それらの行が確定した後にチャンクごとに取得されます。Segment Reader の 4 番目のチャンク以降、それらの行が範囲内のページのうちこの割合以上に触れた場合、これらの列は述語列と同様に先読みされるようになります。1 より大きい値では切り替わりません。変更は以降に開かれる Segment Reader に反映されます。`remote_io_scheduler_enable` が `true` の場合にのみ有効です。
 - 導入バージョン: -
 
+### lake_compaction_prefetch_window_blocks
+
+- デフォルト: 32
+- タイプ: Int
+- 単位: -
+- 変更可能: はい
+- 説明: 実験用。lake compaction タスクが入力セグメント全体で先読みして Data Cache に格納する目標ブロック数です。ワーカーのメモリ上限が設定されている場合、予算はその 8 分の 1 に制限され、物理入力セグメント数で割って切り捨てられます。ただし、各セグメントは少なくとも 1 ブロックを先読みするため、セグメント数が予算より多い入力では各セグメントが 1 ブロックずつ先読みし、合計が予算とメモリ上限を超えます。0 で無効になります。remote I/O scheduler、テーブルのキャッシュ、対象の compaction モードのキャッシュ書き込みを有効にする必要があります。対象のスカラーページは COMPACTION ワークロードを使用します。
+- 導入バージョン: -
+
 ### remote_prefetch_window_blocks
 
 - デフォルト: 128
 - タイプ: Int
 - 単位: -
 - 変更可能: はい
-- 説明: クエリの Segment Reader が、消費中の位置より先に要求する Data Cache ブロックの最大数。キュー中、取得中、取得済みで未読のブロックを含みます。Reader がどこまで先行するかを制限するもので、ブロックをいつ取得するかはスケジューラが決めます。ロード、Compaction などのバックグラウンド読み取りは先読みしません。`0` で先読みを無効にします。変更は以降に開かれる Segment Reader に反映されます。`remote_io_scheduler_enable` が `true` の場合にのみ有効です。
+- 説明: クエリの Segment Reader が、消費中の位置より先に要求する Data Cache ブロックの最大数。キュー中、取得中、取得済みで未読のブロックを含みます。Reader がどこまで先行するかを制限するもので、ブロックをいつ取得するかはスケジューラが決めます。ロードなどのその他のバックグラウンド読み取りは先読みしません。Compaction の先読みは `lake_compaction_prefetch_window_blocks` で制御します。`0` で先読みを無効にします。変更は以降に開かれる Segment Reader に反映されます。`remote_io_scheduler_enable` が `true` の場合にのみ有効です。
 - 導入バージョン: -
 
 ### remote_read_adaptive_limit

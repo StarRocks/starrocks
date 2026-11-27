@@ -367,6 +367,7 @@ public class CheckpointController extends LeaderDaemon {
                 + "&image_format_version=" + imageFormatVersion;
         try {
             MetaHelper.downloadImageFile(url, MetaService.DOWNLOAD_TIMEOUT_SECOND * 1000, String.valueOf(journalId), dir,
+                    imageFormatVersion,
                     conn -> {
                         // Publish-point self-check: a stop landing between the worker's last
                         // isStopRequested() poll and this publication would find inFlightConnection

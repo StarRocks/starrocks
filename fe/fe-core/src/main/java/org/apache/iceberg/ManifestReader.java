@@ -447,10 +447,10 @@ public class ManifestReader<F extends ContentFile<F>> extends CloseableGroup
                         }
                         if (!tmpDataFiles.isEmpty()) {
                             logDataFileCacheFill(liveDataEntries.get(), tmpDataFiles);
-                            dataFileCache.put(file.location(), tmpDataFiles); // to recalculate the weight
+                            dataFileCache.put(manifestEntriesCacheKey(), tmpDataFiles); // to recalculate the weight
                         }
                         if (!tmpDeleteFiles.isEmpty()) {
-                            deleteFileCache.put(file.location(), tmpDeleteFiles); // to recalculate the weight
+                            deleteFileCache.put(manifestEntriesCacheKey(), tmpDeleteFiles); // to recalculate the weight
                         }
                     }
                 } finally {
@@ -471,13 +471,18 @@ public class ManifestReader<F extends ContentFile<F>> extends CloseableGroup
         }
     }
 
+    private String manifestEntriesCacheKey() {
+        return StarRocksIcebergTableScan.manifestEntriesCacheKey(file.location(), firstRowId);
+    }
+
     private boolean shouldCacheDataFiles() {
-        return dataFileCache != null && content == FileType.DATA_FILES && dataFileCache.getIfPresent(file.location()) != null;
+        return dataFileCache != null && content == FileType.DATA_FILES &&
+                dataFileCache.getIfPresent(manifestEntriesCacheKey()) != null;
     }
 
     private boolean shouldCacheDeleteFiles() {
         return deleteFileCache != null && content == FileType.DELETE_FILES &&
-                deleteFileCache.getIfPresent(file.location()) != null;
+                deleteFileCache.getIfPresent(manifestEntriesCacheKey()) != null;
     }
 
     private Collection<String> withStatsColumnsForDataFileCache(

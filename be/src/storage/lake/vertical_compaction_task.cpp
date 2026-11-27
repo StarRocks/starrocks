@@ -308,7 +308,8 @@ Status VerticalCompactionTask::compact_column_group(
     reader_params.lake_io_opts = {.fill_data_cache = config::lake_enable_vertical_compaction_fill_data_cache,
                                   .buffer_size = _stream_buffer_size,
                                   .hold_segments = _hold_input_segments,
-                                  .remote_read = remote_read_context()};
+                                  .remote_read = remote_read_context(),
+                                  .compaction_prefetch_blocks = prefetch_blocks_per_segment()};
 
     // Apply range filter to ALL column groups (key and non-key) so that segment
     // iterators produce the same row subsets. TabletReader requires start_key and

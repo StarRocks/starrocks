@@ -28,6 +28,7 @@
 #include "gen_cpp/olap_file.pb.h"
 #include "storage_primitive/aggregate_type.h"
 #include "types/agg_state_desc.h"
+#include "types/geo_type_descriptor.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
@@ -48,6 +49,7 @@ class TabletColumn {
     struct ExtraFields {
         std::string default_value;
         std::vector<TabletColumn> sub_columns;
+        std::shared_ptr<const GeoTypeDescriptor> geo_descriptor;
         bool has_default_value = false;
         bool is_virtual_column = false;
     };
@@ -91,6 +93,14 @@ public:
 
     LogicalType type() const { return _type; }
     void set_type(LogicalType type) { _type = type; }
+
+    // In-memory metadata for scalar GEO columns. ColumnPB cannot carry this descriptor yet.
+    void set_geo_descriptor(GeoTypeDescriptor descriptor) {
+        _get_or_alloc_extra_fields()->geo_descriptor = std::make_shared<const GeoTypeDescriptor>(std::move(descriptor));
+    }
+    const GeoTypeDescriptor* geo_descriptor() const {
+        return _extra_fields ? _extra_fields->geo_descriptor.get() : nullptr;
+    }
 
     bool is_key() const { return _check_flag(kIsKeyShift); }
     void set_is_key(bool value) { _set_flag(kIsKeyShift, value); }

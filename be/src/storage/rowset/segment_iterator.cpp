@@ -527,8 +527,8 @@ private:
     // Remote I/O scheduler only: (re)creates the cache read-ahead window of the current scan context, starting at
     // `start_row`.
     void _init_prefetch_window(rowid_t start_row);
-    // Whether this reader reads ahead through SegmentPrefetchWindow at all.
-    bool _should_read_ahead() const;
+    // How many cache blocks this reader reads ahead through SegmentPrefetchWindow; zero for none.
+    int32_t _read_ahead_blocks() const;
     // lake_scan_warm_index: whether the bitmap index lookups ask for the pages they read ahead of the reads.
     bool _should_prefetch_bitmap_index_pages() const;
     void _reset_prefetch_window() {
@@ -1231,15 +1231,22 @@ Status SegmentIterator::start_read_ahead(bool* started) {
     return Status::OK();
 }
 
-bool SegmentIterator::_should_read_ahead() const {
-    // Only a lake query read that fills the cache, in ascending row order, reads ahead. Loads, background work such as
-    // compaction, and reads nobody attributed read what they need as they go.
-    const auto& remote_read = _opts.lake_io_opts.remote_read;
-    return remote_io_scheduler_enabled() && config::remote_prefetch_window_blocks > 0 && _context != nullptr &&
-           remote_read.is_set && remote_read.workload == RemoteReadContext::Workload::QUERY &&
-           _segment->lake_tablet_manager() != nullptr && _opts.lake_io_opts.fill_data_cache &&
-           !_opts.lake_io_opts.skip_disk_cache && !_opts.lake_io_opts.cache_file_only && !_scan_range.empty() &&
-           (_opts.asc_hint || config::desc_hint_split_range <= 0);
+int32_t SegmentIterator::_read_ahead_blocks() const {
+    const auto& opts = _opts.lake_io_opts;
+    if (!remote_io_scheduler_enabled() || _context == nullptr || !opts.remote_read.is_set ||
+        _segment->lake_tablet_manager() == nullptr || !opts.fill_data_cache || opts.skip_disk_cache ||
+        opts.cache_file_only || _scan_range.empty() || (!_opts.asc_hint && config::desc_hint_split_range > 0)) {
+        return 0;
+    }
+    if (opts.remote_read.workload == RemoteReadContext::Workload::QUERY) {
+        return config::remote_prefetch_window_blocks;
+    }
+    // Late-materialized row batches can submit urgent warms outside the normal window.
+    // Compaction uses only the bounded page window, with the file's original transaction context.
+    if (opts.remote_read.workload == RemoteReadContext::Workload::COMPACTION && !_context->_late_materialize) {
+        return opts.compaction_prefetch_blocks;
+    }
+    return 0;
 }
 
 bool SegmentIterator::_should_prefetch_bitmap_index_pages() const {
@@ -1258,7 +1265,8 @@ bool SegmentIterator::_should_prefetch_bitmap_index_pages() const {
 
 void SegmentIterator::_init_prefetch_window(rowid_t start_row) {
     _reset_prefetch_window();
-    if (!_should_read_ahead()) {
+    const int32_t blocks = _read_ahead_blocks();
+    if (blocks <= 0) {
         return;
     }
     // Scalar columns, read from the segment file or from a delta column group file; the others (complex types,
@@ -1309,8 +1317,11 @@ void SegmentIterator::_init_prefetch_window(rowid_t start_row) {
         return;
     }
     _prefetch_window = std::make_unique<SegmentPrefetchWindow>(
-            std::move(columns), &_scan_range, start_row, config::remote_prefetch_window_blocks,
-            config::remote_prefetch_late_read_ahead_ratio, config::starlet_star_cache_block_size_bytes, _opts.stats);
+            std::move(columns), &_scan_range, start_row, blocks, config::remote_prefetch_late_read_ahead_ratio,
+            config::starlet_star_cache_block_size_bytes, _opts.stats,
+            // Only query scans share the node read-ahead budget; compaction keeps its own window bound.
+            _opts.lake_io_opts.remote_read.workload == RemoteReadContext::Workload::QUERY ? ReadAheadBudget::instance()
+                                                                                          : nullptr);
 }
 
 Status SegmentIterator::_init_reused_scan() {
@@ -1719,6 +1730,17 @@ struct IndexOnlyPredicateChecker {
     }
 };
 
+// Expression predicates and the OR subtrees holding one.
+struct ExprPredicateChecker {
+    bool operator()(const PredicateColumnNode& node) const { return node.col_pred()->is_expr_predicate(); }
+
+    template <CompoundNodeType Type>
+    bool operator()(const PredicateCompoundNode<Type>& node) const {
+        return std::any_of(node.children().begin(), node.children().end(),
+                           [&](const auto& child) { return child.visit(*this); });
+    }
+};
+
 StatusOr<roaring::Roaring> evaluate_pred_tree_to_bitmap(
         const PredicateTree& pred_tree, const Schema& schema,
         const std::vector<std::unique_ptr<ColumnIterator>>& column_iterators_by_cid,
@@ -1743,6 +1765,11 @@ StatusOr<roaring::Roaring> evaluate_pred_tree_to_bitmap(
     if (used_tree.empty()) {
         return candidate;
     }
+
+    // A contiguous batch may read across short gaps between the runs of `candidate` only when the tree has no
+    // expression predicates: those are cheap and safe to evaluate on the rows outside `candidate`, while an
+    // expression is never computed for a row outside it.
+    const bool bridge_gaps = !used_tree.visit(ExprPredicateChecker());
 
     // cid -> field index in `schema`.
     std::unordered_map<ColumnId, size_t> cid_2_fid;
@@ -1788,8 +1815,32 @@ StatusOr<roaring::Roaring> evaluate_pred_tree_to_bitmap(
     SparseRange<> rows = roaring2range(candidate);
     roaring::Roaring result;
     std::vector<uint8_t> selection;
-    for (auto iter = rows.new_iterator(); iter.has_more();) {
-        Range<> r = iter.next(kEvalBatch);
+    // A delete vector scattered over the segment splits `candidate` into many short runs. A batch per run costs about
+    // 1us (column, seek, chunk, tree evaluation) while reading a row costs a few ns, so a contiguous batch reads
+    // across gaps of up to kMaxBridgedGap rows, and the rows it picks up from the gaps are dropped at the end.
+    constexpr rowid_t kMaxBridgedGap = 128;
+    size_t run = 0;
+    rowid_t next_row = rows.empty() ? 0 : rows[0].begin();
+    bool bridged = false;
+    const auto next_span = [&]() {
+        const rowid_t begin = std::max(next_row, rows[run].begin());
+        const rowid_t limit = begin + kEvalBatch;
+        rowid_t end = std::min(rows[run].end(), limit);
+        while (bridge_gaps && end == rows[run].end() && run + 1 < rows.size() &&
+               rows[run + 1].begin() - end <= kMaxBridgedGap && rows[run + 1].begin() < limit) {
+            ++run;
+            bridged = true;
+            end = std::min(rows[run].end(), limit);
+        }
+        if (end == rows[run].end()) {
+            ++run;
+        }
+        next_row = end;
+        return Range<>(begin, end);
+    };
+    while (run < rows.size()) {
+        // A batch is one contiguous span of at most kEvalBatch rows.
+        Range<> r = next_span();
         const uint32_t bn = r.end() - r.begin();
 
         // Build a chunk keyed by column id so PredicateTree::evaluate (chunk->get_column_by_id(cid))
@@ -1827,6 +1878,9 @@ StatusOr<roaring::Roaring> evaluate_pred_tree_to_bitmap(
                 result.add(r.begin() + i);
             }
         }
+    }
+    if (bridged) {
+        result &= candidate;
     }
     return result;
 }
@@ -2341,16 +2395,6 @@ bool SegmentIterator::need_early_materialize_subfield(const FieldPtr& field) {
     }
     return false;
 }
-
-struct ExprPredicateChecker {
-    bool operator()(const PredicateColumnNode& node) const { return node.col_pred()->is_expr_predicate(); }
-
-    template <CompoundNodeType Type>
-    bool operator()(const PredicateCompoundNode<Type>& node) const {
-        return std::any_of(node.children().begin(), node.children().end(),
-                           [&](const auto& child) { return child.visit(*this); });
-    }
-};
 
 void SegmentIterator::_init_column_predicates() {
     SCOPED_RAW_TIMER(&_opts.stats->init_context_ns);

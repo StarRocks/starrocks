@@ -59,6 +59,7 @@ import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.hive.IcebergHiveCatalog;
 import com.starrocks.http.rest.RestBaseAction;
+import com.starrocks.load.pipe.PipeManager;
 import com.starrocks.load.pipe.PipeManagerTest;
 import com.starrocks.load.routineload.RoutineLoadMgr;
 import com.starrocks.mysql.MysqlChannel;
@@ -102,6 +103,7 @@ import com.starrocks.sql.ast.expression.ArithmeticExpr;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.Subquery;
+import com.starrocks.sql.ast.pipe.PipeName;
 import com.starrocks.sql.ast.warehouse.cngroup.AlterCnGroupStmt;
 import com.starrocks.sql.ast.warehouse.cngroup.CreateCnGroupStmt;
 import com.starrocks.sql.ast.warehouse.cngroup.DropCnGroupStmt;
@@ -3770,6 +3772,36 @@ public class PrivilegeCheckerTest extends StarRocksTestBase {
                 "revoke ALTER on PIPE db1.* from test",
                 "Access denied; you need (at least one of) the ALTER privilege(s) on PIPE db1.p1 " +
                         "for this operation");
+
+        // create or replace pipe: replacing an existing pipe also requires DROP on it
+        {
+            String replaceSql = "create or replace pipe p1 " +
+                    "as insert into tbl_pipe select * from files('path'='fake://dir/', 'format'='parquet', " +
+                    "'auto_ingest'='false') ";
+            String replaceNewSql = "create or replace pipe p_not_exist " +
+                    "as insert into tbl_pipe select * from files('path'='fake://dir/', 'format'='parquet', " +
+                    "'auto_ingest'='false') ";
+            grantRevokeSqlAsRoot(String.format("grant CREATE PIPE on DATABASE %s to test", dbName));
+            verifyGrantRevoke(
+                    replaceSql,
+                    "grant DROP on PIPE db1.p1 to test",
+                    "revoke DROP on PIPE db1.p1 from test",
+                    "Access denied; you need (at least one of) the DROP privilege(s) on PIPE db1.p1 " +
+                            "for this operation");
+            // the denied replace leaves the old pipe in place
+            PipeManager pipeManager = GlobalStateMgr.getCurrentState().getPipeManager();
+            long oldPipeId = pipeManager.mayGetPipe(new PipeName(dbName, "p1")).get().getId();
+            ctxToTestUser();
+            new StmtExecutor(ctx, SqlParser.parseSingleStatement(replaceSql,
+                    ctx.getSessionVariable().getSqlMode())).execute();
+            Assertions.assertTrue(ctx.getState().getErrorMessage().contains(
+                    "the DROP privilege(s) on PIPE db1.p1"), ctx.getState().getErrorMessage());
+            Assertions.assertEquals(oldPipeId, pipeManager.mayGetPipe(new PipeName(dbName, "p1")).get().getId());
+            // no existing pipe to replace, so CREATE PIPE alone is enough
+            ctxToTestUser();
+            Authorizer.check(UtFrameUtils.parseStmtWithNewParser(replaceNewSql, ctx), ctx);
+            grantRevokeSqlAsRoot(String.format("revoke CREATE PIPE on DATABASE %s from test", dbName));
+        }
 
         // drop pipe
         verifyGrantRevoke(

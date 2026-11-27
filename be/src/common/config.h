@@ -88,6 +88,11 @@ CONF_mBool(enable_resolve_hostname_to_ip_in_load_error_url, "false");
 // If no ip match this rule, will choose one randomly.
 CONF_String(priority_networks, "");
 CONF_Bool(net_use_ipv6_when_priority_networks_empty, "false");
+// How long BE/CN startup waits for a non-loopback address to appear when the host only has
+// loopback addresses, e.g. the process was started before DHCP assigned an address. Without
+// the wait, the process picks a loopback address and keeps it until it is restarted.
+// Once the wait times out, the address is chosen as before. 0 disables the wait.
+CONF_Int32(net_wait_for_local_ip_timeout_s, "300");
 
 // Memory urged water level, if the memory usage exceeds this level,
 // be will free up some memory immediately to ensure the system runs smoothly.
@@ -449,10 +454,10 @@ CONF_mBool(lake_enable_segment_tail_index_region, "true");
 // uncompressed trailer keeps the same size. The format is identified by the column encoding
 // recorded in the segment metadata (not by any in-trailer flag), so a BE that does not know the
 // encoding fails to open the segment instead of misreading it. Only the write side is gated by
-// this config; default true. Set it to false while any BE that does not support the encoding is
+// this config; default false. Set it to false while any BE that does not support the encoding is
 // still serving, and before downgrading to such a version, since segments already written with
 // the encoding stay unreadable there.
-CONF_mBool(enable_binary_plain_delta_offset, "true");
+CONF_mBool(enable_binary_plain_delta_offset, "false");
 
 CONF_mBool(enable_zero_copy_from_page_cache, "true");
 
@@ -916,6 +921,15 @@ CONF_mBool(lake_scan_parallel_segment_open, "true");
 // remote_prefetch_window_blocks blocks not read yet, so the segment started last can take that to about twice the
 // window. 0 starts each segment's read-ahead only when its turn comes.
 CONF_mInt32(lake_scan_read_ahead_segments, "16");
+
+// The cache blocks the query scans of a node may have asked for ahead of their reads and not read yet, all scans
+// together: the blocks remote_prefetch_window_blocks lets each segment reader keep ahead, and those of the segments
+// lake_scan_read_ahead_segments starts early. The windows reading ahead share it equally: each keeps at most the limit
+// divided by their number (at least one block), so a scan that starts later still gets its share. While the node holds
+// this many, a window asks for no more blocks and a tablet scan starts no next segment early; their reads fetch what
+// they need as they reach it. The blocks a read is about to consume are always fetched. Blocks are reserved atomically,
+// so concurrent scans never take the total past the limit. 0 means no limit.
+CONF_mInt64(lake_scan_read_ahead_max_blocks, "2048");
 
 // Fragment thread pool
 CONF_Int32(fragment_pool_thread_num_min, "64");
@@ -1721,9 +1735,13 @@ CONF_Int32(remote_read_compaction_weight, "1");
 CONF_Int32(remote_read_background_weight, "1");
 // Cache blocks a query's segment reader keeps asked for ahead of what it is consuming -- queued, in flight, or filled
 // and not read yet -- while the remote I/O scheduler is enabled. It bounds how far a reader runs ahead of itself;
-// when the blocks are fetched is the scheduler's decision. Loads, compaction and other background reads do not read
-// ahead. 0 turns the read-ahead off. Applies to the segment readers opened afterwards.
+// when the blocks are fetched is the scheduler's decision. Loads and other background reads do not read ahead;
+// compaction reads ahead under lake_compaction_prefetch_window_blocks. 0 turns the read-ahead off. Applies to the
+// segment readers opened afterwards.
 CONF_mInt32(remote_prefetch_window_blocks, "128");
+// Target cache blocks a lake compaction task requests ahead across its input segments; zero disables it.
+// Every input segment keeps at least one block ahead, so an input with more segments than this exceeds it.
+CONF_mInt32(lake_compaction_prefetch_window_blocks, "32");
 // With late materialization, the columns read only for the rows that pass the predicates are fetched per chunk once
 // those rows are known. From the fourth chunk of a segment reader on, once those rows have touched at least this
 // share of the pages they span, these columns are read ahead like the predicate columns. Above 1, never. Applies to

@@ -1595,7 +1595,7 @@ This topic introduces the following types of FE configurations:
 - Type: Int
 - Unit: Milliseconds
 - Is mutable: Yes
-- Description: The maximum time a commit to an Iceberg table (INSERT, INSERT OVERWRITE, DELETE, UPDATE, MERGE, or compaction) waits for the other FEs to drop their cached copy of the table, so that a query on any FE sees the commit once the statement returns. An FE that does not respond in time is left to the background refresh. During a rolling upgrade, an FE of an earlier version refreshes the table instead, so a commit can wait up to this long. Set it to 0 or less to disable the wait.
+- Description: The maximum time a commit to an Iceberg table (INSERT, INSERT OVERWRITE, DELETE, UPDATE, MERGE, or compaction), or a TRUNCATE TABLE, ALTER TABLE, or DROP TABLE on an Iceberg table, waits for the other FEs to drop their cached copy of the table, so that a query on any FE sees the change once the statement returns. An FE that does not respond in time is left to the background refresh. During a rolling upgrade, an FE of an earlier version refreshes the table instead, so a statement can wait up to this long. Set it to 0 or less to disable the wait.
 - Introduced in: -
 
 ### `hive_commit_invalidate_other_fe_timeout_ms`
@@ -1604,7 +1604,7 @@ This topic introduces the following types of FE configurations:
 - Type: Int
 - Unit: Milliseconds
 - Is mutable: Yes
-- Description: The maximum time an INSERT, INSERT OVERWRITE, or TRUNCATE on a Hive table waits for the other FEs to drop their cached copy of the table, so that a query on any FE sees the change once the statement returns. An FE that does not respond in time is left to the background refresh. During a rolling upgrade, an FE of an earlier version either refreshes the table instead, so a statement can wait up to this long, or keeps its copy until the background refresh. Set it to 0 or less to disable the wait.
+- Description: The maximum time an INSERT, INSERT OVERWRITE, TRUNCATE, DROP TABLE, or ALTER TABLE ADD PARTITION on a Hive table waits for the other FEs to drop their cached copy of the table, so that a query on any FE sees the change once the statement returns. An FE that does not respond in time is left to the background refresh. During a rolling upgrade, an FE of an earlier version either refreshes the table instead, so a statement can wait up to this long, or keeps its copy until the background refresh. Set it to 0 or less to disable the wait.
 - Introduced in: -
 
 ### `refresh_other_fe_rpc_executor_thread_num`
@@ -1857,6 +1857,15 @@ This topic introduces the following types of FE configurations:
 - Unit: -
 - Is mutable: No
 - Description: The directory that stores metadata.
+- Introduced in: -
+
+### `metadata_ignore_image_checksum_error`
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to accept a metadata image that fails its checksum check, that is, an image whose content does not match its checksum, or a v2 image without a checksum. By default, an FE refuses such an image when it downloads it from another FE, and does not start when it loads such an image from its own metadata directory. If the value is `TRUE`, the FE accepts or loads the image and writes a warning to **fe.log** instead. Set this item to `TRUE` only to recover from a checksum check that is wrong, and set it back to `FALSE` afterwards: while it is `TRUE`, an image damaged on one FE can be loaded by the other FEs.
 - Introduced in: -
 
 ### `metadata_ignore_unknown_operation_type`

@@ -989,7 +989,7 @@ FROM test;
 ### enable_runtime_adaptive_dop
 
 * **范围**: Session
-* **描述**: 当为某个 Session 启用此功能时，Planner 和 Fragment Builder 会标记支持运行时自适应 DOP 的 Pipeline-capable Fragment，使其在运行时使用自适应并行度。此选项仅在 `enable_pipeline_engine` 为 true 时生效。启用后，Fragment 在计划构建期间会使用自适应并行度：Join 的 Probe 可能会等待所有 Build 阶段完成（这与 `group_execution` 行为冲突），启用运行时自适应 DOP 会禁用 Pipeline 级别的 Multi-Partitioned Runtime Filter。该参数会记录在 Query Profile 中，并且可以在每个会话中切换。
+* **描述**: 当为某个 Session 启用此功能时，Planner 和 Fragment Builder 会标记支持运行时自适应 DOP 的 Pipeline-capable Fragment，使其在运行时使用自适应并行度。此选项仅在 `enable_pipeline_engine` 为 true 且未开启 Spill 时生效：`enable_spill` 为 true，或语句自身开启了 Spill（例如在 `enable_connector_sink_spill` 开启时写入 Iceberg、Hive 或 FILES() 表）时，不会使用运行时自适应 DOP。启用后，Fragment 在计划构建期间会使用自适应并行度：Join 的 Probe 可能会等待所有 Build 阶段完成（这与 `group_execution` 行为冲突），启用运行时自适应 DOP 会禁用 Pipeline 级别的 Multi-Partitioned Runtime Filter。该参数会记录在 Query Profile 中，并且可以在每个会话中切换。
 * **默认值**: `false`
 * **数据类型**: boolean
 * **引入版本**: v3.2.0
@@ -1412,11 +1412,12 @@ FROM test;
 * 描述：控制扫描规划期间 Paimon Global Index 谓词的求值位置。取值不区分大小写：
   * `off`：禁用 Global Index，包括优化器收集统计信息时。仍可使用普通的分区和文件裁剪。
   * `local`：由 FE 中的 Paimon Java SDK 处理，遵循表的 `global-index.enabled` 配置。
-  * `distributed`：将符合条件的标量 BTree 索引文件信息交给 BE/CN 求值，再将返回的 bitmap 交给 Java SDK 生成数据分片。关闭 SDK 自动索引求值，包括优化器收集统计信息时。分布式求值不可用或失败时，回退到不使用 Global Index 裁剪的数据扫描。
-* 默认值：local
+  * `auto`：将符合条件的标量 BTree 索引文件信息交给 BE/CN 求值，再将返回的 bitmap 交给 Java SDK 生成数据分片。分布式求值不可用或失败，包括应用 bitmap 规划分片时失败，会保留原谓词和同一快照，重新规划普通数据扫描。关闭 SDK 自动索引求值，包括优化器收集统计信息时。
+  * `distributed`：使用与 `auto` 相同的分布式求值路径，索引发现、校验、执行、结果收集或 bitmap 应用出错时，将错误返回给调用者。没有符合条件的索引谓词时，使用普通数据规划，并关闭 SDK 自动索引求值。
+* 默认值：auto
 * 类型：String
 * 引入版本：v4.2
-* 限制：分布式模式适用于 main 分支上 data evolution 表的快照查询，要求索引键的 schema 兼容且索引完整覆盖数据。最多 4096 个索引分片，每个分片最多返回 1 MiB 序列化 bitmap。FE 收集预算最多为查询内存限制的八分之一，上限 64 MiB，并对序列化字节数和候选行数实施保守限制。分布式索引不可用、执行失败或超过限制时，保留原谓词，规划不使用 Global Index 裁剪的数据扫描。查询被取消或外层超时预算耗尽时停止规划。有行过滤或列脱敏策略时不使用此优化。
+* 限制：分布式求值适用于 main 分支上 data evolution 表的快照查询，要求索引键的 schema 兼容且索引完整覆盖数据。最多 4096 个索引分片，每个分片最多返回 1 MiB 序列化 bitmap。FE 收集预算最多为查询内存限制的八分之一，上限 64 MiB，并对序列化字节数和候选行数实施保守限制。覆盖范围、预算、行过滤和列脱敏检查可能拒绝分布式求值。`auto` 遇到这些错误会规划不使用 Global Index 裁剪的普通数据扫描，`distributed` 会将错误返回给调用者。查询被取消、外层超时预算耗尽或回退扫描失败时停止规划。
 * 诊断：External Trace 包括 `PaimonGlobalIndex.Mode`、`PaimonGlobalIndex.Evaluate`、`PaimonGlobalIndex.ValidateCoverage`、`PaimonGlobalIndex.Result` 和 `PaimonGlobalIndex.Fallback`。开启 metadata profile 后，可查看原生 scanner 的索引打开、求值、序列化耗时、序列化字节数以及文件系统 I/O 计数。
 
 ### paimon_reader_mode

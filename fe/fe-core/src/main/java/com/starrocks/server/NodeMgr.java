@@ -726,7 +726,8 @@ public class NodeMgr {
             LOG.info("start to download image.{} version:{}, from {}", remoteImageJournalId,
                     remoteStorageInfo.getImageFormatVersion(), url);
             MetaHelper.downloadImageFile(url, HTTP_TIMEOUT_SECOND * 1000,
-                    Long.toString(remoteImageJournalId), new File(imageFileDir));
+                    Long.toString(remoteImageJournalId), new File(imageFileDir),
+                    remoteStorageInfo.getImageFormatVersion());
         } else {
             LOG.info("skip download image for {}, current version {} >= version {} from {}",
                     imageFileDir, localImageJournalId, remoteImageJournalId, helperNode);

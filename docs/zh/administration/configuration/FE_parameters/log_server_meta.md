@@ -1594,7 +1594,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Int
 - 单位: 毫秒
 - 是否可变: Yes
-- 描述: Iceberg 表提交（INSERT、INSERT OVERWRITE、DELETE、UPDATE、MERGE 或 compaction）返回前，等待其他 FE 删除该表缓存的最长时间，使语句返回后在任意 FE 上查询都能看到这次提交。在该时间内没有响应的 FE 由后台刷新更新。滚动升级期间，旧版本的 FE 会改为刷新该表，因此一次提交最多可能等待这么久。设置为 0 或更小的值表示不等待。
+- 描述: Iceberg 表提交（INSERT、INSERT OVERWRITE、DELETE、UPDATE、MERGE 或 compaction），以及对 Iceberg 表执行的 TRUNCATE TABLE、ALTER TABLE 或 DROP TABLE 返回前，等待其他 FE 删除该表缓存的最长时间，使语句返回后在任意 FE 上查询都能看到这次变更。在该时间内没有响应的 FE 由后台刷新更新。滚动升级期间，旧版本的 FE 会改为刷新该表，因此一条语句最多可能等待这么久。设置为 0 或更小的值表示不等待。
 - 引入版本: -
 
 ### `hive_commit_invalidate_other_fe_timeout_ms`
@@ -1603,7 +1603,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Int
 - 单位: 毫秒
 - 是否可变: Yes
-- 描述: Hive 表上的 INSERT、INSERT OVERWRITE 或 TRUNCATE 返回前，等待其他 FE 删除该表缓存的最长时间，使语句返回后在任意 FE 上查询都能看到这次变更。在该时间内没有响应的 FE 由后台刷新更新。滚动升级期间，旧版本的 FE 或者会改为刷新该表，因此一条语句最多可能等待这么久，或者会保留缓存直到后台刷新。设置为 0 或更小的值表示不等待。
+- 描述: Hive 表上的 INSERT、INSERT OVERWRITE、TRUNCATE、DROP TABLE 或 ALTER TABLE ADD PARTITION 返回前，等待其他 FE 删除该表缓存的最长时间，使语句返回后在任意 FE 上查询都能看到这次变更。在该时间内没有响应的 FE 由后台刷新更新。滚动升级期间，旧版本的 FE 或者会改为刷新该表，因此一条语句最多可能等待这么久，或者会保留缓存直到后台刷新。设置为 0 或更小的值表示不等待。
 - 引入版本: -
 
 ### `refresh_other_fe_rpc_executor_thread_num`
@@ -1856,6 +1856,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 单位: -
 - 是否可变: No
 - 描述: 存储元数据的目录。
+- 引入版本: -
+
+### `metadata_ignore_image_checksum_error`
+
+- 默认值: false
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 是否接受未通过 checksum 校验的元数据 image，即内容与其 checksum 不一致的 image，或者没有 checksum 的 v2 image。默认情况下，FE 从其他 FE 下载到这样的 image 时会拒收，从自身元数据目录加载这样的 image 时无法启动。如果值为 `TRUE`，FE 会接受或加载该 image，并在 **fe.log** 中记录一条警告。仅在 checksum 校验本身出错时用于恢复，恢复后请改回 `FALSE`：该值为 `TRUE` 时，一个 FE 上损坏的 image 可能被其他 FE 加载。
 - 引入版本: -
 
 ### `metadata_ignore_unknown_operation_type`

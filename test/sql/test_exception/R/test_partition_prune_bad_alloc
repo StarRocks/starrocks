@@ -1,0 +1,31 @@
+-- name: test_partition_prune_bad_alloc @sequential
+create table t_range_part (k_id int not null, k_date date null, c_int int null) duplicate key(k_id, k_date)
+partition by range(k_date) (partition p_hist values less than ("2020-01-01"), partition p2024_01 values less than ("2024-02-01"), partition p_max values less than (maxvalue))
+distributed by hash(k_id) buckets 2 properties ("replication_num" = "1");
+-- result:
+-- !result
+insert into t_range_part values (1, null, 1), (2, "2019-12-31", 2), (3, "2024-01-15", 3), (4, "2030-01-01", 4);
+-- result:
+-- !result
+select count(*) from t_range_part where year(k_date) >= 2024;
+-- result:
+2
+-- !result
+admin enable failpoint 'partition_scan_range_pruner_bad_alloc';
+-- result:
+-- !result
+select count(*) from t_range_part where year(k_date) >= 2024;
+-- result:
+2
+-- !result
+select k_id from t_range_part where year(k_date) < 2024 order by k_id;
+-- result:
+2
+-- !result
+admin disable failpoint 'partition_scan_range_pruner_bad_alloc';
+-- result:
+-- !result
+select count(*) from t_range_part where year(k_date) >= 2024;
+-- result:
+2
+-- !result

@@ -59,10 +59,10 @@ CONF_mBool(lake_enable_segment_tail_index_region, "true");
 // uncompressed trailer keeps the same size. The format is identified by the column encoding
 // recorded in the segment metadata (not by any in-trailer flag), so a BE that does not know the
 // encoding fails to open the segment instead of misreading it. Only the write side is gated by
-// this config; default true. Set it to false while any BE that does not support the encoding is
+// this config; default false. Set it to false while any BE that does not support the encoding is
 // still serving, and before downgrading to such a version, since segments already written with
 // the encoding stay unreadable there.
-CONF_mBool(enable_binary_plain_delta_offset, "true");
+CONF_mBool(enable_binary_plain_delta_offset, "false");
 
 // whether to enable the bitmap index memory cache
 CONF_mBool(enable_bitmap_index_memory_page_cache, "true");

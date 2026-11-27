@@ -180,8 +180,9 @@ CONF_Int32(remote_read_background_weight, "1");
 
 // Cache blocks a query's segment reader keeps asked for ahead of what it is consuming -- queued, in flight, or filled
 // and not read yet -- while the remote I/O scheduler is enabled. It bounds how far a reader runs ahead of itself;
-// when the blocks are fetched is the scheduler's decision. Loads, compaction and other background reads do not read
-// ahead. 0 turns the read-ahead off. Applies to the segment readers opened afterwards.
+// when the blocks are fetched is the scheduler's decision. Loads and other background reads do not read ahead;
+// compaction reads ahead under lake_compaction_prefetch_window_blocks. 0 turns the read-ahead off. Applies to the
+// segment readers opened afterwards.
 CONF_mInt32(remote_prefetch_window_blocks, "128");
 
 // Whether starlet's remote I/O scheduler may skip the local-cache write of a block fill while the cache disk is

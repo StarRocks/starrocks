@@ -3571,15 +3571,16 @@ public class Config extends ConfigBase {
     public static int refresh_other_fe_rpc_executor_thread_num = 4;
 
     /**
-     * Max time a commit to an Iceberg table waits for the other FEs to drop their cached copy of the table,
-     * so that a query on any FE sees the commit once the statement returns. 0 or less disables the wait.
+     * Max time a commit to an Iceberg table, or a TRUNCATE, ALTER TABLE or DROP TABLE of one, waits for the other
+     * FEs to drop their cached copy of the table, so that a query on any FE sees the change once the statement
+     * returns. 0 or less disables the wait.
      */
     @ConfField(mutable = true)
     public static int iceberg_commit_invalidate_other_fe_timeout_ms = 3000;
 
     /**
-     * Max time an INSERT, INSERT OVERWRITE or TRUNCATE on a Hive table waits for the other FEs to drop their
-     * cached copy of the table, so that a query on any FE sees the change once the statement returns.
+     * Max time an INSERT, INSERT OVERWRITE, TRUNCATE, DROP TABLE or ADD PARTITION on a Hive table waits for the other
+     * FEs to drop their cached copy of the table, so that a query on any FE sees the change once the statement returns.
      * 0 or less disables the wait.
      */
     @ConfField(mutable = true)
@@ -4516,6 +4517,15 @@ public class Config extends ConfigBase {
      */
     @ConfField
     public static boolean metadata_ignore_unknown_subtype = false;
+
+    /**
+     * Whether to accept a checkpoint image that fails its checksum check (the bytes do not match the checksum,
+     * or a v2 image has none): when it is downloaded from another FE, and when it is loaded at startup.
+     * Each such image is then logged as a warning instead of being refused. Only for recovery, when the check
+     * itself is wrong: while it is true, an image damaged on one FE's disk can reach and be loaded by others.
+     */
+    @ConfField(mutable = true)
+    public static boolean metadata_ignore_image_checksum_error = false;
 
     /**
      * Number of profile infos reserved by `ProfileManager` for recently executed query.

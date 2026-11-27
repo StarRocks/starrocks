@@ -21,10 +21,12 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.PaimonTable;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
+import com.starrocks.common.util.DebugUtil;
 import com.starrocks.connector.CatalogConnector;
 import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.RemoteFileInfo;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.paimon.PaimonReaderSelector;
 import com.starrocks.connector.paimon.PaimonReaderSelector.Reader;
 import com.starrocks.connector.paimon.PaimonRemoteFileDesc;
@@ -164,7 +166,6 @@ public class PaimonScanNode extends ScanNode {
                     paimonTable.getCatalogTableName(), paimonTable.getFullSchema(), splitsInfo.getNativeTable());
             tupleDescriptor.setTable(paimonTable);
         }
-        String predicateInfo = encodeObjectToString(splitsInfo.getPredicate());
         List<Split> splits = splitsInfo.getPaimonSplits();
         computeScanMetrics(splits);
 
@@ -174,13 +175,30 @@ public class PaimonScanNode extends ScanNode {
             return;
         }
 
-        SessionVariable sessionVariable = ConnectContext.get().getSessionVariable();
+        ConnectContext context = ConnectContext.get();
+        SessionVariable sessionVariable = context.getSessionVariable();
+        // Check the final splits, which may have been pruned by the distributed Global Index.
+        Map<BinaryRow, Long> selectedPartitions = Maps.newHashMap();
+        for (Split split : splits) {
+            PaimonSplitUtils.getDataSplit(split).ifPresent(dataSplit ->
+                    selectedPartitions.computeIfAbsent(dataSplit.partition(), k -> nextPartitionId()));
+        }
+        int maxPartitions = sessionVariable.getScanLakePartitionNumLimit();
+        if (maxPartitions > 0 && selectedPartitions.size() > maxPartitions) {
+            String msg = "Exceeded the limit of number of paimon table partitions to be scanned. " +
+                    "Number of partitions allowed: " + maxPartitions +
+                    ", number of partitions to be scanned: " + selectedPartitions.size() +
+                    ". Please adjust the SQL or change the limit by set variable scan_lake_partition_num_limit.";
+            LOG.warn("{} queryId: {}", msg, DebugUtil.printId(context.getQueryId()));
+            throw new StarRocksConnectorException(msg);
+        }
+
+        String predicateInfo = encodeObjectToString(splitsInfo.getPredicate());
         PaimonReaderMode paimonReaderMode = sessionVariable.getPaimonReaderMode();
         if (sessionVariable.getPaimonForceJNIReader()) {
             paimonReaderMode = PaimonReaderMode.JNI;
         }
         PaimonReaderSelector selector = new PaimonReaderSelector(paimonTable.getNativeTable(), fieldNames);
-        Map<BinaryRow, Long> selectedPartitions = Maps.newHashMap();
         for (Split split : splits) {
             PaimonReaderSelector.Decision decision;
             try (Timer ignored = Tracers.watchScope(EXTERNAL, paimonTable.getCatalogTableName() + ".selectPaimonReader")) {
@@ -189,8 +207,6 @@ public class PaimonScanNode extends ScanNode {
             Tracers.count(EXTERNAL, "Paimon.metadata.reader." + paimonTable.getCatalogTableName() +
                     ".selectionReason." + decision.reason(), 1);
             addScanRangeLocations(split, decision.reader(), predicateInfo, tupleDescriptor);
-            PaimonSplitUtils.getDataSplit(split).ifPresent(dataSplit ->
-                    selectedPartitions.computeIfAbsent(dataSplit.partition(), k -> nextPartitionId()));
         }
 
         scanNodePredicates.setSelectedPartitionIds(selectedPartitions.values());

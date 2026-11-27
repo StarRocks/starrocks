@@ -67,6 +67,9 @@ TEST_F(CompactionTaskContextTest, test_calculation) {
     reader_stats.column_iterator_init_ns = 500;
     reader_stats.io_count_local_disk = 600;
     reader_stats.io_count_remote = 700;
+    reader_stats.remote_prefetch_rejected_blocks = 2;
+    reader_stats.remote_prefetch_blocks = 3;
+    reader_stats.remote_prefetch_ranges = 7;
     reader_stats.compressed_bytes_read_remote = 1024;
     reader_stats.compressed_bytes_read_local_disk = 1024;
     reader_stats.create_segment_iter_ns = 101;
@@ -95,6 +98,9 @@ TEST_F(CompactionTaskContextTest, test_calculation) {
     EXPECT_EQ(stats.column_iterator_init_ns, 500);
     EXPECT_EQ(stats.io_count_local_disk, 600);
     EXPECT_EQ(stats.io_count_remote, 700);
+    EXPECT_EQ(stats.remote_prefetch_rejected_blocks, 2);
+    EXPECT_EQ(stats.remote_prefetch_blocks, 3);
+    EXPECT_EQ(stats.remote_prefetch_ranges, 7);
     EXPECT_EQ(stats.io_bytes_read_remote, 1024);
     EXPECT_EQ(stats.io_bytes_read_local_disk, 1024);
     EXPECT_EQ(stats.create_segment_iter_ns, 101);
@@ -123,6 +129,9 @@ TEST_F(CompactionTaskContextTest, test_calculation) {
     EXPECT_EQ(after_add.column_iterator_init_ns, 1000);
     EXPECT_EQ(after_add.io_count_local_disk, 1200);
     EXPECT_EQ(after_add.io_count_remote, 1400);
+    EXPECT_EQ(after_add.remote_prefetch_rejected_blocks, 4);
+    EXPECT_EQ(after_add.remote_prefetch_blocks, 6);
+    EXPECT_EQ(after_add.remote_prefetch_ranges, 14);
     EXPECT_EQ(after_add.io_bytes_read_remote, 2048);
     EXPECT_EQ(after_add.io_bytes_read_local_disk, 2048);
     EXPECT_EQ(after_add.in_queue_time_sec, 10);
@@ -136,6 +145,9 @@ TEST_F(CompactionTaskContextTest, test_calculation) {
     EXPECT_EQ(after_minus.column_iterator_init_ns, 0);
     EXPECT_EQ(after_minus.io_count_local_disk, 0);
     EXPECT_EQ(after_minus.io_count_remote, 0);
+    EXPECT_EQ(after_minus.remote_prefetch_rejected_blocks, 0);
+    EXPECT_EQ(after_minus.remote_prefetch_blocks, 0);
+    EXPECT_EQ(after_minus.remote_prefetch_ranges, 0);
     EXPECT_EQ(after_minus.io_bytes_read_remote, 0);
     EXPECT_EQ(after_minus.io_bytes_read_local_disk, 0);
     EXPECT_EQ(after_minus.in_queue_time_sec, 0);
@@ -242,6 +254,9 @@ TEST_F(CompactionTaskContextTest, test_to_json_stats) {
     context.stats->io_ns_read_local_disk = 9 * TIME_UNIT_NS_PER_SECOND;
     context.stats->segment_init_ns = 2 * TIME_UNIT_NS_PER_SECOND;
     context.stats->io_count_remote = 3;
+    context.stats->remote_prefetch_rejected_blocks = 2;
+    context.stats->remote_prefetch_blocks = 3;
+    context.stats->remote_prefetch_ranges = 7;
     context.stats->io_count_local_disk = 2;
     context.stats->segment_init_ns = 3 * TIME_UNIT_NS_PER_SECOND;
     context.stats->column_iterator_init_ns = 4 * TIME_UNIT_NS_PER_SECOND;
@@ -260,6 +275,9 @@ TEST_F(CompactionTaskContextTest, test_to_json_stats) {
     EXPECT_THAT(json_stats, testing::HasSubstr(R"("read_remote_sec":1)"));
     EXPECT_THAT(json_stats, testing::HasSubstr(R"("read_local_sec":9)"));
     EXPECT_THAT(json_stats, testing::HasSubstr(R"("read_remote_count":3)"));
+    EXPECT_THAT(json_stats, testing::HasSubstr(R"("remote_prefetch_rejected_blocks":2)"));
+    EXPECT_THAT(json_stats, testing::HasSubstr(R"("remote_prefetch_blocks":3)"));
+    EXPECT_THAT(json_stats, testing::HasSubstr(R"("remote_prefetch_ranges":7)"));
     EXPECT_THAT(json_stats, testing::HasSubstr(R"("read_local_count":2)"));
     EXPECT_THAT(json_stats, testing::HasSubstr(R"("write_segment_count":2)"));
     EXPECT_THAT(json_stats, testing::HasSubstr(R"("write_remote_mb":1)"));

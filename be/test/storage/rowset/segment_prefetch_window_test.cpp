@@ -16,20 +16,26 @@
 
 #include <gtest/gtest.h>
 
+#include <atomic>
 #include <memory>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "base/testutil/assert.h"
+#include "base/utility/defer_op.h"
 #include "column/chunk_factory.h"
+#include "common/config_lake_fwd.h"
 #include "fs/fs_memory.h"
 #include "gen_cpp/tablet_schema.pb.h"
 #include "storage/chunk_helper.h"
 #include "storage/olap_common.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/column_reader.h"
+#include "storage/rowset/read_ahead_budget.h"
 #include "storage/rowset/segment.h"
 #include "storage/rowset/segment_writer.h"
+#include "storage/storage_metrics.h"
 #include "storage/tablet_schema.h"
 #include "storage_primitive/storage_stats.h"
 #include "types/datum.h"
@@ -154,7 +160,7 @@ protected:
                                                        int64_t object_offset = 0, size_t block_size = kBlockSize) {
         return std::make_unique<SegmentPrefetchWindow>(
                 std::vector<SegmentPrefetchWindow::Column>{{_reader, &_stream, object_offset}}, range, start_row,
-                ahead_blocks, late_ratio, block_size, &_stats);
+                ahead_blocks, late_ratio, block_size, &_stats, ReadAheadBudget::instance());
     }
 
     std::shared_ptr<MemoryFileSystem> _fs;
@@ -197,6 +203,194 @@ TEST_F(SegmentPrefetchWindowTest, advance_bounds_read_ahead) {
     const size_t asked = _stream.warms.size();
     window->advance(0);
     EXPECT_EQ(asked, _stream.warms.size());
+}
+
+// The windows of a node together hold no more blocks ahead than lake_scan_read_ahead_max_blocks; a window held back
+// asks for the rest once another one has released its blocks.
+TEST_F(SegmentPrefetchWindowTest, node_limit_bounds_all_windows) {
+    auto& node = StorageMetrics::instance()->lake_scan_read_ahead_blocks;
+    auto& capped = StorageMetrics::instance()->lake_scan_read_ahead_capped_total;
+    const int64_t base = node.value();
+    const int64_t old_limit = config::lake_scan_read_ahead_max_blocks;
+    DeferOp restore([&] { config::lake_scan_read_ahead_max_blocks = old_limit; });
+    config::lake_scan_read_ahead_max_blocks = base + 6;
+
+    SparseRange<> range(0, kRows);
+    auto first = make_window(&range, 0, 4);
+    first->advance(0);
+    EXPECT_EQ(4u, first->ahead_blocks());
+    EXPECT_EQ(base + 4, node.value());
+    EXPECT_TRUE(ReadAheadBudget::instance()->has_room());
+
+    // The second window gets only what is left of the node's blocks.
+    const int64_t capped_before = capped.value();
+    auto second = make_window(&range, 0, 4);
+    second->advance(0);
+    EXPECT_EQ(2u, second->ahead_blocks());
+    EXPECT_EQ(base + 6, node.value());
+    EXPECT_GT(capped.value(), capped_before);
+    EXPECT_FALSE(ReadAheadBudget::instance()->has_room());
+
+    first.reset();
+    EXPECT_EQ(base + 2, node.value());
+    second->advance(0);
+    EXPECT_EQ(4u, second->ahead_blocks());
+    EXPECT_EQ(base + 4, node.value());
+    second.reset();
+    EXPECT_EQ(base, node.value());
+}
+
+// A window that stops warming gives its blocks back to the node.
+TEST_F(SegmentPrefetchWindowTest, disabled_window_releases_node_blocks) {
+    auto& node = StorageMetrics::instance()->lake_scan_read_ahead_blocks;
+    const int64_t base = node.value();
+    SparseRange<> range(0, kRows);
+    auto window = make_window(&range, 0, 64);
+    window->advance(0);
+    // Several pages ahead, so that passing the first one leaves blocks held.
+    ASSERT_GT(_stream.warms.size(), 2u);
+    EXPECT_EQ(base + 64, node.value());
+    auto& windows = StorageMetrics::instance()->lake_scan_read_ahead_windows;
+    const int64_t reading = windows.value();
+    _stream.supported = false;
+    window->advance(_pages[1].first);
+    EXPECT_TRUE(window->disabled());
+    EXPECT_EQ(0u, window->ahead_blocks());
+    EXPECT_EQ(base, node.value());
+    // It no longer takes a share of the node limit, and is not counted twice when it goes away.
+    EXPECT_EQ(reading - 1, windows.value());
+    window.reset();
+    EXPECT_EQ(reading - 1, windows.value());
+}
+
+// The segment readers that read ahead share lake_scan_read_ahead_max_blocks equally, whichever asks first; one that reads
+// ahead alone keeps its own window again.
+TEST_F(SegmentPrefetchWindowTest, node_limit_is_shared_equally) {
+    auto& node = StorageMetrics::instance()->lake_scan_read_ahead_blocks;
+    auto& windows = StorageMetrics::instance()->lake_scan_read_ahead_windows;
+    auto& capped = StorageMetrics::instance()->lake_scan_read_ahead_capped_total;
+    ASSERT_EQ(0, node.value());
+    ASSERT_EQ(0, windows.value());
+    const int64_t old_limit = config::lake_scan_read_ahead_max_blocks;
+    DeferOp restore([&] { config::lake_scan_read_ahead_max_blocks = old_limit; });
+    config::lake_scan_read_ahead_max_blocks = 8;
+
+    SparseRange<> range(0, kRows);
+    auto first = make_window(&range, 0, 8);
+    auto second = make_window(&range, 0, 8);
+    EXPECT_EQ(2, windows.value());
+    // The first to ask takes its share, not all the node has left.
+    const int64_t capped_before = capped.value();
+    first->advance(0);
+    EXPECT_EQ(4u, first->ahead_blocks());
+    EXPECT_GT(capped.value(), capped_before);
+    second->advance(0);
+    EXPECT_EQ(4u, second->ahead_blocks());
+    EXPECT_EQ(8, node.value());
+
+    second.reset();
+    EXPECT_EQ(1, windows.value());
+    EXPECT_EQ(4, node.value());
+    first->advance(0);
+    EXPECT_EQ(8u, first->ahead_blocks());
+    first.reset();
+    EXPECT_EQ(0, windows.value());
+    EXPECT_EQ(0, node.value());
+}
+
+// A window without a budget (compaction) keeps only its own bound: it neither joins the node budget nor takes blocks
+// from it, even while the node is full.
+TEST_F(SegmentPrefetchWindowTest, window_without_budget_stays_out_of_node_limit) {
+    auto& node = StorageMetrics::instance()->lake_scan_read_ahead_blocks;
+    auto& windows = StorageMetrics::instance()->lake_scan_read_ahead_windows;
+    ASSERT_EQ(0, node.value());
+    ASSERT_EQ(0, windows.value());
+    const int64_t old_limit = config::lake_scan_read_ahead_max_blocks;
+    DeferOp restore([&] { config::lake_scan_read_ahead_max_blocks = old_limit; });
+    config::lake_scan_read_ahead_max_blocks = 4;
+
+    SparseRange<> range(0, kRows);
+    auto query = make_window(&range, 0, 8);
+    query->advance(0);
+    EXPECT_EQ(4u, query->ahead_blocks());
+    EXPECT_FALSE(ReadAheadBudget::instance()->has_room());
+
+    SegmentPrefetchWindow compaction({{_reader, &_stream, 0}}, &range, 0, 8, 2.0, kBlockSize, &_stats, nullptr);
+    compaction.advance(0);
+    EXPECT_EQ(8u, compaction.ahead_blocks());
+    EXPECT_EQ(4, node.value());
+    EXPECT_EQ(1, windows.value());
+    query.reset();
+    EXPECT_EQ(0, node.value());
+    EXPECT_EQ(0, windows.value());
+}
+
+// A grant gives its blocks back when released, moved over, or destroyed.
+TEST(ReadAheadBudgetTest, grant_gives_back_its_blocks) {
+    const int64_t old_limit = config::lake_scan_read_ahead_max_blocks;
+    DeferOp restore([&] { config::lake_scan_read_ahead_max_blocks = old_limit; });
+    config::lake_scan_read_ahead_max_blocks = 10;
+    ReadAheadBudget budget;
+    {
+        auto member = budget.join();
+        auto grant = budget.acquire(6, 0, 100);
+        EXPECT_EQ(6u, grant.blocks());
+        // No more than the node has left.
+        auto rest = budget.acquire(6, 6, 100);
+        EXPECT_EQ(4u, rest.blocks());
+        EXPECT_EQ(0u, budget.acquire(1, 10, 100).blocks());
+        EXPECT_FALSE(budget.has_room());
+        // Moving a grant over another gives the overwritten blocks back.
+        rest = std::move(grant);
+        EXPECT_EQ(0u, grant.blocks());
+        EXPECT_EQ(6, budget.held_blocks());
+        rest.release();
+        EXPECT_EQ(0, budget.held_blocks());
+        EXPECT_EQ(1, budget.members());
+    }
+    EXPECT_EQ(0, budget.held_blocks());
+    EXPECT_EQ(0, budget.members());
+}
+
+// Concurrent members never hold more than the limit together, nor more than their share each.
+TEST(ReadAheadBudgetTest, concurrent_grants_stay_within_limit) {
+    const int64_t old_limit = config::lake_scan_read_ahead_max_blocks;
+    DeferOp restore([&] { config::lake_scan_read_ahead_max_blocks = old_limit; });
+    constexpr int kThreads = 8;
+    constexpr int64_t kLimit = 64;
+    config::lake_scan_read_ahead_max_blocks = kLimit;
+    ReadAheadBudget budget;
+    std::vector<ReadAheadBudget::Member> members;
+    for (int i = 0; i < kThreads; ++i) {
+        members.push_back(budget.join());
+    }
+    std::atomic<bool> over{false};
+    std::vector<std::thread> threads;
+    for (int t = 0; t < kThreads; ++t) {
+        threads.emplace_back([&, t] {
+            std::vector<ReadAheadBudget::Grant> held;
+            size_t blocks = 0;
+            for (int i = 0; i < 20000; ++i) {
+                auto grant = budget.acquire(3, blocks, 1000);
+                blocks += grant.blocks();
+                if (grant.blocks() > 0) {
+                    held.push_back(std::move(grant));
+                }
+                if (budget.held_blocks() > kLimit || blocks > static_cast<size_t>(kLimit / kThreads)) {
+                    over = true;
+                }
+                if ((i + t) % 3 == 0 && !held.empty()) {
+                    blocks -= held.back().blocks();
+                    held.pop_back();
+                }
+            }
+        });
+    }
+    for (auto& thread : threads) {
+        thread.join();
+    }
+    EXPECT_FALSE(over.load());
+    EXPECT_EQ(0, budget.held_blocks());
 }
 
 // Once the reader is past a page, its warm-up is withdrawn and the window moves on.
@@ -334,7 +528,7 @@ TEST_F(SegmentPrefetchWindowTest, columns_keep_their_own_object_offsets) {
     // Page 3 of the second column crosses into the next block; the first column's pages all fit in block 0.
     const int64_t crossing = kBigBlock - static_cast<int64_t>(_pages[3].pointer.offset) - 1;
     SegmentPrefetchWindow window({{_reader, &_stream, 0}, {_reader, &_stream, crossing}}, &range, 0, 1024, 2.0,
-                                 kBigBlock, &_stats);
+                                 kBigBlock, &_stats, ReadAheadBudget::instance());
     window.advance(0);
     ASSERT_EQ(3u, _stream.warms.size());
     size_t from_next_block = 0;
