@@ -243,7 +243,9 @@ public class ListPartitionPruner implements PartitionPruner {
             InPredicateOperator inOp = conjunct.cast();
             return !inOp.isNotIn() && inOp.getChildren().stream().skip(1).allMatch(ScalarOperator::isConstant);
         } else if (conjunct instanceof IsNullPredicateOperator) {
-            return true;
+            // CAST(col AS t) IS NULL does not prune (see evalIsNullPredicate), so it must stay in the estimate
+            IsNullPredicateOperator isNull = conjunct.cast();
+            return isNull.isNotNull() || isNull.getChild(0).isColumnRef();
         } else if (conjunct instanceof CompoundPredicateOperator) {
             CompoundPredicateOperator cop = conjunct.cast();
             // all children should be pruneable
@@ -862,6 +864,11 @@ public class ListPartitionPruner implements PartitionPruner {
     private Set<Long> evalIsNullPredicate(IsNullPredicateOperator isNullPredicate) {
         Preconditions.checkNotNull(isNullPredicate);
         if (!isSinglePartitionColumn(isNullPredicate)) {
+            return null;
+        }
+        // CAST(col AS t) IS NULL also holds for the values the cast turns into NULL, as CAST(bj AS INT), so
+        // the NULL partitions are only enough for the bare column. IS NOT NULL keeps a superset either way.
+        if (!isNullPredicate.isNotNull() && !isNullPredicate.getChild(0).isColumnRef()) {
             return null;
         }
         ColumnRefOperator child = Utils.extractColumnRef(isNullPredicate).get(0);
