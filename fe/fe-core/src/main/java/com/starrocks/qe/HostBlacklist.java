@@ -14,7 +14,6 @@
 
 package com.starrocks.qe;
 
-import com.google.api.client.util.Sets;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.common.Config;
@@ -71,11 +70,28 @@ public class HostBlacklist {
     }
 
     public void add(Long hostId) {
+        addAutoDisconnect(hostId, System.currentTimeMillis());
+    }
+
+    public boolean add(Long hostId, long requestStartTime) {
+        if (hostId == null) {
+            return false;
+        }
+        ComputeNode node = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(hostId);
+        // Ignore failures from requests started before this FE observed the node restart.
+        if (node != null && requestStartTime < node.getLastRecoveryTime()) {
+            return false;
+        }
+        addAutoDisconnect(hostId, requestStartTime);
+        return true;
+    }
+
+    private void addAutoDisconnect(Long hostId, long requestStartTime) {
         if (hostId == null) {
             return;
         }
 
-        DisconnectEvent de = new DisconnectEvent(hostId, LocalDateTime.now(), DisconnectEvent.TYPE_AUTO);
+        DisconnectEvent de = new DisconnectEvent(hostId, LocalDateTime.now(), DisconnectEvent.TYPE_AUTO, requestStartTime);
 
         // auto disconnect can't overwrite manual disconnect
         hostBlacklist.compute(hostId, (k, v) -> v != null && v.type == DisconnectEvent.TYPE_MANUAL ? v : de);
@@ -132,7 +148,15 @@ public class HostBlacklist {
                 continue;
             }
             List<String> row = Lists.newArrayList();
-            long count = allEvents.stream().filter(e -> e.hostId == value.hostId).count();
+            // Count what refresh() counts, so the number shown never contradicts the removal decision.
+            // Manual entries are never removed by refresh() and their own event carries no
+            // requestStartTime, so they keep counting the whole history.
+            long since = 0;
+            if (value.type == DisconnectEvent.TYPE_AUTO) {
+                ComputeNode node = sis.getBackendOrComputeNode(value.hostId);
+                since = node == null ? 0 : node.getLastRecoveryTime();
+            }
+            long count = countFailuresSince(allEvents, value.hostId, since);
 
             row.add(String.valueOf(value.hostId));
             row.add(value.type == DisconnectEvent.TYPE_AUTO ? "AUTO" : "MANUAL");
@@ -142,6 +166,11 @@ public class HostBlacklist {
             result.add(row);
         }
         return result;
+    }
+
+    private static long countFailuresSince(List<DisconnectEvent> events, long hostId, long since) {
+        // Count only requests started at or after the restart was observed, including the same millisecond.
+        return events.stream().filter(f -> f.hostId == hostId && f.requestStartTime >= since).count();
     }
 
     private void updateHistory() {
@@ -184,7 +213,7 @@ public class HostBlacklist {
         SystemInfoService clusterInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
 
         List<Long> offlineNode = Lists.newArrayList();
-        Set<Long> reconnectNode = Sets.newHashSet();
+        Map<Long, ComputeNode> reconnectNodes = Maps.newHashMap();
 
         for (Map.Entry<Long, DisconnectEvent> entry : hostBlacklist.entrySet()) {
             Long nodeId = entry.getKey();
@@ -210,7 +239,7 @@ public class HostBlacklist {
                 List<Integer> ports = Lists.newArrayList();
                 Collections.addAll(ports, node.getBePort(), node.getBrpcPort(), node.getHttpPort());
                 if (NetUtils.checkAccessibleForAllPorts(host, ports)) {
-                    reconnectNode.add(nodeId);
+                    reconnectNodes.put(nodeId, node);
                 }
             }
         }
@@ -222,9 +251,10 @@ public class HostBlacklist {
         }
 
         // update the retry times.
-        List<DisconnectEvent> histories = getHistories(reconnectNode);
-        for (Long nodeId : reconnectNode) {
-            long count = histories.stream().filter(f -> f.hostId == nodeId).count();
+        List<DisconnectEvent> histories = getHistories(reconnectNodes.keySet());
+        for (Map.Entry<Long, ComputeNode> entry : reconnectNodes.entrySet()) {
+            long nodeId = entry.getKey();
+            long count = countFailuresSince(histories, nodeId, entry.getValue().getLastRecoveryTime());
             if (count < Config.black_host_connect_failures_within_time) {
                 remove(nodeId);
                 LOG.warn("remove nodeID {} from blacklist", nodeId);
@@ -262,11 +292,17 @@ public class HostBlacklist {
         public final long hostId;
         public final int type;
         public final LocalDateTime disconnectTime;
+        public final long requestStartTime;
 
         public DisconnectEvent(long hostId, LocalDateTime lastDisconnectTime, int type) {
+            this(hostId, lastDisconnectTime, type, 0);
+        }
+
+        public DisconnectEvent(long hostId, LocalDateTime lastDisconnectTime, int type, long requestStartTime) {
             this.hostId = hostId;
             this.disconnectTime = lastDisconnectTime;
             this.type = type;
+            this.requestStartTime = requestStartTime;
         }
 
         @Override
@@ -275,6 +311,7 @@ public class HostBlacklist {
                     "hostId=" + hostId +
                     ", type=" + type +
                     ", disconnectTime=" + disconnectTime +
+                    ", requestStartTime=" + requestStartTime +
                     '}';
         }
     }

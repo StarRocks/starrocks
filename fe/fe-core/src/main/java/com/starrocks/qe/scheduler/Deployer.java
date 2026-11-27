@@ -417,7 +417,10 @@ public class Deployer {
         }
 
         // 1. change state to DEPLOYING before sending rpc to avoid race condition with report status
-        fragmentInstanceExecStates.forEach(FragmentInstanceExecState::changeStateIntoDeploying);
+        // The batch rpc below is sent once for all the executions, so they share one request start time,
+        // which the blacklist needs to tell whether a reported failure is stale after a node restart.
+        long deployStartTime = System.currentTimeMillis();
+        fragmentInstanceExecStates.forEach(e -> e.changeStateIntoDeploying(deployStartTime));
 
         // 2. send RPC
         Future<PExecBatchPlanFragmentsResult> batchFuture = null;

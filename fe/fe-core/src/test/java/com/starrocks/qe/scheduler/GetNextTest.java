@@ -16,6 +16,7 @@ package com.starrocks.qe.scheduler;
 
 import com.starrocks.common.Reference;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.proto.PCancelPlanFragmentRequest;
 import com.starrocks.proto.PCancelPlanFragmentResult;
 import com.starrocks.proto.PFetchDataResult;
@@ -27,6 +28,7 @@ import com.starrocks.qe.SimpleScheduler;
 import com.starrocks.rpc.ConfigurableSerDesFactory;
 import com.starrocks.rpc.PFetchDataRequest;
 import com.starrocks.rpc.RpcException;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.FrontendServiceVersion;
 import com.starrocks.thrift.TReportExecStatusParams;
 import com.starrocks.thrift.TResultBatch;
@@ -128,6 +130,45 @@ public class GetNextTest extends SchedulerTestBase {
         Assertions.assertFalse(batch.isEos());
 
         Assertions.assertThrows(RpcException.class, scheduler::getNext, "rpc failed: receive error packet");
+    }
+
+    @Test
+    public void testFetchFailureAfterRecoveryIsCounted() throws Exception {
+        setBackendService(new MockPBackendService() {
+            @Override
+            public Future<PFetchDataResult> fetchDataAsync(PFetchDataRequest request) {
+                return submit(() -> {
+                    throw new IllegalStateException("fetch failed");
+                });
+            }
+        });
+
+        long[] nodeIds = {BACKEND1_ID, backend2.getId(), backend3.getId()};
+        try {
+            for (long nodeId : nodeIds) {
+                SimpleScheduler.removeFromBlocklist(nodeId);
+            }
+            DefaultCoordinator scheduler = startScheduling("select count(1) from lineitem");
+            for (long nodeId : nodeIds) {
+                Deencapsulation.setField(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
+                        .getBackendOrComputeNode(nodeId), "lastRecoveryTime", System.currentTimeMillis());
+            }
+
+            Assertions.assertThrows(RpcException.class, scheduler::getNext);
+            long blacklisted = 0;
+            for (long nodeId : nodeIds) {
+                if (SimpleScheduler.isInBlocklist(nodeId)) {
+                    blacklisted++;
+                }
+            }
+            Assertions.assertEquals(1, blacklisted);
+        } finally {
+            for (long nodeId : nodeIds) {
+                SimpleScheduler.removeFromBlocklist(nodeId);
+                Deencapsulation.setField(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
+                        .getBackendOrComputeNode(nodeId), "lastRecoveryTime", 0L);
+            }
+        }
     }
 
     @Test
