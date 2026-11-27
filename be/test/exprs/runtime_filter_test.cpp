@@ -388,6 +388,55 @@ TEST_F(RuntimeMembershipFilterTest, TestJoinRuntimeFilter) {
     }
 }
 
+TEST_F(RuntimeMembershipFilterTest, TestGlobalBloomFilterOnConstantColumnUsesThePartitionOfEachRow) {
+    // A global runtime filter of a shuffle join has one bloom filter per partition. The probe value 7 went to
+    // partition 1 only. A constant probe column has the same value in every row, but the partition of each row
+    // comes from all the partition-by expressions and differs from row to row (RB-1193).
+    TRuntimeBloomFilter<TYPE_INT> partition0;
+    TRuntimeBloomFilter<TYPE_INT> partition1;
+    partition0.init(10);
+    partition1.init(10);
+    partition0.insert(1000);
+    partition1.insert(7);
+    TRuntimeBloomFilter<TYPE_INT> grf;
+    grf.concat(&partition0);
+    grf.concat(&partition1);
+    ASSERT_EQ(2, grf.num_hash_partitions());
+
+    const size_t num_rows = 4;
+    auto column = ColumnHelper::create_const_column<TYPE_INT>(7, num_rows);
+    RuntimeFilter::RunningContext ctx;
+    ctx.use_merged_selection = false;
+    ctx.selection.assign(num_rows, 1);
+    // row 0 and 2 belong to partition 0, row 1 and 3 to partition 1
+    ctx.hash_values = {0, 1, 0, 1};
+    grf.evaluate(column.get(), &ctx);
+    // the rows of partition 1 must be kept: their filter has 7
+    EXPECT_EQ(1, ctx.selection[1]);
+    EXPECT_EQ(1, ctx.selection[3]);
+    // and every row gets the same verdict as in a non-constant column with the same values
+    auto plain_column = ColumnHelper::create_column(TYPE_INT_DESC, false);
+    for (size_t i = 0; i < num_rows; ++i) {
+        plain_column->append_datum(Datum(int32_t(7)));
+    }
+    RuntimeFilter::RunningContext plain_ctx;
+    plain_ctx.use_merged_selection = false;
+    plain_ctx.selection.assign(num_rows, 1);
+    plain_ctx.hash_values = {0, 1, 0, 1};
+    grf.evaluate(plain_column.get(), &plain_ctx);
+    for (size_t i = 0; i < num_rows; ++i) {
+        EXPECT_EQ(plain_ctx.selection[i], ctx.selection[i]) << "row " << i;
+    }
+
+    // the rows of a constant NULL column all take the filter's NULL verdict
+    auto null_column = ColumnHelper::create_const_null_column(num_rows);
+    ctx.selection.assign(num_rows, 1);
+    grf.evaluate(null_column.get(), &ctx);
+    for (size_t i = 0; i < num_rows; ++i) {
+        EXPECT_EQ(0, ctx.selection[i]);
+    }
+}
+
 TEST_F(RuntimeMembershipFilterTest, TestJoinRuntimeFilterSlice) {
     StringRF crf;
     auto& bf = crf.membership_filter();

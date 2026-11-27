@@ -1,0 +1,58 @@
+-- name: test_runtime_filter_const_probe_key_partitioned
+create table repro_cust (customer_id int not null, customer_level tinyint null) duplicate key(customer_id)
+distributed by hash(customer_id) buckets 3 properties ("replication_num" = "1");
+-- result:
+-- !result
+insert into repro_cust values (1,1),(2,2),(3,1),(4,3),(5,NULL),(6,2),(7,-128),(8,127),(9,0),(10,1),(11,2),(12,3);
+-- result:
+-- !result
+set enable_global_runtime_filter = true;
+-- result:
+-- !result
+select customer_id from repro_cust where (customer_id is null, customer_level) in (select customer_level, customer_level from repro_cust) order by customer_id;
+-- result:
+9
+-- !result
+select customer_id from repro_cust where (customer_id is not null, customer_level) in (select customer_level, customer_level from repro_cust) order by customer_id;
+-- result:
+1
+3
+10
+-- !result
+select a.customer_id from repro_cust a join [shuffle] repro_cust b on (a.customer_id is not null) = b.customer_level and a.customer_level = b.customer_level order by 1;
+-- result:
+1
+1
+1
+3
+3
+3
+10
+10
+10
+-- !result
+select a.customer_id from repro_cust a where exists (select 1 from repro_cust b where (a.customer_id is null) = b.customer_level and a.customer_level = b.customer_level) order by 1;
+-- result:
+9
+-- !result
+set enable_global_runtime_filter = false;
+-- result:
+-- !result
+select customer_id from repro_cust where (customer_id is not null, customer_level) in (select customer_level, customer_level from repro_cust) order by customer_id;
+-- result:
+1
+3
+10
+-- !result
+select a.customer_id from repro_cust a join [shuffle] repro_cust b on (a.customer_id is not null) = b.customer_level and a.customer_level = b.customer_level order by 1;
+-- result:
+1
+1
+1
+3
+3
+3
+10
+10
+10
+-- !result
