@@ -27,6 +27,7 @@ import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.paimon.PaimonGlobalIndexPlanInfo;
 import com.starrocks.connector.paimon.PaimonReaderSelector;
 import com.starrocks.connector.paimon.PaimonReaderSelector.Reader;
 import com.starrocks.connector.paimon.PaimonRemoteFileDesc;
@@ -69,6 +70,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicLong;
@@ -86,6 +88,7 @@ public class PaimonScanNode extends ScanNode {
     private final HDFSScanNodePredicates scanNodePredicates = new HDFSScanNodePredicates();
     private final List<TScanRangeLocations> scanRangeLocationsList = new ArrayList<>();
     private CloudConfiguration cloudConfiguration = null;
+    private PaimonGlobalIndexPlanInfo globalIndexPlanInfo;
     // Candidate file metadata, before residual filtering, row merging and reader-range splitting.
     // -1 means unavailable (including system-table splits without DataFileMeta).
     private long scanSplitCount = -1;
@@ -158,6 +161,7 @@ public class PaimonScanNode extends ScanNode {
 
         PaimonRemoteFileDesc remoteFileDesc = (PaimonRemoteFileDesc) fileInfos.get(0).getFiles().get(0);
         PaimonSplitsInfo splitsInfo = remoteFileDesc.getPaimonSplitsInfo();
+        globalIndexPlanInfo = splitsInfo.getGlobalIndexPlanInfo();
         if (splitsInfo.getNativeTable() != null) {
             // Use the same branch/schema/options for reader selection and BE serialization.
             // Each scan needs its own table id: descriptor tables deduplicate by id, while
@@ -470,6 +474,8 @@ public class PaimonScanNode extends ScanNode {
                         partitionNames.size() == 0 ? 1 : partitionNames.size()));
         output.append("\n");
 
+        appendGlobalIndexExplain(output, prefix, detailLevel);
+
         // TODO: support it in verbose
         if (detailLevel != VERBOSE) {
             output.append(prefix).append(String.format("cardinality=%s", cardinality));
@@ -499,6 +505,31 @@ public class PaimonScanNode extends ScanNode {
         }
 
         return output.toString();
+    }
+
+    private void appendGlobalIndexExplain(StringBuilder output, String prefix, TExplainLevel detailLevel) {
+        if (globalIndexPlanInfo == null) {
+            return;
+        }
+        output.append(prefix).append("Paimon Global Index: mode=").append(globalIndexPlanInfo.mode().modeName())
+                .append(", path=").append(globalIndexPlanInfo.result().path())
+                .append(", result=").append(globalIndexPlanInfo.result().name().toLowerCase(Locale.ROOT)).append("\n");
+        // COSTS uses the verbose node detail path.
+        if (detailLevel != VERBOSE) {
+            return;
+        }
+        if (globalIndexPlanInfo.reason() != null) {
+            output.append(prefix).append("  reason=")
+                    .append(globalIndexPlanInfo.reason().name().toLowerCase(Locale.ROOT)).append("\n");
+        }
+        PaimonGlobalIndexPlanInfo.Details details = globalIndexPlanInfo.details();
+        if (details != null) {
+            output.append(prefix).append("  index_type=").append(details.indexType())
+                    .append(", indexed_columns=").append(details.indexedColumns())
+                    .append(", snapshot_id=").append(details.snapshotId()).append("\n");
+            output.append(prefix).append("  shards=").append(details.shardCount()).append('/').append(details.shardCount())
+                    .append(", candidate_row_ids=").append(details.candidateRowIds()).append("\n");
+        }
     }
 
     @Override

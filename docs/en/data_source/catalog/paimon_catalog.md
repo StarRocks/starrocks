@@ -970,6 +970,31 @@ cache hits, or execution stopping early. It is a scan-size signal, not measured
 I/O, output size, or an execution limit. In particular, a small `LIMIT` can still
 select large files.
 
+### Inspect Global Index decisions
+
+Physical `EXPLAIN` shows the configured Global Index mode, the selected path,
+and the result for each Paimon data scan. For a distributed index that was
+applied, `EXPLAIN VERBOSE` and `EXPLAIN COSTS` include the index details.
+
+```text
+0:PaimonScanNode
+   Paimon Global Index: mode=auto, path=distributed, result=applied
+     index_type=btree, indexed_columns=[id], snapshot_id=5
+     shards=3/3, candidate_row_ids=1
+```
+
+`shards` reports the number of validated shard results and the expected number.
+`candidate_row_ids` counts distinct row IDs returned by the distributed index,
+before residual filters. An empty index result can be `applied` with zero
+candidates. `Paimon Scan Metrics` shows the metadata totals of candidate files.
+
+`sdk_managed` delegates index selection to the Paimon SDK in `local` mode.
+`skipped` means the scan proceeded without a distributed request. In `auto`
+mode, `fallback` means a distributed attempt failed and ordinary Paimon split
+planning succeeded with SDK index evaluation disabled. The detailed plan shows
+the reason for a skip or fallback, and `TRACE VALUES EXTERNAL` provides more
+information about the underlying error.
+
 ## Load data from Paimon
 
 Suppose you have an OLAP table named `olap_tbl`, you can transform and load data like below:

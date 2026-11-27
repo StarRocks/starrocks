@@ -24,15 +24,30 @@ public class PaimonSplitsInfo {
     private final List<Split> paimonSplits;
     private final List<Predicate> predicates;
     private final Table nativeTable;
+    private final PaimonGlobalIndexPlanInfo globalIndexPlanInfo;
 
     public PaimonSplitsInfo(List<Predicate> predicates, List<Split> paimonSplits) {
         this(predicates, paimonSplits, null);
     }
 
     public PaimonSplitsInfo(List<Predicate> predicates, List<Split> paimonSplits, Table nativeTable) {
+        this(predicates, paimonSplits, nativeTable, null);
+    }
+
+    public PaimonSplitsInfo(List<Predicate> predicates, List<Split> paimonSplits, Table nativeTable,
+                            PaimonGlobalIndexPlanInfo globalIndexPlanInfo) {
         this.predicates = predicates;
         this.paimonSplits = paimonSplits;
         this.nativeTable = nativeTable;
+        this.globalIndexPlanInfo = globalIndexPlanInfo;
+    }
+
+    PaimonSplitsInfo withGlobalIndexPlanInfo(PaimonGlobalIndexPlanInfo planInfo) {
+        return new PaimonSplitsInfo(predicates, paimonSplits, nativeTable, planInfo);
+    }
+
+    public PaimonGlobalIndexPlanInfo getGlobalIndexPlanInfo() {
+        return globalIndexPlanInfo;
     }
 
     public Table getNativeTable() {
