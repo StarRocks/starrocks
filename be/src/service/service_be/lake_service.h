@@ -16,6 +16,9 @@
 #include <span>
 
 #ifndef __APPLE__
+#include <bthread/condition_variable.h>
+#include <bthread/mutex.h>
+
 #include "common/status.h"
 #include "gen_cpp/lake_service.pb.h"
 
@@ -132,6 +135,12 @@ private:
 
     ExecEnv* _env;
     lake::TabletManager* _tablet_mgr;
+
+    // Guarded by _dropping_cache_mutex: the drop_tablet_cache requests on the CLONE pool, and the signal that one of
+    // them has finished.
+    bthread::Mutex _dropping_cache_mutex;
+    int _cache_drops_on_pool = 0;
+    bthread::ConditionVariable _cache_drop_finished;
 };
 
 // Get txn_ids string from PublishVersionRequest (compatible with both new and old FE versions)
