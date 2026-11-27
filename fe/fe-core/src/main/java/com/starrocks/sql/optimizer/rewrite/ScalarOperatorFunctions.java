@@ -381,7 +381,11 @@ public class ScalarOperatorFunctions {
      */
     @ConstantFunction(name = "timediff", argTypes = {DATETIME, DATETIME}, returnType = TIME, isMonotonic = true)
     public static ConstantOperator timeDiff(ConstantOperator first, ConstantOperator second) {
-        return ConstantOperator.createTime(Duration.between(second.getDatetime(), first.getDatetime()).getSeconds());
+        // Whole seconds, rounded towards zero as in the BE (the difference in microseconds divided by 1000000).
+        // Duration.getSeconds() would round a negative difference down: -10.5 seconds would be -11.
+        long microseconds = ChronoUnit.MICROS.between(second.getDatetime(), first.getDatetime());
+        long seconds = microseconds / 1_000_000;
+        return ConstantOperator.createTime(seconds);
     }
 
     @ConstantFunction(name = "datediff", argTypes = {DATETIME, DATETIME}, returnType = INT, isMonotonic = true)
