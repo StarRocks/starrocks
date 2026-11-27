@@ -44,6 +44,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionType;
+import com.starrocks.catalog.SqlFunction;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
 import com.starrocks.common.Config;
@@ -66,6 +67,7 @@ import com.starrocks.sql.analyzer.mv.MVPartitionCheckContext;
 import com.starrocks.sql.analyzer.mv.RowIdStrategy;
 import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
+import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.CancelRefreshMaterializedViewStmt;
 import com.starrocks.sql.ast.ColWithComment;
@@ -79,6 +81,7 @@ import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.ast.PartitionRangeDesc;
 import com.starrocks.sql.ast.QualifiedName;
+import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.RandomDistributionDesc;
 import com.starrocks.sql.ast.RangeDistributionDesc;
@@ -87,15 +90,19 @@ import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SetOperationRelation;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.TableRef;
+import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.ViewRelation;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprSubstitutionMap;
 import com.starrocks.sql.ast.expression.ExprSubstitutionVisitor;
 import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.ExprUtils;
+import com.starrocks.sql.ast.expression.FieldReference;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.IntLiteral;
+import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.Subquery;
 import com.starrocks.sql.ast.expression.TimestampArithmeticExpr;
 import com.starrocks.sql.ast.expression.TypeDef;
 import com.starrocks.sql.common.PListCell;
@@ -135,8 +142,11 @@ import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeMap;
+import java.util.TreeSet;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
@@ -546,11 +556,14 @@ public class MaterializedViewAnalyzer {
                 // check partition expression all in column list and
                 // write the expr into partitionExpDesc if partition expression exists
                 checkExpInColumn(statement);
-                // replace partition by expr with resolved partition by expr
+                // replace partition by expr with resolved partition by expr; outputColumnPositions gets the positions
+                // of the partition columns that are generated partition columns of the ref base table by definition
+                Set<Integer> outputColumnPositions = Sets.newHashSet();
                 Map<Integer, Expr> changedPartitionByExprs = getBaseTableExprToGeneratedColumnMap(context,
-                        aliasTableMap, statement.getPartitionByExprs(), statement.getQueryStatement());
+                        aliasTableMap, statement, columnExprMap, outputColumnPositions);
                 // check partition expression is supported
-                checkPartitionColumnExprs(statement, columnExprMap, changedPartitionByExprs, aliasTableMap, context);
+                checkPartitionColumnExprs(statement, columnExprMap, changedPartitionByExprs, outputColumnPositions,
+                        aliasTableMap, context);
                 // check whether partition expression functions are allowed if it exists
                 checkPartitionExpPatterns(statement);
                 // check window function can be used in partitioned mv; must run before the table names in
@@ -957,6 +970,7 @@ public class MaterializedViewAnalyzer {
         private void checkPartitionColumnExprs(CreateMaterializedViewStatement statement,
                                                Map<Column, Expr> columnExprMap,
                                                Map<Integer, Expr> changedPartitionByExprs,
+                                               Set<Integer> outputColumnPositions,
                                                Map<TableName, Table> aliasTableMap,
                                                ConnectContext connectContext) throws SemanticException {
             List<Expr> partitionByExprs = statement.getPartitionByExprs();
@@ -1019,7 +1033,14 @@ public class MaterializedViewAnalyzer {
                     }
                     refTablePartitionExprs.add(partitionRefTableExpr);
                 } else {
-                    if (partitionColumnExpr instanceof FunctionCallExpr || partitionColumnExpr instanceof SlotRef) {
+                    if (outputColumnPositions.contains(i)) {
+                        // e.g. partition by dt_hour with date_trunc('hour', dt) AS dt_hour, where the ref base table is
+                        // partitioned by date_trunc('hour', dt): the output column is that generated partition column by
+                        // its definition, so refer to the generated column directly, one to one and without any
+                        // transform. A partition column replaced by a generated column by its name, e.g. k of k + 1 AS k
+                        // with a generated column AS (k), is checked by its definition below.
+                        refTablePartitionExprs.add(changedPartitionByExprs.get(i).clone());
+                    } else if (partitionColumnExpr instanceof FunctionCallExpr || partitionColumnExpr instanceof SlotRef) {
                         // e.g. partition by date_trunc('day',ss) or time_slice(dt, interval 1 day) or partition by ss
                         refTablePartitionExprs.add(partitionColumnExpr);
                     } else {
@@ -1107,11 +1128,24 @@ public class MaterializedViewAnalyzer {
             }
         }
 
+        /**
+         * If the ref base table is partitioned by generated columns, e.g. PARTITION BY (id, date_trunc('hour', dt)),
+         * returns the mv's partition exprs that refer to one of its generated partition columns, by their position:
+         * - a partition function written over the base table's columns, e.g. date_trunc('hour', dt), is replaced
+         *   by the generated column it is;
+         * - an output column of the mv whose definition is the expression of a generated partition column, e.g.
+         *   dt_hour of date_trunc('hour', dt) AS dt_hour, refers to that generated column one to one where the query
+         *   allows it (see getOutputColumnMappings); its position is added to {@code outputColumnPositions}.
+         * Any other partition expr is checked as before.
+         */
         private Map<Integer, Expr> getBaseTableExprToGeneratedColumnMap(ConnectContext session,
                                                                         Map<TableName, Table> tableNameTableMap,
-                                                                        List<Expr> partitionByExprs,
-                                                                        QueryStatement queryStatement) {
+                                                                        CreateMaterializedViewStatement statement,
+                                                                        Map<Column, Expr> columnExprMap,
+                                                                        Set<Integer> outputColumnPositions) {
             Map<Integer, Expr> changedPartitionByExprs = new HashMap<>();
+            List<Expr> partitionByExprs = statement.getPartitionByExprs();
+            QueryStatement queryStatement = statement.getQueryStatement();
             if (CollectionUtils.isEmpty(partitionByExprs)) {
                 return changedPartitionByExprs;
             }
@@ -1152,20 +1186,138 @@ public class MaterializedViewAnalyzer {
                     generatedExprToColumnRef.put(generatedColumnExpression, gcSlotRef);
                 }
             }
+            // output columns of the mv that are generated partition columns by their definitions, by position
+            Map<Integer, SlotRef> outputColumnMappings = getOutputColumnMappings(session, scope, tableNameTableMap,
+                    statement, refBaseTable, columnExprMap);
+            // the partition columns of the base table that the other partition exprs refer to
+            Set<String> referredColumns = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
+            boolean refersToOneColumnTwice = false;
             for (int i = 0; i < partitionByExprs.size(); i++) {
-                Expr expr = partitionByExprs.get(i);
-                try {
-                    Expr newExpr = substituteExprByGeneratedColumn(session, scope, expr, generatedExprToColumnRef);
-                    // record the ith partition expr and its resolved expr
-                    if (!expr.equals(newExpr)) {
-                        changedPartitionByExprs.put(i, newExpr);
-                    }
-                } catch (Exception e) {
-                    throw new SemanticException("Please check the partition expression %s, " +
-                            "it should refer base table's partition column directly", ExprToSql.toSql(expr));
+                if (!outputColumnMappings.containsKey(i)) {
+                    refersToOneColumnTwice |= !substituteByGeneratedColumn(session, scope, partitionByExprs, i,
+                            generatedExprToColumnRef, changedPartitionByExprs, referredColumns);
+                }
+            }
+            // Two partition columns of one partition column of the base table get one partition value for two positions,
+            // e.g. dt and date_trunc('hour', created_at) both of the generated column dt AS date_trunc('hour', created_at),
+            // or two output columns of one definition. The output columns are mapped all or none: one of them left to
+            // the substitution by name could be bound to another column of its name, e.g. b to a generated column AS (b).
+            for (SlotRef generatedColumn : outputColumnMappings.values()) {
+                refersToOneColumnTwice |= !referredColumns.add(generatedColumn.getColumnName());
+            }
+            for (Map.Entry<Integer, SlotRef> mapping : outputColumnMappings.entrySet()) {
+                if (!refersToOneColumnTwice) {
+                    changedPartitionByExprs.put(mapping.getKey(), mapping.getValue());
+                    outputColumnPositions.add(mapping.getKey());
+                } else {
+                    substituteByGeneratedColumn(session, scope, partitionByExprs, mapping.getKey(),
+                            generatedExprToColumnRef, changedPartitionByExprs, referredColumns);
                 }
             }
             return changedPartitionByExprs;
+        }
+
+        /**
+         * Replaces the ith partition expr by the generated column whose expression it is, if any, and records the
+         * partition column of the base table that it refers to. Returns false if another partition expr has referred
+         * to that column already.
+         */
+        private boolean substituteByGeneratedColumn(ConnectContext session,
+                                                    Scope scope,
+                                                    List<Expr> partitionByExprs,
+                                                    int i,
+                                                    Map<Expr, Expr> generatedExprToColumnRef,
+                                                    Map<Integer, Expr> changedPartitionByExprs,
+                                                    Set<String> referredColumns) {
+            Expr expr = partitionByExprs.get(i);
+            Expr newExpr;
+            try {
+                newExpr = substituteExprByGeneratedColumn(session, scope, expr, generatedExprToColumnRef);
+            } catch (Exception e) {
+                throw new SemanticException("Please check the partition expression %s, " +
+                        "it should refer base table's partition column directly", ExprToSql.toSql(expr));
+            }
+            // record the ith partition expr and its resolved expr
+            if (!expr.equals(newExpr)) {
+                changedPartitionByExprs.put(i, newExpr);
+            }
+            return !(newExpr instanceof SlotRef) || referredColumns.add(((SlotRef) newExpr).getColumnName());
+        }
+
+        /**
+         * Returns, by position, the generated partition columns of the ref base table that partition columns of the mv
+         * are by their definitions. An output column, which may be an alias, is judged by its definition rather than by
+         * its name, which need not be a column of the base table. Such an mv is refreshed partition by partition from
+         * the ref base table, and the creation of the mv resolves its partition columns again by their names through
+         * the query, so there are none unless:
+         * - the query is one SELECT that reads the ref base table alone (see getRefBaseTableRelation);
+         * - a column list, if any, keeps the query's names of the partition columns;
+         * - the column of every other partition expr, a partition function such as date_trunc('day', dt) included,
+         *   refers directly to the base column of its name, which is what the creation resolves it to; e.g. dt of
+         *   created_at AS dt would be resolved to the base column dt. A column of a star counts as well (see
+         *   refersToBaseColumnOfItsName).
+         * A generated column that an output of the query is named like is not mapped either: the creation would
+         * resolve it to that output. With no mapping, all partition columns are left to the existing checks.
+         * The existing checks also require each partition expr to refer to one column, the first one to find the ref
+         * base table and each one again in checkPartitionColumnExprs. So only a definition over one column of the
+         * base table, e.g. date_trunc('hour', created_at) or mod(project_id, 16), gets an mv created; one over two
+         * columns such as mod(k, divisor) is rejected even where it is a generated partition column.
+         */
+        private Map<Integer, SlotRef> getOutputColumnMappings(ConnectContext session,
+                                                              Scope scope,
+                                                              Map<TableName, Table> tableNameTableMap,
+                                                              CreateMaterializedViewStatement statement,
+                                                              OlapTable refBaseTable,
+                                                              Map<Column, Expr> columnExprMap) {
+            QueryStatement queryStatement = statement.getQueryStatement();
+            TableRelation tableRelation = getRefBaseTableRelation(queryStatement, refBaseTable);
+            if (tableRelation == null) {
+                return Map.of();
+            }
+            List<Column> partitionColumns = statement.getPartitionColumns();
+            List<String> outputNames = queryStatement.getQueryRelation().getColumnOutputNames();
+            boolean hasColumnList = CollectionUtils.isNotEmpty(statement.getColWithComments());
+            List<Expr> partitionByExprs = statement.getPartitionByExprs();
+            Map<Integer, SlotRef> mappings = new TreeMap<>();
+            for (int i = 0; i < partitionByExprs.size(); i++) {
+                Column mvColumn = partitionColumns.get(i);
+                Expr outputExpr = columnExprMap.get(mvColumn);
+                if (hasColumnList && !keepsQueryOutputName(queryStatement, mvColumn, outputExpr)) {
+                    return Map.of();
+                }
+                SlotRef generatedColumn = partitionByExprs.get(i) instanceof SlotRef
+                        ? getGeneratedPartitionColumnOfOutput(session, scope, tableNameTableMap, refBaseTable, outputExpr,
+                                tableRelation)
+                        : null;
+                if (generatedColumn != null
+                        && outputNames.stream().noneMatch(generatedColumn.getColumnName()::equalsIgnoreCase)) {
+                    mappings.put(i, generatedColumn);
+                } else if (!refersToBaseColumnOfItsName(queryStatement, mvColumn, outputExpr)) {
+                    return Map.of();
+                }
+            }
+            return mappings;
+        }
+
+        /**
+         * Whether an output of the query refers directly to the base column named like the mv column. A column that a
+         * star expands to is a FieldReference to its position among the fields of the FROM relation, which the existing
+         * checks of the partition columns resolve through the query, by that position among the outputs: another output
+         * where the star follows others. It is resolved the same way here, so that it counts only where they take it
+         * for the base column of its name too.
+         */
+        private static boolean refersToBaseColumnOfItsName(QueryStatement queryStatement, Column mvColumn,
+                                                           Expr outputExpr) {
+            Expr column = outputExpr;
+            if (outputExpr instanceof FieldReference) {
+                try {
+                    column = MVPartitionSlotRefResolver.resolveExpr(outputExpr, queryStatement);
+                } catch (Exception e) {
+                    LOG.debug("Cannot resolve materialized view column {} to its base table", mvColumn.getName(), e);
+                    return false;
+                }
+            }
+            return column instanceof SlotRef && ((SlotRef) column).getColumnName().equalsIgnoreCase(mvColumn.getName());
         }
 
         private Expr substituteExprByGeneratedColumn(ConnectContext session,
@@ -1174,6 +1326,173 @@ public class MaterializedViewAnalyzer {
                                                      Map<Expr, Expr> generatedExprToColumnRef) {
             ExpressionAnalyzer.analyzeExpression(expr, new AnalyzeState(), scope, session);
             return adjustWhereExprIfNeeded(generatedExprToColumnRef, expr, scope, session);
+        }
+
+        /**
+         * Returns the generated partition column of {@code refBaseTable} whose expression is the definition of an
+         * output column of the mv over the base table's columns, analyzed in {@code scope}, or null if there is none.
+         */
+        private SlotRef getGeneratedPartitionColumnOfOutput(ConnectContext session,
+                                                            Scope scope,
+                                                            Map<TableName, Table> tableNameTableMap,
+                                                            OlapTable refBaseTable,
+                                                            Expr outputExpr,
+                                                            TableRelation tableRelation) {
+            if (outputExpr == null) {
+                return null;
+            }
+            Expr definition;
+            try {
+                // An output expression refers to the columns of its FROM relation; resolving it from the select
+                // list would take a column named like an output alias for that alias.
+                definition = MVPartitionSlotRefResolver.resolveExpr(outputExpr, tableRelation);
+            } catch (Exception e) {
+                LOG.debug("Cannot resolve materialized view output {} to its base tables",
+                        ExprToSql.toSql(outputExpr), e);
+                return null;
+            }
+            // a generated partition column is a function of the base table's columns
+            if (!(definition instanceof FunctionCallExpr)) {
+                return null;
+            }
+            List<SlotRef> slotRefs = ExprUtils.collectAllSlotRefs(definition);
+            if (slotRefs.isEmpty()) {
+                return null;
+            }
+            for (SlotRef slotRef : slotRefs) {
+                if (slotRef.getTblNameWithoutAnalyzed() == null) {
+                    return null;
+                }
+                Table table = getPartitionByExprRefBaseTable(session, tableNameTableMap, slotRef);
+                if (table == null || table.getId() != refBaseTable.getId()) {
+                    return null;
+                }
+                // the resolved expression is a copy: resolve its columns by name in the ref base table's scope
+                slotRef.setTblName(null);
+            }
+            try {
+                ExpressionAnalyzer.analyzeExpression(definition, new AnalyzeState(), scope, session);
+                // The load that computes the generated column and the refresh that computes the output must get the
+                // same value, so the value may depend on nothing but the row.
+                if (!isSessionIndependent(definition)) {
+                    return null;
+                }
+                for (Column column : refBaseTable.getPartitionColumns()) {
+                    Expr generatedColumnExpr = column.getGeneratedColumnExpr(refBaseTable.getIdToColumn());
+                    if (generatedColumnExpr == null) {
+                        continue;
+                    }
+                    ExpressionAnalyzer.analyzeExpression(generatedColumnExpr, new AnalyzeState(), scope, session);
+                    if (!generatedColumnExpr.equals(definition) || !hasSameLiterals(generatedColumnExpr, definition)) {
+                        continue;
+                    }
+                    SlotRef generatedColumn = new SlotRef(null, column.getName());
+                    ExpressionAnalyzer.analyzeExpression(generatedColumn, new AnalyzeState(), scope, session);
+                    return generatedColumn;
+                }
+            } catch (Exception e) {
+                LOG.debug("Cannot match materialized view output {} with the generated partition columns of {}",
+                        ExprToSql.toSql(outputExpr), refBaseTable.getName(), e);
+            }
+            return null;
+        }
+
+        /**
+         * Whether the mv column of an output keeps the query's name of that output, which no other output has.
+         */
+        private static boolean keepsQueryOutputName(QueryStatement queryStatement, Column mvColumn, Expr outputExpr) {
+            QueryRelation queryRelation = queryStatement.getQueryRelation();
+            List<Expr> outputExprs = queryRelation.getOutputExpression();
+            List<String> outputNames = queryRelation.getColumnOutputNames();
+            for (int i = 0; i < outputExprs.size() && i < outputNames.size(); i++) {
+                if (outputExprs.get(i) == outputExpr) {
+                    String name = outputNames.get(i);
+                    return name.equalsIgnoreCase(mvColumn.getName())
+                            && outputNames.stream().filter(name::equalsIgnoreCase).count() == 1;
+                }
+            }
+            return false;
+        }
+
+        /**
+         * Returns the FROM relation of the query if the query is one SELECT that reads the ref base table alone, with
+         * no CTE, subquery, window function, grouping sets or LIMIT, where the rows that the mv gets from one partition
+         * of the ref base table depend on no rows of the others; returns null for any other query. The table may name
+         * no partitions, tablets or replicas either: the refresh by partition replaces them with its own partitions.
+         */
+        private static TableRelation getRefBaseTableRelation(QueryStatement queryStatement, OlapTable refBaseTable) {
+            if (!(queryStatement.getQueryRelation() instanceof SelectRelation)) {
+                return null;
+            }
+            SelectRelation selectRelation = (SelectRelation) queryStatement.getQueryRelation();
+            if (!(selectRelation.getRelation() instanceof TableRelation)) {
+                return null;
+            }
+            TableRelation tableRelation = (TableRelation) selectRelation.getRelation();
+            Table table = tableRelation.getTable();
+            if (table == null || table.getId() != refBaseTable.getId() || tableRelation.hasTableHints()
+                    || selectRelation.hasWithClause() || selectRelation.hasAnalyticInfo() || selectRelation.hasLimit()
+                    || CollectionUtils.isNotEmpty(selectRelation.getGroupingSetsList())) {
+                return null;
+            }
+            boolean[] hasSubquery = {false};
+            try {
+                new AstTraverser<Void, Void>() {
+                    @Override
+                    public Void visitSubqueryExpr(Subquery node, Void context) {
+                        hasSubquery[0] = true;
+                        return null;
+                    }
+                }.visit(queryStatement, null);
+            } catch (Exception e) {
+                LOG.debug("Cannot check the query of the materialized view for subqueries", e);
+                return null;
+            }
+            return hasSubquery[0] ? null : tableRelation;
+        }
+
+        /**
+         * Whether the literals of two equal expressions are of one class and one value. Expr.equals compares an
+         * IntLiteral with a LargeIntLiteral by the long value of the latter, which drops its high bits: it takes
+         * mod(k, 18446744073709551632) for mod(k, 16).
+         */
+        private static boolean hasSameLiterals(Expr expr, Expr other) {
+            if (expr instanceof LiteralExpr || other instanceof LiteralExpr) {
+                return expr.getClass() == other.getClass()
+                        && Objects.equals(((LiteralExpr) expr).getStringValue(), ((LiteralExpr) other).getStringValue());
+            }
+            if (expr.getChildren().size() != other.getChildren().size()) {
+                return false;
+            }
+            for (int i = 0; i < expr.getChildren().size(); i++) {
+                if (!hasSameLiterals(expr.getChild(i), other.getChild(i))) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        /**
+         * Whether the analyzed {@code expr} is made of columns, literals and calls of the built-in date_trunc and mod
+         * only, whose values depend on nothing but the row. Other expressions may depend on the session or on the time
+         * of the execution: from_unixtime on the time zone of the session, a CAST of a TIME to DATETIME on the current
+         * date, and a user-defined function, which a call named date_trunc binds to when no built-in one takes its
+         * arguments, on whatever its body does.
+         */
+        private static boolean isSessionIndependent(Expr expr) {
+            if (expr instanceof FunctionCallExpr) {
+                String functionName = ((FunctionCallExpr) expr).getFunctionName();
+                Function function = ((FunctionCallExpr) expr).getFn();
+                // a user-defined function is named with its database, a built-in one without
+                if (function == null || function instanceof SqlFunction || function.getFunctionName().getDb() != null
+                        || (!FunctionSet.DATE_TRUNC.equalsIgnoreCase(functionName)
+                                && !FunctionSet.MOD.equalsIgnoreCase(functionName))) {
+                    return false;
+                }
+            } else if (!(expr instanceof SlotRef) && !(expr instanceof LiteralExpr)) {
+                return false;
+            }
+            return expr.getChildren().stream().allMatch(MaterializedViewAnalyzerVisitor::isSessionIndependent);
         }
 
         private void checkPartitionColumnWithBaseTable(CreateMaterializedViewStatement statement,
