@@ -1,0 +1,204 @@
+-- name: test_like_substring_null_flags_above_join
+create table t (row_id int, k_grp int, c_bool boolean, c_str varchar(100)) duplicate key(row_id)
+distributed by hash(row_id) buckets 1 properties ("replication_num" = "1");
+-- result:
+-- !result
+insert into t values
+(1,1,1,'gamma'),(2,2,0,'delta'),(3,3,NULL,NULL),(4,NULL,0,''),(5,0,1,'alpha'),
+(6,1,0,'delta'),(7,2,1,'beta'),(8,3,0,'alpha'),(9,4,1,'beta'),(10,0,NULL,NULL),
+(11,1,1,''),(12,2,0,'beta'),(13,NULL,1,'x1'),(14,4,0,'a_long_string_value_over_sixteen_chars_zz'),(15,0,1,'beta'),
+(16,1,0,'alpha'),(17,2,NULL,NULL),(18,3,0,'gamma'),(19,4,1,'gamma'),(20,0,0,'delta'),
+(21,1,1,'beta'),(22,NULL,0,'a_long_string_value_over_sixteen_chars_zz'),(23,3,1,'delta'),(24,4,NULL,NULL),(25,0,1,'delta'),
+(26,1,0,'Alpha'),(27,2,1,'alpha'),(28,3,0,'Alpha'),(29,4,1,'a_long_string_value_over_sixteen_chars_zz'),(30,0,0,'Alpha'),
+(31,NULL,NULL,NULL),(32,2,0,'a_long_string_value_over_sixteen_chars_zz'),(33,3,1,'x1'),(34,4,0,'alpha'),(35,0,1,'Alpha'),
+(36,1,0,'gamma'),(37,2,1,'beta'),(38,3,NULL,NULL),(39,4,1,'gamma'),(40,NULL,0,'x1'),
+(41,1,1,'beta'),(42,2,0,'beta'),(43,3,1,''),(44,4,0,'delta'),(45,0,NULL,NULL),
+(46,1,0,'delta'),(47,2,1,'alpha'),(48,3,0,'gamma'),(49,NULL,1,''),(50,0,0,'alpha'),
+(51,1,1,'alpha'),(52,2,NULL,NULL),(53,3,1,'gamma'),(54,4,0,'alpha'),(55,0,1,'alpha'),
+(56,1,0,'beta'),(57,2,1,'gamma'),(58,NULL,0,'delta'),(59,4,NULL,NULL),(60,0,0,'a_long_string_value_over_sixteen_chars_zz');
+-- result:
+-- !result
+select c1, count(*) from (select if(not c_bool, c_str regexp 'a1', k_grp not in (select k_grp from t)) as a2 from t) s(c1) where c1 between 0 and 0 group by 1 order by 1;
+-- result:
+0	57
+-- !result
+select row_id, c_str from (select row_id, c_str, if(not c_bool, c_str regexp 'a1', k_grp not in (select k_grp from t)) as a2 from t) s(row_id, c_str, c1) where c1 between 0 and 0 order by row_id;
+-- result:
+1	gamma
+2	delta
+3	None
+4	
+5	alpha
+6	delta
+7	beta
+8	alpha
+9	beta
+10	None
+11	
+12	beta
+14	a_long_string_value_over_sixteen_chars_zz
+15	beta
+16	alpha
+17	None
+18	gamma
+19	gamma
+20	delta
+21	beta
+22	a_long_string_value_over_sixteen_chars_zz
+23	delta
+24	None
+25	delta
+26	Alpha
+27	alpha
+28	Alpha
+29	a_long_string_value_over_sixteen_chars_zz
+30	Alpha
+32	a_long_string_value_over_sixteen_chars_zz
+33	x1
+34	alpha
+35	Alpha
+36	gamma
+37	beta
+38	None
+39	gamma
+40	x1
+41	beta
+42	beta
+43	
+44	delta
+45	None
+46	delta
+47	alpha
+48	gamma
+50	alpha
+51	alpha
+52	None
+53	gamma
+54	alpha
+55	alpha
+56	beta
+57	gamma
+58	delta
+59	None
+60	a_long_string_value_over_sixteen_chars_zz
+-- !result
+select row_id, c_str from (select row_id, c_str, if(not c_bool, c_str like '%a1%', k_grp not in (select k_grp from t)) as a2 from t) s(row_id, c_str, c1) where c1 between 0 and 0 order by row_id;
+-- result:
+1	gamma
+2	delta
+3	None
+4	
+5	alpha
+6	delta
+7	beta
+8	alpha
+9	beta
+10	None
+11	
+12	beta
+14	a_long_string_value_over_sixteen_chars_zz
+15	beta
+16	alpha
+17	None
+18	gamma
+19	gamma
+20	delta
+21	beta
+22	a_long_string_value_over_sixteen_chars_zz
+23	delta
+24	None
+25	delta
+26	Alpha
+27	alpha
+28	Alpha
+29	a_long_string_value_over_sixteen_chars_zz
+30	Alpha
+32	a_long_string_value_over_sixteen_chars_zz
+33	x1
+34	alpha
+35	Alpha
+36	gamma
+37	beta
+38	None
+39	gamma
+40	x1
+41	beta
+42	beta
+43	
+44	delta
+45	None
+46	delta
+47	alpha
+48	gamma
+50	alpha
+51	alpha
+52	None
+53	gamma
+54	alpha
+55	alpha
+56	beta
+57	gamma
+58	delta
+59	None
+60	a_long_string_value_over_sixteen_chars_zz
+-- !result
+select row_id, c_str from (select row_id, c_str, if(not c_bool, c_str regexp 'a.1', k_grp not in (select k_grp from t)) as a2 from t) s(row_id, c_str, c1) where c1 between 0 and 0 order by row_id;
+-- result:
+1	gamma
+2	delta
+3	None
+4	
+5	alpha
+6	delta
+7	beta
+8	alpha
+9	beta
+10	None
+11	
+12	beta
+14	a_long_string_value_over_sixteen_chars_zz
+15	beta
+16	alpha
+17	None
+18	gamma
+19	gamma
+20	delta
+21	beta
+22	a_long_string_value_over_sixteen_chars_zz
+23	delta
+24	None
+25	delta
+26	Alpha
+27	alpha
+28	Alpha
+29	a_long_string_value_over_sixteen_chars_zz
+30	Alpha
+32	a_long_string_value_over_sixteen_chars_zz
+33	x1
+34	alpha
+35	Alpha
+36	gamma
+37	beta
+38	None
+39	gamma
+40	x1
+41	beta
+42	beta
+43	
+44	delta
+45	None
+46	delta
+47	alpha
+48	gamma
+50	alpha
+51	alpha
+52	None
+53	gamma
+54	alpha
+55	alpha
+56	beta
+57	gamma
+58	delta
+59	None
+60	a_long_string_value_over_sixteen_chars_zz
+-- !result

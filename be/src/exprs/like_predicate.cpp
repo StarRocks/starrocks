@@ -334,13 +334,16 @@ StatusOr<ColumnPtr> LikePredicate::constant_substring_fn(FunctionContext* contex
         return ConstColumn::create(std::move(res), columns[0]->size());
     }
 
+<<<<<<< HEAD
     BinaryColumn* haystack = nullptr;
     NullColumnPtr res_null = nullptr;
+=======
+    const BinaryColumn* haystack = nullptr;
+    const NullableColumn* haystack_nullable = nullptr;
+>>>>>>> 3c4c163 ([BugFix] Give the substring LIKE / REGEXP result its own NULL column (#84694))
     if (columns[0]->is_nullable()) {
-        auto haystack_null = ColumnHelper::as_column<NullableColumn>(columns[0]);
-        haystack = ColumnHelper::as_raw_column<BinaryColumn>(haystack_null->data_column());
-
-        res_null = haystack_null->null_column();
+        haystack_nullable = ColumnHelper::as_raw_column<NullableColumn>(columns[0]);
+        haystack = ColumnHelper::as_raw_column<BinaryColumn>(haystack_nullable->data_column());
     } else {
         haystack = ColumnHelper::as_raw_column<BinaryColumn>(columns[0]);
     }
@@ -386,6 +389,10 @@ StatusOr<ColumnPtr> LikePredicate::constant_substring_fn(FunctionContext* contex
     }
 
     if (columns[0]->has_null()) {
+        // The result must own its NULL flags: if it shared the haystack's, a chunk holding both columns would
+        // filter that one NULL column twice and shift the flags of the haystack column. Copy them only here: a
+        // haystack without NULLs gets a non-nullable result and needs no copy.
+        auto res_null = NullColumn::static_pointer_cast(haystack_nullable->null_column()->clone());
         return NullableColumn::create(std::move(res), std::move(res_null));
     }
     return res;
