@@ -434,13 +434,6 @@ public class PushDownAggregateCollector extends OptExpressionVisitor<Void, Aggre
                     .forEach(v -> childContext.groupBys.put(v, v));
         }
 
-        // Refuse a count that would land on this child without any real group-by key (no column-bearing
-        // group-by expression): it degenerates into a scalar aggregate that emits a phantom row for an
-        // empty child. See isUngroupedCountPush.
-        if (PushDownAggregateUtils.isUngroupedCountPush(childContext)) {
-            return AggregatePushDownContext.EMPTY;
-        }
-
         childContext.immediateChildOfSmallBroadcastJoin = immediateChildOfSmallBroadcastJoin;
         childContext.origAggregator = context.origAggregator;
         childContext.origAggReducedLocally = context.origAggReducedLocally;
@@ -544,12 +537,7 @@ public class PushDownAggregateCollector extends OptExpressionVisitor<Void, Aggre
 
     @Override
     public Void visitLogicalTableScan(OptExpression optExpression, AggregatePushDownContext context) {
-        // Last line of defence for an ungrouped count: this is where every push down candidate is finally
-        // recorded, whatever path it took to get here. splitJoinAggregate rejects the join shapes early, but
-        // a group-by key can also be erased on the way down without ever crossing a join -- a UNION branch
-        // projecting a constant (`select 1 as k from t ... group by k`) leaves this context with a
-        // column-less group-by, and the resulting scalar aggregate emits a phantom row for an empty branch.
-        if (!isInvalid(optExpression, context) && !PushDownAggregateUtils.isUngroupedCountPush(context)) {
+        if (!isInvalid(optExpression, context)) {
             context.targetPosition = optExpression;
             addCandidateContext(context.origAggregator, context);
         }
