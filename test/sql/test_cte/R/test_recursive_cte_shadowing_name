@@ -1,0 +1,32 @@
+-- name: test_recursive_cte_shadowing_name
+with recursive q(n) as (
+    select 1
+    union all
+    select n from (with q(n) as (select 2) (select n from q)) x
+)
+select * from q order by n;
+-- result:
+1
+2
+-- !result
+with recursive q(n) as (
+    select 1
+    union all
+    select n from (with q(n) as (select 2) (select n from q)) x
+)
+select /*+ SET_VAR(enable_recursive_cte=true)*/ * from q order by n;
+-- result:
+1
+2
+-- !result
+with recursive q(n) as (
+    select 1
+    union all
+    select n + 1 from q where n < (select max(n) from (with q(n) as (select 3) (select n from q)) x)
+)
+select /*+ SET_VAR(enable_recursive_cte=true)*/ * from q order by n;
+-- result:
+1
+2
+3
+-- !result
