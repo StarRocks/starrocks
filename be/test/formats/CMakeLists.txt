@@ -19,6 +19,7 @@ set(FORMAT_CORE_TEST_FILES
     parquet/geo_annotation_wire_test.cpp
     parquet/geo_metadata_test.cpp
     parquet/meta_helper_test.cpp
+    parquet/page_index_failed_read_test.cpp
     parquet/parquet_schema_test.cpp
     parquet/stored_column_reader_test.cpp
     parquet/parquet_timezone_conversion_test.cpp
