@@ -129,6 +129,16 @@ public:
         return _append_buffer_bytes;
     }
 
+    // The bytes the producer has put into the pipe, as it received them (a compressed body is not decompressed).
+    int64_t total_appended_bytes() {
+        std::unique_lock<std::mutex> l(_lock);
+        return _total_appended_bytes;
+    }
+
+    // Returns true for the first caller only, so that a load counts the bytes of a pipe once even when more than one
+    // reader looks at it.
+    bool claim_received_bytes() { return !_received_bytes_claimed.exchange(true); }
+
     // For a reader that does not block: registers a callback that runs once when the pipe becomes readable, i.e. it
     // holds data, finishes or is cancelled. Returns false without registering when the pipe is readable already, so
     // that the reader reads again instead of waiting. The callback runs on the thread that makes the pipe readable,
@@ -160,6 +170,9 @@ private:
     int32_t _num_waiting_append_buffer{0};
     int32_t _num_append_buffers{0};
     int64_t _append_buffer_bytes{0};
+    // guarded by _lock; counts both append paths
+    int64_t _total_appended_bytes{0};
+    std::atomic<bool> _received_bytes_claimed{false};
 
     bool _finished{false};
     bool _cancelled{false};

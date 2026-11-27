@@ -26,6 +26,7 @@
 namespace starrocks {
 class SequentialFile;
 class RandomAccessFile;
+class StreamLoadPipe;
 } // namespace starrocks
 
 namespace starrocks {
@@ -123,5 +124,11 @@ protected:
     bool _case_sensitive = true;
 
     bool _schema_only;
+
+    // The stream load pipes this scanner reads. It counts the bytes they received when it closes.
+    std::vector<std::shared_ptr<StreamLoadPipe>> _stream_load_pipes;
+    // Set by a scanner whose format marks its own end (Arrow) once it has read that mark in all its ranges. The
+    // producer may still hold the pipe open then, and the scanner does not read it again.
+    bool _read_to_format_end{false};
 };
 } // namespace starrocks

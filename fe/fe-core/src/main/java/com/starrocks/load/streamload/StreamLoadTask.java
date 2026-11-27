@@ -187,6 +187,11 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
     private long planTimeMs;
     @SerializedName(value = "receiveDataTimeMs")
     private long receiveDataTimeMs;
+    // Bytes the backends received from the client (the request body of a stream load, the bytes consumed from the
+    // source of a routine load task), shown as SCAN_BYTES. A backend-driven load reports it with its commit, an
+    // FE-coordinated one in the load counters of its fragments; -1 when unknown.
+    @SerializedName(value = "receivedBytes")
+    private long receivedBytes = -1;
 
     // used for sync stream load and routine load
     private boolean isSyncStreamLoad = false;
@@ -1011,6 +1016,10 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
                 this.numRowsAbnormal = Long.parseLong(loadCounters.get(LoadEtlTask.DPP_ABNORMAL_ALL));
                 this.numRowsUnselected = Long.parseLong(loadCounters.get(LoadJob.UNSELECTED_ROWS));
                 this.numLoadBytesTotal = Long.parseLong(loadCounters.get(LoadJob.LOADED_BYTES));
+                String receivedBytesCounter = loadCounters.get(LoadJob.RECEIVED_BYTES);
+                if (receivedBytesCounter != null) {
+                    this.receivedBytes = Long.parseLong(receivedBytesCounter);
+                }
 
                 if (numRowsNormal == 0) {
                     String msg = status.ok() ? ERR_NO_ROWS_IMPORTED.formatErrorMsg() : status.getErrorMsg();
@@ -1116,6 +1125,7 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
                 beforeLoadTimeMs, startLoadingTimeMs, startPreparingTimeMs, finishPreparingTimeMs,
                 endTimeMs, numRowsNormal, numRowsAbnormal, numRowsUnselected, numLoadBytesTotal,
                 trackingUrl);
+        txnCommitAttachment.setReceivedBytes(receivedBytes);
         GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().prepareTransaction(
                 dbId, txnId, preparedTimeoutMs, commitInfos, failInfos, txnCommitAttachment, timeoutMs);
     }
@@ -1289,6 +1299,7 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
                 this.numRowsAbnormal = manualLoadTxnCommitAttachment.getFilteredRows();
                 this.numRowsUnselected = manualLoadTxnCommitAttachment.getUnselectedRows();
                 this.numLoadBytesTotal = manualLoadTxnCommitAttachment.getLoadedBytes();
+                this.receivedBytes = manualLoadTxnCommitAttachment.getReceivedBytes();
                 this.trackingUrl = manualLoadTxnCommitAttachment.getErrorLogUrl();
                 this.beginTxnTimeMs = manualLoadTxnCommitAttachment.getBeginTxnTime();
                 this.receiveDataTimeMs = manualLoadTxnCommitAttachment.getReceiveDataTime();
@@ -1299,6 +1310,7 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
                 this.numRowsAbnormal = rlTaskTxnCommitAttachment.getFilteredRows();
                 this.numRowsUnselected = rlTaskTxnCommitAttachment.getUnselectedRows();
                 this.numLoadBytesTotal = rlTaskTxnCommitAttachment.getLoadedBytes();
+                this.receivedBytes = rlTaskTxnCommitAttachment.getReceivedBytes();
                 this.trackingUrl = rlTaskTxnCommitAttachment.getErrorLogUrl();
             }
         }
@@ -1511,6 +1523,7 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
             this.numRowsAbnormal = attachment.getNumRowsAbnormal();
             this.numRowsUnselected = attachment.getNumRowsUnselected();
             this.numLoadBytesTotal = attachment.getNumLoadBytesTotal();
+            this.receivedBytes = attachment.getReceivedBytes();
             return;
         }
         if (txnCommitAttachment instanceof ManualLoadTxnCommitAttachment
@@ -1653,6 +1666,14 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
     // for sync stream load
     public void setCoordinator(Coordinator coord) {
         this.coord = coord;
+    }
+
+    // A backend-driven load starts loading once it has its plan. A transaction stream load may ask for the plan
+    // more than once, so keep the first time.
+    public void markLoadingStarted() {
+        if (startLoadingTimeMs <= 0) {
+            startLoadingTimeMs = System.currentTimeMillis();
+        }
     }
 
     public String getStringByType() {
@@ -1806,10 +1827,17 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
             }
             info.setPriority(LoadPriority.NORMAL);
 
+            // Each row read from the source is loaded, filtered or unselected, so the three add up to the rows
+            // scanned (NumberTotalRows in the stream load response). They stay -1 until the load reports them.
+            if (numRowsNormal >= 0 && numRowsAbnormal >= 0 && numRowsUnselected >= 0) {
+                info.setNum_scan_rows(numRowsNormal + numRowsAbnormal + numRowsUnselected);
+            }
             info.setNum_sink_rows(numRowsNormal);
             info.setNum_filtered_rows(numRowsAbnormal);
             info.setNum_unselected_rows(numRowsUnselected);
-            info.setNum_scan_bytes(numLoadBytesTotal);
+            // The bytes the backends received, like the bytes a broker load reads from its files. A load whose
+            // backends do not report them (an older version) keeps the bytes its sink wrote.
+            info.setNum_scan_bytes(receivedBytes >= 0 ? receivedBytes : numLoadBytesTotal);
 
             info.setCreate_time(TimeUtils.longToTimeString(createTimeMs));
             info.setLoad_start_time(TimeUtils.longToTimeString(startLoadingTimeMs));

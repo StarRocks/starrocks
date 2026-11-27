@@ -352,6 +352,11 @@ public:
 
     void update_num_bytes_scan_from_source(int64_t scan_bytes) { _num_bytes_scan_from_source.fetch_add(scan_bytes); }
 
+    // The bytes the load received from its clients through stream load pipes, as they were sent.
+    int64_t num_bytes_received_from_stream() const noexcept { return _num_bytes_received_from_stream.load(); }
+
+    void update_num_bytes_received_from_stream(int64_t bytes) { _num_bytes_received_from_stream.fetch_add(bytes); }
+
     void update_num_datacache_read_bytes(const int64_t read_bytes) {
         _num_datacache_read_bytes.fetch_add(read_bytes, std::memory_order_relaxed);
     }
@@ -771,6 +776,8 @@ private:
     std::atomic<int64_t> _num_rows_load_filtered{0};     // unqualified rows
     std::atomic<int64_t> _num_rows_load_unselected{0};   // rows filtered by predicates
     std::atomic<int64_t> _num_bytes_scan_from_source{0}; // total bytes scan from source node
+    // bytes received through stream load pipes
+    std::atomic<int64_t> _num_bytes_received_from_stream{0};
 
     // datacache select metrics
     std::atomic<int64_t> _num_datacache_read_bytes{0};
