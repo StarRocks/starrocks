@@ -146,6 +146,8 @@ public class MergeIntoPlanner {
                                      OptExpression logicalRoot, ColumnRefFactory columnRefFactory,
                                      List<ColumnRefOperator> outputColumns, List<String> colNames,
                                      IcebergTable icebergTable, PhysicalPropertySet requiredProperty) {
+        // Before planning, so the optimizer and the fragments see spill on.
+        IcebergPlannerUtils.enableConnectorSinkSpill(session);
         boolean prevIsEnableLocalShuffleAgg = session.getSessionVariable().isEnableLocalShuffleAgg();
         boolean prevSkewJoinOptimizeV1 = session.getSessionVariable().isEnableOptimizerSkewJoinOptimizeV1();
         boolean prevSkewJoinOptimizeV2 = session.getSessionVariable().isEnableOptimizerSkewJoinOptimizeV2();

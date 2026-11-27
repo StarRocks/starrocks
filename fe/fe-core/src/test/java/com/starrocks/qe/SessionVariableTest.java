@@ -351,4 +351,16 @@ public class SessionVariableTest {
         Assertions.assertFalse(variables.isGroupedRangeScan());
     }
 
+    @Test
+    public void testRuntimeAdaptiveDopIsOffWithSpill() {
+        SessionVariable variables = new SessionVariable();
+        variables.setEnableRuntimeAdaptiveDop(true);
+        Assertions.assertTrue(variables.isEnableRuntimeAdaptiveDop());
+
+        variables.setEnableSpill(true);
+        Assertions.assertFalse(variables.isEnableRuntimeAdaptiveDop());
+
+        variables.setEnableSpill(false);
+        Assertions.assertTrue(variables.isEnableRuntimeAdaptiveDop());
+    }
 }
