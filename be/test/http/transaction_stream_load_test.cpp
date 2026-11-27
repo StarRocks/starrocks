@@ -20,36 +20,10 @@
 #include <gtest/gtest.h>
 #include <rapidjson/document.h>
 
-<<<<<<< HEAD
-=======
-#include <cstring>
 #include <optional>
->>>>>>> 7533999 ([BugFix] Pass the CSV format headers of a transaction stream load to the FE (#84744))
 #include <string>
 
-<<<<<<< HEAD
 #include "common/config.h"
-=======
-#include "base/metrics.h"
-#include "base/testutil/assert.h"
-#include "base/testutil/sync_point.h"
-#include "base/uid_util.h"
-#include "base/utility/defer_op.h"
-#include "common/config_ingest_fwd.h"
-#include "common/config_storage_fwd.h"
-#include "common/status.h"
-#include "common/system/cpu_info.h"
-#include "compute_env/compute_env.h"
-#include "compute_env/load/http_load_params.h"
-#include "compute_env/load/stream_context_mgr.h"
-#include "compute_env/load/stream_load_context.h"
-#include "compute_env/load/stream_load_pipe.h"
-#include "data_workflows/load/stream_load/stream_load_executor.h"
-#include "data_workflows/load/stream_load/transaction_mgr.h"
-#include "exec/exec_env.h"
-#include "exec/pipeline/driver_executor_factory.h"
-#include "exec/pipeline/driver_queue_factory.h"
->>>>>>> 7533999 ([BugFix] Pass the CSV format headers of a transaction stream load to the FE (#84744))
 #include "gen_cpp/FrontendService_types.h"
 #include "gen_cpp/HeartbeatService_types.h"
 #include "http/download_action.h"
@@ -63,6 +37,7 @@
 #include "testutil/sync_point.h"
 #include "util/brpc_stub_cache.h"
 #include "util/cpu_info.h"
+#include "util/uid_util.h"
 
 class mg_connection;
 
@@ -1415,7 +1390,7 @@ TEST_F(TransactionStreamLoadActionTest, csv_format_headers_reach_fe_plan_request
     };
 
     for (const auto& tc : test_cases) {
-        TransactionManagerAction txn_action(&_env, _transaction_mgr.get());
+        TransactionManagerAction txn_action(&_env);
         HttpRequest begin_req(_evhttp_req);
         begin_req._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
         begin_req._headers.emplace(HttpHeaders::CONTENT_LENGTH, "0");
@@ -1441,7 +1416,7 @@ TEST_F(TransactionStreamLoadActionTest, csv_format_headers_reach_fe_plan_request
                                                   captured = true;
                                               });
 
-        TransactionStreamLoadAction action(&_env, &_stream_load_orchestrator, _transaction_mgr.get());
+        TransactionStreamLoadAction action(&_env);
         HttpRequest request(_evhttp_req);
         request.set_handler(&action);
         request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
@@ -1502,13 +1477,14 @@ TEST_F(TransactionStreamLoadActionTest, channel_load_leaves_csv_format_headers_t
     const std::string table = "tbl";
     const int channel_id = 0;
     StreamLoadContext* ctx = nullptr;
-    ASSERT_OK(_env.stream_context_mgr()->create_channel_context(
-            label, channel_id, db, table, TFileFormatType::FORMAT_CSV_PLAIN, ctx, UniqueId::gen_uid().to_thrift(), 1));
+    ASSERT_OK(_env.stream_context_mgr()->create_channel_context(&_env, label, channel_id, db, table,
+                                                                TFileFormatType::FORMAT_CSV_PLAIN, ctx,
+                                                                UniqueId::gen_uid().to_thrift(), 1));
     DeferOp release_ctx([&] { StreamLoadContext::release(ctx); });
     ASSERT_OK(_env.stream_context_mgr()->put_channel_context(label, table, channel_id, ctx));
     DeferOp remove_ctx([&] { _env.stream_context_mgr()->remove_channel_context(ctx); });
 
-    TransactionStreamLoadAction action(&_env, &_stream_load_orchestrator, _transaction_mgr.get());
+    TransactionStreamLoadAction action(&_env);
     // Both load calls carry the same headers, so the check that they match passes too.
     for (int call = 1; call <= 2; ++call) {
         k_response_str = "";
@@ -1549,8 +1525,8 @@ TEST_F(TransactionStreamLoadActionTest, on_header_invalid_csv_format_headers_rej
 
     for (const auto& tc : test_cases) {
         k_response_str = "";
-        TransactionStreamLoadAction action(&_env, &_stream_load_orchestrator, _transaction_mgr.get());
-        auto ctx = new StreamLoadContext(_env.load_stream_mgr());
+        TransactionStreamLoadAction action(&_env);
+        auto ctx = new StreamLoadContext(&_env);
         ctx->ref();
         ctx->db = "db";
         ctx->table = "tbl";
@@ -1608,7 +1584,7 @@ TEST_F(TransactionStreamLoadActionTest, csv_format_headers_must_match_across_loa
     };
 
     for (const auto& tc : test_cases) {
-        TransactionManagerAction txn_action(&_env, _transaction_mgr.get());
+        TransactionManagerAction txn_action(&_env);
         {
             HttpRequest begin_req(_evhttp_req);
             begin_req._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
@@ -1623,7 +1599,7 @@ TEST_F(TransactionStreamLoadActionTest, csv_format_headers_must_match_across_loa
             ASSERT_STREQ("OK", doc["Status"].GetString()) << tc.label;
         }
 
-        TransactionStreamLoadAction action(&_env, &_stream_load_orchestrator, _transaction_mgr.get());
+        TransactionStreamLoadAction action(&_env);
         // Sends one load call of the transaction and returns what on_header returned.
         auto send_load = [&](const char* value) {
             k_response_str = "";
