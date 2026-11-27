@@ -27,6 +27,7 @@ import com.starrocks.type.VarcharType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 class TabletRangeTest {
@@ -259,7 +260,7 @@ class TabletRangeTest {
         TTuple lowerTuple = new TTuple();
         TVariant lowerVariant = new TVariant();
         lowerVariant.setType(TypeSerializer.toThrift(IntegerType.INT));
-        lowerVariant.setValue("10");
+        lowerVariant.setValue("10".getBytes(StandardCharsets.UTF_8));
         lowerTuple.setValues(List.of(lowerVariant));
         tRange.setLower_bound(lowerTuple);
 
@@ -267,7 +268,7 @@ class TabletRangeTest {
         TTuple upperTuple = new TTuple();
         TVariant upperVariant = new TVariant();
         upperVariant.setType(TypeSerializer.toThrift(IntegerType.INT));
-        upperVariant.setValue("20");
+        upperVariant.setValue("20".getBytes(StandardCharsets.UTF_8));
         upperTuple.setValues(List.of(upperVariant));
         tRange.setUpper_bound(upperTuple);
 
@@ -290,14 +291,14 @@ class TabletRangeTest {
         TTuple lowerTuple = new TTuple();
         TVariant lowerVariant = new TVariant();
         lowerVariant.setType(TypeSerializer.toThrift(IntegerType.BIGINT));
-        lowerVariant.setValue("1000");
+        lowerVariant.setValue("1000".getBytes(StandardCharsets.UTF_8));
         lowerTuple.setValues(List.of(lowerVariant));
         tRange.setLower_bound(lowerTuple);
 
         TTuple upperTuple = new TTuple();
         TVariant upperVariant = new TVariant();
         upperVariant.setType(TypeSerializer.toThrift(IntegerType.BIGINT));
-        upperVariant.setValue("2000");
+        upperVariant.setValue("2000".getBytes(StandardCharsets.UTF_8));
         upperTuple.setValues(List.of(upperVariant));
         tRange.setUpper_bound(upperTuple);
 
@@ -317,14 +318,14 @@ class TabletRangeTest {
         TTuple lowerTuple = new TTuple();
         TVariant lowerVariant = new TVariant();
         lowerVariant.setType(TypeSerializer.toThrift(VarcharType.VARCHAR));
-        lowerVariant.setValue("aaa");
+        lowerVariant.setValue("aaa".getBytes(StandardCharsets.UTF_8));
         lowerTuple.setValues(List.of(lowerVariant));
         tRange.setLower_bound(lowerTuple);
 
         TTuple upperTuple = new TTuple();
         TVariant upperVariant = new TVariant();
         upperVariant.setType(TypeSerializer.toThrift(VarcharType.VARCHAR));
-        upperVariant.setValue("zzz");
+        upperVariant.setValue("zzz".getBytes(StandardCharsets.UTF_8));
         upperTuple.setValues(List.of(upperVariant));
         tRange.setUpper_bound(upperTuple);
 
