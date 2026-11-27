@@ -79,6 +79,17 @@ done
 # kill all python UDF worker processes spawned by this CN, then remove their sockets
 reap_python_udf_workers
 
+# A preStop hook can run before start_cn.sh has written the pid file, so a graceful stop
+# waits for it instead of exiting 0 with nothing signalled.
+# The wait counts against --timeout.
+start_ts=$(date +%s)
+if [ ! -f $pidfile ] && [ $SIG -eq 15 ]; then
+    for _ in `seq 30`; do
+        [ -f $pidfile ] && break
+        [ $TIME_OUT -gt 0 ] && [ $(($(date +%s) - $start_ts)) -ge $TIME_OUT ] && break
+        sleep 1
+    done
+fi
 
 if [ -f $pidfile ]; then
     pid=`cat $pidfile`
@@ -95,7 +106,6 @@ if [ -f $pidfile ]; then
     fi
 
     # Waiting for a process to exit
-    start_ts=$(date +%s)
     while kill -0 $pid > /dev/null 2>&1; do
         if [ $TIME_OUT -gt 0 ] && [ $(($(date +%s) - $start_ts)) -gt $TIME_OUT ]; then
             kill -9 $pid
@@ -107,4 +117,7 @@ if [ -f $pidfile ]; then
     done
 
     rm $pidfile
+elif [ $SIG -eq 15 ]; then
+    echo "ERROR: $pidfile not found, CN not stopped" >&2
+    exit 1
 fi
