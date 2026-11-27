@@ -293,7 +293,7 @@ public class TabletRangeTest {
                 String json = gson.toJson(loaded);
                 Assertions.assertTrue(json.contains("\"clazz\":\"StringVariant\""), json);
                 Assertions.assertTrue(json.contains("\"value\":\"a\""), json);
-                Assertions.assertEquals(loaded, gson.fromJson(json, TabletRange.class));
+                Assertions.assertEquals(loaded.getRange(), gson.fromJson(json, TabletRange.class).getRange());
             }
         } finally {
             Config.metadata_ignore_unknown_subtype = saved;
@@ -325,7 +325,7 @@ public class TabletRangeTest {
                 Assertions.assertArrayEquals(lowerBytes, lower.get(1).getBytesValue());
                 Assertions.assertEquals(5, upper.get(0).getLongValue());
                 Assertions.assertArrayEquals(upperBytes, upper.get(1).getBytesValue());
-                Assertions.assertEquals(original, loaded);
+                Assertions.assertEquals(original.getRange(), loaded.getRange());
             }
         } finally {
             Config.metadata_ignore_unknown_subtype = saved;

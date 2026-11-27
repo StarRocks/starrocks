@@ -39,11 +39,7 @@ import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.Utils;
 import com.starrocks.lake.compaction.CompactionMgr;
 import com.starrocks.persist.EditLog;
-<<<<<<< HEAD
-=======
-import com.starrocks.persist.WALApplier;
 import com.starrocks.planner.RangeDistributionPrunerTest;
->>>>>>> e183bb1 ([BugFix] Keep tablet range boundary values as raw bytes on FE (#84763))
 import com.starrocks.proto.AggregatePublishVersionRequest;
 import com.starrocks.proto.PublishVersionRequest;
 import com.starrocks.proto.PublishVersionResponse;
