@@ -139,6 +139,12 @@ public class Trino2SRFunctionCallTransformer {
         // contains_sequence -> array_contains_seq
         registerFunctionTransformer("contains_sequence", 2, "array_contains_seq",
                 List.of(Expr.class, Expr.class));
+        // cardinality -> array_length (cardinality is an alias for array_length in StarRocks)
+        registerFunctionTransformer("cardinality", 1, "cardinality",
+                List.of(Expr.class));
+        // array_intersect -> array_intersect (direct mapping with variable arguments)
+        registerFunctionTransformerWithVarArgs("array_intersect", "array_intersect",
+                List.of(Expr.class));
     }
 
     private static void registerDateFunctionTransformer() {
