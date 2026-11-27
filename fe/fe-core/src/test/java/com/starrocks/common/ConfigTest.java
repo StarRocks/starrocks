@@ -104,6 +104,63 @@ public class ConfigTest {
     }
 
     @Test
+    public void testExternalTableInvalidateTimeoutKeepsTheConnectorNames() throws Exception {
+        // The per-connector names this config replaced still set it, and SHOW FRONTEND CONFIG still finds it by them
+        int original = Config.external_table_commit_invalidate_other_fe_timeout_ms;
+        try {
+            int value = 1000;
+            for (String oldName : List.of("iceberg_commit_invalidate_other_fe_timeout_ms",
+                    "hive_commit_invalidate_other_fe_timeout_ms", "paimon_commit_invalidate_other_fe_timeout_ms")) {
+                value++;
+                Config.setMutableConfig(oldName, String.valueOf(value), false, "");
+                Assertions.assertEquals(value, Config.external_table_commit_invalidate_other_fe_timeout_ms, oldName);
+                List<List<String>> configs = Config.getConfigInfo(PatternMatcher.createMysqlPattern(oldName, false));
+                Assertions.assertEquals(1, configs.size(), oldName);
+                Assertions.assertEquals("external_table_commit_invalidate_other_fe_timeout_ms", configs.get(0).get(0));
+                Assertions.assertEquals(String.valueOf(value), configs.get(0).get(2));
+            }
+        } finally {
+            Config.external_table_commit_invalidate_other_fe_timeout_ms = original;
+        }
+    }
+
+    @Test
+    public void testConfigPersistedThroughAnAliasSurvivesRestart(@TempDir Path tempDir) throws Exception {
+        // Persisted WITH PERSISTENT through any of its names, the last value set is the one loaded on restart, also
+        // when fe.conf already has another of its names with another value
+        Path confFile = tempDir.resolve("fe.conf");
+        Files.writeString(confFile, "iceberg_commit_invalidate_other_fe_timeout_ms = 0\n");
+        Field configPathField = ConfigBase.class.getDeclaredField("configPath");
+        Field isPersistedField = ConfigBase.class.getDeclaredField("isPersisted");
+        configPathField.setAccessible(true);
+        isPersistedField.setAccessible(true);
+        String oldConfigPath = (String) configPathField.get(null);
+        boolean oldIsPersisted = isPersistedField.getBoolean(null);
+        int original = Config.external_table_commit_invalidate_other_fe_timeout_ms;
+        try {
+            config.init(confFile.toString());
+            Assertions.assertEquals(0, Config.external_table_commit_invalidate_other_fe_timeout_ms);
+            // Enable persistence for this temporary file even when CI runs in a container.
+            isPersistedField.setBoolean(null, true);
+            int value = 1000;
+            for (String name : List.of("hive_commit_invalidate_other_fe_timeout_ms",
+                    "paimon_commit_invalidate_other_fe_timeout_ms", "iceberg_commit_invalidate_other_fe_timeout_ms",
+                    "external_table_commit_invalidate_other_fe_timeout_ms")) {
+                value++;
+                Config.setMutableConfig(name, String.valueOf(value), true, "root");
+                // A restart: the default, then what fe.conf says
+                Config.external_table_commit_invalidate_other_fe_timeout_ms = 3000;
+                config.init(confFile.toString());
+                Assertions.assertEquals(value, Config.external_table_commit_invalidate_other_fe_timeout_ms, name);
+            }
+        } finally {
+            configPathField.set(null, oldConfigPath);
+            isPersistedField.setBoolean(null, oldIsPersisted);
+            Config.external_table_commit_invalidate_other_fe_timeout_ms = original;
+        }
+    }
+
+    @Test
     public void testMutableConfig() throws Exception {
         // Skip test if persistence is not available (container environments)
         Assumptions.assumeTrue(ConfigBase.isIsPersisted(),

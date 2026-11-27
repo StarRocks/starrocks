@@ -395,7 +395,7 @@ public class PaimonDdlMetadataTest {
     }
 
     private static String invalidation() {
-        return CATALOG + "." + DB + "." + TABLE + "@" + Config.paimon_commit_invalidate_other_fe_timeout_ms;
+        return CATALOG + "." + DB + "." + TABLE + "@" + Config.external_table_commit_invalidate_other_fe_timeout_ms;
     }
 
     // A catalog of an FE, configured as PaimonConnector configures one: it also caches the partition list

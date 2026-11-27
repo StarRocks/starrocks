@@ -248,7 +248,7 @@ public class HiveMetadata implements ConnectorMetadata {
         // The metastore names, which the other FEs' cache keys use
         TableName tableName = new TableName(catalogName, table.getCatalogDBName(), table.getCatalogTableName());
         GlobalStateMgr.getCurrentState().invalidateOthersFeTable(tableName,
-                Config.hive_commit_invalidate_other_fe_timeout_ms);
+                Config.external_table_commit_invalidate_other_fe_timeout_ms);
     }
 
     private List<String> filterTruncatePartitions(TruncateTablePartitionStmt stmt, HiveTable table,

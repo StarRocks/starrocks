@@ -69,6 +69,7 @@ import com.starrocks.connector.share.iceberg.IcebergPartitionUtils;
 import com.starrocks.connector.share.iceberg.IcebergTablePayload;
 import com.starrocks.connector.share.iceberg.SerializableTable;
 import com.starrocks.ha.FrontendNodeType;
+import com.starrocks.metric.ConnectorMetricsMgr;
 import com.starrocks.metric.LongCounterMetric;
 import com.starrocks.metric.Metric;
 import com.starrocks.metric.MetricLabel;
@@ -1898,7 +1899,7 @@ public class IcebergMetadataTest extends TableTestBase {
                 Lists.newArrayList(appendCommitInfo(mockedNativeTableJ, "ts_month=2022-01")), null);
 
         Assertions.assertEquals(List.of(new TableName(CATALOG_NAME, "iceberg_db", "iceberg_table")), invalidated);
-        Assertions.assertEquals(List.of(Config.iceberg_commit_invalidate_other_fe_timeout_ms), timeouts);
+        Assertions.assertEquals(List.of(Config.external_table_commit_invalidate_other_fe_timeout_ms), timeouts);
         Assertions.assertEquals(List.of(true), committedWhenInvalidated);
     }
 
@@ -1987,7 +1988,7 @@ public class IcebergMetadataTest extends TableTestBase {
     }
 
     private static String invalidationOf(String dbName, String tableName) {
-        return CATALOG_NAME + "." + dbName + "." + tableName + "@" + Config.iceberg_commit_invalidate_other_fe_timeout_ms;
+        return CATALOG_NAME + "." + dbName + "." + tableName + "@" + Config.external_table_commit_invalidate_other_fe_timeout_ms;
     }
 
     @Test
@@ -2052,10 +2053,19 @@ public class IcebergMetadataTest extends TableTestBase {
         IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
                 Executors.newSingleThreadExecutor(), DEFAULT_CATALOG_PROPERTIES);
         mockCommitInfoFrontend();
+        AtomicBoolean durationRecorded = new AtomicBoolean(false);
+        new MockUp<ConnectorMetricsMgr>() {
+            @Mock
+            public void increaseDeleteDurationMs(String connectorType, long durationMs, String deleteType) {
+                durationRecorded.set(true);
+            }
+        };
         List<Integer> filesLeftWhenInvalidated = new ArrayList<>();
+        List<Boolean> durationRecordedWhenInvalidated = new ArrayList<>();
         List<String> invalidated = recordOtherFeInvalidations(() -> {
             mockedNativeTableB.refresh();
             filesLeftWhenInvalidated.add(Lists.newArrayList(mockedNativeTableB.newScan().planFiles()).size());
+            durationRecordedWhenInvalidated.add(durationRecorded.get());
         });
 
         StarRocksConnectorException exception = Assertions.assertThrows(StarRocksConnectorException.class,
@@ -2064,6 +2074,8 @@ public class IcebergMetadataTest extends TableTestBase {
         Assertions.assertTrue(exception.getCause() instanceof CommitStateUnknownException);
         Assertions.assertEquals(List.of(invalidationOf("iceberg_db", "iceberg_table")), invalidated);
         Assertions.assertEquals(List.of(1), filesLeftWhenInvalidated);
+        // as on success, the delete duration does not include the wait for the other FEs
+        Assertions.assertEquals(List.of(true), durationRecordedWhenInvalidated);
     }
 
     @Test

@@ -569,7 +569,7 @@ public class HiveMetadataTest {
         hiveMetadata.finishSink("hive_db", "hive_table", Lists.newArrayList(appendCommitInfo()), null);
 
         Assertions.assertEquals(List.of(new TableName("hive_catalog", "hive_db", "hive_table")), invalidated);
-        Assertions.assertEquals(List.of(Config.hive_commit_invalidate_other_fe_timeout_ms), timeouts);
+        Assertions.assertEquals(List.of(Config.external_table_commit_invalidate_other_fe_timeout_ms), timeouts);
         Assertions.assertEquals(List.of(true), committedWhenInvalidated);
     }
 

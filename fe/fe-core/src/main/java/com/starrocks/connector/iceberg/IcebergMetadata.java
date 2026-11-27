@@ -783,6 +783,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         // Set engine info and user for audit
         updateCommitInfo(deleteFiles, context);
 
+        boolean commitStateUnknown = false;
         try {
             deleteFiles.commit();
             LOG.info("Successfully executed metadata delete on {}.{}, delete: {}",
@@ -805,15 +806,17 @@ public class IcebergMetadata implements ConnectorMetadata {
         } catch (UncheckedIOException | ValidationException | CommitFailedException | CommitStateUnknownException e) {
             LOG.error("Failed to execute metadata delete on {}.{}", dbName, tableName, e);
             ConnectorMetricsMgr.increaseDeleteTotalFail(ConnectorMetricsMgr.CONNECTOR_ICEBERG, e, deleteType);
-            if (e instanceof CommitStateUnknownException) {
-                // The delete may have been applied: drop the cached table everywhere, as truncateTable does
-                invalidateCachesAfterDelete(dbName, tableName);
-            }
+            // The delete may have been applied: drop the cached table everywhere, as truncateTable does
+            commitStateUnknown = e instanceof CommitStateUnknownException;
             throw new StarRocksConnectorException(
                     String.format("Failed to execute metadata delete on %s.%s", dbName, tableName), e);
         } finally {
             ConnectorMetricsMgr.increaseDeleteDurationMs(ConnectorMetricsMgr.CONNECTOR_ICEBERG,
                     System.currentTimeMillis() - startMs, deleteType);
+            // After the duration is recorded, as on success: the wait for the other FEs is not part of the delete
+            if (commitStateUnknown) {
+                invalidateCachesAfterDelete(dbName, tableName);
+            }
         }
 
         invalidateCachesAfterDelete(dbName, tableName);
@@ -3301,7 +3304,7 @@ public class IcebergMetadata implements ConnectorMetadata {
     // before the statement returns, so that a read on any FE sees the change. Never throws.
     private void invalidateOthersFeTable(String dbName, String tableName) {
         GlobalStateMgr.getCurrentState().invalidateOthersFeTable(new TableName(catalogName, dbName, tableName),
-                Config.iceberg_commit_invalidate_other_fe_timeout_ms);
+                Config.external_table_commit_invalidate_other_fe_timeout_ms);
     }
 
     private void commitWithCleanup(Runnable commitAction, Runnable cleanupAction,

@@ -366,8 +366,8 @@ public class PaimonWriteMetadataTest {
         // nor does a repeated finish of a committed operation
         metadata.finishSink(DB, TABLE, List.of(producer), null, operation, null);
 
-        assertEquals(List.of(CATALOG + "." + DB + "." + TABLE + "@" + Config.paimon_commit_invalidate_other_fe_timeout_ms),
-                invalidated);
+        assertEquals(List.of(CATALOG + "." + DB + "." + TABLE + "@"
+                + Config.external_table_commit_invalidate_other_fe_timeout_ms), invalidated);
         assertEquals(1, snapshotWhenAsked.size());
         assertTrue(snapshotWhenAsked.get(0) > before, "asked before the commit was published");
     }
