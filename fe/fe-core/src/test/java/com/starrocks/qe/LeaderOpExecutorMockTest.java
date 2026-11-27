@@ -76,7 +76,8 @@ public class LeaderOpExecutorMockTest {
         try (MockedStatic<ThriftRPCRequestExecutor> thriftConnectionPoolMockedStatic =
                 Mockito.mockStatic(ThriftRPCRequestExecutor.class)) {
             thriftConnectionPoolMockedStatic.when(()
-                            -> ThriftRPCRequestExecutor.call(Mockito.any(), Mockito.any(), Mockito.anyInt(), Mockito.any()))
+                            -> ThriftRPCRequestExecutor.call(Mockito.any(), Mockito.any(), Mockito.anyInt(), Mockito.anyInt(),
+                                    Mockito.any()))
                     .thenReturn(tMasterOpResult);
             LeaderOpExecutor executor =
                     new LeaderOpExecutor(stmtBase, stmtBase.getOrigStmt(), connectContext, RedirectStatus.FORWARD_NO_SYNC, false,
