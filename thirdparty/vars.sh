@@ -572,6 +572,17 @@ TP_ARCHIVES="CLUCENE LIBEVENT OPENSSL THRIFT PROTOBUF GFLAGS GLOG GTEST RAPIDJSO
             FIU LIBDEFLATE LLVM ABSL CARES GRPC SIMDUTF TENANN POCO ICU XSIMD LIBXML2 AZURE LIBDIVIDE PPROF FLAMEGRAPH XXHASH \
             BLAKE3 BENCHGEN PAIMON_CPP LIBNL KAFEL NSJAIL PROMETHEUS_CPP CRC32C NLOHMANN_JSON GOOGLE_CLOUD_CPP"
 
+# Prebuilt Lance packages use the Rocky9 glibc floor. Legacy CentOS7 skips them.
+LANCE_SUPPORTED=0
+if [[ "$(uname -s)" == "Linux" ]]; then
+    lance_glibc_version="$(getconf GNU_LIBC_VERSION 2>/dev/null || true)"
+    if [[ "${lance_glibc_version}" =~ ^glibc\ ([0-9]+)\.([0-9]+) ]] && \
+            (( BASH_REMATCH[1] > 2 || (BASH_REMATCH[1] == 2 && BASH_REMATCH[2] >= 34) )); then
+        LANCE_SUPPORTED=1
+        TP_ARCHIVES="${TP_ARCHIVES} LANCE"
+    fi
+fi
+
 if [[ -n "${STARROCKS_TP_VARS_OVERRIDE:-}" ]]; then
     . "${STARROCKS_TP_VARS_OVERRIDE}"
 fi

@@ -56,3 +56,10 @@ PPROF_DOWNLOAD="https://github.com/StarRocks/pprof/releases/download/release%2F2
 PPROF_NAME="pprof"
 PPROF_SOURCE="pprof"
 PPROF_MD5SUM="3a5d99f3efe82a2a1e83824701888ed4"
+
+# Lance native SDK (independently built and tested).
+LANCE_DOWNLOAD="https://github.com/beinan/starrocks-lance-ffi/releases/download/v0.1.0/starrocks-lance-0.1.0-rocky9-x86_64.tar.gz"
+LANCE_NAME="starrocks-lance-0.1.0-rocky9-x86_64.tar.gz"
+LANCE_SOURCE="starrocks-lance-0.1.0-rocky9-x86_64"
+LANCE_MD5SUM="8abbfaf10890f9211accb30a843879a4"
+LANCE_SHA256="e98eec74a29183aa76bcb4cdefeed3c6d2be1899d0b815e3221e5b292fee9d95"

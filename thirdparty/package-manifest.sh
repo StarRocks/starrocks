@@ -130,6 +130,11 @@ starrocks_set_default_packages() {
         STARROCKS_THIRDPARTY_ALL_PACKAGES+=(breakpad)
     fi
 
+    # Installing a verified binary does not enable the optional BE connector.
+    if [[ "${LANCE_SUPPORTED:-0}" == "1" ]]; then
+        STARROCKS_THIRDPARTY_ALL_PACKAGES+=(lance)
+    fi
+
     if [[ "$(uname -s)" == "Darwin" ]]; then
         starrocks_filter_default_packages "${DARWIN_UNSUPPORTED_PACKAGES:-}"
     fi
