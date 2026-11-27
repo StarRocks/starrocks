@@ -16,11 +16,8 @@
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.qe.SqlModeHelper;
-<<<<<<< HEAD
-=======
 import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.ast.QueryStatement;
->>>>>>> 3ac03b5f8d4... [BugFix][RB-1092] Write the NULL ordering of ORDER BY items into generated SQL (#70781)
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.formatter.AST2SQLVisitor;
 import com.starrocks.sql.formatter.FormatOptions;
