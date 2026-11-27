@@ -22,6 +22,8 @@
 #include "column/vectorized_fwd.h"
 #include "compute_env/sorting/merge.h"
 #include "compute_env/sorting/sort_cursor.h"
+#include "compute_env/spill/mem_tracker_guard.h"
+#include "compute_env/spill/spiller.hpp"
 #include "exec/exec_env.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/fragment_context_cancel.h"
@@ -69,6 +71,31 @@ Status SortContext::spiller_task_status() const {
         }
     }
     return Status::OK();
+}
+
+// A restore task is only re-armed from SpillerReader::restore(), i.e. after a chunk has been pulled. When
+// a spilled partition drains its buffer while its stream is not at EOF and no restore task is in flight,
+// nothing would ever re-arm it: is_partition_ready() stays false forever, so a source that reports "no
+// output" is never scheduled again (poller mode) or stays parked WAIT_RESTORE (event scheduler). Either
+// way the query hangs with no error. Re-arm such partitions here, mirroring what the partitionwise
+// aggregate/distinct and hash-join probe sources already do for their single reader.
+void SortContext::rearm_stalled_restores() {
+    for (const auto& sorter : _chunks_sorter_partitions) {
+        const auto& spiller = sorter->spiller();
+        if (spiller == nullptr || !spiller->spilled() || spiller->is_cancel()) {
+            continue;
+        }
+        const auto& reader = spiller->reader();
+        if (reader == nullptr) {
+            continue;
+        }
+        Status st = reader->rearm_if_stalled(_state, RESOURCE_TLS_MEMTRACER_GUARD(_state, std::weak_ptr(reader)));
+        if (!st.ok()) {
+            // has_output() cannot return a status; record it on the spiller so the next pull_chunk()
+            // fails fast rather than the query hanging.
+            spiller->update_spilled_task_status(std::move(st));
+        }
+    }
 }
 
 void SortContext::subscribe_source_to_spillers(RuntimeState* state, PipelineObserver* observer) {
