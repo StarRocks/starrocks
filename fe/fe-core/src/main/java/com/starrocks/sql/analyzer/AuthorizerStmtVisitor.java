@@ -250,6 +250,7 @@ import com.starrocks.sql.ast.integration.CreateSecurityIntegrationStatement;
 import com.starrocks.sql.ast.integration.DropSecurityIntegrationStatement;
 import com.starrocks.sql.ast.integration.ShowCreateSecurityIntegrationStatement;
 import com.starrocks.sql.ast.integration.ShowSecurityIntegrationStatement;
+import com.starrocks.sql.ast.pipe.AlterPipeSetProperty;
 import com.starrocks.sql.ast.pipe.AlterPipeStmt;
 import com.starrocks.sql.ast.pipe.CreatePipeStmt;
 import com.starrocks.sql.ast.pipe.DescPipeStmt;
@@ -270,7 +271,9 @@ import com.starrocks.sql.ast.warehouse.cngroup.DropCnGroupStmt;
 import com.starrocks.sql.ast.warehouse.cngroup.EnableDisableCnGroupStmt;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -3340,6 +3343,7 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
                     context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                     PrivilegeType.CREATE_PIPE.name(), ObjectType.DATABASE.name(), statement.getPipeName().getDbName());
         }
+        checkPipeWarehouseUsagePrivilege(statement.getProperties(), context);
         // OR REPLACE drops the existing pipe, so it also needs DROP on that pipe; PipeManager.createPipe
         // checks again at execution, as the pipe may be created or replaced in between
         PipeName pipeName = statement.getPipeName();
@@ -3358,6 +3362,24 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
                     InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                     context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                     PrivilegeType.DROP.name(), ObjectType.PIPE.name(), pipeName.toString());
+        }
+    }
+
+    // 'task.warehouse' lands in the same task variable as 'warehouse'; default_warehouse is usable by everyone.
+    // Resolve the name first: names are case-sensitive, and the privilege check lets an unknown warehouse pass.
+    private void checkPipeWarehouseUsagePrivilege(Map<String, String> properties, ConnectContext context) {
+        if (properties == null) {
+            return;
+        }
+        for (Map.Entry<String, String> property : properties.entrySet()) {
+            String key = StringUtils.removeStartIgnoreCase(property.getKey(), PipeAnalyzer.TASK_VARIABLES_PREFIX);
+            if (!key.equalsIgnoreCase(PropertyAnalyzer.PROPERTIES_WAREHOUSE)) {
+                continue;
+            }
+            Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(property.getValue());
+            if (warehouse.getId() != WarehouseManager.DEFAULT_WAREHOUSE_ID) {
+                checkWarehouseUsagePrivilege(warehouse.getName(), context);
+            }
         }
     }
 
@@ -3387,6 +3409,9 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
                     InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                     context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                     PrivilegeType.ALTER.name(), ObjectType.PIPE.name(), pipeName.toString());
+        }
+        if (statement.getAlterPipeClause() instanceof AlterPipeSetProperty setProperty) {
+            checkPipeWarehouseUsagePrivilege(setProperty.getProperties(), context);
         }
         return null;
     }
