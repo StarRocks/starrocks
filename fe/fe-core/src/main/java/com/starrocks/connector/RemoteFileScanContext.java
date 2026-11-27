@@ -15,6 +15,7 @@
 package com.starrocks.connector;
 
 import com.starrocks.catalog.Table;
+import org.apache.commons.lang.NotImplementedException;
 import org.apache.hudi.common.table.timeline.HoodieInstant;
 import org.apache.hudi.common.table.timeline.HoodieTimeline;
 import org.apache.hudi.common.table.view.HoodieTableFileSystemView;
@@ -28,6 +29,12 @@ import java.util.concurrent.locks.ReentrantLock;
 public class RemoteFileScanContext {
     public RemoteFileScanContext(Table table) {
         this.tableLocation = table.getTableLocation();
+        try {
+            this.dbName = table.getCatalogDBName();
+            this.tableName = table.getCatalogTableName();
+        } catch (NotImplementedException e) {
+            // a table type without catalog names: its file lists are found by location only
+        }
     }
 
     public RemoteFileScanContext(String tableLocation) {
@@ -35,6 +42,10 @@ public class RemoteFileScanContext {
     }
 
     public String tableLocation = null;
+    // The catalog names of the table the scan is for, or null: they find the file lists of a table whose location is
+    // not at hand, as on an FE asked to drop a table it no longer has in its metastore cache
+    public String dbName = null;
+    public String tableName = null;
 
     // ---- concurrent initialization -----
     public ReentrantLock lock = new ReentrantLock();
