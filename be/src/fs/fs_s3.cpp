@@ -45,6 +45,7 @@
 #include "fs/fs_registry.h"
 #include "fs/fs_scheme.h"
 #include "fs/output_stream_adapter.h"
+#include "fs/plain_aws_http_client_scope.h"
 #include "gutil/casts.h"
 #include "gutil/strings/util.h"
 #include "io/direct_s3_output_stream.h"
@@ -203,6 +204,8 @@ S3ClientFactory::S3ClientPtr S3ClientFactory::new_client(const TCloudConfigurati
         }
     }
 
+    // Object storage fast retry is only for the clients that starlet creates for shared-data storage.
+    fs::ScopedPlainAwsHttpClient plain_http_client;
     auto credential_provider = _get_aws_credentials_provider(aws_cloud_credential);
 
     config.retryStrategy = std::make_shared<Aws::Client::SpecifiedRetryableErrorsRetryStrategy>(
@@ -227,6 +230,8 @@ S3ClientFactory::S3ClientPtr S3ClientFactory::new_client(const ClientConfigurati
         if (_client_cache_keys[i] == client_cache_key) return _clients[i];
     }
 
+    // Object storage fast retry is only for the clients that starlet creates for shared-data storage.
+    fs::ScopedPlainAwsHttpClient plain_http_client;
     S3ClientPtr client;
     string access_key_id;
     string secret_access_key;

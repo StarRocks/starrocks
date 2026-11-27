@@ -32,6 +32,7 @@
 #include "base/network/network_util.h"
 #include "cache/datacache_metrics.h"
 #include "common/config_metrics_fwd.h"
+#include "common/config_object_storage_fwd.h"
 #include "common/metrics/process_metrics_registry.h"
 #include "common/status.h"
 #include "common/system/backend_options.h"
@@ -46,6 +47,7 @@
 #include "fs/fs.h"
 #include "fs/fs_util.h"
 #include "io/io_profiler_metrics.h"
+#include "platform/aws/object_storage_fast_retry.h"
 #include "platform/http/http_metrics.h"
 #include "platform/key_cache.h"
 #include "platform/llm/ai_metrics.h"
@@ -245,6 +247,11 @@ void BackendMetricsInitializer::initialize(ProcessMetricsRegistry* process_metri
     registry->set_collect_hook_enabled(options.collect_hook_enabled);
     compression::install_compression_context_pool_metrics(registry);
     HttpMetrics::instance()->install(registry);
+    // The fast retry client is installed whenever the AWS SDK uses its curl client (see AwsSdkGuard), and its
+    // switch can be turned on at runtime.
+    if (!config::enable_poco_client_for_aws_sdk) {
+        ObjectStorageFastRetryMetrics::instance()->install(registry);
+    }
     AIMetrics::instance()->install(registry);
     ServiceMetrics::instance()->install(registry);
     StarOSWorkerMetrics::instance()->install(registry);
