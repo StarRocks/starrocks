@@ -697,9 +697,11 @@ public abstract class MVRefreshProcessor {
 
             // only collect to-repair tables when the table is different from the old one by checking the table identifier
             final Table newTable = optNewTable.get();
-            if (!baseTableInfo.getTableIdentifier().equals(table.getTableIdentifier())) {
+            // compare with the reloaded table: the table read before the metadata refresh may still be stale
+            if (!baseTableInfo.getTableIdentifier().equals(newTable.getTableIdentifier())) {
                 logger.info("table {} changed after refreshing materialized view, old id: {}, new id: {}",
-                        baseTableInfo.getTableInfoStr(), table.getTableIdentifier(), newTable.getTableIdentifier());
+                        baseTableInfo.getTableInfoStr(), baseTableInfo.getTableIdentifier(),
+                        newTable.getTableIdentifier());
                 if (currentRefreshMode.isIncremental()) {
                     throw new SemanticException("Materialized view %s.%s refresh failed: base table %s schema " +
                             "or identity changed, cannot do incremental refresh in %s mode. " +
