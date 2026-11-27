@@ -26,8 +26,6 @@
 
 namespace starrocks {
 
-namespace {
-
 TypeInfoPtr get_tablet_column_type_info(const TabletColumn& col) {
     if (col.type() == TYPE_ARRAY) {
         return get_array_type_info(get_tablet_column_type_info(col.subcolumn(0)));
@@ -46,8 +44,6 @@ TypeInfoPtr get_tablet_column_type_info(const TabletColumn& col) {
     }
     return get_type_info(col.type(), col.precision(), col.scale());
 }
-
-} // namespace
 
 Field StorageSchemaHelper::convert_field(ColumnId id, const TabletColumn& c) {
     TypeInfoPtr type_info = [&] {
