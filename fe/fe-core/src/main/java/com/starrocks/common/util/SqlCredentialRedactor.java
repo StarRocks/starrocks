@@ -158,13 +158,15 @@ public class SqlCredentialRedactor {
             Pattern.CASE_INSENSITIVE | Pattern.DOTALL | Pattern.MULTILINE
     );
 
-    // scheme://user:password@host - the password is group 2.
+    // //user:password@host - the password is group 2. Like the JDBC bridge's URL redactor
+    // (DataSourceCache), it takes any user-info character, since ' and , are legal in a password.
     private static final Pattern URI_USER_INFO_PASSWORD_PATTERN = Pattern.compile(
-            "([A-Za-z][A-Za-z0-9+.\\-]*://[^/\\s:@\"'?#,]+:)([^/\\s@\"'?#,]+)@");
+            "(//[^/?#@:\\s\"]*:)([^/?#@\\s\"]*)@");
 
-    // ?password=..., &pwd=..., ;passwd=... (JDBC URLs use ; as well as & between parameters).
+    // ?password=..., &trustStorePassword=..., ;PWD=... (JDBC URLs use ; as well as & between parameters).
+    // SQL Server wraps a value containing ; in braces, escaping } as }}, so a braced value is taken whole.
     private static final Pattern URI_PASSWORD_PARAMETER_PATTERN = Pattern.compile(
-            "([?&;](?:password|passwd|pwd)=)([^&;\\s\"'#]*)",
+            "([?&;][^&#;=\\s\"']*(?:password|passwd|pwd)=)(\\{(?:[^}]|\\}\\})*\\}|[^&;\\s\"'#]*)",
             Pattern.CASE_INSENSITIVE);
 
     private static final String LDAP_SIMPLE_AUTH_PLUGIN = "AUTHENTICATION_LDAP_SIMPLE";

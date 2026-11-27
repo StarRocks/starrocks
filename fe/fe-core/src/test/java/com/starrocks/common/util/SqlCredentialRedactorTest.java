@@ -59,6 +59,31 @@ public class SqlCredentialRedactorTest {
     }
 
     @Test
+    public void testRedactPasswordSuffixedUriParameters() {
+        Assertions.assertEquals("jdbc:mysql://host:3306/db?trustStorePassword=***&sslpassword=***&user=u",
+                SqlCredentialRedactor.redactUriCredentials(
+                        "jdbc:mysql://host:3306/db?trustStorePassword=uripw6&sslpassword=uripw7&user=u"));
+    }
+
+    @Test
+    public void testRedactBracedSqlServerPassword() {
+        Assertions.assertEquals("jdbc:sqlserver://host:1433;password=***;encrypt=true",
+                SqlCredentialRedactor.redactUriCredentials(
+                        "jdbc:sqlserver://host:1433;password={uri;pw}}8};encrypt=true"));
+    }
+
+    @Test
+    public void testRedactUserInfoPasswordWithPunctuation() {
+        Assertions.assertEquals("http://u:***@host:8181",
+                SqlCredentialRedactor.redactUriCredentials("http://u:uri'pw,9@host:8181"));
+        // In a list of URIs, only the one with a password changes.
+        Assertions.assertEquals("thrift://h1:9083,thrift://u:***@h2:9083",
+                SqlCredentialRedactor.redactUriCredentials("thrift://h1:9083,thrift://u:uripw10@h2:9083"));
+        String sql = "CREATE EXTERNAL CATALOG c PROPERTIES (\"iceberg.catalog.uri\"=\"http://u:uri'pw,11@host\")";
+        Assertions.assertFalse(SqlCredentialRedactor.redact(sql).contains("uri'pw,11"));
+    }
+
+    @Test
     public void testPrintableMapMasksPasswordInsideUri() {
         String printed = new PrintableMap<>(java.util.Map.of("iceberg.catalog.uri", "http://user:uripw5@host:8181"),
                 "=", true, false, true).toString();
