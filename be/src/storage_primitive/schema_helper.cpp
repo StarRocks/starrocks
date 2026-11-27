@@ -27,6 +27,13 @@
 namespace starrocks {
 
 TypeInfoPtr get_tablet_column_type_info(const TabletColumn& col) {
+    if (col.type() == TYPE_GEOGRAPHY || col.type() == TYPE_GEOMETRY) {
+        // GEO has no scalar type info: it is materialized from the column's descriptor and refuses
+        // row operations such as comparison, so it can never be keyed, sorted or indexed by bytes.
+        const auto* descriptor = col.geo_descriptor();
+        CHECK(descriptor != nullptr) << "GEO column " << col.name() << " has no descriptor";
+        return get_geo_type_info(TypeDescriptor::create_geo_type(col.type(), *descriptor)).value();
+    }
     if (col.type() == TYPE_ARRAY) {
         return get_array_type_info(get_tablet_column_type_info(col.subcolumn(0)));
     }
@@ -46,16 +53,7 @@ TypeInfoPtr get_tablet_column_type_info(const TabletColumn& col) {
 }
 
 Field StorageSchemaHelper::convert_field(ColumnId id, const TabletColumn& c) {
-    TypeInfoPtr type_info = [&] {
-        if (c.type() == TYPE_GEOGRAPHY || c.type() == TYPE_GEOMETRY) {
-            const auto* descriptor = c.geo_descriptor();
-            CHECK(descriptor != nullptr);
-            auto type = TypeDescriptor::create_geo_type(c.type(), *descriptor);
-            return get_geo_type_info(type).value();
-        }
-        return get_tablet_column_type_info(c);
-    }();
-    Field f(id, c.name(), std::move(type_info), c.is_nullable());
+    Field f(id, c.name(), get_tablet_column_type_info(c), c.is_nullable());
     f.set_is_key(c.is_key());
     f.set_length(c.length());
     f.set_uid(c.unique_id());

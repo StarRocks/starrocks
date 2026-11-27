@@ -131,7 +131,10 @@ public:
     Status from_string(void*, const std::string&) const override {
         return Status::NotSupported("Native GEO does not support row string conversion");
     }
-    size_t size() const override { unsupported(); }
+    // A GEO value's storage slot is a Slice of WKB bytes (StorageTypeTraits<TYPE_GEOGRAPHY/GEOMETRY>), so its
+    // width is known, as for BITMAP or VARBINARY. Exposing it lets ARRAY<GEO> build its type info; every
+    // operation that reads, copies, orders or bounds a slot is still rejected below.
+    size_t size() const override { return sizeof(Slice); }
     void shallow_copy(void*, const void*) const override { unsupported(); }
     void deep_copy(void*, const void*, const TypeInfoAllocator*) const override { unsupported(); }
     void direct_copy(void*, const void*) const override { unsupported(); }
