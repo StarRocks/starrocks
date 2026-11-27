@@ -118,8 +118,8 @@ public class TransactionLoadCoordinatorMgr {
     /**
      * Allocates a coordinator node for a given transaction label and warehouse name.
      * The selected node is cached for future retrievals.
-     * If the label already exists in cache, returns the cached node to ensure
-     * subsequent operations (like rollback) are routed to the correct BE.
+     * If the label already exists in cache and its node still exists, returns the
+     * cached node to ensure subsequent operations are routed to the same BE.
      *
      * @param label         the transaction label
      * @param warehouseName the name of the warehouse
@@ -127,12 +127,10 @@ public class TransactionLoadCoordinatorMgr {
      * @throws StarRocksException if allocation fails or no suitable node is found
      */
     public @NonNull ComputeNode allocate(String label, String warehouseName) throws StarRocksException {
-        // Check if the label already exists in cache to avoid overwriting
-        // This ensures that repeated BEGIN requests for the same label
-        // are routed to the same BE where the transaction context exists
-        Long existingNodeId = cache.getIfPresent(label);
-        if (existingNodeId != null) {
-            return getNodeFromId(existingNodeId);
+        // Keep retrying BEGIN on the cached coordinator while it still exists.
+        ComputeNode existingNode = getCachedNode(label);
+        if (existingNode != null) {
+            return existingNode;
         }
 
         final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
@@ -147,7 +145,8 @@ public class TransactionLoadCoordinatorMgr {
 
     /**
      * Retrieves the coordinator node for a given transaction label and database name.
-     * If the label is not present in the cache, attempts to retrieve the node from the transaction state.
+     * If the label is not present in the cache or the cached node was removed,
+     * attempts to retrieve the node from the transaction state.
      *
      * @param label  the transaction label
      * @param dbName the database name
@@ -155,8 +154,24 @@ public class TransactionLoadCoordinatorMgr {
      * @throws StarRocksException if the node cannot be found
      */
     public @NonNull ComputeNode get(String label, String dbName) throws StarRocksException {
+        ComputeNode cachedNode = getCachedNode(label);
+        return cachedNode != null ? cachedNode : getNodeFromTransactionState(label, dbName);
+    }
+
+    private ComputeNode getCachedNode(String label) {
         Long nodeId = cache.getIfPresent(label);
-        return nodeId != null ? getNodeFromId(nodeId) : getNodeFromTransactionState(label, dbName);
+        if (nodeId == null) {
+            return null;
+        }
+
+        try {
+            return getNodeFromId(nodeId);
+        } catch (StarRocksException e) {
+            if (cache.asMap().remove(label, nodeId)) {
+                LOG.warn("Invalidate transaction load coordinator cache for label {}, removed node {}", label, nodeId);
+            }
+            return null;
+        }
     }
 
     /**
