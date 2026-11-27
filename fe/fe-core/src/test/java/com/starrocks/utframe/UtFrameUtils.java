@@ -382,6 +382,7 @@ public class UtFrameUtils {
     }
 
     public static synchronized void createMinStarRocksCluster(boolean startBDB, RunMode runMode, String runningDir) {
+        ExitTraceHook.install();
         // to avoid call createMinStarRocksCluster multiple times
         if (CREATED_MIN_CLUSTER.get()) {
             return;

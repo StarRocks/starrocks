@@ -45,6 +45,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.BackendService;
 import com.starrocks.thrift.HeartbeatService;
 import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.utframe.ExitTraceHook;
 import com.starrocks.utframe.UtFrameUtils;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.commons.dbcp2.BasicDataSource;
@@ -527,6 +528,7 @@ public class PseudoCluster {
 
     public static synchronized PseudoCluster getOrCreate(String runDir, boolean fakeJournal, int queryPort, int numBackends)
             throws Exception {
+        ExitTraceHook.install();
         if (instance == null) {
             instance = build(runDir, fakeJournal, queryPort, numBackends);
         }
