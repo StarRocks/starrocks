@@ -361,7 +361,6 @@ if (WITH_CONNECTOR_JDBC)
             jdbc/type_checker_manager.cpp
             jdbc/type_checker_xml_loader.cpp
     )
-
     target_link_libraries(ConnectorJDBC PUBLIC
             ConnectorPrimitive
             Expr
@@ -379,5 +378,25 @@ if (WITH_CONNECTOR_JDBC)
             Platform
             FileSystem
             libxml2
+    )
+endif()
+
+if (WITH_CONNECTOR_LANCE)
+    ADD_BE_LIB(ConnectorLance
+            lance/lance_connector.cpp
+    )
+
+    target_link_libraries(ConnectorLance PUBLIC
+            ConnectorHive
+            ConnectorPrimitive
+            Expr
+            Runtime
+            ChunkCore
+            ColumnCore
+            Types
+            Common
+            Base
+            Gutil
+            StarRocksGen
     )
 endif()

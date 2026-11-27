@@ -188,6 +188,8 @@ fi
 # NOTE: the feature is only supported in container env
 xmx=$(detect_jvm_xmx)
 final_java_opt="${final_java_opt} ${xmx}"
+# The isolated Lance metadata reader uses Arrow direct buffers.
+final_java_opt="${final_java_opt} --add-opens=java.base/java.nio=ALL-UNNAMED"
 
 if [ ${ENABLE_DEBUGGER} -eq 1 ]; then
     # Allow attaching debuggers to the FE process:
