@@ -131,6 +131,10 @@ public class OptOlapPartitionPruner {
         if (prunePartitionPredicate != null) {
             builder.setPredicate(Utils.compoundAnd(prunePartitionPredicate.first))
                     .setPrunedPartitionPredicates(prunePartitionPredicate.second);
+            // Removed predicates are enforced by the selected partitions.
+            if (logicalOlapScanOperator.hasPredicateForMvRewrite()) {
+                builder.setPredicateForMvRewrite(logicalOlapScanOperator.getPredicateForMvRewrite());
+            }
         }
         return builder.build();
     }
