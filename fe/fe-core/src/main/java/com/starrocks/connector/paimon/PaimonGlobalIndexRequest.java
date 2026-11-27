@@ -27,6 +27,7 @@ import org.apache.paimon.schema.TableSchema;
 import org.apache.paimon.types.ArrayType;
 import org.apache.paimon.types.DataField;
 import org.apache.paimon.types.DataTypeRoot;
+import org.apache.paimon.utils.Range;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
@@ -62,6 +63,7 @@ public final class PaimonGlobalIndexRequest {
     private Map<String, IndexReference> indexes;
     private String kind;
     private VectorQuery vector;
+    private List<Range> partitionRanges;
 
     public record VectorQuery(int fieldId, String fieldName, String provider, String metric,
                               List<Float> queryVector, int k) {
@@ -137,6 +139,39 @@ public final class PaimonGlobalIndexRequest {
         return request;
     }
 
+    public static PaimonGlobalIndexRequest createFilteredAnn(PaimonGlobalIndexRequest unfiltered,
+            ScalarOperator scalar, Map<Integer, Integer> fieldIds, List<Range> partitionRanges) {
+        if (unfiltered == null || !unfiltered.isAnn() || unfiltered.isFilteredAnn()) {
+            throw new IllegalArgumentException("Expected an unfiltered Paimon ANN request");
+        }
+        PaimonGlobalIndexRequest request = parse(unfiltered.toJson());
+        request.kind = "filtered_top_n";
+        if (scalar != null) {
+            PaimonGlobalIndexRequest filter = create(request.tablePath, request.branch, request.snapshotId,
+                    request.schemaId, request.schemaTimeMillis, scalar, fieldIds);
+            request.predicate = filter.predicate;
+            request.indexes = filter.indexes;
+        }
+        request.partitionRanges = partitionRanges == null ? null : List.copyOf(partitionRanges);
+        request.validate();
+        if (request.toJson().getBytes(StandardCharsets.UTF_8).length > 64 * 1024) {
+            throw new IllegalArgumentException("Paimon filtered ANN request is too large");
+        }
+        return request;
+    }
+
+    public boolean isFilteredAnn() {
+        return isAnn() && "filtered_top_n".equals(kind);
+    }
+
+    public List<Range> getPartitionRanges() {
+        return partitionRanges == null ? null : List.copyOf(partitionRanges);
+    }
+
+    public boolean hasScalarPredicate() {
+        return predicate != null;
+    }
+
     public int getVersion() {
         return version;
     }
@@ -150,7 +185,7 @@ public final class PaimonGlobalIndexRequest {
     }
 
     private void validateAnn() {
-        if (!"unfiltered_top_n".equals(kind) || predicate != null || indexes != null || vector == null
+        if ((!"unfiltered_top_n".equals(kind) && !isFilteredAnn()) || vector == null
                 || vector.fieldId() < 0 || vector.fieldName() == null || vector.fieldName().isBlank()
                 || !"lumina".equals(vector.provider()) || vector.metric() == null
                 || !Set.of("l2", "cosine", "inner_product").contains(vector.metric())
@@ -158,6 +193,30 @@ public final class PaimonGlobalIndexRequest {
                 || vector.queryVector().size() > 4096 || vector.k() <= 0
                 || 4L + 12L * vector.k() > resultBytesLimit) {
             throw new IllegalArgumentException("Invalid Paimon ANN request");
+        }
+        if (isFilteredAnn()) {
+            if ((predicate == null) != (indexes == null) || predicate == null && partitionRanges == null
+                    || indexes != null && indexes.isEmpty()) {
+                throw new IllegalArgumentException("Paimon filtered ANN requires complete filter bindings");
+            }
+            if (indexes != null) {
+                getScalarFieldIds();
+            }
+            if (partitionRanges != null) {
+                if (partitionRanges.isEmpty() || partitionRanges.size() > PaimonGlobalIndexPlanner.MAX_SHARDS) {
+                    throw new IllegalArgumentException("Invalid Paimon ANN partition range count");
+                }
+                long previous = -1;
+                for (Range range : partitionRanges) {
+                    if (range == null || range.from < 0 || range.to < range.from || range.to == Long.MAX_VALUE
+                            || range.from <= previous) {
+                        throw new IllegalArgumentException("Invalid or overlapping Paimon ANN partition ranges");
+                    }
+                    previous = range.to;
+                }
+            }
+        } else if (predicate != null || indexes != null || partitionRanges != null) {
+            throw new IllegalArgumentException("Unfiltered Paimon ANN cannot contain filters");
         }
         for (Float value : vector.queryVector()) {
             if (value == null || !Float.isFinite(value)) {
@@ -196,7 +255,8 @@ public final class PaimonGlobalIndexRequest {
         if (isAnn()) {
             validateAnn();
         } else {
-            if (predicate == null || indexes == null || indexes.isEmpty() || kind != null || vector != null) {
+            if (predicate == null || indexes == null || indexes.isEmpty() || kind != null || vector != null
+                    || partitionRanges != null) {
                 throw new IllegalArgumentException("Invalid Paimon scalar index request");
             }
             getRequiredFieldIds();
@@ -223,8 +283,29 @@ public final class PaimonGlobalIndexRequest {
     }
 
     private static void validateAnnJson(JsonObject root) {
-        if (root.has("predicate") || root.has("indexes")) {
-            throw new IllegalArgumentException("Paimon ANN request cannot contain scalar fields");
+        boolean filtered = "filtered_top_n".equals(stringMember(root, "kind"));
+        if (!filtered && (root.has("predicate") || root.has("indexes") || root.has("partitionRanges"))) {
+            throw new IllegalArgumentException("Unfiltered Paimon ANN request cannot contain filters");
+        }
+        if (filtered && root.has("predicate") != root.has("indexes")) {
+            throw new IllegalArgumentException("Paimon ANN scalar predicate and indexes must be paired");
+        }
+        if (filtered && root.has("predicate")) {
+            if (!root.get("predicate").isJsonObject() || !root.has("indexes") || !root.get("indexes").isJsonObject()) {
+                throw new IllegalArgumentException("Invalid Paimon ANN scalar filter");
+            }
+            for (var entry : root.getAsJsonObject("indexes").entrySet()) {
+                JsonObject index = entry.getValue().getAsJsonObject();
+                validateAnnInteger(index.get("fieldId"), Integer.MAX_VALUE);
+                stringMember(index, "provider");
+            }
+        }
+        if (filtered && root.has("partitionRanges")) {
+            for (JsonElement element : root.getAsJsonArray("partitionRanges")) {
+                JsonObject range = element.getAsJsonObject();
+                validateAnnInteger(range.get("from"), Long.MAX_VALUE);
+                validateAnnInteger(range.get("to"), Long.MAX_VALUE);
+            }
         }
         for (String field : List.of("version", "resultBytesLimit", "snapshotId", "schemaId", "schemaTimeMillis")) {
             JsonElement value = root.get(field);
@@ -253,6 +334,14 @@ public final class PaimonGlobalIndexRequest {
             if (!value.isJsonPrimitive() || !value.getAsJsonPrimitive().isNumber()) {
                 throw new IllegalArgumentException("Invalid Paimon ANN vector element");
             }
+        }
+    }
+
+    private static void validateAnnInteger(JsonElement value, long maximum) {
+        if (value == null || !value.isJsonPrimitive() || !value.getAsJsonPrimitive().isNumber()
+                || !value.getAsString().matches("[0-9]{1,19}")
+                || value.getAsBigDecimal().compareTo(BigDecimal.valueOf(maximum)) > 0) {
+            throw new IllegalArgumentException("Invalid Paimon ANN filter integer");
         }
     }
 
@@ -458,7 +547,16 @@ public final class PaimonGlobalIndexRequest {
 
     public Set<Integer> getRequiredFieldIds() {
         if (isAnn()) {
-            return Set.of(vector.fieldId());
+            Set<Integer> fields = new java.util.HashSet<>(getScalarFieldIds());
+            fields.add(vector.fieldId());
+            return Set.copyOf(fields);
+        }
+        return getScalarFieldIds();
+    }
+
+    public Set<Integer> getScalarFieldIds() {
+        if (indexes == null) {
+            return Set.of();
         }
         Set<Integer> result = new java.util.HashSet<>();
         indexes.forEach((column, reference) -> {

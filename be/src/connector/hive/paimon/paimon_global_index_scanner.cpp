@@ -16,6 +16,7 @@
 
 #include <fmt/format.h>
 #include <paimon/global_index/bitmap_global_index_result.h>
+#include <paimon/global_index/bitmap_scored_global_index_result.h>
 #include <paimon/global_index/global_indexer.h>
 #include <paimon/global_index/global_indexer_factory.h>
 #include <paimon/global_index/io/global_index_file_reader.h>
@@ -153,33 +154,21 @@ Status PaimonGlobalIndexScanner::do_open(RuntimeState* runtime_state) {
     _paimon_file_system = std::allocate_shared<PaimonFileSystem>(
             PaimonQueryAllocator<PaimonFileSystem>(tracker), _scanner_ctx->fs, _scanner_ctx->datacache_options,
             [operation = _operation] { return operation->check(); }, tracker);
+    const bool ann = _request["version"].GetInt() == kAnnProtocolVersion;
+    if (ann && !paimon_global_index::ann_string(_request, "kind", "filtered_top_n")) {
+        return _open_vector_reader(runtime_state);
+    }
+    if (ann && !_request.HasMember("predicate")) return check_query_state(runtime_state);
     auto file_reader = std::allocate_shared<IndexFileReader>(
             PaimonQueryAllocator<IndexFileReader>(tracker),
             [operation = _operation, fs = _paimon_file_system](const std::string& path) {
                 return operation->open([&] { return fs->Open(path); });
             });
-    if (_request["version"].GetInt() == kAnnProtocolVersion) {
-        const auto& file = _scanner_ctx->scan_range->paimon_global_index_scan_range.index_files[0];
-        const auto& vector = _request["vector"];
-        auto metadata = std::allocate_shared<paimon::Bytes>(PaimonQueryAllocator<paimon::Bytes>(tracker), file.metadata,
-                                                            _memory_pool.get());
-        std::map<std::string, std::string> options = {{"lumina.distance.metric", vector["metric"].GetString()},
-                                                      {"lumina.encoding.type", "rawf32"}};
-        auto indexer = paimon::GlobalIndexerFactory::Get("lumina", options);
-        if (!indexer.ok()) return paimon_error("Lumina indexer creation", indexer.status());
-        if (indexer.value() == nullptr) return Status::NotSupported("Paimon Lumina indexer is unavailable");
-        auto reader = paimon_global_index::create_segment_reader(
-                *indexer.value(), vector["fieldName"].GetString(), "array<float>", file_reader,
-                {paimon::GlobalIndexIOMeta(file.path, file.file_size, metadata)}, _memory_pool);
-        if (!reader.ok()) return paimon_error("Lumina file reader creation", reader.status());
-        if (reader.value() == nullptr) return Status::InternalError("Paimon Lumina file reader is unavailable");
-        _readers.emplace(file.field_id, std::move(reader).value());
-        return check_query_state(runtime_state);
-    }
     const auto& files = _scanner_ctx->scan_range->paimon_global_index_scan_range.index_files;
     using Group = std::tuple<int32_t, int64_t, int64_t>;
     std::map<Group, std::vector<paimon::GlobalIndexIOMeta>> groups;
-    for (const auto& file : files) {
+    for (size_t i = ann ? 1 : 0; i < files.size(); ++i) {
+        const auto& file = files[i];
         auto [it, inserted] = _field_types.emplace(file.field_id, file.field_type);
         if (!inserted && it->second != file.field_type) {
             return Status::InvalidArgument("Inconsistent Paimon Global Index key types");
@@ -208,6 +197,32 @@ Status PaimonGlobalIndexScanner::do_open(RuntimeState* runtime_state) {
         }
         _readers.emplace(field_id, std::move(composite));
     }
+    return check_query_state(runtime_state);
+}
+
+Status PaimonGlobalIndexScanner::_open_vector_reader(RuntimeState* runtime_state) {
+    RETURN_IF_ERROR(check_query_state(runtime_state));
+    const auto tracker = runtime_state->query_mem_tracker_ptr();
+    auto file_reader = std::allocate_shared<IndexFileReader>(
+            PaimonQueryAllocator<IndexFileReader>(tracker),
+            [operation = _operation, fs = _paimon_file_system](const std::string& path) {
+                return operation->open([&] { return fs->Open(path); });
+            });
+    const auto& file = _scanner_ctx->scan_range->paimon_global_index_scan_range.index_files[0];
+    const auto& vector = _request["vector"];
+    auto metadata = std::allocate_shared<paimon::Bytes>(PaimonQueryAllocator<paimon::Bytes>(tracker), file.metadata,
+                                                        _memory_pool.get());
+    std::map<std::string, std::string> options = {{"lumina.distance.metric", vector["metric"].GetString()},
+                                                  {"lumina.encoding.type", "rawf32"}};
+    auto indexer = paimon::GlobalIndexerFactory::Get("lumina", options);
+    if (!indexer.ok()) return paimon_error("Lumina indexer creation", indexer.status());
+    if (indexer.value() == nullptr) return Status::NotSupported("Paimon Lumina indexer is unavailable");
+    auto reader = paimon_global_index::create_segment_reader(
+            *indexer.value(), vector["fieldName"].GetString(), "array<float>", file_reader,
+            {paimon::GlobalIndexIOMeta(file.path, file.file_size, metadata)}, _memory_pool);
+    if (!reader.ok()) return paimon_error("Lumina file reader creation", reader.status());
+    if (reader.value() == nullptr) return Status::InternalError("Paimon Lumina file reader is unavailable");
+    _readers.emplace(file.field_id, std::move(reader).value());
     return check_query_state(runtime_state);
 }
 
@@ -362,7 +377,8 @@ Status PaimonGlobalIndexScanner::_parse_request(const TPaimonGlobalIndexScanRang
     }
     if (scan_range.protocol_version == kAnnProtocolVersion) {
         RETURN_IF_ERROR(paimon_global_index::validate_ann_vector(*request));
-        if (scan_range.index_files.size() != 1) {
+        const bool filtered = paimon_global_index::ann_string(*request, "kind", "filtered_top_n");
+        if (!filtered && scan_range.index_files.size() != 1) {
             return Status::InvalidArgument("Paimon unfiltered ANN requires one complete index file per shard");
         }
         const auto& file = scan_range.index_files[0];
@@ -373,12 +389,21 @@ Status PaimonGlobalIndexScanner::_parse_request(const TPaimonGlobalIndexScanRang
             file.row_range_from != scan_range.range_from || file.row_range_to != scan_range.range_to) {
             return Status::InvalidArgument("Invalid Paimon ANN file descriptor");
         }
-        return paimon_global_index::validate_ann_metadata(file.metadata, (*request)["vector"]);
+        RETURN_IF_ERROR(paimon_global_index::validate_ann_metadata(file.metadata, (*request)["vector"]));
+        RETURN_IF_ERROR(
+                paimon_global_index::validate_ann_partitions(*request, scan_range.range_from, scan_range.range_to));
+        if (!filtered) return Status::OK();
+        if (!request->HasMember("predicate")) {
+            return scan_range.index_files.size() == 1
+                           ? Status::OK()
+                           : Status::InvalidArgument("Unexpected scalar ANN files without a predicate");
+        }
     }
     if (!request->HasMember("predicate") || !(*request)["predicate"].IsObject() || !request->HasMember("indexes") ||
         !(*request)["indexes"].IsObject() || (*request)["indexes"].ObjectEmpty()) {
         return Status::InvalidArgument("Invalid Paimon scalar Global Index request");
     }
+    std::set<int32_t> bound_fields;
     for (const auto& member : (*request)["indexes"].GetObject()) {
         const auto& binding = member.value;
         if (member.name.GetStringLength() == 0 || !binding.IsObject() || !binding.HasMember("fieldId") ||
@@ -386,16 +411,28 @@ Status PaimonGlobalIndexScanner::_parse_request(const TPaimonGlobalIndexScanRang
             !binding["provider"].IsString() || std::string_view(binding["provider"].GetString()) != "btree") {
             return Status::InvalidArgument("Invalid Paimon Global Index field binding");
         }
+        if (scan_range.protocol_version == kAnnProtocolVersion &&
+            binding["fieldId"].GetInt() == (*request)["vector"]["fieldId"].GetInt()) {
+            return Status::InvalidArgument("ANN vector and scalar fields must be distinct");
+        }
+        bound_fields.insert(binding["fieldId"].GetInt());
     }
     size_t payload_bytes = scan_range.query_json.size() + 128;
     std::set<int32_t> fields;
-    for (const auto& file : scan_range.index_files) {
+    const size_t scalar_start = scan_range.protocol_version == kAnnProtocolVersion ? 1 : 0;
+    if (scalar_start != 0) {
+        const auto& vector_file = scan_range.index_files[0];
+        payload_bytes += vector_file.path.size() + vector_file.metadata.size() + vector_file.field_type.size() + 128;
+    }
+    for (size_t i = scalar_start; i < scan_range.index_files.size(); ++i) {
+        const auto& file = scan_range.index_files[i];
         if (!file.__isset.field_id || !file.__isset.field_type || !file.__isset.path || !file.__isset.file_size ||
             !file.__isset.row_range_from || !file.__isset.row_range_to || !file.__isset.metadata || file.field_id < 0 ||
             file.path.empty() || file.file_size <= 0 || file.row_range_from < 0 ||
             file.row_range_to < file.row_range_from || file.row_range_to == std::numeric_limits<int64_t>::max() ||
             file.row_range_from > scan_range.range_to || file.row_range_to < scan_range.range_from ||
-            arrow_key_format(file.field_type) == nullptr || !valid_btree_metadata(file.metadata)) {
+            arrow_key_format(file.field_type) == nullptr || !valid_btree_metadata(file.metadata) ||
+            (scalar_start != 0 && !bound_fields.contains(file.field_id))) {
             return Status::InvalidArgument("Invalid Paimon Global Index file descriptor");
         }
         payload_bytes += file.path.size() + file.metadata.size() + file.field_type.size() + 128;
@@ -416,12 +453,43 @@ StatusOr<std::shared_ptr<paimon::ScoredGlobalIndexResult>> PaimonGlobalIndexScan
         RuntimeState* runtime_state) {
     RETURN_IF_ERROR(check_query_state(runtime_state));
     const auto& vector = _request["vector"];
+    const auto& scan_range = _scanner_ctx->scan_range->paimon_global_index_scan_range;
+    paimon::VectorSearch::PreFilter pre_filter;
+    if (_request.HasMember("predicate")) {
+        ASSIGN_OR_RETURN(auto scalar, _evaluate(runtime_state));
+        const auto tracker = runtime_state->query_mem_tracker_ptr();
+        auto candidates = std::allocate_shared<paimon_global_index::AnnCandidateRanges>(
+                PaimonQueryAllocator<paimon_global_index::AnnCandidateRanges>(tracker), tracker);
+        auto iterator = scalar->CreateIterator();
+        if (!iterator.ok()) return paimon_error("ANN scalar candidate iteration", iterator.status());
+        if (iterator.value() == nullptr) return Status::InternalError("Null ANN scalar candidate iterator");
+        while (iterator.value()->HasNext()) {
+            RETURN_IF_ERROR(check_query_state(runtime_state));
+            const auto id = iterator.value()->Next();
+            if (id < scan_range.range_from || id > scan_range.range_to) {
+                return Status::InternalError("ANN scalar candidate outside shard");
+            }
+            RETURN_IF_ERROR(candidates->add(id));
+        }
+        if (candidates->empty()) {
+            return std::shared_ptr<paimon::ScoredGlobalIndexResult>(
+                    std::allocate_shared<paimon::BitmapScoredGlobalIndexResult>(
+                            PaimonQueryAllocator<paimon::BitmapScoredGlobalIndexResult>(tracker),
+                            paimon::RoaringBitmap64(), std::vector<float>()));
+        }
+        std::shared_ptr<const paimon_global_index::AnnCandidateRanges> membership = std::move(candidates);
+        pre_filter = [membership, from = scan_range.range_from, to = scan_range.range_to](int64_t local) {
+            return membership->allows_local(local, from, to);
+        };
+    }
     auto found = _readers.find(vector["fieldId"].GetInt());
-    if (found == _readers.end()) return Status::InternalError("Missing Paimon ANN file reader");
+    if (found == _readers.end()) {
+        RETURN_IF_ERROR(_open_vector_reader(runtime_state));
+        found = _readers.find(vector["fieldId"].GetInt());
+    }
     std::vector<float> query;
     query.reserve(vector["queryVector"].Size());
     for (const auto& value : vector["queryVector"].GetArray()) query.push_back(static_cast<float>(value.GetDouble()));
-    const auto& scan_range = _scanner_ctx->scan_range->paimon_global_index_scan_range;
     const int64_t segment_rows = scan_range.range_to - scan_range.range_from + 1;
     const auto k = static_cast<int32_t>(std::min<int64_t>(vector["k"].GetInt(), segment_rows));
     // The original metadata is already validated and remains unchanged.
@@ -440,9 +508,21 @@ StatusOr<std::shared_ptr<paimon::ScoredGlobalIndexResult>> PaimonGlobalIndexScan
                                             ? Distance::COSINE
                                             : Distance::INNER_PRODUCT;
     auto result = found->second->VisitVectorSearch(std::make_shared<paimon::VectorSearch>(
-            vector["fieldName"].GetString(), k, query, nullptr, nullptr, distance, options));
+            vector["fieldName"].GetString(), k, query, pre_filter, nullptr, distance, options));
     RETURN_IF_ERROR(check_query_state(runtime_state));
     if (!result.ok()) return paimon_error("ANN vector search", result.status());
+    if (pre_filter && result.value() != nullptr) {
+        auto iterator = result.value()->CreateScoredIterator();
+        if (!iterator.ok()) return paimon_error("ANN filtered result iteration", iterator.status());
+        if (iterator.value() == nullptr) return Status::InternalError("Null filtered ANN scored iterator");
+        int32_t count = 0;
+        while (iterator.value()->HasNext()) {
+            RETURN_IF_ERROR(check_query_state(runtime_state));
+            if (++count > k || !pre_filter(iterator.value()->NextWithScore().first)) {
+                return Status::InternalError("ANN provider returned a row outside the scalar candidates");
+            }
+        }
+    }
     return std::move(result).value();
 }
 

@@ -92,7 +92,10 @@ class PaimonAnnTopNRuleTest {
             assertTrue(rule.transform(input(metric, true, 3, 0, false), auto).isEmpty());
         }
         assertTrue(rule.transform(input(FunctionSet.APPROX_L2_DISTANCE, false, 3, 0, false), auto).isEmpty());
-        assertTrue(rule.transform(input(FunctionSet.APPROX_L2_DISTANCE, true, 3, 0, true), auto).isEmpty());
+        var filtered = input(FunctionSet.APPROX_L2_DISTANCE, true, 3, 0, true);
+        var result = rule.transform(filtered, auto);
+        assertEquals(1, result.size());
+        assertSame(filtered.inputAt(0).getOp().getPredicate(), result.get(0).inputAt(0).getOp().getPredicate());
         assertTrue(rule.transform(input(FunctionSet.APPROX_L2_DISTANCE, true, Integer.MAX_VALUE, 1, false), auto).isEmpty());
         assertTrue(rule.transform(input(FunctionSet.APPROX_L2_DISTANCE, true, 3, 0, false), context("off")).isEmpty());
     }

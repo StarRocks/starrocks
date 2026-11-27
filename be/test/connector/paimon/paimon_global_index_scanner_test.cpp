@@ -48,6 +48,8 @@ public:
         rapidjson::Document request;
         return PaimonGlobalIndexScanner::_parse_request(range, &request);
     }
+    static Status reparse(PaimonGlobalIndexScanner* scanner) { return scanner->_parse_request(); }
+    static bool has_reader(PaimonGlobalIndexScanner* scanner, int32_t id) { return scanner->_readers.contains(id); }
     static void set_reader(PaimonGlobalIndexScanner* scanner, int32_t id,
                            std::shared_ptr<paimon::GlobalIndexReader> reader) {
         scanner->_readers[id] = std::move(reader);
@@ -114,6 +116,33 @@ TPaimonGlobalIndexScanRange valid_ann_range() {
     return range;
 }
 
+TPaimonGlobalIndexScanRange valid_filtered_ann_range(bool scalar = true) {
+    auto range = valid_ann_range();
+    range.index_files[0].__set_field_id(18);
+    if (scalar) range.index_files.push_back(valid_range().index_files[0]);
+    change_request(&range, [&](auto& d) {
+        d["kind"].SetString("filtered_top_n");
+        d["vector"]["fieldId"].SetInt(18);
+        if (scalar) {
+            auto scalar_request = parse_json(valid_range().query_json.c_str());
+            rapidjson::Value predicate, indexes;
+            predicate.CopyFrom(scalar_request["predicate"], d.GetAllocator());
+            indexes.CopyFrom(scalar_request["indexes"], d.GetAllocator());
+            d.AddMember("predicate", predicate, d.GetAllocator());
+            d.AddMember("indexes", indexes, d.GetAllocator());
+        } else {
+            rapidjson::Value ranges;
+            ranges.SetArray();
+            rapidjson::Value bounds(rapidjson::kObjectType);
+            bounds.AddMember("from", 100, d.GetAllocator());
+            bounds.AddMember("to", 103, d.GetAllocator());
+            ranges.PushBack(bounds, d.GetAllocator());
+            d.AddMember("partitionRanges", ranges, d.GetAllocator());
+        }
+    });
+    return range;
+}
+
 class FakeScoredResult final : public paimon::BitmapScoredGlobalIndexResult {
 public:
     explicit FakeScoredResult(std::vector<std::pair<int64_t, float>> hits)
@@ -157,6 +186,82 @@ public:
     std::function<void()> on_open;
 };
 } // namespace
+
+TEST(PaimonFilteredAnnRequestTest, AcceptsScalarPartitionAndCombinedFiltersWithOverlappingScalarFiles) {
+    EXPECT_OK(PaimonGlobalIndexScannerTestAccessor::parse(valid_filtered_ann_range()));
+    auto range = valid_filtered_ann_range(false);
+    EXPECT_OK(PaimonGlobalIndexScannerTestAccessor::parse(range));
+    auto scalar = parse_json(valid_filtered_ann_range().query_json.c_str());
+    change_request(&range, [&](auto& d) {
+        rapidjson::Value predicate, indexes;
+        predicate.CopyFrom(scalar["predicate"], d.GetAllocator());
+        indexes.CopyFrom(scalar["indexes"], d.GetAllocator());
+        d.AddMember("predicate", predicate, d.GetAllocator());
+        d.AddMember("indexes", indexes, d.GetAllocator());
+    });
+    range.index_files.push_back(valid_range().index_files[0]);
+    range.index_files[1].__set_row_range_from(99);
+    range.index_files[1].__set_row_range_to(101);
+    auto tail = range.index_files[1];
+    tail.__set_row_range_from(102);
+    tail.__set_row_range_to(110);
+    range.index_files.push_back(tail);
+    EXPECT_OK(PaimonGlobalIndexScannerTestAccessor::parse(range));
+}
+
+TEST(PaimonFilteredAnnRequestTest, RejectsIncompleteScalarAndUnboundFiles) {
+    for (int change = 0; change < 7; ++change) {
+        auto range = valid_filtered_ann_range();
+        if (change == 0) change_request(&range, [](auto& d) { d.RemoveMember("predicate"); });
+        if (change == 1) change_request(&range, [](auto& d) { d.RemoveMember("indexes"); });
+        if (change == 2) range.index_files.pop_back();
+        if (change == 3) range.index_files[1].__set_field_id(19);
+        if (change == 4) range.index_files[1].__set_field_type("array<float>");
+        if (change == 5) change_request(&range, [](auto& d) { d["indexes"]["k"]["provider"].SetString("lumina"); });
+        if (change == 6) change_request(&range, [](auto& d) { d["indexes"]["k"]["fieldId"].SetInt(18); });
+        EXPECT_TRUE(PaimonGlobalIndexScannerTestAccessor::parse(range).is_invalid_argument());
+    }
+    auto range = valid_filtered_ann_range(false);
+    range.index_files.push_back(valid_range().index_files[0]);
+    EXPECT_TRUE(PaimonGlobalIndexScannerTestAccessor::parse(range).is_invalid_argument());
+}
+
+TEST(PaimonFilteredAnnRequestTest, RejectsMalformedOverlappingOrPartialPartitionRanges) {
+    for (const char* json :
+         {"null", "[]", "[1]", R"([{"from":100,"to":102}])", R"([{"from":-1,"to":104}])", R"([{"from":104,"to":103}])",
+          R"([{"from":100,"to":9223372036854775807}])", R"([{"from":"100","to":103}])",
+          R"([{"from":99,"to":102},{"from":102,"to":110}])", R"([{"from":103,"to":110},{"from":99,"to":102}])",
+          R"([{"from":99,"to":101},{"from":103,"to":110}])"}) {
+        auto range = valid_filtered_ann_range(false);
+        change_request(&range, [&](auto& d) {
+            auto ranges = parse_json(json);
+            d["partitionRanges"].CopyFrom(ranges, d.GetAllocator());
+        });
+        EXPECT_TRUE(PaimonGlobalIndexScannerTestAccessor::parse(range).is_invalid_argument());
+    }
+}
+
+TEST(PaimonFilteredAnnCandidateTest, CompressesConsecutiveGlobalIdsAndMapsLocalOffsetExactlyOnce) {
+    paimon_global_index::AnnCandidateRanges membership(nullptr);
+    for (int64_t id : {297, 298, 299, 302, 305}) EXPECT_OK(membership.add(id));
+    EXPECT_FALSE(membership.empty());
+    EXPECT_TRUE(membership.allows_local(41, 256, 511));
+    EXPECT_TRUE(membership.allows_local(43, 256, 511));
+    EXPECT_TRUE(membership.allows_local(46, 256, 511));
+    EXPECT_FALSE(membership.allows_local(44, 256, 511)); // nearest row 300 is excluded
+    EXPECT_FALSE(membership.allows_local(47, 256, 511)); // candidate gap
+    EXPECT_FALSE(membership.allows_local(-1, 256, 511));
+    EXPECT_FALSE(membership.allows_local(256, 256, 511));
+    EXPECT_FALSE(membership.allows_local(299, 256, 511)); // global IDs must not be offset twice
+    EXPECT_FALSE(membership.add(305).ok());
+    EXPECT_FALSE(membership.add(1).ok());
+}
+
+TEST(PaimonFilteredAnnCandidateTest, BoundsSparseCandidateMemory) {
+    paimon_global_index::AnnCandidateRanges membership(nullptr);
+    for (size_t i = 0; i < paimon_global_index::AnnCandidateRanges::MAX_RANGES; ++i) ASSERT_OK(membership.add(2 * i));
+    EXPECT_TRUE(membership.add(2 * paimon_global_index::AnnCandidateRanges::MAX_RANGES).is_mem_limit_exceeded());
+}
 
 TEST(PaimonGlobalIndexAnnRequestTest, AcceptsV6AndPreservesScalarV5) {
     EXPECT_OK(PaimonGlobalIndexScannerTestAccessor::parse(valid_range()));
@@ -563,6 +668,25 @@ protected:
     HdfsScannerContext _context;
     PaimonGlobalIndexScanner _scanner;
 };
+
+TEST_F(PaimonGlobalIndexScannerTest, EmptyFilteredCandidatesSkipOpeningLuminaAndEmitCompletion) {
+    ASSERT_OK(_scanner.do_open(&_state));
+    const auto scalar_files = request().index_files;
+    request() = valid_filtered_ann_range();
+    request().index_files.resize(1);
+    request().index_files.insert(request().index_files.end(), scalar_files.begin(), scalar_files.end());
+    ASSERT_OK(PaimonGlobalIndexScannerTestAccessor::reparse(&_scanner));
+    inject_result(result_from_ranges({}));
+    const auto opens_before = _source.opened_paths.size();
+    ChunkPtr chunk = std::make_shared<Chunk>();
+    ASSERT_OK(next(&chunk));
+    ASSERT_EQ(1, chunk->num_rows());
+    const auto bytes = chunk->get_column_by_slot_id(2)->get(0).get_slice();
+    EXPECT_EQ(std::string(4, '\0'), std::string(bytes.data, bytes.size));
+    EXPECT_EQ(opens_before, _source.opened_paths.size());
+    EXPECT_FALSE(PaimonGlobalIndexScannerTestAccessor::has_reader(&_scanner, 18));
+    EXPECT_TRUE(next(&chunk).is_end_of_file());
+}
 
 TEST_F(PaimonGlobalIndexScannerTest, ReadsOnlySelectedFilesEmitsBinaryBitmapAndStopsAfterOneRow) {
     ASSERT_OK(_scanner.do_open(&_state));

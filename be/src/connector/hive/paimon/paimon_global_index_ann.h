@@ -22,13 +22,17 @@
 #include <cstdint>
 #include <cstring>
 #include <functional>
+#include <iterator>
 #include <limits>
+#include <memory>
 #include <set>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include "base/statusor.h"
+#include "connector/hive/paimon/paimon_query_allocator.h"
 
 namespace starrocks::paimon_global_index {
 
@@ -43,9 +47,14 @@ inline bool ann_string(const rapidjson::Value& value, const char* key, std::stri
 }
 
 inline Status validate_ann_vector(const rapidjson::Value& request) {
-    if (!ann_string(request, "kind", "unfiltered_top_n") || request.HasMember("predicate") ||
-        request.HasMember("indexes") || !request.HasMember("vector") || !request["vector"].IsObject()) {
-        return Status::InvalidArgument("Invalid Paimon unfiltered ANN request");
+    const bool filtered = ann_string(request, "kind", "filtered_top_n");
+    if ((!filtered && !ann_string(request, "kind", "unfiltered_top_n")) ||
+        (!filtered &&
+         (request.HasMember("predicate") || request.HasMember("indexes") || request.HasMember("partitionRanges"))) ||
+        (filtered && (request.HasMember("predicate") != request.HasMember("indexes") ||
+                      (!request.HasMember("predicate") && !request.HasMember("partitionRanges")))) ||
+        !request.HasMember("vector") || !request["vector"].IsObject()) {
+        return Status::InvalidArgument("Invalid Paimon ANN filter envelope");
     }
     const auto& vector = request["vector"];
     if (!vector.HasMember("fieldId") || !vector["fieldId"].IsInt() || vector["fieldId"].GetInt() < 0 ||
@@ -71,6 +80,59 @@ inline Status validate_ann_vector(const rapidjson::Value& request) {
     }
     return Status::OK();
 }
+
+inline Status validate_ann_partitions(const rapidjson::Value& request, int64_t from, int64_t to) {
+    if (!request.HasMember("partitionRanges")) return Status::OK();
+    const auto& ranges = request["partitionRanges"];
+    if (!ranges.IsArray() || ranges.Empty()) return Status::InvalidArgument("Invalid ANN partition ranges");
+    int64_t previous_to = -1;
+    bool contained = false;
+    for (const auto& range : ranges.GetArray()) {
+        if (!range.IsObject() || !range.HasMember("from") || !range["from"].IsInt64() || !range.HasMember("to") ||
+            !range["to"].IsInt64() || range["from"].GetInt64() < 0 ||
+            range["to"].GetInt64() < range["from"].GetInt64() ||
+            range["to"].GetInt64() == std::numeric_limits<int64_t>::max() || range["from"].GetInt64() <= previous_to) {
+            return Status::InvalidArgument("ANN partition ranges must be sorted, disjoint and finite");
+        }
+        contained |= from >= range["from"].GetInt64() && to <= range["to"].GetInt64();
+        previous_to = range["to"].GetInt64();
+    }
+    return contained ? Status::OK() : Status::InvalidArgument("ANN shard crosses selected partition boundaries");
+}
+
+// Query-bound immutable membership used concurrently by SDK search workers.
+// Consecutive global row IDs are compressed; the explicit bound limits an
+// adversarial sparse bitmap independently of the query MemTracker.
+class AnnCandidateRanges {
+public:
+    explicit AnnCandidateRanges(std::shared_ptr<MemTracker> tracker)
+            : _ranges(PaimonQueryAllocator<std::pair<int64_t, int64_t>>(std::move(tracker))) {}
+    static constexpr size_t MAX_RANGES = 65536;
+    Status add(int64_t id) {
+        if (id < 0 || (!_ranges.empty() && id <= _ranges.back().second)) {
+            return Status::InternalError("ANN scalar candidates must be distinct, ascending global row IDs");
+        }
+        if (!_ranges.empty() && _ranges.back().second != std::numeric_limits<int64_t>::max() &&
+            id == _ranges.back().second + 1) {
+            _ranges.back().second = id;
+        } else {
+            if (_ranges.size() == MAX_RANGES) return Status::MemoryLimitExceeded("ANN candidate range budget exceeded");
+            _ranges.emplace_back(id, id);
+        }
+        return Status::OK();
+    }
+    bool empty() const { return _ranges.empty(); }
+    bool allows_local(int64_t local, int64_t from, int64_t to) const {
+        if (local < 0 || from < 0 || to < from || local > to - from) return false;
+        const int64_t global = from + local;
+        auto next = std::upper_bound(_ranges.begin(), _ranges.end(), global,
+                                     [](int64_t id, const auto& range) { return id < range.first; });
+        return next != _ranges.begin() && global <= std::prev(next)->second;
+    }
+
+private:
+    std::vector<std::pair<int64_t, int64_t>, PaimonQueryAllocator<std::pair<int64_t, int64_t>>> _ranges;
+};
 
 // Preserve original metadata bytes. These checks bound the public SDK parser and
 // reject provider configurations outside the initial unfiltered ANN contract.

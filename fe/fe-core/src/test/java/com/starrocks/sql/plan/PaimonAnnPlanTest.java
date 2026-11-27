@@ -43,12 +43,11 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class PaimonAnnPlanTest extends PlanTestBase {
     @Test
-    void bindsUnfilteredSqlAtFinalScanPlanning(@TempDir Path directory) throws Exception {
+    void bindsAnnIntentAtFinalScanPlanning(@TempDir Path directory) throws Exception {
         String catalogName = "paimon_ann_planning";
         String warehouse = directory.toUri().toString();
         var paimonPath = new org.apache.paimon.fs.Path(warehouse);
@@ -102,9 +101,13 @@ class PaimonAnnPlanTest extends PlanTestBase {
             assertTrue(plan.contains("approx_l2_distance") && plan.contains("top-n"), plan);
 
             scanParams.set(null);
-            getFragmentPlan(select + "WHERE id > 3 ORDER BY score LIMIT 3");
-            assertNotNull(scanParams.get());
-            assertNull(scanParams.get().getAnnQuery());
+            plan = getFragmentPlan(select + "WHERE id > 3 ORDER BY score LIMIT 3").toLowerCase(Locale.ROOT);
+            scan = scanParams.get();
+            assertNotNull(scan);
+            assertNotNull(scan.getAnnQuery());
+            assertNotNull(scan.getPredicate());
+            assertEquals(3, scan.getAnnQuery().k());
+            assertTrue(plan.contains("approx_l2_distance") && plan.contains("top-n"), plan);
         } finally {
             connectContext.getSessionVariable().setPaimonGlobalIndexMode(previousMode);
             starRocksAssert.dropCatalog(catalogName);

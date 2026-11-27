@@ -21,16 +21,22 @@ import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.RemoteMetaSplit;
 import com.starrocks.connector.SerializedMetaSpec;
 import com.starrocks.sql.optimizer.Utils;
+import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.thrift.TPaimonGlobalIndexFile;
 import org.apache.paimon.CoreOptions;
 import org.apache.paimon.Snapshot;
 import org.apache.paimon.data.BinaryRow;
 import org.apache.paimon.index.GlobalIndexMeta;
+import org.apache.paimon.index.IndexFileHandler;
 import org.apache.paimon.io.DataFileMeta;
 import org.apache.paimon.manifest.FileKind;
 import org.apache.paimon.manifest.IndexManifestEntry;
+import org.apache.paimon.predicate.Predicate;
 import org.apache.paimon.schema.TableSchema;
 import org.apache.paimon.table.FallbackReadFileStoreTable;
 import org.apache.paimon.table.FileStoreTable;
@@ -51,6 +57,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -149,6 +156,76 @@ public final class PaimonGlobalIndexPlanner {
         }
     }
 
+    static PaimonGlobalIndexRequest annRequest(FileStoreTable table, long snapshotId, PaimonAnnQuery ann,
+                                              ScalarOperator predicate, Map<Integer, String> columnNames) {
+        if (predicate == null) {
+            return annRequest(table, snapshotId, ann);
+        }
+        TableSchema schema = table.schema();
+        var fields = schema.nameToFieldMap();
+        List<ScalarOperator> partitionPredicates = new ArrayList<>();
+        List<ScalarOperator> scalarPredicates = new ArrayList<>();
+        Map<Integer, Integer> scalarBindings = new HashMap<>();
+        for (ScalarOperator conjunct : Utils.extractConjuncts(predicate)) {
+            boolean supported = conjunct instanceof BinaryPredicateOperator || conjunct instanceof IsNullPredicateOperator
+                    || conjunct instanceof InPredicateOperator in && !in.isNotIn();
+            if (!supported || !(conjunct.getChild(0) instanceof ColumnRefOperator column)
+                    || conjunct.getChildren().stream().skip(1)
+                            .anyMatch(child -> !(child instanceof ConstantOperator literal) || literal.isNull())) {
+                return null;
+            }
+            DataField field = fields.get(columnNames.get(column.getId()));
+            if (field == null || !supportedAnnFilterKey(field.type())) {
+                return null;
+            }
+            ScalarOperator bound = bindColumnNames(conjunct.clone(), Map.of(column.getId(), field));
+            try {
+                PaimonGlobalIndexRequest.create(table.location().toString(), "main", snapshotId, schema.id(),
+                        schema.timeMillis(), bound, Map.of(column.getId(), field.id())).validatePredicate(schema);
+            } catch (IllegalArgumentException e) {
+                // Every conjunct must be exact before ANN can discard any candidate.
+                return null;
+            }
+            if (schema.partitionKeys().contains(field.name())) {
+                partitionPredicates.add(bound);
+            } else {
+                scalarPredicates.add(bound);
+                scalarBindings.put(column.getId(), field.id());
+            }
+        }
+        PaimonGlobalIndexRequest unfiltered = annRequest(table, snapshotId, ann);
+        if (unfiltered == null || !scalarBindings.isEmpty()
+                && !btreeFields(table, snapshotId).containsAll(scalarBindings.values())) {
+            return null;
+        }
+        List<Range> partitionRanges = null;
+        if (!partitionPredicates.isEmpty()) {
+            Snapshot snapshot = table.snapshotManager().snapshot(snapshotId);
+            TableSchema snapshotSchema = table.schemaManager().schema(snapshot.schemaId());
+            var partitionType = schema.logicalPartitionType();
+            if (!partitionType.equals(snapshotSchema.logicalPartitionType())) {
+                return null;
+            }
+            var converter = new PaimonPredicateConverter(partitionType);
+            List<Predicate> filters = partitionPredicates.stream().map(converter::convert).toList();
+            if (filters.stream().anyMatch(Objects::isNull)) {
+                return null;
+            }
+            List<Range> selected = new ArrayList<>();
+            visibleAnnRanges(table, unfiltered, snapshot, snapshotSchema).forEach((partition, ranges) -> {
+                if (filters.stream().allMatch(filter -> filter.test(partition.value()))) {
+                    selected.addAll(ranges);
+                }
+            });
+            if (selected.isEmpty()) {
+                return null;
+            }
+            partitionRanges = mergeRanges(selected);
+        }
+        return PaimonGlobalIndexRequest.createFilteredAnn(unfiltered, Utils.compoundAnd(scalarPredicates),
+                scalarBindings, partitionRanges);
+    }
+
     private static boolean annEligible(TableSchema schema) {
         return eligible(schema) && CoreOptions.fromMap(schema.options()).rowTrackingEnabled();
     }
@@ -198,6 +275,10 @@ public final class PaimonGlobalIndexPlanner {
             case BOOLEAN, TINYINT, SMALLINT, INTEGER, BIGINT, CHAR, VARCHAR -> true;
             default -> false;
         };
+    }
+
+    private static boolean supportedAnnFilterKey(DataType type) {
+        return supportedKey(type) && type.getTypeRoot() != DataTypeRoot.CHAR;
     }
 
     public static Metadata metadata(PaimonTable origin, PaimonGlobalIndexRequest request) {
@@ -317,6 +398,9 @@ public final class PaimonGlobalIndexPlanner {
     private record AnnPartition(BinaryRow value, int bucket) {
     }
 
+    private record AnnIndexFile(AnnPartition partition, Range range, TPaimonGlobalIndexFile file) {
+    }
+
     private static Metadata annMetadata(FileStoreTable table, PaimonGlobalIndexRequest request) {
         try (Timer ignored = Tracers.watchScope(EXTERNAL, "PaimonGlobalIndex.AnnCoverage")) {
             Snapshot snapshot = table.snapshotManager().snapshot(request.getSnapshotId());
@@ -326,6 +410,16 @@ public final class PaimonGlobalIndexPlanner {
             }
             request.validateVector(table.schema());
             request.validateVector(snapshotSchema);
+            if (request.hasScalarPredicate()) {
+                request.validatePredicate(table.schema());
+                Set<Integer> fields = request.getScalarFieldIds();
+                var snapshotFields = snapshotSchema.idToFieldMap();
+                if (!loadStableScalarFields(table, table.schema()).containsAll(fields)
+                        || fields.stream().anyMatch(id -> !snapshotFields.containsKey(id)
+                                || !supportedAnnFilterKey(snapshotFields.get(id).type()))) {
+                    throw new IllegalArgumentException("Paimon filtered ANN has incompatible scalar schema");
+                }
+            }
             return annShards(table, request, snapshot, snapshotSchema);
         }
     }
@@ -334,7 +428,9 @@ public final class PaimonGlobalIndexPlanner {
             FileStoreTable table, PaimonGlobalIndexRequest request, Snapshot snapshot, TableSchema snapshotSchema) {
         Map<AnnPartition, List<Range>> visible = new HashMap<>();
         List<Range> visibleRanges = new ArrayList<>();
-        Set<Long> checkedSchemas = new HashSet<>(Set.of(snapshotSchema.id()));
+        var scalarNames = request.getScalarFieldIds().stream()
+                .map(id -> snapshotSchema.idToFieldMap().get(id).name()).toList();
+        Set<Long> checkedSchemas = new HashSet<>();
         for (Split split : table.newSnapshotReader().withSnapshot(snapshot).withMode(ScanMode.ALL).read().splits()) {
             if (!(split instanceof DataSplit data) || data.isStreaming()
                     || data.deletionFiles().stream().flatMap(List::stream).anyMatch(file -> file != null)) {
@@ -343,11 +439,17 @@ public final class PaimonGlobalIndexPlanner {
             var partition = new AnnPartition(data.partition(), data.bucket());
             for (DataFileMeta file : data.dataFiles()) {
                 if (checkedSchemas.add(file.schemaId())) {
-                    request.validateVector(table.schemaManager().schema(file.schemaId()));
+                    TableSchema fileSchema = file.schemaId() == snapshotSchema.id()
+                            ? snapshotSchema : table.schemaManager().schema(file.schemaId());
+                    request.validateVector(fileSchema);
+                    if (request.hasScalarPredicate()) {
+                        request.validatePredicate(fileSchema);
+                    }
                 }
                 if (file.firstRowId() == null || file.rowCount() <= 0 || file.writeCols() != null
-                        && !file.writeCols().contains(request.getVector().fieldName())) {
-                    throw new IllegalArgumentException("Paimon ANN data file does not provide the vector row IDs");
+                        && (!file.writeCols().contains(request.getVector().fieldName())
+                                || !file.writeCols().containsAll(scalarNames))) {
+                    throw new IllegalArgumentException("Paimon ANN data file does not provide the indexed columns");
                 }
                 var range = new Range(file.firstRowId(), Math.addExact(file.firstRowId(), file.rowCount() - 1));
                 visible.computeIfAbsent(partition, unused -> new ArrayList<>()).add(range);
@@ -363,12 +465,10 @@ public final class PaimonGlobalIndexPlanner {
         var vector = request.getVector();
         var handler = table.store().newIndexFileHandler();
         Map<AnnPartition, List<Range>> rangesByPartition = new HashMap<>();
-        List<TPaimonGlobalIndexFile> files = new ArrayList<>();
+        List<AnnIndexFile> files = new ArrayList<>();
         List<Range> shardRanges = new ArrayList<>();
         Set<String> paths = new HashSet<>();
-        long requestBytes = request.toJson().getBytes(StandardCharsets.UTF_8).length;
-        long totalTaskBytes = 0;
-        long totalResultBytes = 0;
+        long vectorDescriptorBytes = 0;
         long transportBudget = PaimonGlobalIndexRequest.resultBudget() / 4;
         for (IndexManifestEntry entry : handler.scan(snapshot, vector.provider())) {
             GlobalIndexMeta index = entry.indexFile().globalIndexMeta();
@@ -391,14 +491,8 @@ public final class PaimonGlobalIndexPlanner {
             if (!paths.add(path)) {
                 throw new IllegalArgumentException("Duplicate Paimon ANN index file");
             }
-            long taskBytes = requestBytes + metadata.length + path.getBytes(StandardCharsets.UTF_8).length + 256;
-            totalTaskBytes += taskBytes;
-            totalResultBytes += Integer.BYTES + 12 * Math.min(vector.k(), range.count()) + 64;
-            if (taskBytes > 1024 * 1024 || totalTaskBytes > transportBudget || totalResultBytes > transportBudget) {
-                throw new IllegalArgumentException("Paimon ANN shard payload exceeds the planning budget");
-            }
-            rangesByPartition.computeIfAbsent(new AnnPartition(entry.partition(), entry.bucket()),
-                    unused -> new ArrayList<>()).add(range);
+            var partition = new AnnPartition(entry.partition(), entry.bucket());
+            rangesByPartition.computeIfAbsent(partition, unused -> new ArrayList<>()).add(range);
             shardRanges.add(range);
             TPaimonGlobalIndexFile file = new TPaimonGlobalIndexFile();
             file.setField_id(vector.fieldId());
@@ -408,7 +502,11 @@ public final class PaimonGlobalIndexPlanner {
             file.setRow_range_from(range.from);
             file.setRow_range_to(range.to);
             file.setMetadata(metadata);
-            files.add(file);
+            vectorDescriptorBytes += indexDescriptorBytes(file);
+            if (vectorDescriptorBytes > transportBudget) {
+                throw new IllegalArgumentException("Paimon ANN descriptors exceed the planning budget");
+            }
+            files.add(new AnnIndexFile(partition, range, file));
         }
         if (files.isEmpty()) {
             throw new IllegalArgumentException("Paimon ANN snapshot has no Lumina index for " + vector.fieldName());
@@ -422,13 +520,114 @@ public final class PaimonGlobalIndexPlanner {
             // valid candidates if obsolete rows had already filled that segment's result.
             throw new IllegalArgumentException("Paimon ANN index ranges do not exactly cover the snapshot");
         }
-        files.sort(Comparator.comparingLong(TPaimonGlobalIndexFile::getRow_range_from));
+        List<Range> partitionRanges = request.getPartitionRanges();
+        if (partitionRanges != null) {
+            files.removeIf(file -> !covers(partitionRanges, List.of(file.range())));
+            if (!mergeRanges(files.stream().map(AnnIndexFile::range).toList()).equals(partitionRanges)) {
+                throw new IllegalArgumentException("Paimon partition filter does not match complete ANN shards");
+            }
+        }
+        Map<AnnPartition, List<TPaimonGlobalIndexFile>> scalarFiles = request.hasScalarPredicate()
+                ? annScalarFiles(table.schema(), handler, snapshot, request.getScalarFieldIds(), paths,
+                        files.stream().map(AnnIndexFile::partition).collect(Collectors.toSet()))
+                : Map.of();
+        files.sort(Comparator.comparingLong(file -> file.range().from));
+        long requestBytes = request.toJson().getBytes(StandardCharsets.UTF_8).length;
+        long totalTaskBytes = 0;
+        long totalResultBytes = 0;
         List<RemoteMetaSplit> splits = new ArrayList<>(files.size());
-        for (TPaimonGlobalIndexFile file : files) {
-            splits.add(new Shard(splits.size(), file.getRow_range_from(), file.getRow_range_to(),
-                    file.getFile_size(), request, List.of(file)));
+        for (AnnIndexFile vectorFile : files) {
+            Range range = vectorFile.range();
+            List<TPaimonGlobalIndexFile> selected = new ArrayList<>();
+            selected.add(vectorFile.file());
+            if (request.hasScalarPredicate()) {
+                selectAnnScalarFiles(range, scalarFiles.getOrDefault(vectorFile.partition(), List.of()),
+                        request.getScalarFieldIds(), selected);
+            }
+            long bytes = 0;
+            long taskBytes = requestBytes + 128;
+            for (TPaimonGlobalIndexFile file : selected) {
+                bytes = Math.addExact(bytes, file.getFile_size());
+                taskBytes += indexDescriptorBytes(file);
+            }
+            totalTaskBytes += taskBytes;
+            totalResultBytes += Integer.BYTES + 12 * Math.min(vector.k(), range.count()) + 64;
+            if (taskBytes > 1024 * 1024 || totalTaskBytes > transportBudget || totalResultBytes > transportBudget) {
+                throw new IllegalArgumentException("Paimon ANN shard payload exceeds the planning budget");
+            }
+            splits.add(new Shard(splits.size(), range.from, range.to, bytes, request, List.copyOf(selected)));
         }
         return new Metadata(request, List.copyOf(splits));
+    }
+
+    private static Map<AnnPartition, List<TPaimonGlobalIndexFile>> annScalarFiles(
+            TableSchema schema, IndexFileHandler handler, Snapshot snapshot, Set<Integer> fieldIds,
+            Set<String> paths, Set<AnnPartition> partitions) {
+        Map<AnnPartition, List<TPaimonGlobalIndexFile>> files = new HashMap<>();
+        long metadataBytes = 0;
+        for (IndexManifestEntry entry : handler.scan(snapshot, "btree")) {
+            GlobalIndexMeta index = entry.indexFile().globalIndexMeta();
+            var partition = new AnnPartition(entry.partition(), entry.bucket());
+            if (index == null || !fieldIds.contains(index.indexFieldId()) || !partitions.contains(partition)) {
+                continue;
+            }
+            byte[] metadata = index.indexMeta();
+            String path = handler.filePath(entry).toString();
+            if (entry.kind() != FileKind.ADD || paths.size() >= MAX_FILES || !paths.add(path)
+                    || entry.indexFile().fileSize() <= 0 || index.rowRangeStart() < 0
+                    || index.rowRangeEnd() < index.rowRangeStart() || index.rowRangeEnd() == Long.MAX_VALUE
+                    || metadata == null || metadata.length < 9 || metadata.length > MAX_INDEX_META_BYTES) {
+                throw new IllegalArgumentException("Invalid Paimon filtered ANN BTree descriptor");
+            }
+            TPaimonGlobalIndexFile file = new TPaimonGlobalIndexFile();
+            file.setField_id(index.indexFieldId());
+            file.setField_type(keyType(schema.idToFieldMap().get(index.indexFieldId()).type()));
+            file.setPath(path);
+            file.setFile_size(entry.indexFile().fileSize());
+            file.setRow_range_from(index.rowRangeStart());
+            file.setRow_range_to(index.rowRangeEnd());
+            file.setMetadata(metadata);
+            metadataBytes += indexDescriptorBytes(file);
+            if (metadataBytes > PaimonGlobalIndexRequest.resultBudget() / 4) {
+                throw new IllegalArgumentException("Paimon filtered ANN BTree descriptors exceed the planning budget");
+            }
+            files.computeIfAbsent(partition, unused -> new ArrayList<>()).add(file);
+        }
+        files.values().forEach(entries -> entries.sort(Comparator.comparingLong(TPaimonGlobalIndexFile::getRow_range_from)));
+        return files;
+    }
+
+    private static void selectAnnScalarFiles(Range shard, List<TPaimonGlobalIndexFile> files, Set<Integer> fieldIds,
+                                             List<TPaimonGlobalIndexFile> selected) {
+        Map<Integer, List<Range>> coverage = new HashMap<>();
+        for (TPaimonGlobalIndexFile file : files) {
+            if (file.getRow_range_from() > shard.to) {
+                break;
+            }
+            if (file.getRow_range_to() < shard.from) {
+                continue;
+            }
+            var range = new Range(file.getRow_range_from(), file.getRow_range_to());
+            var ranges = coverage.computeIfAbsent(file.getField_id(), unused -> new ArrayList<>());
+            // A physical range may have multiple BTree files. Distinct ranges must not overlap.
+            if (ranges.isEmpty() || !ranges.get(ranges.size() - 1).equals(range)) {
+                if (!ranges.isEmpty() && ranges.get(ranges.size() - 1).to >= range.from) {
+                    throw new IllegalArgumentException("Paimon filtered ANN has overlapping BTree ranges");
+                }
+                ranges.add(range);
+            }
+            selected.add(file);
+        }
+        for (int fieldId : fieldIds) {
+            if (!covers(mergeRanges(coverage.getOrDefault(fieldId, List.of())), List.of(shard))) {
+                throw new IllegalArgumentException("Paimon filtered ANN BTree index does not cover its vector shard");
+            }
+        }
+    }
+
+    private static long indexDescriptorBytes(TPaimonGlobalIndexFile file) {
+        return file.getMetadata().length + 128L + file.getPath().getBytes(StandardCharsets.UTF_8).length
+                + file.getField_type().length();
     }
 
     private static void requireDisjointAnnRanges(List<Range> ranges) {

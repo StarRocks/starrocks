@@ -57,6 +57,7 @@ private:
     StatusOr<std::shared_ptr<paimon::GlobalIndexResult>> _evaluate(RuntimeState* runtime_state);
     StatusOr<std::shared_ptr<paimon::ScoredGlobalIndexResult>> _evaluate_vector(RuntimeState* runtime_state);
     Status _emit_result(Slice bytes, ChunkPtr* chunk);
+    Status _open_vector_reader(RuntimeState* runtime_state);
 
     bool _emitted = false;
     int64_t _open_ns = 0;

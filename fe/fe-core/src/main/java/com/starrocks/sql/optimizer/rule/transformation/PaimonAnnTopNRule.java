@@ -52,7 +52,7 @@ public class PaimonAnnTopNRule extends TransformationRule {
         }
         LogicalTopNOperator topN = input.getOp().cast();
         LogicalPaimonScanOperator scan = input.inputAt(0).getOp().cast();
-        if (scan.getAnnQuery() != null || scan.getProjection() == null || scan.getPredicate() != null
+        if (scan.getAnnQuery() != null || scan.getProjection() == null
                 || scan.hasLimit() || topN.getPredicate() != null || topN.getLimit() <= 0 || topN.getOffset() < 0
                 || topN.getLimit() > Integer.MAX_VALUE - topN.getOffset() || topN.isSplit()
                 || topN.getSortPhase() != SortPhase.FINAL || topN.getTopNType() != TopNType.ROW_NUMBER

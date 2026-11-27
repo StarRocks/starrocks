@@ -939,7 +939,9 @@ ORDER BY distance
 LIMIT 10;
 ```
 
-Queries with filters use the ordinary query path. In `auto` mode, recoverable distributed index errors fall back to an ordinary scan of the same snapshot. Explicit `distributed` mode returns the error. Queries still compute the original score and order the returned candidates.
+Filtered ANN supports `AND` combinations of direct column comparisons, positive `IN`, and `IS [NOT] NULL` on supported partition columns or columns with complete BTree coverage. Partition values select complete vector segments, and BTree candidates restrict each segment before its Top-N search. Queries with unsupported predicates use the ordinary query path.
+
+In `auto` mode, recoverable distributed index errors fall back to an ordinary scan of the same snapshot. Explicit `distributed` mode returns the error. Queries still compute the original score and order the returned candidates.
 
 ### Inspect the planned scan size
 

@@ -990,15 +990,17 @@ public class PaimonMetadata implements ConnectorMetadata {
         }
         PaimonMetricRegistry paimonMetricRegistry = new PaimonMetricRegistry();
         List<Split> splits = null;
+        boolean annApplied = false;
         RuntimeException indexFailure = null;
         if (evaluateIndex && paimonNativeTable instanceof FileStoreTable fileStore) {
             SimpleExecutor.checkInternalQueryState(caller);
             try {
-                GlobalIndexResult result = evaluateGlobalIndex(
+                IndexEvaluation evaluation = evaluateGlobalIndex(
                         paimonTable, fileStore, (PaimonScanRangeParams) params, snapshotId, caller);
-                if (result != null) {
+                if (evaluation != null) {
                     SimpleExecutor.checkInternalQueryState(caller);
-                    splits = planDataSplits(readBuilder, paimonMetricRegistry, result);
+                    splits = planDataSplits(readBuilder, paimonMetricRegistry, evaluation.result());
+                    annApplied = evaluation.ann();
                 } else {
                     Tracers.record(EXTERNAL, "PaimonGlobalIndex.Result",
                             hasAnnQuery ? "no eligible ANN snapshot" : "no supported indexed scalar predicate");
@@ -1018,7 +1020,7 @@ public class PaimonMetadata implements ConnectorMetadata {
         }
         if (splits != null) {
             Tracers.record(EXTERNAL, "PaimonGlobalIndex.Result", "applied");
-            if (hasAnnQuery) {
+            if (annApplied) {
                 Tracers.record(EXTERNAL, "PaimonGlobalIndex.ANN", "applied");
             }
         } else {
@@ -1046,19 +1048,26 @@ public class PaimonMetadata implements ConnectorMetadata {
         return new PaimonSplitsInfo(predicates, splits, paimonNativeTable);
     }
 
-    private static GlobalIndexResult evaluateGlobalIndex(PaimonTable paimonTable, FileStoreTable fileStore,
-                                                         PaimonScanRangeParams params, long snapshotId,
-                                                         ConnectContext caller) {
+    private record IndexEvaluation(GlobalIndexResult result, boolean ann) {
+    }
+
+    private static IndexEvaluation evaluateGlobalIndex(PaimonTable paimonTable, FileStoreTable fileStore,
+                                                       PaimonScanRangeParams params, long snapshotId,
+                                                       ConnectContext caller) {
         try (Timer ignored = Tracers.watchScope(EXTERNAL, "PaimonGlobalIndex.Evaluate")) {
-            PaimonAnnQuery annQuery = params.getPredicate() == null ? params.getAnnQuery() : null;
-            PaimonGlobalIndexRequest request = annQuery == null
-                    ? PaimonGlobalIndexPlanner.request(fileStore, snapshotId, params.getPredicate(), params.getColumnNames())
-                    : PaimonGlobalIndexPlanner.annRequest(fileStore, snapshotId, annQuery);
+            PaimonAnnQuery annQuery = params.getAnnQuery();
+            PaimonGlobalIndexRequest request = annQuery == null ? null
+                    : PaimonGlobalIndexPlanner.annRequest(
+                            fileStore, snapshotId, annQuery, params.getPredicate(), params.getColumnNames());
+            if (request == null) {
+                request = PaimonGlobalIndexPlanner.request(fileStore, snapshotId, params.getPredicate(), params.getColumnNames());
+            }
             if (request == null) {
                 return null;
             }
-            return new PaimonGlobalIndexCollectJob(paimonTable, request,
+            GlobalIndexResult result = new PaimonGlobalIndexCollectJob(paimonTable, request,
                     PaimonGlobalIndexRequest.resultBudget()).collect(caller);
+            return result == null ? null : new IndexEvaluation(result, request.isAnn());
         }
     }
 
