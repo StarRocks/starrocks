@@ -327,6 +327,15 @@ subprojects {
             substitute(module("org.lz4:lz4-pure-java")).using(module("at.yawk.lz4:lz4-java:${project.ext["lz4-java.version"]}"))
                 .because("Replace org.lz4:lz4-pure-java with at.yawk.lz4:lz4-java")
         }
+
+        // Maven's <dependencyManagement> pins a version for every transitive; Gradle's
+        // constraints only state a preference and lose to any higher transitive request. The
+        // log4j coordinates the root pom manages must therefore be forced, or delta-storage ->
+        // unitycatalog-client (log4j-api 2.25.3) and spark (log4j-core 2.20.0) drag api and core
+        // apart and every test dies inside LogManager.getLogger with
+        // "NoSuchMethodError: ServiceLoaderUtil.loadServices".
+        listOf("log4j-api", "log4j-core", "log4j-slf4j-impl", "log4j-layout-template-json", "log4j-1.2-api")
+            .forEach { resolutionStrategy.force("org.apache.logging.log4j:$it:${project.ext["log4j.version"]}") }
     }
 
     tasks.withType<JavaCompile> {
