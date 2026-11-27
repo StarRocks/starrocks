@@ -883,6 +883,39 @@ TEST_F(StreamLoadActionTest, merge_commit_accepts_skip_header_that_skips_nothing
     }
 }
 
+// Merge commit loads the requests of a merge window as one file, and the Arrow scanner reads only the first request's
+// IPC stream of it, so the other requests would be reported as loaded with none of their rows. A merge commit request
+// in the arrow format, in any case, is refused before its body is received. Without merge commit the format is
+// accepted, as format_arrow checks.
+TEST_F(StreamLoadActionTest, merge_commit_rejects_arrow) {
+    for (const char* format : {"arrow", "ARROW", "Arrow"}) {
+        // So that each case reads its own reply.
+        k_response_str.clear();
+        StreamLoadAction action(&_env, &_stream_load_orchestrator, _stream_load_executor.get(), _limiter.get(),
+                                _batch_write_mgr.get());
+
+        HttpRequest request(_evhttp_req);
+        request._params.emplace(HTTP_DB_KEY, "db");
+        request._params.emplace(HTTP_TABLE_KEY, "tbl");
+        request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+        request._headers.emplace(HttpHeaders::CONTENT_LENGTH, "0");
+        request._headers.emplace(HTTP_ENABLE_MERGE_COMMIT, "true");
+        request._headers.emplace(HTTP_MERGE_COMMIT_INTERVAL_MS, "1000");
+        request._headers.emplace(HTTP_MERGE_COMMIT_PARALLEL, "1");
+        request._headers.emplace(HTTP_FORMAT_KEY, format);
+        request.set_handler(&action);
+
+        ASSERT_EQ(-1, action.on_header(&request)) << format;
+
+        // The reply on_header sent.
+        rapidjson::Document doc;
+        doc.Parse(k_response_str.c_str());
+        ASSERT_STREQ("Fail", doc["Status"].GetString()) << format;
+        ASSERT_NE(nullptr, std::strstr(doc["Message"].GetString(), "The arrow format is not supported by merge commit"))
+                << format << ": " << doc["Message"].GetString();
+    }
+}
+
 TEST_F(StreamLoadActionTest, merge_commit_response) {
     // success
     {

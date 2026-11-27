@@ -150,4 +150,14 @@ Status check_merge_commit_skip_header(const std::string& format, const std::stri
     return Status::OK();
 }
 
+Status check_merge_commit_format(const std::string& format) {
+    if (boost::iequals(format, "arrow")) {
+        return Status::InvalidArgument(
+                "The arrow format is not supported by merge commit, which loads the requests of a merge window as one "
+                "file. Load Arrow data with an HTTP Stream Load that does not enable merge commit, or send it in "
+                "another format such as CSV or JSON");
+    }
+    return Status::OK();
+}
+
 } // namespace starrocks
