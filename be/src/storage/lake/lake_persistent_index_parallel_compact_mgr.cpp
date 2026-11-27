@@ -59,6 +59,16 @@ size_t LakePersistentIndexParallelCompactTask::input_sstable_file_cnt() const {
 
 void LakePersistentIndexParallelCompactTask::run() {
     DCHECK(_cb != nullptr);
+    bool reported = false;
+    // With enable_threadpool_catch_task_exception the pool catches an exception thrown below and unwinds through
+    // here. Report a failure in that case, so wait_for() does not apply a result without this task's output, and
+    // count the task as done either way, so ~AsyncCompactCB() does not wait for it forever.
+    DeferOp report_done([&]() {
+        if (!reported) {
+            _cb->update_status(Status::InternalError("LakePersistentIndexParallelCompactTask threw an exception"));
+        }
+        _cb->task_done();
+    });
     Status status = do_run();
     if (status.is_corruption()) {
         // Corrupted bytes usually come from the local cache copy of an input sstable.
@@ -74,7 +84,7 @@ void LakePersistentIndexParallelCompactTask::run() {
     if (status.ok()) {
         _cb->add_result(_output_sstables);
     }
-    _cb->task_done();
+    reported = true;
 }
 
 void LakePersistentIndexParallelCompactTask::drop_input_sstable_cache() {
@@ -91,8 +101,9 @@ void LakePersistentIndexParallelCompactTask::drop_input_sstable_cache() {
 void LakePersistentIndexParallelCompactTask::cancel() {
     // When canceling, just update the status to cancelled.
     DCHECK(_cb != nullptr);
+    // Counted as done even if update_status() throws: the pool catches exceptions from cancel().
+    DeferOp report_done([&]() { _cb->task_done(); });
     _cb->update_status(Status::Cancelled("LakePersistentIndexParallelCompactTask cancelled"));
-    _cb->task_done();
 }
 
 Status LakePersistentIndexParallelCompactTask::do_run() {
@@ -289,11 +300,17 @@ Status AsyncCompactCB::submit(const std::shared_ptr<LakePersistentIndexParallelC
         std::lock_guard<std::mutex> lg(_mutex);
         _num_submitted++;
     }
+    bool accepted = false;
+    // Rolled back unless the token accepted the task, including when submit() throws, or ~AsyncCompactCB() would
+    // wait for a task that never reaches the pool.
+    DeferOp rollback([&]() {
+        if (!accepted) {
+            std::lock_guard<std::mutex> lg(_mutex);
+            _num_submitted--;
+        }
+    });
     auto st = _thread_pool_token->submit(task);
-    if (!st.ok()) {
-        std::lock_guard<std::mutex> lg(_mutex);
-        _num_submitted--;
-    }
+    accepted = st.ok();
     return st;
 }
 
