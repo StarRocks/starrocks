@@ -14,11 +14,7 @@
 
 #include "storage/lake/vacuum.h"
 
-<<<<<<< HEAD
-=======
-#include <bvar/bvar.h>
 #include <fmt/format.h>
->>>>>>> 81c75313d00... [BugFix][RB-444] Keep drop_tablet_cache from starving drop_table and stalling the recycle bin (#65436)
 #include <gtest/gtest.h>
 #include <unistd.h>
 
