@@ -362,6 +362,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 変更可能: はい
 - 説明: 共有データクラスタのクエリスキャン（分割の有無を問わない）が Tablet の Segment を開いた後、次に読むインデックスページを非同期でウォームアップするかどうか。対象は各 Segment の短キーインデックス、述語列の zone map、bloom filter、bitmap インデックスのルートページ、読み取り列の ordinal index のルートページです。同様に、等値述語と `IN` 述語の bitmap インデックス検索では、すべての値の辞書ページをまとめて要求し、続いて選択したすべての bitmap のページをまとめて要求してから読み取ります。スキャンはウォームアップの完了を待たず、失敗した場合は通常どおり読み取ります。Segment メタデータフィルター（`enable_lake_segment_metadata_filter`）によってスキャン対象から除外された Segment はウォームアップしません。この項目はクエリにのみ適用され、リモート I/O スケジューラー（`remote_io_scheduler_enable`）が有効な場合にのみ効果があります。`lake_scan_parallel_segment_open` とは独立しています。ウォームアップの状況はクエリプロファイルの `TabletPrepareIndexWarmSegments`、`TabletPrepareIndexWarmRanges`、`TabletPrepareIndexWarmBlocks`、`TabletPrepareIndexWarmSkipped`、`TabletPrepareIndexWarmPrunedSegments` に、bitmap インデックスページの要求状況は `BitmapIndexPrefetchPages` と `BitmapIndexPrefetchBlocks` に記録されます。
 
+### lake_scan_read_ahead_max_blocks
+
+- デフォルト: 2048
+- タイプ: Long
+- 単位: -
+- 変更可能: はい
+- 説明: BE/CN 上のすべてのクエリスキャンが合計で、先読みとして取得を要求し、まだ読んでいない状態で保持できるキャッシュブロック数。`remote_prefetch_window_blocks` により各 Segment が先読みするブロックと、`lake_scan_read_ahead_segments` により早めに開始した Segment のブロックを含みます。先読み中の Segment はこの上限を均等に分け合い、各 Segment が保持できるのは上限を先読み中の Segment 数で割った数（最低 1 ブロック）までです。そのため、後から開始したスキャンも自分の分を確保できます。自分の分より多く保持している Segment は、超過分を読み終えるまで先読みを要求しません。この数に達すると、Segment はそれ以上先読みを要求せず、Tablet スキャンも次の Segment を早めに開始しません。該当するデータは読む時点で取得されます。直後に読むブロックは常に取得されます。ブロックはアトミックに予約されるため、スキャンが並行しても合計がこの値を超えることはありません。`0` は無制限を意味します。メトリクス `lake_scan_read_ahead_blocks`、`lake_scan_read_ahead_windows`、`lake_scan_read_ahead_capped_total` が、現在の合計、上限を分け合う Segment 数、上限が先読みを抑えた回数を示します。
+- 導入バージョン: -
+
 ### lake_scan_read_ahead_segments
 
 - デフォルト: 16
