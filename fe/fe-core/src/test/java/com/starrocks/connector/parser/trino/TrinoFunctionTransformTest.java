@@ -14,6 +14,11 @@
 
 package com.starrocks.connector.parser.trino;
 
+import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.type.ArrayType;
+import com.starrocks.type.IntegerType;
+import org.apache.commons.lang3.StringUtils;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
@@ -49,6 +54,30 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
         sql = "select count_if(v1) from t0;";
         assertPlanContains(sql, "  2:AGGREGATE (update finalize)\n" +
                 "  |  output: count(if(CAST(1: v1 AS BOOLEAN), 1, NULL))");
+    }
+
+    @Test
+    public void testSequence() throws Exception {
+        String sql = "select sequence(1, 5)";
+        assertPlanContains(sql, "trino_sequence(1, 5)");
+        QueryStatement statement = (QueryStatement) analyzeSuccess(sql);
+        Assertions.assertEquals(new ArrayType(IntegerType.BIGINT),
+                statement.getQueryRelation().getOutputExpression().get(0).getType());
+
+        // The two-argument form stays two arguments: execution picks the direction from the evaluated bounds.
+        sql = "select sequence(v1, v2), sequence(v1, v2, v3) from t0";
+        assertPlanContains(sql, "trino_sequence(1: v1, 2: v2)", "trino_sequence(1: v1, 2: v2, 3: v3)");
+
+        // Each argument appears once, so a non-deterministic bound is evaluated once.
+        sql = "select sequence(1, cast(rand() * 10 as bigint))";
+        String plan = getFragmentPlan(sql);
+        Assertions.assertEquals(1, StringUtils.countMatches(plan, "rand()"), plan);
+        assertPlanContains("select sequence(1, (select max(v1) from t0))", "trino_sequence(1, ");
+
+        // Other bound types aren't cast to BIGINT: DATE bounds would otherwise return integers like 20240131.
+        analyzeFail("select sequence(date '2024-01-31', date '2024-02-01')",
+                "Unexpected parameters (date, date) for function sequence");
+        analyzeFail("select sequence('1', '3')", "Unexpected parameters (varchar, varchar) for function sequence");
     }
 
     @Test
