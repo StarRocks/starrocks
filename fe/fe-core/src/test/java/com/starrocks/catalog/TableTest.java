@@ -77,6 +77,7 @@ public class TableTest {
         Assertions.assertEquals("VIEW", new Table(TableType.VIEW).getMysqlType());
         Assertions.assertEquals("VIEW", new Table(TableType.MATERIALIZED_VIEW).getMysqlType());
         Assertions.assertEquals("VIEW", new Table(TableType.CLOUD_NATIVE_MATERIALIZED_VIEW).getMysqlType());
+        Assertions.assertEquals("VIEW", new Table(TableType.ICEBERG_VIEW).getMysqlType());
 
         Assertions.assertEquals("SYSTEM VIEW", new Table(TableType.SCHEMA).getMysqlType());
     }
