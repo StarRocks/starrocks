@@ -19,6 +19,8 @@
 
 #include <gutil/macros.h>
 
+#include <cstdint>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -27,6 +29,8 @@
 namespace starrocks {
 
 class CIDR;
+class InetAddress;
+class Status;
 
 class BackendOptions {
 public:
@@ -48,6 +52,12 @@ public:
 private:
     static bool analyze_priority_cidrs();
     static bool is_in_prior_network(const std::string& ip);
+
+    using HostsProvider = std::function<Status(std::vector<InetAddress>*)>;
+    // Calls `provider` until it reports at least one non-loopback address or `timeout_ms` elapses,
+    // retrying every `retry_interval_ms`. Leaves the last result in `hosts` either way.
+    static Status get_hosts_waiting_for_non_loopback(const HostsProvider& provider, int64_t timeout_ms,
+                                                     int64_t retry_interval_ms, std::vector<InetAddress>* hosts);
 
     static std::string _s_localhost;
     static std::string _s_local_ip;

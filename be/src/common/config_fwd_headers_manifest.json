@@ -598,6 +598,7 @@
         "enable_resolve_hostname_to_ip_in_load_error_url",
         "priority_networks",
         "net_use_ipv6_when_priority_networks_empty",
+        "net_wait_for_local_ip_timeout_s",
         "be_http_port",
         "be_http_port",
         "brpc_query_ignore_overcrowded",
