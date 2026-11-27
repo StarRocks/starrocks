@@ -26,21 +26,232 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.Replica;
+import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
+import com.starrocks.journal.JournalTask;
+import com.starrocks.persist.ConsistencyCheckInfo;
+import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.thrift.TStorageMedium;
 import mockit.Expectations;
 import mockit.Mocked;
+import mockit.Verifications;
 import org.apache.commons.lang3.reflect.FieldUtils;
 import org.apache.commons.lang3.reflect.MethodUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class ConsistencyCheckerTest {
+
+    @Test
+    public void testTimeoutPreservesLastCompletedCheckAndAllowsRetry(@Mocked GlobalStateMgr globalStateMgr,
+                                                                     @Mocked EditLog editLog,
+                                                                     @Mocked JournalTask journalTask) throws Exception {
+        long dbId = 1L;
+        long tableId = 2L;
+        long partitionId = 3L;
+        long indexId = 4L;
+        long tabletId = 5L;
+        long replicaId = 6L;
+        long backendId = 7L;
+        long physicalPartitionId = 8L;
+        long visibleVersion = 2L;
+        TStorageMedium medium = TStorageMedium.HDD;
+
+        MaterializedIndex materializedIndex = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL);
+        Replica replica = new Replica(replicaId, backendId, visibleVersion, 1111,
+                10, 1000, Replica.ReplicaState.NORMAL, -1, visibleVersion);
+        TabletMeta tabletMeta = new TabletMeta(dbId, tableId, physicalPartitionId, indexId, medium);
+        LocalTablet tablet = new LocalTablet(tabletId, Lists.newArrayList(replica));
+        tablet.setCheckedVersion(visibleVersion - 1);
+        tablet.setIsConsistent(false);
+        materializedIndex.addTablet(tablet, tabletMeta, false);
+        PartitionInfo partitionInfo = new PartitionInfo();
+        partitionInfo.addPartition(partitionId, new DataProperty(medium), (short) 3, null);
+        DistributionInfo distributionInfo = new HashDistributionInfo(1, Lists.newArrayList());
+        Partition partition = new Partition(partitionId, physicalPartitionId, "partition", materializedIndex,
+                distributionInfo);
+        partition.getDefaultPhysicalPartition().setVisibleVersion(visibleVersion, System.currentTimeMillis());
+        OlapTable table = new OlapTable(tableId, "table", Lists.newArrayList(), KeysType.AGG_KEYS, partitionInfo,
+                distributionInfo);
+        table.addPartition(partition);
+        Database database = new Database(dbId, "database");
+        database.registerTableUnlocked(table);
+        TabletInvertedIndex invertedIndex = new TabletInvertedIndex();
+        invertedIndex.addTablet(tabletId, tabletMeta);
+
+        List<ConsistencyCheckInfo> loggedChecks = new ArrayList<>();
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+                minTimes = 0;
+
+                globalStateMgr.getTabletInvertedIndex();
+                result = invertedIndex;
+                minTimes = 0;
+
+                globalStateMgr.getLocalMetastore().getDb(dbId);
+                result = database;
+                minTimes = 0;
+
+                globalStateMgr.getLocalMetastore().getTable(dbId, tableId);
+                result = table;
+                minTimes = 0;
+
+                globalStateMgr.getLocalMetastore().getDbIds();
+                result = Lists.newArrayList(dbId);
+                minTimes = 0;
+
+                globalStateMgr.getLocalMetastore().getTables(dbId);
+                result = Lists.newArrayList(table);
+                minTimes = 0;
+
+                globalStateMgr.getEditLog();
+                result = editLog;
+
+                editLog.logFinishConsistencyCheck((ConsistencyCheckInfo) any);
+                result = journalTask;
+                maxTimes = 3;
+            }
+        };
+
+        CheckConsistencyJob job = new CheckConsistencyJob(tabletId);
+        job.setState(CheckConsistencyJob.JobState.RUNNING);
+        FieldUtils.writeField(job, "checkedVersion", visibleVersion, true);
+        FieldUtils.writeField(job, "checkedSchemaHash", -1, true);
+        FieldUtils.writeField(job, "createTime", System.currentTimeMillis() - 1000, true);
+        FieldUtils.writeField(job, "timeoutMs", 1L, true);
+        FieldUtils.writeField(job, "checksumMap", Map.of(backendId, -1L), true);
+
+        Assertions.assertEquals(1, job.tryFinishJob());
+        Assertions.assertFalse(tablet.isConsistent(), "an incomplete check must preserve the prior result");
+        Assertions.assertEquals(visibleVersion - 1, tablet.getCheckedVersion(),
+                "an incomplete check must not mark its visible version as checked");
+        Assertions.assertTrue(tablet.getLastCheckTime() > 0, "the attempt should still enforce cooldown");
+
+        new Verifications() {
+            {
+                editLog.logFinishConsistencyCheck(withCapture(loggedChecks));
+                times = 1;
+            }
+        };
+        Assertions.assertEquals(1, loggedChecks.size());
+        Assertions.assertEquals(visibleVersion - 1, loggedChecks.get(0).getCheckedVersion());
+        Assertions.assertFalse(loggedChecks.get(0).isConsistent());
+
+        ConsistencyChecker checker = new ConsistencyChecker();
+        checker.replayFinishConsistencyCheck(loggedChecks.get(0), globalStateMgr);
+        Assertions.assertEquals(visibleVersion - 1, tablet.getCheckedVersion(),
+                "edit-log replay must retain the last completed version");
+        Assertions.assertFalse(tablet.isConsistent(), "edit-log replay must retain the last completed result");
+
+        tablet.setLastCheckTime(0);
+        Assertions.assertEquals(Lists.newArrayList(tabletId), checker.chooseTablets(),
+                "the unchanged visible version should be eligible again after cooldown");
+
+        long secondBackendId = 9L;
+        tablet.addReplica(new Replica(10L, secondBackendId, visibleVersion, 1111,
+                10, 1000, Replica.ReplicaState.NORMAL, -1, visibleVersion), false);
+        CheckConsistencyJob matchingJob = new CheckConsistencyJob(tabletId);
+        matchingJob.setState(CheckConsistencyJob.JobState.RUNNING);
+        FieldUtils.writeField(matchingJob, "checkedVersion", visibleVersion, true);
+        FieldUtils.writeField(matchingJob, "checkedSchemaHash", -1, true);
+        FieldUtils.writeField(matchingJob, "createTime", System.currentTimeMillis(), true);
+        FieldUtils.writeField(matchingJob, "timeoutMs", 60000L, true);
+        FieldUtils.writeField(matchingJob, "checksumMap", Map.of(backendId, 100L, secondBackendId, 100L), true);
+        Assertions.assertEquals(1, matchingJob.tryFinishJob());
+        Assertions.assertTrue(tablet.isConsistent(), "matching completed checks should still mark the tablet consistent");
+        Assertions.assertEquals(visibleVersion, tablet.getCheckedVersion());
+
+        CheckConsistencyJob mismatchingJob = new CheckConsistencyJob(tabletId);
+        mismatchingJob.setState(CheckConsistencyJob.JobState.RUNNING);
+        FieldUtils.writeField(mismatchingJob, "checkedVersion", visibleVersion, true);
+        FieldUtils.writeField(mismatchingJob, "checkedSchemaHash", -1, true);
+        FieldUtils.writeField(mismatchingJob, "createTime", System.currentTimeMillis(), true);
+        FieldUtils.writeField(mismatchingJob, "timeoutMs", 60000L, true);
+        FieldUtils.writeField(mismatchingJob, "checksumMap", Map.of(backendId, 100L, secondBackendId, 200L), true);
+        Assertions.assertEquals(1, mismatchingJob.tryFinishJob());
+        Assertions.assertFalse(tablet.isConsistent(), "different completed checksums should still mark the tablet inconsistent");
+        Assertions.assertEquals(visibleVersion, tablet.getCheckedVersion());
+    }
+
+    @Test
+    public void testInsufficientReplicasPreservesLastCompletedCheck(@Mocked GlobalStateMgr globalStateMgr,
+                                                                    @Mocked EditLog editLog,
+                                                                    @Mocked JournalTask journalTask) {
+        long dbId = 11L;
+        long tableId = 12L;
+        long partitionId = 13L;
+        long indexId = 14L;
+        long tabletId = 15L;
+        long replicaId = 16L;
+        long backendId = 17L;
+        long physicalPartitionId = 18L;
+        long visibleVersion = 2L;
+        TStorageMedium medium = TStorageMedium.HDD;
+
+        MaterializedIndex materializedIndex = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL);
+        Replica replica = new Replica(replicaId, backendId, visibleVersion, 1111,
+                10, 1000, Replica.ReplicaState.NORMAL, -1, visibleVersion);
+        TabletMeta tabletMeta = new TabletMeta(dbId, tableId, physicalPartitionId, indexId, medium);
+        LocalTablet tablet = new LocalTablet(tabletId, Lists.newArrayList(replica));
+        tablet.setCheckedVersion(visibleVersion - 1);
+        tablet.setIsConsistent(false);
+        materializedIndex.addTablet(tablet, tabletMeta, false);
+        PartitionInfo partitionInfo = new PartitionInfo();
+        partitionInfo.addPartition(partitionId, new DataProperty(medium), (short) 3, null);
+        DistributionInfo distributionInfo = new HashDistributionInfo(1, Lists.newArrayList());
+        Partition partition = new Partition(partitionId, physicalPartitionId, "partition", materializedIndex,
+                distributionInfo);
+        partition.getDefaultPhysicalPartition().setVisibleVersion(visibleVersion, System.currentTimeMillis());
+        OlapTable table = new OlapTable(tableId, "table", Lists.newArrayList(), KeysType.AGG_KEYS, partitionInfo,
+                distributionInfo);
+        table.addPartition(partition);
+        Database database = new Database(dbId, "database");
+        database.registerTableUnlocked(table);
+        TabletInvertedIndex invertedIndex = new TabletInvertedIndex();
+        invertedIndex.addTablet(tabletId, tabletMeta);
+
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+                minTimes = 0;
+
+                globalStateMgr.getTabletInvertedIndex();
+                result = invertedIndex;
+                minTimes = 0;
+
+                globalStateMgr.getLocalMetastore().getDb(dbId);
+                result = database;
+                minTimes = 0;
+
+                globalStateMgr.getLocalMetastore().getTable(dbId, tableId);
+                result = table;
+                minTimes = 0;
+
+                globalStateMgr.getEditLog();
+                result = editLog;
+
+                editLog.logFinishConsistencyCheck((ConsistencyCheckInfo) any);
+                result = journalTask;
+            }
+        };
+
+        CheckConsistencyJob job = new CheckConsistencyJob(tabletId);
+        Assertions.assertFalse(job.sendTasks(), "one replica is below the configured quorum of two");
+        Assertions.assertEquals(visibleVersion - 1, tablet.getCheckedVersion(),
+                "a check that did not start must preserve the last completed version");
+        Assertions.assertFalse(tablet.isConsistent(), "a check that did not start must preserve the last result");
+        Assertions.assertTrue(tablet.getLastCheckTime() > 0, "the failed attempt should still enforce cooldown");
+    }
 
     @Test
     public void testChooseTablets(@Mocked GlobalStateMgr globalStateMgr) {
