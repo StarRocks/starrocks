@@ -827,6 +827,24 @@ class StarrocksSQLApiLib(object):
         result = self.execute_sql(sql)
         tools.assert_true(result["status"], "create Paimon DDL catalog failed: %s" % result.get("msg"))
 
+    def assert_paimon_global_index_trace(self, query, required, forbidden):
+        """Check positive and negative Global Index evidence from one planning run."""
+        if isinstance(required, str) or isinstance(forbidden, str) or not required:
+            raise ValueError("required must be a nonempty list; forbidden must be a list")
+        result = self.execute_sql("TRACE VALUES EXTERNAL " + query, True)
+        if not result["status"]:
+            raise AssertionError("Paimon Global Index trace failed: %s" % result.get("msg"))
+        trace = "\n".join(str(value) for row in result["result"] for value in row)
+        if "PLAN NOT AVAILABLE" in trace:
+            raise AssertionError("Paimon Global Index planning failed:\n" + trace)
+        normalized = re.sub(r"\s*:\s*", ":", trace)
+        for expected in required:
+            if re.sub(r"\s*:\s*", ":", expected) not in normalized:
+                raise AssertionError("missing Global Index evidence %s:\n%s" % (expected, trace))
+        for unexpected in forbidden:
+            if re.sub(r"\s*:\s*", ":", unexpected) in normalized:
+                raise AssertionError("unexpected Global Index evidence %s:\n%s" % (unexpected, trace))
+
     def assert_paimon_reader(self, query, table, expected):
         """Assert one reader and reject empty scans or mixed routes."""
         self.assert_paimon_readers(query, table, expected)
