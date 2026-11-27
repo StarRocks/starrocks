@@ -583,9 +583,10 @@ jobs:
 
   be-ut:
     runs-on: [self-hosted, normal]
-    needs: 
+    needs:
       - thirdparty-info
       - be-checker
+      - test-checker
     timeout-minutes: 150
     name: BE UT
     if: >
@@ -600,8 +601,17 @@ jobs:
       IMAGE_CACHE_ID: ${{ needs.thirdparty-info.outputs.ubuntu_image_cache_id }}
       LINUX_DISTRO: ubuntu
     steps:
+      # Like FE UT: the job still reports success, so the required check passes.
+      - name: Reuse BE UT of the previous commit
+        if: needs.test-checker.outputs.be_ut_reuse == 'true'
+        env:
+          PRE_SHA: ${{ needs.test-checker.outputs.pre_sha }}
+        run: |
+          echo "::notice::Only documentation changed since ${PRE_SHA::10}, whose BE UT passed; skip BE UT."
+
       - name: INIT ECI & RUN UT
         id: run_ut
+        if: needs.test-checker.outputs.be_ut_reuse != 'true'
         shell: bash
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
@@ -910,6 +920,9 @@ jobs:
     outputs:
       test_change: ${{ steps.path-filter.outputs.test }}
       pre_build_conclusion: ${{ steps.check-integration-test-results.outputs.pre_build_conclusion }}
+      pre_sha: ${{ steps.docs-only-push.outputs.pre_sha }}
+      sys_test_reuse: ${{ steps.docs-only-push.outputs.sys_test_reuse }}
+      be_ut_reuse: ${{ steps.docs-only-push.outputs.be_ut_reuse }}
     steps:
       - uses: dorny/paths-filter@v3
         id: path-filter
@@ -925,6 +938,86 @@ jobs:
           pre_commit_job_status_dict='${{ env.PRE_COMMIT_JOB_STATUS_DICT }}'
           pre_build_conclusion=$(echo $pre_commit_job_status_dict | jq -r '."BUILD"')
           echo "pre_build_conclusion=${pre_build_conclusion}" >> $GITHUB_OUTPUT
+
+      # Path filters look at the whole PR, so a push that only edits documentation used to rebuild
+      # and rerun DEPLOY SR, SQL-Tester and ADMIT TEST (~40 min) on code they had already passed.
+      # When nothing but documentation changed since PRE_COMMIT and PRE_COMMIT passed that chain,
+      # BUILD skips it (the jobs report skipped, which satisfies required checks) and BE UT skips
+      # its run as FE UT does. Anything unexpected leaves sys_test_reuse and be_ut_reuse unset,
+      # which means the full run.
+      # PRE_COMMIT is the PR's second-newest commit (ci-tool scripts/check-blacklist.sh), and
+      # PRE_COMMIT_JOB_STATUS_DICT maps each job name of its CI PIPELINE run to its conclusion.
+      - name: Check docs-only push since pre-commit
+        id: docs-only-push
+        if: env.PRE_COMMIT != '' && env.PRE_COMMIT_JOB_STATUS_DICT != ''
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          # PRE_COMMIT has 7 characters; the compare API cannot resolve a short SHA of a fork commit.
+          if ! pr_commits=$(gh api --paginate "repos/${REPO}/pulls/${PR_NUMBER}/commits?per_page=100" --jq '.[].sha'); then
+            echo "::warning::Cannot list the commits of this PR; run everything."
+            exit 0
+          fi
+          pre_sha=$(grep "^${PRE_COMMIT}" <<< "${pr_commits}" || true)
+          if [[ -z "${pre_sha}" || "${pre_sha}" == *$'\n'* ]]; then
+            echo "${PRE_COMMIT} is not exactly one commit of this PR; run everything."
+            exit 0
+          fi
+
+          if ! compare=$(gh api "repos/${REPO}/compare/${pre_sha}...${HEAD_SHA}"); then
+            echo "::warning::Cannot compare ${pre_sha} with ${HEAD_SHA}; run everything."
+            exit 0
+          fi
+          # ahead: PRE_COMMIT is an ancestor of HEAD, so no rebase or force-push since.
+          status=$(jq -r '.status' <<< "${compare}")
+          if [[ "${status}" != 'ahead' ]]; then
+            echo "HEAD is ${status} relative to ${pre_sha}, not ahead; run everything."
+            exit 0
+          fi
+          # The compare API lists at most 300 files.
+          if (( $(jq '.files | length' <<< "${compare}") >= 300 )); then
+            echo "300 or more files changed since ${pre_sha}; run everything."
+            exit 0
+          fi
+          # Nothing that builds, packages or tests StarRocks reads docs/, handbook/ or a top-level
+          # *.md file. Not every *.md: FE UT reads fe/**/test/resources/**/help.md, and test/ holds
+          # the SQL-Tester cases. A rename counts its old path too.
+          changed=$(jq -r '.files[] | .filename, (.previous_filename // empty)' <<< "${compare}")
+          not_docs=$(grep -vE '^(docs/|handbook/|[^/]+\.md$)' <<< "${changed}" || true)
+          if [[ -n "${not_docs}" ]]; then
+            echo "Changed since ${pre_sha} and not documentation; run everything:"
+            head -n 20 <<< "${not_docs}"
+            exit 0
+          fi
+          echo "Only documentation changed since ${pre_sha}:"
+          echo "${changed}"
+          echo "pre_sha=${pre_sha}" >> "$GITHUB_OUTPUT"
+
+          conclusion() { jq -r --arg job "$1" '.[$job] // "none"' <<< "${PRE_COMMIT_JOB_STATUS_DICT}"; }
+          sys_test_reuse=true
+          if [[ "$(conclusion 'SYSTEM TEST REUSE')" == 'success' ]]; then
+            # PRE_COMMIT reused them in turn, from a commit with the same code that passed them.
+            echo "${PRE_COMMIT} reused the system tests of an earlier commit with the same code."
+          else
+            for job in 'BUILD' 'DEPLOY SR' 'SQL-Tester' 'Restart FE' 'Restart BE' 'ADMIT TEST' 'Restart FE(Admit)' 'Restart BE(Admit)'; do
+              result=$(conclusion "${job}")
+              if [[ "${result}" != 'success' ]]; then
+                echo "${job} of ${PRE_COMMIT}: ${result}; run the system tests."
+                sys_test_reuse=false
+              fi
+            done
+          fi
+          be_ut_reuse=false
+          if [[ "$(conclusion 'BE UT')" == 'success' ]]; then
+            be_ut_reuse=true
+          fi
+          echo "sys_test_reuse: ${sys_test_reuse}, be_ut_reuse: ${be_ut_reuse}"
+          echo "sys_test_reuse=${sys_test_reuse}" >> "$GITHUB_OUTPUT"
+          echo "be_ut_reuse=${be_ut_reuse}" >> "$GITHUB_OUTPUT"
 
   build:
     runs-on: [self-hosted, normal]
@@ -1022,7 +1115,15 @@ jobs:
           pr_be_change: ${{ steps.parsing-be-path-filter.outputs.src_filter }}
           pr_fe_change: ${{ steps.parsing-fe-path-filter.outputs.src_filter }}
           pr_test_change: ${{ needs.test-checker.outputs.test_change }}
+          sys_test_reuse: ${{ needs.test-checker.outputs.sys_test_reuse }}
+          pre_sha: ${{ needs.test-checker.outputs.pre_sha }}
         run: |
+          # Leaving sys_test_need unset skips DEPLOY SR and every system test behind it.
+          if [[ "${sys_test_reuse}" == 'true' ]]; then
+            echo "Only documentation changed since ${pre_sha}, which passed the system tests; skip the build and reuse them."
+            exit 0
+          fi
+
           if [[ "${sys_test_need}" == "" ]]; then
             if [[ "${{ env.pr_pom_change}}" == 'true' || "${{ env.pr_be_change}}" == 'true' || "${{ env.pr_fe_change}}" == 'true' || "${{ env.pr_test_change }}" == 'true' ]]; then
               sys_test_need=true
@@ -1067,6 +1168,30 @@ jobs:
         run: |
           rm -f ${{ steps.run_build.outputs.RES_FILE }}
           rm -f ${{ steps.run_build.outputs.RES_LOG }}
+
+  # Marks a run whose system tests were reused, so that the next docs-only push, whose PRE_COMMIT
+  # is this run's commit, can reuse them too: DEPLOY SR, SQL-Tester and ADMIT TEST of this run
+  # report skipped, not success.
+  sys-test-reuse:
+    runs-on: ubuntu-latest
+    needs: [test-checker, build]
+    name: SYSTEM TEST REUSE
+    if: "!cancelled() && needs.build.result == 'success' && needs.test-checker.outputs.sys_test_reuse == 'true'"
+    steps:
+      - name: Report the reused commit
+        env:
+          PRE_SHA: ${{ needs.test-checker.outputs.pre_sha }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+        run: |
+          msg="Only documentation changed since ${PRE_SHA::10}, which passed DEPLOY SR, SQL-Tester and ADMIT TEST (or reused them from a commit with the same code); they are skipped for this commit."
+          echo "::notice::${msg}"
+          {
+            echo "### System tests reused"
+            echo "${msg}"
+            echo ""
+            echo "Results: ${PR_URL}/commits/${PRE_SHA}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
   deploy:
     runs-on: [self-hosted, normal]
     needs: build

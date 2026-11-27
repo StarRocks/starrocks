@@ -25,6 +25,7 @@ Map the local scripts and GitHub workflows that enforce structural rules, run va
 
 - Structural rules should be enforced by small repo-local scripts with actionable error messages.
 - CI path filters must stay aligned with the files each checker owns.
+- `ci-pipeline.yml` reuses the previous PR commit's BUILD → DEPLOY SR → SQL-Tester → ADMIT TEST chain and BE UT when a push changes only `docs/`, `handbook/` or top-level `*.md` files (step `Check docs-only push since pre-commit` in TEST FILTER). Keep that allowlist to paths no build, packaging or test script reads.
 - Generated handbook or AGENTS content should be validated mechanically when a generator exists.
 
 ## Test and Validation
