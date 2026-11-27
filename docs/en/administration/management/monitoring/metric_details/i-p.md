@@ -753,6 +753,13 @@ Latency metrics expose percentile series such as `merge_commit_request_latency_9
 - Unit: Count
 - Description: Total number of packets sent through the network.
 
+## `object_storage_fast_retry_total`
+
+- Unit: Count
+- Type: Cumulative
+- Labels: `request` (`put_object` or `head_object`), `result` (`expired`, `resend_fast`, `resend_slow`, `resend_error`, or `no_budget`)
+- Description: Events of the fast retry for small requests to shared-data object storage (`enable_object_storage_fast_retry`). `expired`: a send that carried the short timeout got no response in time and was aborted. `resend_fast`: a resend got a response within the short timeout. `resend_slow`: a resend got a response but took longer than the short timeout. `resend_error`: a resend ended with a network error, and the SDK retries the request as usual. `no_budget`: a send went without the short timeout because the budget (`object_storage_fast_retry_budget_percent`) had run out. Registered when `enable_poco_client_for_aws_sdk` is `false`.
+
 ## `ordinal_index_mem_bytes`
 
 - Unit: Bytes

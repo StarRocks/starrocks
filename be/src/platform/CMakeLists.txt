@@ -19,6 +19,7 @@ set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/platform")
 
 set(PLATFORM_FILES
   aws/aws_sdk_guard.cpp
+  aws/object_storage_fast_retry.cpp
   aws/poco_common.cpp
   aws/poco_http_client.cpp
   aws/poco_http_client_factory.cpp
