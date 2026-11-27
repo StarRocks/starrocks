@@ -617,6 +617,8 @@ public class ExternalResourceCleanupTest {
         org.apache.iceberg.Table nativeTbl = Mockito.mock(org.apache.iceberg.Table.class);
         org.apache.iceberg.Schema schema = new org.apache.iceberg.Schema(List.of());
         Mockito.when(nativeTbl.schema()).thenReturn(schema);
+        Mockito.when(table.getReadSchema()).thenReturn(schema);
+        Mockito.when(nativeTbl.spec()).thenReturn(org.apache.iceberg.PartitionSpec.unpartitioned());
         Mockito.when(table.getNativeTable()).thenReturn(nativeTbl);
         Mockito.when(table.getCatalogDBName()).thenReturn("db");
         Mockito.when(table.getCatalogTableName()).thenReturn("tbl");
@@ -779,6 +781,7 @@ public class ExternalResourceCleanupTest {
         org.apache.iceberg.Table nativeTbl = Mockito.mock(org.apache.iceberg.Table.class);
         org.apache.iceberg.Schema schema = new org.apache.iceberg.Schema(List.of());
         Mockito.when(nativeTbl.schema()).thenReturn(schema);
+        Mockito.when(table.getReadSchema()).thenReturn(schema);
         Mockito.when(nativeTbl.spec()).thenReturn(org.apache.iceberg.PartitionSpec.unpartitioned());
         Mockito.when(table.getNativeTable()).thenReturn(nativeTbl);
         Mockito.when(table.getCatalogDBName()).thenReturn("db");
