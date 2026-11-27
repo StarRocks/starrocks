@@ -1506,14 +1506,26 @@ private:
             const auto* const_column = down_cast<const ConstColumn*>(input_column);
             if (const_column->only_null()) {
                 selection[0] = _has_null;
+                memset(selection, selection[0], size);
             } else {
                 const auto input_data = GetContainer<Type>::get_data(const_column->data_column());
-                if constexpr (can_use_bf) {
-                    _rf_test_data<multi_partition>(selection, input_data, hash_values, 0);
+                if constexpr (multi_partition && can_use_bf) {
+                    // The value is the same in every row, but the partition of each row comes from all the
+                    // partition-by expressions and differs from row to row, so each row must be tested against
+                    // the filter of its own partition. Testing row 0 only and copying its result dropped the rows
+                    // of the other partitions.
+                    for (size_t i = 0; i < size; ++i) {
+                        if (selection[i]) {
+                            selection[i] = _test_data_with_hash(input_data[0], hash_values[i]);
+                        }
+                    }
+                } else {
+                    if constexpr (can_use_bf) {
+                        _rf_test_data<multi_partition>(selection, input_data, hash_values, 0);
+                    }
+                    memset(selection, selection[0], size);
                 }
             }
-            uint8_t sel = selection[0];
-            memset(selection, sel, size);
         } else if (input_column->is_nullable()) {
             const auto* nullable_column = down_cast<const NullableColumn*>(input_column);
             const auto input_data = GetContainer<Type>::get_data(nullable_column->data_column());
