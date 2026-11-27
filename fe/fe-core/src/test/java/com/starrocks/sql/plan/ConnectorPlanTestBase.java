@@ -34,6 +34,7 @@ import com.starrocks.connector.delta.DeltaLakeMetadata;
 import com.starrocks.connector.hive.MockedHiveMetadata;
 import com.starrocks.connector.iceberg.MockIcebergMetadata;
 import com.starrocks.connector.jdbc.MockedJDBCMetadata;
+import com.starrocks.connector.kudu.KuduConnector;
 import com.starrocks.connector.kudu.KuduMetadata;
 import com.starrocks.connector.metastore.MetastoreTable;
 import com.starrocks.connector.paimon.PaimonMetadata;
@@ -278,7 +279,9 @@ public class ConnectorPlanTestBase extends PlanTestBase {
                 MOCK_KUDU_CATALOG_NAME, StringUtils.EMPTY, properties);
 
         KuduMetadata kuduMetadata = new KuduMetadata(MOCK_KUDU_CATALOG_NAME, new HdfsEnvironment(),
-                master, false, StringUtils.EMPTY, Optional.empty());
+                master, false, StringUtils.EMPTY, Optional.empty(),
+                KuduConnector.DEFAULT_KUDU_CLIENT_OPERATION_TIMEOUT_MS,
+                KuduConnector.DEFAULT_KUDU_CLIENT_ADMIN_OPERATION_TIMEOUT_MS);
         metadataMgr.registerMockedMetadata(MOCK_KUDU_CATALOG_NAME, kuduMetadata);
     }
 
