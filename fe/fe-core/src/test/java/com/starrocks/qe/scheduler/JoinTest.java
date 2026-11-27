@@ -18,9 +18,11 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.qe.DefaultCoordinator;
+import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.scheduler.dag.FragmentInstanceExecState;
 import com.starrocks.server.GlobalStateMgr;
@@ -347,6 +349,45 @@ public class JoinTest extends SchedulerTestBase {
             FragmentInstanceExecState execState = scheduler.getExecutionDAG().getExecution(indexInJob);
             System.out.println(execState.getState());
             Assertions.assertTrue(execState.getState() == FragmentInstanceExecState.State.FINISHED);
+        }
+    }
+
+    /**
+     * Why a statement may only remove the QeProcessorImpl entry it registered itself:
+     * QeProcessorImpl.unregisterQuery() calls onFinished() on the coordinator it removes, so when anything
+     * else removes a running INSERT's entry, such as another statement under the same execution id whose
+     * own registration was refused, the INSERT's join() returns at once, done, with an OK status and no
+     * commit infos, although no fragment instance has finished; StmtExecutor then commits nothing.
+     */
+    @Test
+    public void testUnregisteringARunningInsertEndsItsJoinWithNoCommitInfos() throws Exception {
+        String sql = "insert into lineitem select * from lineitem";
+        DefaultCoordinator scheduler = startScheduling(sql);
+        TUniqueId executionId = connectContext.getExecutionId();
+        QeProcessorImpl.INSTANCE.registerQuery(executionId, new QeProcessorImpl.QueryInfo(connectContext, sql, scheduler));
+        try {
+            AtomicBoolean joinFinished = new AtomicBoolean(false);
+            Thread joinThread = new Thread(() -> joinFinished.set(scheduler.join(300)));
+            joinThread.setDaemon(true);
+            joinThread.start();
+            // No fragment instance has reported: the INSERT is still running.
+            Awaitility.await().during(1, TimeUnit.SECONDS).atMost(2, TimeUnit.SECONDS).until(() -> !joinFinished.get());
+
+            // Another statement under the same execution id: its registration is refused, then it removes the id.
+            Assertions.assertThrows(AlreadyExistsException.class, () -> QeProcessorImpl.INSTANCE.registerQuery(
+                    executionId, QeProcessorImpl.QueryInfo.fromPlanningQuery(connectContext, sql)));
+            QeProcessorImpl.INSTANCE.unregisterQuery(executionId);
+
+            Awaitility.await().atMost(5, TimeUnit.SECONDS).until(joinFinished::get);
+            // StmtExecutor.handleDMLStmt() goes on to commit when isDone() and the status is OK.
+            Assertions.assertTrue(scheduler.isDone());
+            Assertions.assertTrue(scheduler.getExecStatus().ok());
+            Assertions.assertTrue(scheduler.getCommitInfos().isEmpty());
+            for (FragmentInstanceExecState execution : scheduler.getExecutionDAG().getExecutions()) {
+                Assertions.assertFalse(execution.isFinished());
+            }
+        } finally {
+            QeProcessorImpl.INSTANCE.unregisterQuery(executionId);
         }
     }
 }

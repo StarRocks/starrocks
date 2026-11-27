@@ -1110,6 +1110,17 @@ public class StmtExecutor {
                         QeProcessorImpl.QueryInfo.fromPlanningQuery(context, getRedactedOriginStmtInString()));
             } catch (Exception e) {
                 LOG.warn("Failed to register planning query: {}", DebugUtil.printId(context.getExecutionId()), e);
+                ConnectContext holder = QeProcessorImpl.INSTANCE.getRegisteredConnectContext(context.getExecutionId());
+                if (holder != null && holder != context) {
+                    // Another statement is running under this execution id, so this one is a copy of it, such as
+                    // a forwarded statement that a follower sent again. Running it would run the statement twice,
+                    // and the unregister below, by id, would remove the running statement's entry and finish its
+                    // coordinator. An entry of this same context is one an earlier statement left (async profile)
+                    // and is removed below as before.
+                    context.setPlanning(false);
+                    throw new StarRocksException("A statement with execution id " +
+                            DebugUtil.printId(context.getExecutionId()) + " is already running");
+                }
             }
             try {
                 execPlan = generateExecPlan();

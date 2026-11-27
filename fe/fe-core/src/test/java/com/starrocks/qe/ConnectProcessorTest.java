@@ -82,7 +82,6 @@ import com.starrocks.thrift.TMasterOpRequest;
 import com.starrocks.thrift.TMasterOpResult;
 import com.starrocks.thrift.TResultBatch;
 import com.starrocks.thrift.TResultSinkType;
-import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TUserIdentity;
 import com.starrocks.thrift.TWorkGroup;
 import com.starrocks.transaction.ExplicitTxnStatementValidator;
@@ -305,7 +304,9 @@ public class ConnectProcessorTest extends DDLTestBase {
         Mockito.doReturn(1L).when(context).getReturnRows();
         Mockito.doNothing().when(context).setStmtId(Mockito.anyLong());
         Mockito.doReturn(1L).when(context).getStmtId();
-        Mockito.doReturn(new TUniqueId()).when(context).getExecutionId();
+        // Unique per context, as each statement's execution id is in production: StmtExecutor refuses a statement
+        // whose execution id another context's statement holds.
+        Mockito.doReturn(UUIDUtil.genTUniqueId()).when(context).getExecutionId();
         Mockito.doReturn(MysqlCapability.DEFAULT_CAPABILITY).when(context).getCapability();
         Mockito.doReturn(new AccessControlContext()).when(context).getAccessControlContext();
         Mockito.doReturn(new PlainPasswordAuthenticationProvider(MysqlPassword.EMPTY_PASSWORD))

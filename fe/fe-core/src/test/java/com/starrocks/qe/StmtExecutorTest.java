@@ -109,6 +109,7 @@ import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 
 import java.lang.reflect.Field;
 import java.util.Collections;
@@ -627,6 +628,90 @@ public class StmtExecutorTest {
         } finally {
             Config.max_query_retry_time = oldRetryTime;
         }
+    }
+
+    /**
+     * A statement whose execution id another statement is running under is a copy of that statement, such
+     * as a forwarded statement that a follower sent again (each forward gets its own ConnectContext on the
+     * leader). The copy must be refused before it plans, and must leave the running statement's entry
+     * alone: removing it finishes the running statement's coordinator, and an INSERT then commits nothing.
+     */
+    @Test
+    public void testCopyOfARunningStatementIsRefusedAndLeavesItAlone() throws Exception {
+        ConnectContext ctx = executionIdCollisionContext();
+        TUniqueId executionId = ctx.getExecutionId();
+        ConnectContext runningCtx = UtFrameUtils.createDefaultCtx();
+        Coordinator running = Mockito.mock(Coordinator.class);
+        QeProcessorImpl.INSTANCE.registerQuery(executionId,
+                new QeProcessorImpl.QueryInfo(runningCtx, "insert into t select ...", running));
+        try {
+            AtomicInteger plans = stopPlanning();
+            new StmtExecutor(ctx, SqlParser.parseSingleStatement("SELECT 1", SqlModeHelper.MODE_DEFAULT)).execute();
+
+            Assertions.assertSame(running, QeProcessorImpl.INSTANCE.getCoordinator(executionId),
+                    "the running statement's entry was removed");
+            Mockito.verify(running, Mockito.never()).onFinished();
+            Assertions.assertEquals(0, plans.get(), "the copy was planned");
+            Assertions.assertTrue(ctx.getState().isError());
+            Assertions.assertTrue(ctx.getState().getErrorMessage().contains("is already running"),
+                    ctx.getState().getErrorMessage());
+        } finally {
+            QeProcessorImpl.INSTANCE.unregisterQuery(executionId);
+        }
+    }
+
+    /**
+     * An entry of the same ConnectContext under the execution id is one an earlier statement of this context
+     * left behind (a recursive CTE runs its inner statements on the outer statement's context, and an async
+     * profile keeps their entries a while): it is not another statement, and the statement is not refused.
+     */
+    @Test
+    public void testEntryOfTheSameContextDoesNotRefuseTheStatement() throws Exception {
+        ConnectContext ctx = executionIdCollisionContext();
+        TUniqueId executionId = ctx.getExecutionId();
+        QeProcessorImpl.INSTANCE.registerQuery(executionId,
+                new QeProcessorImpl.QueryInfo(ctx, "insert into cte_temp select ...", Mockito.mock(Coordinator.class)));
+        try {
+            AtomicInteger plans = stopPlanning();
+            new StmtExecutor(ctx, SqlParser.parseSingleStatement("SELECT 1", SqlModeHelper.MODE_DEFAULT)).execute();
+
+            Assertions.assertEquals(1, plans.get(), "the statement was not planned");
+            Assertions.assertFalse(ctx.getState().getErrorMessage().contains("is already running"),
+                    ctx.getState().getErrorMessage());
+        } finally {
+            QeProcessorImpl.INSTANCE.unregisterQuery(executionId);
+        }
+    }
+
+    private static ConnectContext executionIdCollisionContext() throws Exception {
+        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+        ConnectContext.threadLocalInfo.set(ctx);
+        UUID queryId = UUIDUtil.genUUID();
+        ctx.setQueryId(queryId);
+        ctx.setExecutionId(UUIDUtil.toTUniqueId(queryId));
+        new MockUp<StmtExecutor>() {
+            @Mock
+            public boolean isForwardToLeader() {
+                return false;
+            }
+        };
+        return ctx;
+    }
+
+    /**
+     * Ends every statement in planning, after its planning-query registration was tried; PLAN_COUNT counts
+     * the statements that got that far.
+     */
+    private static AtomicInteger stopPlanning() {
+        PLAN_COUNT.set(0);
+        new MockUp<StatementPlanner>() {
+            @Mock
+            public static ExecPlan plan(StatementBase ignoredStmt, ConnectContext ignoredCtx) {
+                PLAN_COUNT.incrementAndGet();
+                throw new RuntimeException("planning stopped by the test");
+            }
+        };
+        return PLAN_COUNT;
     }
 
     /**
