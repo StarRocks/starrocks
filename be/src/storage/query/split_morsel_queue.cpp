@@ -638,10 +638,11 @@ BaseRowset* LogicalSplitMorselQueue::_find_largest_rowset(const std::vector<Base
     return largest_rowset;
 }
 
-SegmentSharedPtr LogicalSplitMorselQueue::_find_largest_segment(BaseRowset* rowset) const {
-    // get_non_null_segments() drops any lost-segment placeholders (experimental_lake_ignore_lost_segment).
-    // Logical split does not need positional alignment, so this compacted view is fine.
-    const auto segments = rowset->get_non_null_segments();
+StatusOr<SegmentSharedPtr> LogicalSplitMorselQueue::_find_largest_segment(BaseRowset* rowset) const {
+    // Load the segments with the checked call and return its error. On a segment-load failure (e.g. a StarMgr
+    // GetShard timeout) the unchecked get_segments() returns an empty list, which made the split treat the rowset
+    // as having no segment. The non-null filter only drops the slots experimental_lake_ignore_lost_segment leaves.
+    ASSIGN_OR_RETURN(const auto segments, rowset->get_non_null_segments_checked());
     if (segments.empty()) {
         return nullptr;
     }
@@ -661,11 +662,12 @@ StatusOr<SegmentGroupPtr> LogicalSplitMorselQueue::_create_segment_group(BaseRow
     if (rowset->is_overlapped()) {
         // _find_largest_segment returns nullptr only if the whole rowset was lost
         // (experimental_lake_ignore_lost_segment) -- then there is no segment to add.
-        if (auto largest = _find_largest_segment(rowset); largest != nullptr) {
+        ASSIGN_OR_RETURN(auto largest, _find_largest_segment(rowset));
+        if (largest != nullptr) {
             segments.emplace_back(std::move(largest));
         }
     } else {
-        segments = rowset->get_non_null_segments();
+        ASSIGN_OR_RETURN(segments, rowset->get_non_null_segments_checked());
     }
 
     for (const auto& segment : segments) {
