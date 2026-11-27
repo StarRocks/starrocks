@@ -18,11 +18,18 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.connector.share.credential.CloudConfigurationConstants;
 import com.starrocks.fs.HdfsUtil;
+import com.starrocks.fs.hdfs.HdfsService;
+import com.starrocks.thrift.TBrokerCloseWriterRequest;
+import com.starrocks.thrift.TBrokerDeletePathRequest;
+import com.starrocks.thrift.TBrokerFD;
+import com.starrocks.thrift.TBrokerOpenWriterRequest;
+import com.starrocks.thrift.TBrokerPWriteRequest;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.io.IOException;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
@@ -401,5 +408,54 @@ public class StorageVolumeAccessCheckerTest {
         Assertions.assertDoesNotThrow(() ->
                 StorageVolumeAccessChecker.check(svName, svType, locations, params));
         Assertions.assertEquals(1, writeCount.get());
+    }
+
+    /**
+     * Runs the real HdfsUtil.writeFile and mocks only HdfsService. S3A uploads the temp file when the stream is
+     * closed, so a credential without PutObject fails in closeWriter, and that must fail the check.
+     */
+    @Test
+    public void testCheckFailsWhenUploadOnCloseFails() {
+        String svName = "test_sv";
+        String svType = "S3";
+        List<String> locations = Collections.singletonList("s3://bucket/path");
+        Map<String, String> params = new HashMap<>();
+
+        AtomicInteger closeCount = new AtomicInteger(0);
+        AtomicInteger deleteCount = new AtomicInteger(0);
+
+        new MockUp<HdfsService>() {
+            @Mock
+            public TBrokerFD openWriter(TBrokerOpenWriterRequest request) {
+                return new TBrokerFD(1L, 2L);
+            }
+
+            @Mock
+            public void pwrite(TBrokerPWriteRequest request) {
+                // success
+            }
+
+            @Mock
+            public void closeWriter(TBrokerCloseWriterRequest request) throws StarRocksException {
+                closeCount.incrementAndGet();
+                // Same shape as HdfsFsManager.closeWriter when S3A gets a 403 on PutObject.
+                throw new StarRocksException("errors while close file output stream",
+                        new IOException("Access Denied. (Service: S3, Status Code: 403)"));
+            }
+
+            @Mock
+            public void deletePath(TBrokerDeletePathRequest request) {
+                deleteCount.incrementAndGet();
+            }
+        };
+
+        DdlException ex = Assertions.assertThrows(DdlException.class,
+                () -> StorageVolumeAccessChecker.check(svName, svType, locations, params));
+
+        Assertions.assertTrue(ex.getMessage().contains("Storage volume accessibility check failed"), ex.getMessage());
+        Assertions.assertTrue(ex.getMessage().contains("Status Code: 403"), ex.getMessage());
+        Assertions.assertEquals(1, closeCount.get());
+        // The temp file was never written, so there is nothing to clean up.
+        Assertions.assertEquals(0, deleteCount.get());
     }
 }
