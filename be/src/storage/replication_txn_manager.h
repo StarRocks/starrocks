@@ -71,7 +71,8 @@ private:
 
     Status convert_snapshot_for_primary(const std::string& tablet_snapshot_path,
                                         std::unordered_map<uint32_t, uint32_t>* column_unique_id_map,
-                                        const TReplicateSnapshotRequest& request);
+                                        const TReplicateSnapshotRequest& request,
+                                        const TabletSchemaCSPtr& tablet_schema);
 
     Status publish_snapshot(Tablet* tablet, const string& snapshot_dir, int64_t snapshot_version,
                             bool incremental_snapshot);
