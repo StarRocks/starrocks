@@ -494,8 +494,9 @@ TEST_F(FirstLastValueStreamingTest, RangePeersAndUnboundedFramesKeepRequiredMate
         range.__set_type(TAnalyticWindowType::RANGE);
         // All ORDER BY values are peers, so the peer group cannot stream before end of input.
         run(input, keys, range, first, true, true, expected, "Streaming/Cumulative", 2);
-        range.__set_window_start(range.window_end);
-        run(input, keys, range, first, true, true, expected, "Materializing/ByDefinition", 2);
+        auto unbounded_range = rows_frame(std::nullopt, std::nullopt);
+        unbounded_range.__set_type(TAnalyticWindowType::RANGE);
+        run(input, keys, unbounded_range, first, true, true, expected, "Materializing/Cumulative", 2);
     }
 }
 
