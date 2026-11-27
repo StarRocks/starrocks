@@ -312,7 +312,9 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
         if (sv.getBroadcastRowCountLimit() <= 0) {
             return false;
         }
-        int beNum = Math.max(1, ctx.getAliveBackendNumber());
+        // The number of nodes a broadcast would copy the right table to, counted like the broadcast cost in CostModel.
+        int beNum = Math.max(1, ctx.isUseWarehouseExecNodes() ?
+                ctx.getQueryExecNodeNumber() : ctx.getAliveBackendNumber());
         Statistics leftChildStats = groupExpression.getInputs().get(curChildIndex - 1).getStatistics();
         Statistics rightChildStats = groupExpression.getInputs().get(curChildIndex).getStatistics();
         if (leftChildStats == null || rightChildStats == null) {
