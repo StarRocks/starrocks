@@ -366,6 +366,13 @@ public class StatementPlannerExternalTablesLockTest extends ConnectorPlanTestBas
                 "select count(*) from t0 group by (select count(*) from jdbc0.partitioned_db0.tbl0)");
     }
 
+    /** An external table read under a PIVOT, which the parser moves the FROM clause under, with t0 locked. */
+    @Test
+    public void testExternalTableUnderPivotMetadataNotUnderLock() throws Exception {
+        assertExternalMetadataFetchedBeforeLock("select count(*) from t0 union all "
+                + "select x from jdbc0.partitioned_db0.tbl0 pivot (count(*) for a in ('x' as x))");
+    }
+
     /**
      * A non-recursive CTE's name is in scope only after its own definition: inside it, a same-named table is the
      * table. Here the inner tbl0 is the JDBC table of the current database, which the pre-pass must resolve

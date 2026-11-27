@@ -3332,6 +3332,22 @@ public class PrivilegeCheckerTest extends StarRocksTestBase {
         DDLStmtExecutor.execute(stmt, starRocksAssert.getCtx());
     }
 
+    /**
+     * The parser moves the whole FROM clause of a PIVOT under it: a table read there -- directly, in a subquery, or in
+     * a join -- needs SELECT like any other.
+     */
+    @Test
+    public void testSelectUnderPivot() throws Exception {
+        String pivot = " pivot (sum(k4) for k3 in ('x' as x))";
+        for (String from : new String[] {"db2.tbl1", "(select k1, k3, k4 from db2.tbl1) s",
+                "db2.tbl1 join (select 1 as one) o on true"}) {
+            verifyGrantRevoke("select x from " + from + pivot,
+                    "grant SELECT on TABLE db2.tbl1 to test",
+                    "revoke SELECT on TABLE db2.tbl1 from test",
+                    "Access denied; you need (at least one of) the SELECT privilege(s) on");
+        }
+    }
+
     @Test
     public void testQueryAndDML() throws Exception {
         starRocksAssert.withTable("CREATE TABLE db1.`tprimary` (\n" +

@@ -185,6 +185,17 @@ public class AstTraverser<R, C> implements AstVisitorExtendInterface<R, C> {
     }
 
     @Override
+    public R visitPivotRelation(PivotRelation node, C context) {
+        // The parser moves the whole FROM clause under PIVOT: every table the statement reads there is in its query.
+        if (node.getQuery() != null) {
+            visit(node.getQuery(), context);
+        }
+        node.getAggregateFunctions().forEach(x -> visit(x.getFunctionCallExpr(), context));
+        node.getPivotValues().forEach(x -> x.getExprs().forEach(e -> visit(e, context)));
+        return null;
+    }
+
+    @Override
     public R visitSetOp(SetOperationRelation node, C context) {
         if (node.hasWithClause()) {
             node.getCteRelations().forEach(x -> visit(x, context));
