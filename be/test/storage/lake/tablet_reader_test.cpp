@@ -4296,7 +4296,6 @@ TEST_F(LakeTabletReaderSpit, test_index_warm_includes_idg_bitmap_index_roots) {
     if (roots.bitmap_dict_ordinal.size > 0) {
         EXPECT_TRUE(covered(roots.bitmap_dict_ordinal));
     }
-    EXPECT_EQ(1, stats.lake_prepared_tablet_warm_index_idg_files);
     EXPECT_EQ(1, stats.lake_prepared_tablet_warm_index_segments);
     EXPECT_GE(stats.lake_prepared_tablet_warm_index_ranges, static_cast<int64_t>(idx_ranges.size()));
 
@@ -4304,7 +4303,6 @@ TEST_F(LakeTabletReaderSpit, test_index_warm_includes_idg_bitmap_index_roots) {
     _tablet_mgr->metacache()->prune();
     stats = read(0, "4", 1);
     EXPECT_TRUE(idx_ranges.empty());
-    EXPECT_EQ(0, stats.lake_prepared_tablet_warm_index_idg_files);
 
     // Bitmap index filtering off: no bitmap index is warmed.
     {
@@ -4312,7 +4310,6 @@ TEST_F(LakeTabletReaderSpit, test_index_warm_includes_idg_bitmap_index_roots) {
         _tablet_mgr->metacache()->prune();
         stats = read(1, "8", 1);
         EXPECT_TRUE(idx_ranges.empty());
-        EXPECT_EQ(0, stats.lake_prepared_tablet_warm_index_idg_files);
     }
 
     // A missing .idx file (vacuumed under an old version) is not warmed, and the scan still finds the row. The local
@@ -4321,7 +4318,6 @@ TEST_F(LakeTabletReaderSpit, test_index_warm_includes_idg_bitmap_index_roots) {
     _tablet_mgr->metacache()->prune();
     stats = read(1, "8", 1);
     EXPECT_TRUE(idx_ranges.empty());
-    EXPECT_EQ(0, stats.lake_prepared_tablet_warm_index_idg_files);
 }
 
 // Concurrent readers of the index roots while other threads load the indexes see the same, stable values.

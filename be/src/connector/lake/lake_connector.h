@@ -307,7 +307,6 @@ private:
     RuntimeProfile::Counter* _lake_tablet_prepare_warm_index_blocks_counter = nullptr;
     RuntimeProfile::Counter* _lake_tablet_prepare_warm_index_skipped_counter = nullptr;
     RuntimeProfile::Counter* _lake_tablet_prepare_warm_index_pruned_segments_counter = nullptr;
-    RuntimeProfile::Counter* _lake_tablet_prepare_warm_index_idg_files_counter = nullptr;
     RuntimeProfile::Counter* _lake_tablet_prepare_inline_rowsets_counter = nullptr;
     RuntimeProfile::Counter* _lake_initial_coarse_counter = nullptr;
     RuntimeProfile::Counter* _lake_refined_counter = nullptr;

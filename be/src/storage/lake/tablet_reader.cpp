@@ -784,7 +784,6 @@ static void warm_prepared_indexes(PreparedTabletReadState* state, const TabletSc
                         std::min(idx.file_size, (begin + pp.size + block_size - 1) / block_size * block_size));
             }
         }
-        bool warmed = false;
         for (const auto& [begin, end] : merge_ranges(std::move(blocks))) {
             if (end <= begin) {
                 continue;
@@ -792,10 +791,6 @@ static void warm_prepared_indexes(PreparedTabletReadState* state, const TabletSc
             if (!start_warm(idx.file.get(), true, begin, static_cast<size_t>(end - begin))) {
                 break;
             }
-            warmed = true;
-        }
-        if (warmed) {
-            stats->lake_prepared_tablet_warm_index_idg_files++;
         }
     }
 }

@@ -1558,8 +1558,6 @@ void LakeDataSource::init_counter(RuntimeState* state) {
             ADD_CHILD_COUNTER(_runtime_profile, "TabletPrepareIndexWarmSkipped", TUnit::UNIT, tablet_prepare_name);
     _lake_tablet_prepare_warm_index_pruned_segments_counter = ADD_CHILD_COUNTER(
             _runtime_profile, "TabletPrepareIndexWarmPrunedSegments", TUnit::UNIT, tablet_prepare_name);
-    _lake_tablet_prepare_warm_index_idg_files_counter =
-            ADD_CHILD_COUNTER(_runtime_profile, "TabletPrepareIndexWarmIdgFiles", TUnit::UNIT, tablet_prepare_name);
     _lake_tablet_prepare_inline_rowsets_counter =
             ADD_CHILD_COUNTER(_runtime_profile, "TabletPrepareInlineRowsets", TUnit::UNIT, tablet_prepare_name);
     _lake_seed_segment_init_timer = ADD_CHILD_TIMER(_runtime_profile, "SeedSegmentInitTime", "SeedPrepareTime");
@@ -1791,8 +1789,6 @@ void LakeDataSource::update_counter(RuntimeState* state) {
                    reader_stats.lake_prepared_tablet_warm_index_skipped);
     COUNTER_UPDATE(_lake_tablet_prepare_warm_index_pruned_segments_counter,
                    reader_stats.lake_prepared_tablet_warm_index_pruned_segments);
-    COUNTER_UPDATE(_lake_tablet_prepare_warm_index_idg_files_counter,
-                   reader_stats.lake_prepared_tablet_warm_index_idg_files);
     COUNTER_UPDATE(_lake_tablet_prepare_inline_rowsets_counter, reader_stats.lake_prepared_tablet_inline_rowsets);
     COUNTER_UPDATE(_lake_seed_io_timer, reader_stats.lake_prepared_seed_io_ns);
     COUNTER_UPDATE(_lake_seed_io_count_counter, reader_stats.lake_prepared_seed_io_count);
