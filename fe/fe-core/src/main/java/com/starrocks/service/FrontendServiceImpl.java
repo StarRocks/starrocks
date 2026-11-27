@@ -617,14 +617,10 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         if (!params.isSetUser_ident()) {
             throw new TException("missed user_identity");
         }
-<<<<<<< HEAD
-        // TODO: check privilege
         UserIdentity userIdentity = UserIdentityUtils.fromThrift(params.getUser_ident());
-
-=======
         ConnectContext context = new ConnectContext();
         UserIdentityUtils.setAuthInfoFromThrift(context, params.getUser_ident());
->>>>>>> e19003a ([BugFix] Check pipe privilege in information_schema.pipes and pipe_files (#84463))
+
         PipeManager pm = GlobalStateMgr.getCurrentState().getPipeManager();
         Map<PipeId, Pipe> pipes = pm.getPipesUnlock();
         TListPipesResult result = new TListPipesResult();
@@ -663,13 +659,9 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             throw new TException("missed user_identity");
         }
         LOG.info("listPipeFiles params={}", params);
-<<<<<<< HEAD
-        // TODO: check privilege
         UserIdentity userIdentity = UserIdentityUtils.fromThrift(params.getUser_ident());
-=======
         ConnectContext context = new ConnectContext();
         UserIdentityUtils.setAuthInfoFromThrift(context, params.getUser_ident());
->>>>>>> e19003a ([BugFix] Check pipe privilege in information_schema.pipes and pipe_files (#84463))
         TListPipeFilesResult result = new TListPipeFilesResult();
         PipeManager pm = GlobalStateMgr.getCurrentState().getPipeManager();
         Map<PipeId, Pipe> pipes = pm.getPipesUnlock();
