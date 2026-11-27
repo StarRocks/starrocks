@@ -606,8 +606,9 @@ public class QueryRuntimeProfile {
                     }
 
                     Counter operatorTotalTime = commonMetrics.getMaxCounter(ProfileKeyDictionary.OPERATOR_TOTAL_TIME);
-                    Preconditions.checkNotNull(operatorTotalTime);
-                    queryCumulativeOperatorTime += operatorTotalTime.getValue();
+                    if (operatorTotalTime != null) {
+                        queryCumulativeOperatorTime += operatorTotalTime.getValue();
+                    }
 
                     Counter scanTime = uniqueMetrics.getMaxCounter(ProfileKeyDictionary.SCAN_TIME);
                     if (scanTime != null) {

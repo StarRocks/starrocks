@@ -402,6 +402,36 @@ public class QueryRuntimeProfileTest {
         Assertions.assertEquals(3500, queryProfile.getCounter(ProfileKeyDictionary.QUERY_SUM_MEMORY_USAGE).getValue());
     }
 
+    @Test
+    public void testBuildQueryProfileSkipsMissingOperatorTotalTime() {
+        QueryRuntimeProfile profile = new QueryRuntimeProfile(connectContext, jobSpec, false);
+        profile.initFragmentProfiles(1);
+        RuntimeProfile instance = withQueryCounters(buildInstanceProfile("inst-1", "10.0.0.1:9060"), 10, 100, 1000);
+        RuntimeProfile pipeline = instance.getChild("Pipeline (driver_id=0)");
+
+        RuntimeProfile preparedOp = new RuntimeProfile("OLAP_SCAN_OPERATOR (plan_node_id=0)");
+        RuntimeProfile preparedCommon = new RuntimeProfile("CommonMetrics");
+        preparedCommon.addCounter(ProfileKeyDictionary.OPERATOR_TOTAL_TIME, TUnit.TIME_NS, null).setValue(1234L);
+        preparedOp.addChild(preparedCommon);
+        preparedOp.addChild(new RuntimeProfile("UniqueMetrics"));
+        pipeline.addChild(preparedOp);
+
+        RuntimeProfile unpreparedOp = new RuntimeProfile("HASH_JOIN_PROBE (plan_node_id=1)");
+        unpreparedOp.addChild(new RuntimeProfile("CommonMetrics"));
+        unpreparedOp.addChild(new RuntimeProfile("UniqueMetrics"));
+        pipeline.addChild(unpreparedOp);
+
+        profile.getFragmentProfiles().get(0).addChild(instance);
+
+        RuntimeProfile queryProfile = profile.buildQueryProfile(true);
+        Assertions.assertEquals(1234L,
+                queryProfile.getCounter(ProfileKeyDictionary.QUERY_CUMULATIVE_OPERATOR_TIME).getValue());
+        RuntimeProfile mergedFragment = queryProfile.getChildList().get(0).first;
+        RuntimeProfile mergedPipeline = mergedFragment.getChild("Pipeline (driver_id=0)");
+        Assertions.assertNotNull(mergedPipeline);
+        Assertions.assertNotNull(mergedPipeline.getChild("HASH_JOIN_PROBE (plan_node_id=1)"));
+    }
+
     private static RuntimeProfile withQueryCounters(RuntimeProfile instance, long cpuTime, long spillBytes,
                                                     long peakMemory) {
         instance.addCounter(ProfileKeyDictionary.QUERY_CUMULATIVE_CPU_TIME, TUnit.TIME_NS, null).setValue(cpuTime);

@@ -15,6 +15,7 @@
 #include <gtest/gtest.h>
 
 #include <atomic>
+#include <chrono>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -22,6 +23,7 @@
 #include <vector>
 
 #include "base/testutil/assert.h"
+#include "base/utility/defer_op.h"
 #include "common/config_exec_flow_fwd.h"
 #include "common/object_pool.h"
 #include "common/runtime_profile.h"
@@ -519,6 +521,22 @@ TEST(FragmentContextExecRuntimeTest, ConcurrentAdaptivePublishAndProfileReport) 
                 std::this_thread::yield();
             }
         });
+        DeferOp stop_reporter([&]() {
+            stop.store(true, std::memory_order_release);
+            if (reporter.joinable()) {
+                reporter.join();
+            }
+        });
+        auto wait_for_report_count = [&](int target) {
+            const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+            while (recording_executor->report_exec_state_count.load(std::memory_order_acquire) < target) {
+                if (std::chrono::steady_clock::now() >= deadline) {
+                    return false;
+                }
+                std::this_thread::yield();
+            }
+            return true;
+        };
 
         p1->setup_pipeline_profile(state);
         instantiate_test_drivers(&fragment_ctx, &query_runtime_state, p1.get());
@@ -526,9 +544,7 @@ TEST(FragmentContextExecRuntimeTest, ConcurrentAdaptivePublishAndProfileReport) 
         // Ensure the reporter thread executes real profile merging on the instantiated (but unprepared) p1.
         const int during_prepare_target =
                 recording_executor->report_exec_state_count.load(std::memory_order_acquire) + 1;
-        while (recording_executor->report_exec_state_count.load(std::memory_order_acquire) < during_prepare_target) {
-            std::this_thread::yield();
-        }
+        ASSERT_TRUE(wait_for_report_count(during_prepare_target));
         EXPECT_GT(recording_executor->merged_profile_count.load(std::memory_order_acquire), base_merges);
 
         for (const auto& driver : p1->drivers()) {
@@ -539,9 +555,7 @@ TEST(FragmentContextExecRuntimeTest, ConcurrentAdaptivePublishAndProfileReport) 
 
         // Wait for the reporter thread itself to observe the published pipeline at least once.
         const int post_publish_target = recording_executor->report_exec_state_count.load(std::memory_order_acquire) + 1;
-        while (recording_executor->report_exec_state_count.load(std::memory_order_acquire) < post_publish_target) {
-            std::this_thread::yield();
-        }
+        ASSERT_TRUE(wait_for_report_count(post_publish_target));
         stop.store(true, std::memory_order_release);
         reporter.join();
 
