@@ -20,6 +20,8 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
+
 public class AggregatePushDownTest extends PlanTestBase {
     @BeforeAll
     public static void beforeClass() throws Exception {
@@ -57,6 +59,131 @@ public class AggregatePushDownTest extends PlanTestBase {
     }
 
     @Test
+<<<<<<< HEAD
+=======
+    public void testConstantKeyUnionBranchKeepsOnlyNonEmptyInput() throws Exception {
+        // A group-by key can be erased without ever crossing a join: a UNION branch projecting a constant
+        // (`select 1 as k ... group by k`) leaves the pushed aggregate with no grouping key, so it lands as a
+        // scalar aggregate in every branch, which emits a row for an empty branch. It is pushed, but keeps its
+        // row only for a non-empty branch, as the GROUP BY on the constant would.
+        String constKeyUnion = getFragmentPlan(
+                "select k, count(*) from (select 1 as k from t0 union all select 1 from t1) u group by k");
+        Assertions.assertEquals(3, StringUtils.countMatches(constKeyUnion, ":AGGREGATE "), constKeyUnion);
+        Assertions.assertEquals(2, StringUtils.countMatches(constKeyUnion, "having: "), constKeyUnion);
+
+        String constKeySumUnion = getFragmentPlan(
+                "select k, sum(v) from (select 1 as k, t0.v2 as v from t0, t1 union all select 2, v5 from t1) u " +
+                        "group by k");
+        Assertions.assertEquals(3, StringUtils.countMatches(constKeySumUnion, ":AGGREGATE "), constKeySumUnion);
+        Assertions.assertEquals(2, StringUtils.countMatches(constKeySumUnion, "having: "), constKeySumUnion);
+
+        // Sanity: a UNION whose key is a real column still pushes a count into both branches.
+        String colKeyUnion = getFragmentPlan(
+                "select k, count(*) from (select v1 as k from t0 union all select v4 from t1) u group by k");
+        Assertions.assertEquals(3, StringUtils.countMatches(colKeyUnion, ":AGGREGATE "), colKeyUnion);
+    }
+
+    @Test
+    public void testAggregatePushedBelowKeylessJoinKeepsOnlyNonEmptyInput() throws Exception {
+        // An aggregate pushed with no grouping key is a scalar aggregate, which emits one row even when its
+        // side is empty (count 0, sum / min / max NULL). Through a keyless join (CROSS JOIN, or an INNER JOIN
+        // whose condition contributes no columns of that side) the row pairs with every row of the other
+        // side, so `select t1.v4, max(t0.v2) from t0, t1 where <false on t0> group by t1.v4` returned one
+        // (v4, NULL) group per t1.v4 instead of no rows (RB-1395). The aggregate is still pushed, but counts
+        // its input rows and keeps its row only when the count is positive.
+        for (String sql : List.of("select t1.v4, count(*) from t0, t1 group by t1.v4",
+                "select t1.v4, max(t0.v2), sum(t0.v3) from t0, t1 group by t1.v4",
+                "select t1.v4, min(t0.v2) from t0 inner join t1 on 1 = 1 group by t1.v4",
+                "select t1.v4, count(*) from t0 inner join t1 on 1 = 1 group by t1.v4",
+                "select t1.v4, max(t0.v2) from t0 join t1 on t0.v1 = 4 where t0.v3 < 0 group by t1.v4")) {
+            String plan = getFragmentPlan(sql);
+            Assertions.assertTrue(StringUtils.countMatches(plan, ":AGGREGATE ") >= 2, sql + "\n" + plan);
+            Assertions.assertTrue(plan.matches("(?s).*\\|  having: \\d+: count > 0\n.*"), sql + "\n" + plan);
+            // a count(*) of the query is the row count; otherwise one is added
+            Assertions.assertEquals(sql.contains("count(*)") ? 0 : 1, StringUtils.countMatches(plan, "count(1)"),
+                    sql + "\n" + plan);
+        }
+
+        // A constant key groups nothing on the pushed side either; the rewriter drops it and builds the same
+        // row-count-guarded aggregate.
+        for (String sql : List.of("select 1 + 1, count(*) from t0, t1 group by 1 + 1",
+                "select 1 + 1, max(t0.v2) from t0, t1 group by 1 + 1")) {
+            String plan = getFragmentPlan(sql);
+            Assertions.assertEquals(2, StringUtils.countMatches(plan, ":AGGREGATE "), sql + "\n" + plan);
+            Assertions.assertTrue(plan.matches("(?s).*\\|  having: \\d+: count > 0\n.*"), sql + "\n" + plan);
+        }
+
+        // Over a real equi-join the on-predicate column supplies the grouping key, and no row count is needed.
+        String constGroupByEquiPlan =
+                getFragmentPlan("select 1 + 1, count(*) from t0 join t1 on t0.v1 = t1.v4 group by 1 + 1");
+        Assertions.assertEquals(2, StringUtils.countMatches(constGroupByEquiPlan, ":AGGREGATE "), constGroupByEquiPlan);
+        assertNotContains(constGroupByEquiPlan, "having:");
+
+        // A group-by expression spanning both sides of a keyless join is not ungrouped: the rewriter flattens
+        // `t0.v1 + t1.v4` into its component columns before reaching the join, so child 0 keeps `v1` as its
+        // grouping key and needs no row count.
+        String derivedGroupByPlan =
+                getFragmentPlan("select t0.v1 + t1.v4, count(*) from t0, t1 group by t0.v1 + t1.v4");
+        Assertions.assertEquals(2, StringUtils.countMatches(derivedGroupByPlan, ":AGGREGATE "), derivedGroupByPlan);
+        assertContains(derivedGroupByPlan, "output: count(*)\n  |  group by: 1: v1");
+        assertNotContains(derivedGroupByPlan, "having:");
+
+        // A grouped push down needs no row count either.
+        String realJoinPlan =
+                getFragmentPlan("select t1.v4, max(t0.v2) from t0 join t1 on t0.v1 = t1.v4 group by t1.v4");
+        Assertions.assertEquals(2, StringUtils.countMatches(realJoinPlan, ":AGGREGATE "), realJoinPlan);
+        assertNotContains(realJoinPlan, "having:");
+    }
+
+    @Test
+    public void testCountPushedBelowSemiAntiJoin() throws Exception {
+        // A semi/anti join only filters its preserved side: it neither duplicates those rows nor pads them
+        // with NULLs, and it decides row by row on the on-predicate columns, which the pushed group-by set
+        // always contains. sum(partial_count) over the surviving groups is therefore the true count.
+        //
+        // Rejecting these would not merely forgo a count push down. A count that cannot land on a side
+        // aborts the whole push down for that side, so it would also cancel the sum/min/max push downs that
+        // already worked below semi joins -- which is what regressed TPC-DS Q14 (its `ss_item_sk IN (...)`
+        // becomes a LEFT SEMI JOIN).
+        String semiPlan = getFragmentPlan(
+                "select t0.v1, count(*) from t0 where t0.v1 in (select t1.v4 from t1) group by t0.v1");
+        Assertions.assertEquals(2, StringUtils.countMatches(semiPlan, ":AGGREGATE "), semiPlan);
+
+        String antiPlan = getFragmentPlan(
+                "select t0.v1, count(*) from t0 where t0.v1 not in (select t1.v4 from t1) group by t0.v1");
+        Assertions.assertEquals(2, StringUtils.countMatches(antiPlan, ":AGGREGATE "), antiPlan);
+
+        String mixedPlan = getFragmentPlan(
+                "select t0.v1, sum(t0.v2), count(*) from t0 where t0.v1 in (select t1.v4 from t1) group by t0.v1");
+        Assertions.assertEquals(2, StringUtils.countMatches(mixedPlan, ":AGGREGATE "), mixedPlan);
+    }
+
+    @Test
+    public void testCountNotLeftAboveJoinWhenOtherAggPushed() throws Exception {
+        // Pushing ANY aggregation to a join child collapses that child to one row per group key.
+        // count(*) is the only whitelisted function sensitive to that collapse, so if count() is
+        // stripped from a side (because it may only land on one side of the join) the remaining
+        // aggregations must not be pushed either -- otherwise the count() left above the join
+        // counts the collapsed rows instead of the real join rows.
+        //
+        // t0 = {(1,10),(1,20)}, t1 = {(1),(1),(1)} joins to 6 rows: sum = 90, count = 6.
+        // Collapsing t0 to a single (v1=1, sum=30) row would yield count = 3.
+        String plan = getFragmentPlan(
+                "select t0.v1, sum(t0.v2), count(*) from t0 join t1 on t0.v1 = t1.v4 group by t0.v1");
+        Assertions.assertEquals(1, StringUtils.countMatches(plan, ":AGGREGATE "), plan);
+
+        String leftJoinPlan = getFragmentPlan(
+                "select t0.v1, sum(t1.v5), count(*) from t0 left join t1 on t0.v1 = t1.v4 group by t0.v1");
+        Assertions.assertEquals(1, StringUtils.countMatches(leftJoinPlan, ":AGGREGATE "), leftJoinPlan);
+
+        // Sanity: sum() alone is insensitive to the collapse, so it is still pushed below the join.
+        String sumOnlyPlan = getFragmentPlan(
+                "select t0.v1, sum(t0.v2) from t0 join t1 on t0.v1 = t1.v4 group by t0.v1");
+        Assertions.assertEquals(2, StringUtils.countMatches(sumOnlyPlan, ":AGGREGATE "), sumOnlyPlan);
+    }
+
+    @Test
+>>>>>>> 3a595a7 ([BugFix] Push an ungrouped aggregate below a keyless join with HAVING count > 0 (#84812))
     public void testPushDownDisableOnBroadcastJoin() {
         connectContext.getSessionVariable().setCboPushDownAggregateOnBroadcastJoin(false);
         try {
