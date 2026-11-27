@@ -421,8 +421,7 @@ void JoinHashMap<LT, CT, MT>::_search_ht(RuntimeState* state, ChunkPtr* probe_ch
 template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
 void JoinHashMap<LT, CT, MT>::_search_ht_remain(RuntimeState* state) {
     if (!_probe_state->has_remain) {
-        size_t zero_count = SIMD::count_zero(_probe_state->build_match_index);
-        if (zero_count <= 0) {
+        if (!SIMD::contain_zero(_probe_state->build_match_index)) {
             _probe_state->count = 0;
             _probe_state->has_remain = false;
             return;

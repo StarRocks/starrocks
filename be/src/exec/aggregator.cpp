@@ -1843,7 +1843,7 @@ void Aggregator::build_hash_map_with_topn_runtime_filter(size_t chunk_size) {
     // if _streaming_selection is not all 0, means there are new group by keys,
     // we need to build the topn runtime filter
     if (_topn_runtime_filter_builder != nullptr &&
-        SIMD::count_zero(_streaming_selection.data(), chunk_size) != chunk_size) {
+        SIMD::contains_nonzero_bit(_streaming_selection.data(), chunk_size)) {
         _topn_runtime_filter_builder->update(_group_by_columns, _streaming_selection);
     }
 }
