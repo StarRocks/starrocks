@@ -430,7 +430,7 @@ This parameter predates v4.1; its existence does not imply support for shared-da
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: Whether to enable parallel Compaction for Primary Key index in a shared-data cluster.
+- Description: Deprecated. This item no longer takes effect: Primary Key index Compaction in a shared-data cluster always runs in parallel, because the serial Compaction could drop index files of a range-split file set from the Primary Key index. Setting it to `false` only logs a warning.
 - Introduced in: -
 
 ### enable_pk_index_parallel_execution

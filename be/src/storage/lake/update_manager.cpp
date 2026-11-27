@@ -2526,11 +2526,16 @@ Status UpdateManager::execute_index_major_compaction(const TabletMetadataPtr& me
     // error-propagation paths.
     FAIL_POINT_TRIGGER_EXECUTE(fail_execute_index_major_compaction,
                                { return Status::InternalError("injected index major compaction failure"); });
-    if (config::enable_pk_index_parallel_compaction) {
-        return LakePersistentIndex::parallel_major_compact(ExecEnv::GetInstance()->parallel_compact_mgr(), _tablet_mgr,
-                                                           metadata, txn_log);
+    // Always use the fileset-aware parallel path. The serial LakePersistentIndex::major_compact picks a
+    // prefix of the flattened sstable list, which can cut a range-split fileset, while apply_opcompaction
+    // removes every fileset that holds an input: the sstables left out of the merge are dropped from the
+    // index. enable_pk_index_parallel_compaction=false is therefore ignored.
+    if (!config::enable_pk_index_parallel_compaction) {
+        LOG_EVERY_N(WARNING, 1000) << "enable_pk_index_parallel_compaction=false is ignored, the serial PK index "
+                                      "major compaction can drop sstables from the index";
     }
-    return LakePersistentIndex::major_compact(_tablet_mgr, metadata, txn_log);
+    return LakePersistentIndex::parallel_major_compact(ExecEnv::GetInstance()->parallel_compact_mgr(), _tablet_mgr,
+                                                       metadata, txn_log);
 }
 
 Status UpdateManager::pk_index_major_compaction(int64_t tablet_id, DataDir* data_dir) {

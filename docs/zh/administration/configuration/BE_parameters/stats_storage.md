@@ -464,7 +464,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - 类型：Boolean
 - 单位：-
 - 是否动态：是
-- 描述：是否启用存算分离集群中主键索引的并行 Compaction。
+- 描述：已弃用，该参数不再生效。存算分离集群中主键索引的 Compaction 始终并行执行，因为串行 Compaction 可能会把按范围切分的文件组中的索引文件从主键索引中丢弃。设置为 `false` 时仅打印一条告警日志。
 - 引入版本：-
 
 ### enable_pk_index_parallel_execution

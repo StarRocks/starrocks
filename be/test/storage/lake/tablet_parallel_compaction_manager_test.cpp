@@ -4429,10 +4429,9 @@ TEST_F(TabletParallelCompactionManagerTest, test_index_major_compaction_failure_
         fp->setMode(trigger_mode);
     };
 
-    // Take the serial branch of execute_index_major_compaction so the disarmed leg below returns OK
-    // deterministically: the parallel branch needs a LakePersistentIndexParallelCompactMgr, which
-    // TestBase only wires up when StorageEnv happens to have one. The failpoint sits ahead of this
-    // branch, so the armed leg is unaffected.
+    // enable_pk_index_parallel_compaction=false is ignored: execute_index_major_compaction still takes the
+    // parallel path, which returns OK before touching the compaction manager because this tablet has no
+    // PK index sstables. The failpoint sits ahead of that path, so the armed leg is unaffected.
     const bool saved_parallel = config::enable_pk_index_parallel_compaction;
     config::enable_pk_index_parallel_compaction = false;
     DeferOp restore_parallel([&] { config::enable_pk_index_parallel_compaction = saved_parallel; });
