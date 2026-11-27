@@ -1479,12 +1479,7 @@ private:
                 selection[0] = _has_null;
                 memset(selection, selection[0], size);
             } else {
-<<<<<<< HEAD:be/src/exprs/runtime_filter.h
                 const auto& input_data = GetContainer<Type>::get_data(const_column->data_column());
-                if constexpr (can_use_bf) {
-                    _rf_test_data<multi_partition>(selection, input_data, hash_values, 0);
-=======
-                const auto input_data = GetContainer<Type>::get_data(const_column->data_column());
                 if constexpr (multi_partition && can_use_bf) {
                     // The value is the same in every row, but the partition of each row comes from all the
                     // partition-by expressions and differs from row to row, so each row must be tested against
@@ -1500,7 +1495,6 @@ private:
                         _rf_test_data<multi_partition>(selection, input_data, hash_values, 0);
                     }
                     memset(selection, selection[0], size);
->>>>>>> a06247a ([BugFix] Test each row of a constant column against its own partition's runtime filter (#84695)):be/src/runtime/runtime_filter.h
                 }
             }
         } else if (input_column->is_nullable()) {
