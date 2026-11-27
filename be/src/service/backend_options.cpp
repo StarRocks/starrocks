@@ -18,7 +18,9 @@
 #include "service/backend_options.h"
 
 #include <algorithm>
+#include <chrono>
 #include <ostream>
+#include <thread>
 
 #include "common/config.h"
 #include "common/logging.h"
@@ -30,6 +32,7 @@
 namespace starrocks {
 
 static const std::string PRIORITY_CIDR_SEPARATOR = ";";
+static constexpr int64_t kWaitForLocalIpRetryIntervalMs = 1000;
 
 std::string BackendOptions::_s_localhost;
 std::string BackendOptions::_s_local_ip;
@@ -51,7 +54,8 @@ bool BackendOptions::init(bool is_cn) {
         return false;
     }
     std::vector<InetAddress> hosts;
-    Status status = get_hosts(&hosts);
+    Status status = get_hosts_waiting_for_non_loopback(
+            get_hosts, int64_t(config::net_wait_for_local_ip_timeout_s) * 1000, kWaitForLocalIpRetryIntervalMs, &hosts);
 
     if (!status.ok()) {
         LOG(FATAL) << status.message();
@@ -136,6 +140,37 @@ bool BackendOptions::init(bool is_cn) {
     LOG(INFO) << "local_ip " << _s_local_ip;
     LOG(INFO) << "resolved_ip " << _s_resolved_ip;
     return true;
+}
+
+Status BackendOptions::get_hosts_waiting_for_non_loopback(const HostsProvider& provider, int64_t timeout_ms,
+                                                          int64_t retry_interval_ms, std::vector<InetAddress>* hosts) {
+    const auto start = std::chrono::steady_clock::now();
+    bool waited = false;
+    while (true) {
+        hosts->clear();
+        RETURN_IF_ERROR(provider(hosts));
+        const int64_t elapsed_ms =
+                std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start).count();
+        if (std::any_of(hosts->begin(), hosts->end(), [](const InetAddress& h) { return !h.is_loopback(); })) {
+            if (waited) {
+                LOG(INFO) << "non-loopback address is available after waiting " << elapsed_ms << "ms";
+            }
+            return Status::OK();
+        }
+        if (elapsed_ms >= timeout_ms) {
+            if (timeout_ms > 0) {
+                LOG(WARNING) << "no non-loopback address is available after waiting " << elapsed_ms
+                             << "ms, choose the local address from what is available";
+            }
+            return Status::OK();
+        }
+        if (!waited) {
+            LOG(WARNING) << "only loopback addresses are available, wait up to " << timeout_ms
+                         << "ms for a non-loopback address (net_wait_for_local_ip_timeout_s)";
+            waited = true;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(std::min(retry_interval_ms, timeout_ms - elapsed_ms)));
+    }
 }
 
 std::string BackendOptions::get_localhost() {
