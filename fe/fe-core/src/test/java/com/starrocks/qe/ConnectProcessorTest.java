@@ -74,7 +74,9 @@ import com.starrocks.sql.analyzer.DDLTestBase;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.PrepareStmt;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.common.AuditEncryptionChecker;
 import com.starrocks.sql.common.LargeInPredicateException;
+import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.system.Frontend;
 import com.starrocks.thrift.TMasterOpRequest;
 import com.starrocks.thrift.TMasterOpResult;
@@ -2107,6 +2109,73 @@ public class ConnectProcessorTest extends DDLTestBase {
                 Arguments.of("select /*+SET_VAR(custom_query_id='hinted_id')*/ 1", "hinted_id"),
                 Arguments.of("prepare s1 from 'select /*+SET_VAR(custom_query_id=\"hinted_id\")*/ 1'; execute s1", "hinted_id"),
                 Arguments.of("select 1", "session_id"));
+    }
+
+    private static final String AUDIT_TEST_ACCESS_KEY = "AKIA_AUDIT_TEST_AK";
+    private static final String AUDIT_TEST_SECRET_KEY = "AUDIT_TEST_SECRET_SK";
+    private static final String AUDIT_TEST_FILES = "FILES('path'='s3://bucket/dir/*.parquet', 'format'='parquet', " +
+            "'aws.s3.region'='us-west-2', 'aws.s3.access_key'='" + AUDIT_TEST_ACCESS_KEY + "', " +
+            "'aws.s3.secret_key'='" + AUDIT_TEST_SECRET_KEY + "')";
+
+    @ParameterizedTest
+    @MethodSource("auditCredentialCases")
+    public void testAuditRedactsCredentialsTheCheckerMisses(String sql) throws Exception {
+        ConnectContext ctx = initMockContext(mockChannel(createQueryPacket(sql)), GlobalStateMgr.getCurrentState());
+        ctx.setCurrentUserIdentity(UserIdentity.ROOT);
+        ctx.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
+        // Every case must reach the last branch of formatStmt: a statement that parses but that
+        // AuditEncryptionChecker does not flag. Only that branch depends on the defense-in-depth
+        // redaction. Some branches audit a multi-statement request once, with the whole text and
+        // the last statement, so the last statement is the one that must not be flagged.
+        List<StatementBase> stmts = SqlParser.parse(sql, ctx.getSessionVariable());
+        Assertions.assertFalse(AuditEncryptionChecker.needEncrypt(stmts.get(stmts.size() - 1)), sql);
+
+        new MockUp<StmtExecutor>() {
+            // Only the audit statement matters; running FILES() would reach out to object storage.
+            @Mock
+            public void execute() {
+            }
+
+            @Mock
+            public PQueryStatistics getQueryStatisticsForAuditLog() {
+                return null;
+            }
+        };
+        // Check every audit event the request emits, whether it is audited once or per statement.
+        List<String> auditStmts = new ArrayList<>();
+        new MockUp<AuditEventProcessor>() {
+            @Mock
+            public void handleAuditEvent(AuditEvent event) {
+                auditStmts.add(event.stmt);
+            }
+        };
+        new ConnectProcessor(ctx).processOnce();
+
+        Assertions.assertFalse(auditStmts.isEmpty(), sql);
+        for (String auditStmt : auditStmts) {
+            Assertions.assertFalse(auditStmt.contains(AUDIT_TEST_ACCESS_KEY), auditStmt);
+            Assertions.assertFalse(auditStmt.contains(AUDIT_TEST_SECRET_KEY), auditStmt);
+        }
+        Assertions.assertTrue(auditStmts.stream().anyMatch(s -> s.contains("***")), auditStmts.toString());
+    }
+
+    private static Stream<Arguments> auditCredentialCases() {
+        return Stream.of(
+                Arguments.of("SELECT * FROM t0 JOIN " + AUDIT_TEST_FILES + " f ON t0.k1 = f.k1"),
+                Arguments.of("WITH f AS (SELECT * FROM " + AUDIT_TEST_FILES + ") SELECT * FROM f"),
+                Arguments.of("SELECT * FROM t0 WHERE k1 IN (SELECT k1 FROM " + AUDIT_TEST_FILES + ")"),
+                Arguments.of("CREATE TABLE t1 AS SELECT * FROM " + AUDIT_TEST_FILES),
+                // A flagged statement followed by one that is not flagged, in one request.
+                Arguments.of("SELECT * FROM " + AUDIT_TEST_FILES + "; SELECT 1"),
+                Arguments.of("PREPARE s1 FROM 'SELECT * FROM " + AUDIT_TEST_FILES.replace('\'', '"') + "'"),
+                // The line separators are folded before the credentials are redacted.
+                Arguments.of("SELECT *\nFROM t0\nJOIN " + AUDIT_TEST_FILES.replace(", ", ",\n") +
+                        " f\nON t0.k1 = f.k1"),
+                // Credential keys that AuditEncryptionChecker does not look for, in a plain FROM.
+                Arguments.of("SELECT * FROM FILES('path'='gs://bucket/dir/*.parquet', 'format'='parquet', " +
+                        "'gcp.gcs.service_account_email'='sa@example.iam.gserviceaccount.com', " +
+                        "'gcp.gcs.service_account_private_key_id'='" + AUDIT_TEST_ACCESS_KEY + "', " +
+                        "'gcp.gcs.service_account_private_key'='" + AUDIT_TEST_SECRET_KEY + "')"));
     }
 
     @Test
