@@ -61,8 +61,9 @@ public:
     static void construct_hash_table(JoinHashTableItems* table_items, const ImmBuffer<CppType>& keys,
                                      const std::optional<ImmBuffer<uint8_t>> is_nulls);
 
+    template <typename ProbeKeys>
     static void lookup_init(const JoinHashTableItems& table_items, HashTableProbeState* probe_state,
-                            const ImmBuffer<CppType>& build_keys, const ImmBuffer<CppType>& probe_keys,
+                            const ImmBuffer<CppType>& build_keys, const ProbeKeys& probe_keys,
                             std::optional<ImmBuffer<uint8_t>> is_nulls);
 
     static bool equal(const CppType& x, const CppType& y) { return x == y; }
@@ -126,8 +127,9 @@ public:
     static void construct_hash_table(JoinHashTableItems* table_items, const ImmBuffer<CppType>& keys,
                                      const std::optional<ImmBuffer<uint8_t>> is_nulls);
 
+    template <typename ProbeKeys>
     static void lookup_init(const JoinHashTableItems& table_items, HashTableProbeState* probe_state,
-                            const ImmBuffer<CppType>& build_keys, const ImmBuffer<CppType>& probe_keys,
+                            const ImmBuffer<CppType>& build_keys, const ProbeKeys& probe_keys,
                             const std::optional<ImmBuffer<uint8_t>> is_nulls);
 
     static bool equal(const CppType& x, const CppType& y) { return true; }
@@ -209,8 +211,9 @@ public:
     static void construct_hash_table(JoinHashTableItems* table_items, const ImmBuffer<CppType>& keys,
                                      const std::optional<ImmBuffer<uint8_t>> is_nulls);
 
+    template <typename ProbeKeys>
     static void lookup_init(const JoinHashTableItems& table_items, HashTableProbeState* probe_state,
-                            const ImmBuffer<CppType>& build_keys, const ImmBuffer<CppType>& probe_keys,
+                            const ImmBuffer<CppType>& build_keys, const ProbeKeys& probe_keys,
                             const std::optional<ImmBuffer<uint8_t>> is_nulls);
 
     static bool equal(const CppType& x, const CppType& y) { return true; }
@@ -257,8 +260,9 @@ public:
     static void construct_hash_table(JoinHashTableItems* table_items, const ImmBuffer<CppType>& keys,
                                      const std::optional<ImmBuffer<uint8_t>> is_nulls);
 
+    template <typename ProbeKeys>
     static void lookup_init(const JoinHashTableItems& table_items, HashTableProbeState* probe_state,
-                            const ImmBuffer<CppType>& build_keys, const ImmBuffer<CppType>& probe_keys,
+                            const ImmBuffer<CppType>& build_keys, const ProbeKeys& probe_keys,
                             const std::optional<ImmBuffer<uint8_t>> is_nulls);
 
     static bool equal(const CppType& x, const CppType& y) { return true; }
@@ -308,8 +312,9 @@ public:
     static void construct_hash_table(JoinHashTableItems* table_items, const ImmBuffer<CppType>& keys,
                                      const std::optional<ImmBuffer<uint8_t>> is_nulls);
 
+    template <typename ProbeKeys>
     static void lookup_init(const JoinHashTableItems& table_items, HashTableProbeState* probe_state,
-                            const ImmBuffer<CppType>& build_keys, const ImmBuffer<CppType>& probe_keys,
+                            const ImmBuffer<CppType>& build_keys, const ProbeKeys& probe_keys,
                             const std::optional<ImmBuffer<uint8_t>> is_nulls);
 
     static bool equal(const CppType& x, const CppType& y) { return true; }
@@ -330,8 +335,9 @@ public:
     static void construct_hash_table(JoinHashTableItems* table_items, const ImmBuffer<CppType>& keys,
                                      const std::optional<ImmBuffer<uint8_t>> is_nulls);
 
+    template <typename ProbeKeys>
     static void lookup_init(const JoinHashTableItems& table_items, HashTableProbeState* probe_state,
-                            const ImmBuffer<CppType>& build_keys, const ImmBuffer<CppType>& probe_keys,
+                            const ImmBuffer<CppType>& build_keys, const ProbeKeys& probe_keys,
                             const std::optional<ImmBuffer<uint8_t>> is_nulls);
 
     static bool equal(const CppType& x, const CppType& y) { return true; }
@@ -386,8 +392,9 @@ public:
     static void construct_hash_table(JoinHashTableItems* table_items, const ImmBuffer<CppType>& keys,
                                      const std::optional<ImmBuffer<uint8_t>> is_nulls);
 
+    template <typename ProbeKeys>
     static void lookup_init(const JoinHashTableItems& table_items, HashTableProbeState* probe_state,
-                            const ImmBuffer<CppType>& build_keys, const ImmBuffer<CppType>& probe_keys,
+                            const ImmBuffer<CppType>& build_keys, const ProbeKeys& probe_keys,
                             const std::optional<ImmBuffer<uint8_t>> is_nulls);
 
     static bool equal(const CppType& x, const CppType& y) { return true; }
