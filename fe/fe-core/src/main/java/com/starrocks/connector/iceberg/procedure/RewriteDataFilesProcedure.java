@@ -148,6 +148,10 @@ public class RewriteDataFilesProcedure extends IcebergTableProcedure {
         velCtx.put("catalogName", catalogName);
         velCtx.put("dbName", dbName);
         velCtx.put("tableName", tableName);
+        String fullTableName = catalogName != null
+                ? catalogName + "." + dbName + "." + tableName
+                : dbName + "." + tableName;
+        velCtx.put("fullTableName", fullTableName);
 
         String partitionFilterSql = null;
         if (partitionFilter != null) {
@@ -212,16 +216,16 @@ public class RewriteDataFilesProcedure extends IcebergTableProcedure {
         StringWriter writer = new StringWriter();
         if (writeRowLineage) {
             defaultVelocityEngine.evaluate(velCtx, writer, "InsertSelectTemplate",
-                    "INSERT INTO $catalogName.$dbName.$tableName" +
+                    "INSERT INTO $fullTableName" +
                             " SELECT *, _row_id, _last_updated_sequence_number" +
-                            " FROM $catalogName.$dbName.$tableName" +
+                            " FROM $fullTableName" +
                             " #if ($partitionFilterSql)" +
                             " WHERE $partitionFilterSql" +
                             " #end");
         } else {
             defaultVelocityEngine.evaluate(velCtx, writer, "InsertSelectTemplate",
-                    "INSERT INTO $catalogName.$dbName.$tableName" +
-                            " SELECT * FROM $catalogName.$dbName.$tableName" +
+                    "INSERT INTO $fullTableName" +
+                            " SELECT * FROM $fullTableName" +
                             " #if ($partitionFilterSql)" +
                             " WHERE $partitionFilterSql" +
                             " #end");
