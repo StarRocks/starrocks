@@ -1727,16 +1727,16 @@ public class MvUtils {
     /**
      * Whether the base table is a view of an external catalog, which the catalog can redefine without StarRocks
      * noticing, so the tables an mv on it reads can change.
+     * <p>
+     * A failed lookup is thrown, not read as "no view": a caller skipping its checks on a transient connector failure
+     * would let the refresh read a redefined view's new tables, see MVPCTRefreshProcessor#syncBaseTableInfosWithDefinedQuery.
+     * A table that does not exist is not a view.
      */
     public static boolean isConnectorView(BaseTableInfo baseTableInfo) {
         if (baseTableInfo.isInternalCatalog()) {
             return false;
         }
-        try {
-            return getTableWithIdentifier(baseTableInfo).map(Table::isConnectorView).orElse(false);
-        } catch (Exception e) {
-            return false;
-        }
+        return getTableWithIdentifier(baseTableInfo).map(Table::isConnectorView).orElse(false);
     }
 
     /**

@@ -39,8 +39,11 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.scheduler.MVTaskRunProcessor;
 import com.starrocks.scheduler.TaskRun;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
+import com.starrocks.sql.analyzer.MaterializedViewAnalyzer;
 import com.starrocks.sql.ast.AlterMaterializedViewStatusClause;
 import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
@@ -61,6 +64,7 @@ import java.io.DataInputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -392,6 +396,89 @@ class MvConnectorViewRedefinitionTest extends MVTestBase {
             starRocksAssert.dropTable("mv_view_table_2");
             starRocksAssert.dropTable("mv_view_table_1");
         }
+    }
+
+    /**
+     * <b>Given</b> an unpartitioned mv on a view that reads table_1, refreshed from table_1.
+     * <br><b>When</b> the view moves to table_2 and resolving the defined query fails in the base-table sync only, e.g.
+     * a connector timeout that is gone by the time the refresh analyzes the defined query again.
+     * <br><b>Then</b> the refresh fails instead of writing table_2's rows into an mv that still tracks table_1, and a
+     * later refresh adopts table_2.
+     */
+    @Test
+    void refreshFailsWhenTheBaseTableSyncCannotResolveTheRedefinedView() throws Exception {
+        String mvName = "table_view_sync_failure_mv";
+        boolean enablePlanCache = connectContext.getSessionVariable().isEnableMaterializedViewPlanCache();
+        boolean enableViewRewrite = connectContext.getSessionVariable().isEnableViewBasedMvRewrite();
+        connectContext.getSessionVariable().setEnableMaterializedViewPlanCache(true);
+        connectContext.getSessionVariable().setEnableViewBasedMvRewrite(true);
+        createViewBaseTables("");
+        boolean[] failSync = {false};
+        // the base-table sync is the only caller resolving base tables from a query statement
+        new MockUp<MaterializedViewAnalyzer>() {
+            @Mock
+            public Set<BaseTableInfo> getBaseTableInfos(Invocation invocation, QueryStatement queryStatement) {
+                if (failSync[0]) {
+                    throw new RuntimeException("connector timed out");
+                }
+                return invocation.proceed(queryStatement);
+            }
+        };
+        try {
+            // given: an mv on the view reading table_1, refreshed and used for rewrite
+            starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW " + mvName + " " +
+                    "DISTRIBUTED BY HASH(c_custkey) BUCKETS 1 REFRESH DEFERRED MANUAL " +
+                    "PROPERTIES (\"replication_num\" = \"1\", \"query_rewrite_consistency\" = \"checked\") " +
+                    "AS SELECT * FROM " + TABLE_VIEW);
+            refreshMaterializedView("test", mvName);
+            MaterializedView mv = getMv(mvName);
+            List<BaseTableInfo> baseTableInfos = mv.getBaseTableInfos();
+            PlanTestBase.assertContains(getFragmentPlan(TABLE_1_SQL), "TABLE: " + mvName);
+
+            // when: the view moves to table_2, and the base-table sync cannot resolve it
+            tableViewSql = TABLE_2_SQL;
+            failSync[0] = true;
+            Exception refreshError = assertThrows(Exception.class, () -> refreshMV("test", mv));
+            assertTrue(refreshError.getMessage().contains("failed to resolve base tables"), refreshError.getMessage());
+
+            // then: the mv still tracks table_1 and was not rebuilt from table_2, so table_1 still rewrites to it
+            assertTrue(mv.isActive(), mv.getInactiveReason());
+            assertEquals(baseTableInfos, mv.getBaseTableInfos());
+            assertEquals(Set.of(TABLE_VIEW, "default_catalog.test.mv_view_table_1"), objectDependencyNames(mvName));
+            PlanTestBase.assertContains(getFragmentPlan(TABLE_1_SQL), "TABLE: " + mvName);
+            PlanTestBase.assertNotContains(getFragmentPlan(TABLE_2_SQL), "TABLE: " + mvName);
+
+            // when: the connector recovers and a later refresh runs
+            failSync[0] = false;
+            refreshMaterializedView("test", mvName);
+            // then: it adopts table_2 and rebuilds the mv from it
+            assertEquals(Set.of(TABLE_VIEW, "default_catalog.test.mv_view_table_2"), objectDependencyNames(mvName));
+            PlanTestBase.assertContains(getFragmentPlan(TABLE_2_SQL), "TABLE: " + mvName);
+            PlanTestBase.assertNotContains(getFragmentPlan(TABLE_1_SQL), "TABLE: " + mvName);
+        } finally {
+            tableViewSql = TABLE_1_SQL;
+            connectContext.getSessionVariable().setEnableMaterializedViewPlanCache(enablePlanCache);
+            connectContext.getSessionVariable().setEnableViewBasedMvRewrite(enableViewRewrite);
+            dropMv("test", mvName);
+            starRocksAssert.dropTable("mv_view_table_2");
+            starRocksAssert.dropTable("mv_view_table_1");
+        }
+    }
+
+    /**
+     * A failed lookup of an external base table must not read as "not a view": the refresh would then skip the
+     * base-table sync, see {@link #refreshFailsWhenTheBaseTableSyncCannotResolveTheRedefinedView}.
+     */
+    @Test
+    void connectorViewProbeThrowsWhenTheLookupFails() {
+        BaseTableInfo viewInfo = new BaseTableInfo(CATALOG, DB, "customer_table_view", "customer_table_view");
+        new MockUp<MetadataMgr>() {
+            @Mock
+            public Optional<Table> getTableWithIdentifier(ConnectContext context, BaseTableInfo baseTableInfo) {
+                throw new RuntimeException("connector timed out");
+            }
+        };
+        assertThrows(RuntimeException.class, () -> MvUtils.isConnectorView(viewInfo));
     }
 
     @Test

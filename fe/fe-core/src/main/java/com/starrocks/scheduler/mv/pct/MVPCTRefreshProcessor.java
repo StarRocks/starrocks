@@ -256,10 +256,12 @@ public final class MVPCTRefreshProcessor extends MVRefreshProcessor {
             Analyzer.analyze(queryStmt, ctx);
             resolvedBaseTableInfos = MaterializedViewAnalyzer.getBaseTableInfos(queryStmt);
         } catch (Exception e) {
-            // the refresh itself analyzes the defined query again and reports the error
-            logger.warn("failed to resolve base tables of mv's defined query, keep the current ones: {}",
-                    DebugUtil.getRootStackTrace(e));
-            return;
+            // Fail the run instead of keeping the current base tables: the refresh analyzes the defined query again,
+            // and once a transient connector failure is gone it would read the tables the view moved to, while the
+            // mv still tracks versions, relations and its cached plan for the old ones. A later run retries.
+            logger.warn("failed to resolve base tables of mv's defined query: {}", DebugUtil.getRootStackTrace(e));
+            throw new DmlException("failed to resolve base tables of materialized view %s.%s: %s", e,
+                    db.getFullName(), mv.getName(), e.getMessage());
         }
 
         if (MvUtils.isSameBaseTables(mv.getBaseTableInfos(), resolvedBaseTableInfos)) {
