@@ -39,6 +39,7 @@
 #include <string>
 #include <vector>
 
+#include "base/testutil/sync_point.h"
 #include "common/logging.h"
 #include "common/status.h"
 #include "gutil/strings/split.h"
@@ -55,6 +56,7 @@ bool RowsetMetaManager::check_rowset_meta(KVStore* meta, const TabletUid& tablet
 }
 
 Status RowsetMetaManager::save(KVStore* meta, const TabletUid& tablet_uid, const RowsetMetaPB& rowset_meta_pb) {
+    TEST_ERROR_POINT("RowsetMetaManager::save");
     std::string key = fmt::format("{}{}_{}", ROWSET_PREFIX, tablet_uid.to_string(), rowset_meta_pb.rowset_id());
     std::string value;
     bool ret = rowset_meta_pb.SerializeToString(&value);
