@@ -417,6 +417,13 @@ public class AnalyzeSingleTest {
         Assertions.assertEquals("\'0ABC\'",
                 AstToStringBuilder.toString(statement.getQueryRelation().getOutputExpression().get(0)));
 
+        // view and MV definitions are stored as AstToSQLBuilder output and parsed again: x'0ABC' must stay VARBINARY
+        statement = (QueryStatement) analyzeSuccess("select x'0ABC' c, hex(x'0ABC') h");
+        String sql = AstToSQLBuilder.toSQL(statement);
+        Assertions.assertTrue(sql.contains("hex(x'0ABC')"), sql);
+        QueryStatement reparsed = (QueryStatement) analyzeSuccess(sql);
+        Assertions.assertTrue(reparsed.getQueryRelation().getOutputExpression().get(0).getType().isBinaryType(), sql);
+
         String expectMsg = "Binary literal can only contain hexadecimal digits and an even number of digits";
         analyzeFail("select x'0AB' ", expectMsg);
         analyzeFail("select x\"0AB\" ", expectMsg);

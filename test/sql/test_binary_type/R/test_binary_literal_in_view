@@ -1,0 +1,40 @@
+-- name: test_binary_literal_in_view
+CREATE DATABASE test_binary_literal_in_view_${uuid0};
+-- result:
+-- !result
+USE test_binary_literal_in_view_${uuid0};
+-- result:
+-- !result
+CREATE TABLE tc (k INT, b VARBINARY(20))
+DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO tc VALUES (1, x'616263'), (2, x'6869');
+-- result:
+-- !result
+CREATE VIEW vbin AS SELECT x'616263' c, hex(x'616263') h, length(x'616263') l;
+-- result:
+-- !result
+SELECT hex(c), h, l FROM vbin;
+-- result:
+616263	616263	3
+-- !result
+CREATE VIEW vbin2 AS SELECT k, b FROM tc WHERE b = x'616263';
+-- result:
+-- !result
+SELECT k, hex(b) FROM vbin2;
+-- result:
+1	616263
+-- !result
+CREATE MATERIALIZED VIEW mv_bin REFRESH MANUAL PROPERTIES ("replication_num" = "1")
+AS SELECT k, hex(b) hb FROM tc WHERE b = x'616263';
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_bin WITH SYNC MODE;
+SELECT k, hb FROM mv_bin;
+-- result:
+1	616263
+-- !result
+DROP DATABASE test_binary_literal_in_view_${uuid0} FORCE;
+-- result:
+-- !result

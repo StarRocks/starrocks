@@ -48,6 +48,7 @@ import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.MapExpr;
 import com.starrocks.sql.ast.expression.Parameter;
 import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.VarBinaryLiteral;
 import com.starrocks.type.Type;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -689,6 +690,10 @@ public class AST2SQLVisitor extends AST2StringVisitor {
     @Override
     public String visitLiteral(LiteralExpr expr, Void context) {
         if (!options.isEnableDigest()) {
+            // the display form '0ABC' would be parsed back as a VARCHAR, e.g. in a view or MV definition
+            if (expr instanceof VarBinaryLiteral) {
+                return "x'" + expr.getStringValue() + "'";
+            }
             return super.visitLiteral(expr, context);
         }
         return "?";
