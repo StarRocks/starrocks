@@ -1,0 +1,41 @@
+diff --git a/src/aws-cpp-sdk-core/source/auth/STSCredentialsProvider.cpp b/src/aws-cpp-sdk-core/source/auth/STSCredentialsProvider.cpp
+index 7747d86..dbad984 100644
+--- a/src/aws-cpp-sdk-core/source/auth/STSCredentialsProvider.cpp
++++ b/src/aws-cpp-sdk-core/source/auth/STSCredentialsProvider.cpp
+@@ -101,6 +101,19 @@ STSAssumeRoleWebIdentityCredentialsProvider::STSAssumeRoleWebIdentityCredentials
+     config.scheme = Aws::Http::Scheme::HTTPS;
+     config.region = tmpRegion;
+ 
++    // Honor AWS_USE_FIPS_ENDPOINT, then the profile's use_fips_endpoint, so the web identity
++    // call goes to the STS FIPS endpoint like every other client in a FIPS deployment.
++    Aws::String useFips = Aws::Environment::GetEnv("AWS_USE_FIPS_ENDPOINT");
++    if (useFips.empty())
++    {
++        useFips = Aws::Config::GetCachedConfigProfile(Aws::Auth::GetConfigProfileName()).GetValue("use_fips_endpoint");
++    }
++    config.useFIPS = Aws::Utils::StringUtils::ToLower(useFips.c_str()) == "true";
++    if (config.useFIPS)
++    {
++        AWS_LOGSTREAM_DEBUG(STS_ASSUME_ROLE_WEB_IDENTITY_LOG_TAG, "Using the STS FIPS endpoint for web identity credentials.");
++    }
++
+     Aws::Vector<Aws::String> retryableErrors;
+     retryableErrors.push_back("IDPCommunicationError");
+     retryableErrors.push_back("InvalidIdentityToken");
+diff --git a/src/aws-cpp-sdk-core/source/internal/AWSHttpResourceClient.cpp b/src/aws-cpp-sdk-core/source/internal/AWSHttpResourceClient.cpp
+index a559090..fb9b95b 100644
+--- a/src/aws-cpp-sdk-core/source/internal/AWSHttpResourceClient.cpp
++++ b/src/aws-cpp-sdk-core/source/internal/AWSHttpResourceClient.cpp
+@@ -501,7 +501,11 @@ namespace Aws
+             static const int CN_NORTHWEST_1_HASH = Aws::Utils::HashingUtils::HashString(Aws::Region::CN_NORTHWEST_1);
+             auto hash = Aws::Utils::HashingUtils::HashString(clientConfiguration.region.c_str());
+ 
+-            ss << "sts." << clientConfiguration.region << ".amazonaws.com";
++            // STS FIPS hosts are sts-fips.<region>. In aws-us-gov the regular sts.<region> host is
++            // already FIPS, so keep it there.
++            const bool useFipsHost = clientConfiguration.useFIPS &&
++                clientConfiguration.region.rfind("us-gov-", 0) != 0;
++            ss << (useFipsHost ? "sts-fips." : "sts.") << clientConfiguration.region << ".amazonaws.com";
+             if (hash == CN_NORTH_1_HASH || hash == CN_NORTHWEST_1_HASH)
+             {
+                 ss << ".cn";
