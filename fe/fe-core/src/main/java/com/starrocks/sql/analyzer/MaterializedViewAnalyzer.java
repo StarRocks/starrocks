@@ -46,11 +46,8 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionType;
-<<<<<<< HEAD
 import com.starrocks.catalog.RangePartitionInfo;
-=======
 import com.starrocks.catalog.SqlFunction;
->>>>>>> 6804036 ([BugFix] Partition an MV by output columns that are generated partition columns of its list base table (#84762))
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
 import com.starrocks.common.Config;
@@ -110,11 +107,8 @@ import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.SlotRef;
-<<<<<<< HEAD
 import com.starrocks.sql.ast.expression.StringLiteral;
-=======
 import com.starrocks.sql.ast.expression.Subquery;
->>>>>>> 6804036 ([BugFix] Partition an MV by output columns that are generated partition columns of its list base table (#84762))
 import com.starrocks.sql.ast.expression.TimestampArithmeticExpr;
 import com.starrocks.sql.ast.expression.TypeDef;
 import com.starrocks.sql.common.PListCell;
