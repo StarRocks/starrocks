@@ -14,6 +14,8 @@
 
 #include "storage/lake/parallel_task_runner.h"
 
+#include <fmt/format.h>
+
 #include <memory>
 #include <utility>
 
@@ -41,14 +43,27 @@ void ParallelTaskRunner::run(std::function<Status()> task) {
     // Held by shared_ptr rather than moved into the lambda so the submit-failure path below can still
     // call it.
     auto shared = std::make_shared<std::function<Status()>>(std::move(task));
+    {
+        // Counted before the submit so a worker that finishes the task first cannot make the finished
+        // count overtake it.
+        std::lock_guard<std::mutex> l(_mutex);
+        _submitted++;
+    }
     auto st = _token->submit_func([this, shared]() {
         // Pool workers do not inherit the caller's thread-local trace, so re-adopt it or every
         // TRACE_COUNTER_* inside the task is silently dropped.
         ADOPT_TRACE(_trace);
         ScopedRemoteReadContext remote_read_scope(_remote_read);
-        record((*shared)());
+        Status task_st = (*shared)();
+        std::lock_guard<std::mutex> l(_mutex);
+        _status.update(task_st);
+        _finished++;
     });
     if (!st.ok()) {
+        {
+            std::lock_guard<std::mutex> l(_mutex);
+            _submitted--;
+        }
         // A token only refuses while it is shutting down, and the work still has to happen, so run it
         // here. Safe for the same reason the task was safe on a worker: it shares nothing with the
         // caller thread beyond what it already captured.
@@ -63,6 +78,15 @@ Status ParallelTaskRunner::join() {
         _token->wait();
     }
     std::lock_guard<std::mutex> l(_mutex);
+    if (_finished < _submitted) {
+        // wait() also returns when the pool is shut down, and ThreadPool::shutdown() drops queued tasks
+        // without running them. Reporting OK here would hand the caller results for work that never
+        // happened, e.g. a PK index rebuilt without the rows of the segments whose scan was dropped.
+        _status.update(Status::Aborted(fmt::format("{} of {} parallel tasks did not run, the thread pool was shut down",
+                                                   _submitted - _finished, _submitted)));
+        // Counted once: a later phase on the same runner only reports its own dropped tasks.
+        _submitted = _finished;
+    }
     return _status;
 }
 

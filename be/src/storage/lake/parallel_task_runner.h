@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <cstdint>
 #include <functional>
 #include <mutex>
 
@@ -73,7 +74,9 @@ public:
     // until join() returns.
     void run(std::function<Status()> task);
 
-    // Wait for every task submitted so far and return the first error, or OK. Idempotent.
+    // Wait for every task submitted so far and return the first error, or OK. Idempotent. Returns
+    // Aborted if the token's pool was shut down before every submitted task ran, because shutdown drops
+    // queued tasks without running them.
     Status join();
 
 private:
@@ -87,6 +90,9 @@ private:
     RemoteReadContext _remote_read;
     std::mutex _mutex;
     Status _status;
+    // Tasks the token accepted, and how many of them ran. Guarded by _mutex.
+    int64_t _submitted = 0;
+    int64_t _finished = 0;
 };
 
 } // namespace starrocks::lake
