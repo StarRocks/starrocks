@@ -18,8 +18,10 @@ import com.starrocks.common.util.Counter;
 import com.starrocks.common.util.ProfileKeyDictionary;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.scheduler.dag.JobSpec;
+import com.starrocks.task.LoadEtlTask;
 import com.starrocks.thrift.FrontendServiceVersion;
 import com.starrocks.thrift.TCounterAggregateType;
 import com.starrocks.thrift.TReportExecStatusParams;
@@ -32,6 +34,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.Map;
 import java.util.Optional;
 
 public class QueryRuntimeProfileTest {
@@ -61,102 +64,22 @@ public class QueryRuntimeProfileTest {
     }
 
     @Test
-<<<<<<< HEAD
-=======
-    public void testStatusOnlyReportHasNoLoadUpdates() {
-        QueryRuntimeProfile profile = new QueryRuntimeProfile(connectContext, jobSpec, false);
-        Assertions.assertTrue(profile.buildLoadInformationUpdates(null, new TReportExecStatusParams()).isEmpty());
-    }
-
-    @Test
-    public void testLoadInformationUpdatesAreDeferred() {
-        QueryRuntimeProfile profile = new QueryRuntimeProfile(connectContext, jobSpec, false);
-        FragmentInstanceExecState execState = mock(FragmentInstanceExecState.class);
-        when(execState.getAddress()).thenReturn(new TNetworkAddress("backend", 9060));
-        TTabletCommitInfo commitInfo = new TTabletCommitInfo();
-        TTabletFailInfo failInfo = new TTabletFailInfo();
-        TSinkCommitInfo sinkCommitInfo = new TSinkCommitInfo();
-        Map<String, String> counters = Map.of(LoadEtlTask.DPP_NORMAL_ALL, "7", LoadEtlTask.DPP_ABNORMAL_ALL, "2",
-                LoadJob.UNSELECTED_ROWS, "1", LoadJob.LOADED_BYTES, "100");
-        TReportExecStatusParams params = new TReportExecStatusParams()
-                .setDelta_urls(Collections.singletonList("delta"))
-                .setLoad_counters(counters)
-                .setTracking_url("tracking")
-                .setExport_files(Collections.singletonList("export"))
-                .setCommitInfos(Collections.singletonList(commitInfo))
-                .setFailInfos(Collections.singletonList(failInfo))
-                .setRejected_record_path("rejected")
-                .setSink_commit_infos(Collections.singletonList(sinkCommitInfo))
-                .setBackend_id(10)
-                .setLoad_datacache_metrics(new TLoadDataCacheMetrics().setRead_bytes(100).setWrite_bytes(200).setCount(1));
-
-        List<Runnable> updates = profile.buildLoadInformationUpdates(execState, params);
-        Assertions.assertTrue(profile.getDeltaUrls().isEmpty());
-        Assertions.assertTrue(profile.getLoadCounters().isEmpty());
-        Assertions.assertEquals("", profile.getTrackingUrl());
-        Assertions.assertTrue(profile.getExportFiles().isEmpty());
-        Assertions.assertTrue(profile.getCommitInfos().isEmpty());
-        Assertions.assertTrue(profile.getFailInfos().isEmpty());
-        Assertions.assertTrue(profile.getRejectedRecordPaths().isEmpty());
-        Assertions.assertTrue(profile.getSinkCommitInfos().isEmpty());
-        Assertions.assertTrue(profile.getDataCacheSelectMetrics().getBeMetrics().isEmpty());
-
-        updates.forEach(Runnable::run);
-        Assertions.assertEquals(Collections.singletonList("delta"), profile.getDeltaUrls());
-        Assertions.assertEquals(counters, profile.getLoadCounters());
-        Assertions.assertEquals("tracking", profile.getTrackingUrl());
-        Assertions.assertEquals(Collections.singletonList("export"), profile.getExportFiles());
-        Assertions.assertEquals(Collections.singletonList(commitInfo), profile.getCommitInfos());
-        Assertions.assertEquals(Collections.singletonList(failInfo), profile.getFailInfos());
-        Assertions.assertEquals(Collections.singletonList("backend:rejected"), profile.getRejectedRecordPaths());
-        Assertions.assertEquals(Collections.singletonList(sinkCommitInfo), profile.getSinkCommitInfos());
-        LoadDataCacheMetrics cacheMetrics = profile.getDataCacheSelectMetrics().getBeMetrics().get(10L);
-        Assertions.assertEquals(100, cacheMetrics.getReadBytes().getBytes());
-        Assertions.assertEquals(200, cacheMetrics.getWriteBytes().getBytes());
-        Assertions.assertEquals(1, cacheMetrics.getCount());
-    }
-
-    @Test
     public void testReceivedBytesAggregateOnlyWhenReported() {
         QueryRuntimeProfile profile = new QueryRuntimeProfile(connectContext, jobSpec, false);
         // An instance that reads no stream load pipe, or runs on an older backend, does not report them.
-        profile.buildLoadInformationUpdates(null, new TReportExecStatusParams()
-                .setLoad_counters(Map.of(LoadEtlTask.DPP_NORMAL_ALL, "7", LoadJob.LOADED_BYTES, "100")))
-                .forEach(Runnable::run);
+        profile.updateLoadInformation(null, new TReportExecStatusParams()
+                .setLoad_counters(Map.of(LoadEtlTask.DPP_NORMAL_ALL, "7", LoadJob.LOADED_BYTES, "100")));
         Assertions.assertFalse(profile.getLoadCounters().containsKey(LoadJob.RECEIVED_BYTES));
 
         for (int i = 0; i < 2; i++) {
-            profile.buildLoadInformationUpdates(null, new TReportExecStatusParams()
-                    .setLoad_counters(Map.of(LoadEtlTask.DPP_NORMAL_ALL, "0", LoadJob.RECEIVED_BYTES, "64")))
-                    .forEach(Runnable::run);
+            profile.updateLoadInformation(null, new TReportExecStatusParams()
+                    .setLoad_counters(Map.of(LoadEtlTask.DPP_NORMAL_ALL, "0", LoadJob.RECEIVED_BYTES, "64")));
         }
         Assertions.assertEquals("128", profile.getLoadCounters().get(LoadJob.RECEIVED_BYTES));
         Assertions.assertEquals("7", profile.getLoadCounters().get(LoadEtlTask.DPP_NORMAL_ALL));
     }
 
     @Test
-    public void testLoadCountersAndCacheMetricsAggregateAcrossReports() {
-        QueryRuntimeProfile profile = new QueryRuntimeProfile(connectContext, jobSpec, false);
-        TReportExecStatusParams params = new TReportExecStatusParams()
-                .setBackend_id(10)
-                .setLoad_counters(Map.of(LoadEtlTask.DPP_NORMAL_ALL, "7", LoadEtlTask.DPP_ABNORMAL_ALL, "2",
-                        LoadJob.UNSELECTED_ROWS, "1", LoadJob.LOADED_BYTES, "100"))
-                .setLoad_datacache_metrics(new TLoadDataCacheMetrics().setRead_bytes(100).setWrite_bytes(200).setCount(1));
-        for (int i = 0; i < 2; i++) {
-            profile.buildLoadInformationUpdates(null, params).forEach(Runnable::run);
-        }
-        Assertions.assertEquals("14", profile.getLoadCounters().get(LoadEtlTask.DPP_NORMAL_ALL));
-        Assertions.assertEquals("4", profile.getLoadCounters().get(LoadEtlTask.DPP_ABNORMAL_ALL));
-        Assertions.assertEquals("2", profile.getLoadCounters().get(LoadJob.UNSELECTED_ROWS));
-        Assertions.assertEquals("200", profile.getLoadCounters().get(LoadJob.LOADED_BYTES));
-        LoadDataCacheMetrics cacheMetrics = profile.getDataCacheSelectMetrics().getBeMetrics().get(10L);
-        Assertions.assertEquals(200, cacheMetrics.getReadBytes().getBytes());
-        Assertions.assertEquals(400, cacheMetrics.getWriteBytes().getBytes());
-        Assertions.assertEquals(2, cacheMetrics.getCount());
-    }
-
-    @Test
->>>>>>> 3b9e3c6 ([BugFix] Fill in Stream Load fields missing or wrong in information_schema.loads (#84760))
     public void testMergeLoadChannelProfile() {
         new Expectations() {
             {

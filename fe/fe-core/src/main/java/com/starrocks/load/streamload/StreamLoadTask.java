@@ -1508,7 +1508,6 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
         if (txnState.getTxnCommitAttachment() == null) {
             return;
         }
-<<<<<<< HEAD
         StreamLoadTxnCommitAttachment attachment = (StreamLoadTxnCommitAttachment) txnState.getTxnCommitAttachment();
         this.trackingUrl = attachment.getTrackingURL();
         this.beforeLoadTimeMs = attachment.getBeforeLoadTimeMs();
@@ -1520,30 +1519,7 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
         this.numRowsAbnormal = attachment.getNumRowsAbnormal();
         this.numRowsUnselected = attachment.getNumRowsUnselected();
         this.numLoadBytesTotal = attachment.getNumLoadBytesTotal();
-=======
-        if (txnCommitAttachment instanceof StreamLoadTxnCommitAttachment) {
-            StreamLoadTxnCommitAttachment attachment = (StreamLoadTxnCommitAttachment) txnCommitAttachment;
-            this.trackingUrl = attachment.getTrackingURL();
-            this.beforeLoadTimeMs = attachment.getBeforeLoadTimeMs();
-            this.startLoadingTimeMs = attachment.getStartLoadingTimeMs();
-            this.startPreparingTimeMs = attachment.getStartPreparingTimeMs();
-            this.finishPreparingTimeMs = attachment.getFinishPreparingTimeMs();
-            this.endTimeMs = attachment.getEndTimeMs();
-            this.numRowsNormal = attachment.getNumRowsNormal();
-            this.numRowsAbnormal = attachment.getNumRowsAbnormal();
-            this.numRowsUnselected = attachment.getNumRowsUnselected();
-            this.numLoadBytesTotal = attachment.getNumLoadBytesTotal();
-            this.receivedBytes = attachment.getReceivedBytes();
-            return;
-        }
-        if (txnCommitAttachment instanceof ManualLoadTxnCommitAttachment
-                || txnCommitAttachment instanceof RLTaskTxnCommitAttachment) {
-            setLoadState(txnCommitAttachment, txnState.getReason());
-            return;
-        }
-        LOG.warn("ignore unsupported txn commit attachment {} while replaying stream load task {}",
-                txnCommitAttachment.getClass().getName(), label);
->>>>>>> 3b9e3c6 ([BugFix] Fill in Stream Load fields missing or wrong in information_schema.loads (#84760))
+        this.receivedBytes = attachment.getReceivedBytes();
     }
 
     public OlapTable getTable() throws MetaNotFoundException {

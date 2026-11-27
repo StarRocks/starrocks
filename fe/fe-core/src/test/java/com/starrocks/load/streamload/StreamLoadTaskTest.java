@@ -27,7 +27,6 @@ import com.starrocks.common.Status;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.http.rest.TransactionResult;
-import com.starrocks.load.LoadConstants;
 import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.load.loadv2.ManualLoadTxnCommitAttachment;
 import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
@@ -295,8 +294,6 @@ public class StreamLoadTaskTest {
     }
 
     @Test
-<<<<<<< HEAD
-=======
     public void testToThriftBeforeLoadReportsCounters() {
         // A load that has not reported its counters has no known row total or bytes.
         TLoadInfo loadInfo = streamLoadTask.toThrift().get(0);
@@ -312,65 +309,6 @@ public class StreamLoadTaskTest {
         Deencapsulation.setField(streamLoadTask, "numLoadBytesTotal", 1000L);
 
         Assertions.assertEquals(1000L, streamLoadTask.toThrift().get(0).getNum_scan_bytes());
-    }
-
-    @Test
-    public void testReplayVisibleWithManualLoadTxnCommitAttachment() {
-        ManualLoadTxnCommitAttachment attachment = mock(ManualLoadTxnCommitAttachment.class);
-        when(attachment.getLoadedRows()).thenReturn(100L);
-        when(attachment.getFilteredRows()).thenReturn(10L);
-        when(attachment.getUnselectedRows()).thenReturn(5L);
-        when(attachment.getLoadedBytes()).thenReturn(1000L);
-        when(attachment.getReceivedBytes()).thenReturn(4096L);
-        when(attachment.getErrorLogUrl()).thenReturn("http://error.log");
-
-        TransactionState txnState = new TransactionState();
-        txnState.setTxnCommitAttachment(attachment);
-        txnState.setReason("Replay visible");
-        txnState.setFinishTime(System.currentTimeMillis());
-
-        streamLoadTask.replayOnVisible(txnState);
-
-        TLoadInfo loadInfo = streamLoadTask.toThrift().get(0);
-        Assertions.assertEquals("100%", loadInfo.getProgress());
-        Assertions.assertEquals(100L, loadInfo.getNum_sink_rows());
-        Assertions.assertEquals(10L, loadInfo.getNum_filtered_rows());
-        Assertions.assertEquals(5L, loadInfo.getNum_unselected_rows());
-        Assertions.assertEquals(4096L, loadInfo.getNum_scan_bytes());
-        Assertions.assertEquals("http://error.log", loadInfo.getUrl());
-        Assertions.assertEquals("Replay visible", loadInfo.getError_msg());
-    }
-
-    @Test
-    public void testReplayVisibleKeepsCountersOfPersistedManualLoadAttachment() {
-        TManualLoadTxnCommitAttachment tAttachment = new TManualLoadTxnCommitAttachment();
-        tAttachment.setLoadedRows(100L);
-        tAttachment.setFilteredRows(10L);
-        tAttachment.setUnselectedRows(5L);
-        tAttachment.setLoadedBytes(1000L);
-        tAttachment.setReceivedBytes(4096L);
-        tAttachment.setBeginTxnTime(7L);
-        tAttachment.setPlanTime(8L);
-        tAttachment.setReceiveDataTime(9L);
-        // The attachment as a follower or a restarted FE reads it back from the edit log.
-        String json = GsonUtils.GSON.toJson(new ManualLoadTxnCommitAttachment(tAttachment), TxnCommitAttachment.class);
-        TxnCommitAttachment attachment = GsonUtils.GSON.fromJson(json, TxnCommitAttachment.class);
-
-        TransactionState txnState = new TransactionState();
-        txnState.setTxnCommitAttachment(attachment);
-        txnState.setFinishTime(System.currentTimeMillis());
-        streamLoadTask.replayOnVisible(txnState);
-
-        TLoadInfo loadInfo = streamLoadTask.toThrift().get(0);
-        Assertions.assertEquals(100L, loadInfo.getNum_sink_rows());
-        Assertions.assertEquals(10L, loadInfo.getNum_filtered_rows());
-        Assertions.assertEquals(5L, loadInfo.getNum_unselected_rows());
-        Assertions.assertEquals(4096L, loadInfo.getNum_scan_bytes());
-        Assertions.assertEquals(1000L, streamLoadTask.toStreamLoadThrift().get(0).getNum_load_bytes());
-        JsonObject runtimeDetails = JsonParser.parseString(loadInfo.getRuntime_details()).getAsJsonObject();
-        Assertions.assertEquals(7L, runtimeDetails.get(LoadConstants.RUNTIME_DETAILS_BEGIN_TXN_TIME_MS).getAsLong());
-        Assertions.assertEquals(8L, runtimeDetails.get(LoadConstants.RUNTIME_DETAILS_PLAN_TIME_MS).getAsLong());
-        Assertions.assertEquals(9L, runtimeDetails.get(LoadConstants.RUNTIME_DETAILS_RECEIVE_DATA_TIME_MS).getAsLong());
     }
 
     @Test
@@ -409,7 +347,6 @@ public class StreamLoadTaskTest {
     }
 
     @Test
->>>>>>> 3b9e3c6 ([BugFix] Fill in Stream Load fields missing or wrong in information_schema.loads (#84760))
     public void testSetLoadStateWithRLTaskTxnCommitAttachment() {
         RLTaskTxnCommitAttachment attachment = mock(RLTaskTxnCommitAttachment.class);
         when(attachment.getLoadedRows()).thenReturn(200L);

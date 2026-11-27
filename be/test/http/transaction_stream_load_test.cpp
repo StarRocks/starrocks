@@ -354,7 +354,7 @@ TEST_F(TransactionStreamLoadActionTest, txn_commit_success) {
 
 // The attachment of a transaction carries the bytes of all its load requests, not only those of the last one.
 TEST_F(TransactionStreamLoadActionTest, txn_prepare_reports_bytes_of_all_loads) {
-    TransactionManagerAction txn_action(&_env, _transaction_mgr.get());
+    TransactionManagerAction txn_action(&_env);
     {
         HttpRequest b(_evhttp_req);
         b._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
@@ -368,7 +368,7 @@ TEST_F(TransactionStreamLoadActionTest, txn_prepare_reports_bytes_of_all_loads) 
         ASSERT_STREQ("OK", doc["Status"].GetString());
     }
 
-    TransactionStreamLoadAction action(&_env, &_stream_load_orchestrator, _transaction_mgr.get());
+    TransactionStreamLoadAction action(&_env);
     for (const std::string content : {"abc", "defgh"}) {
         HttpRequest request(_evhttp_req);
         request.set_handler(&action);

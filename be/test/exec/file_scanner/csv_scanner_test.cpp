@@ -1521,12 +1521,12 @@ TEST_P(CSVScannerTest, test_stream_pipe_resumes_after_timed_out_reads) {
 
 // A load counts the bytes it received through its pipe when the scanner is done with the finished pipe.
 TEST_P(CSVScannerTest, test_stream_pipe_reports_received_bytes) {
-    _runtime_services.load_stream_mgr = &_load_stream_mgr;
-    _query_execution_services.runtime = &_runtime_services;
+    ExecEnv* exec_env = ExecEnv::GetInstance();
+    LoadStreamMgr* load_stream_mgr = exec_env->load_stream_mgr();
     const UniqueId load_id = UniqueId::gen_uid();
     auto pipe = std::make_shared<StreamLoadPipe>();
-    ASSERT_OK(_load_stream_mgr.put(load_id, pipe));
-    DeferOp remove_pipe([&] { _load_stream_mgr.remove(load_id); });
+    ASSERT_OK(load_stream_mgr->put(load_id, pipe));
+    DeferOp remove_pipe([&] { load_stream_mgr->remove(load_id); });
 
     std::vector<TypeDescriptor> types{TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_VARCHAR)};
     std::vector<TBrokerRangeDesc> ranges(1);
@@ -1541,7 +1541,7 @@ TEST_P(CSVScannerTest, test_stream_pipe_reports_received_bytes) {
     ASSERT_OK(pipe->finish());
 
     auto scanner = create_csv_scanner(types, ranges, "\n", ",", /*skip_header=*/0, /*trim_space=*/false,
-                                      /*enclose=*/0, /*escape=*/0, &_query_execution_services);
+                                      /*enclose=*/0, /*escape=*/0, exec_env);
     ASSERT_OK(scanner->open());
     auto res = scanner->get_next();
     ASSERT_OK(res.status());

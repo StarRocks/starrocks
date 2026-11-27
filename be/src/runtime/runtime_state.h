@@ -281,7 +281,11 @@ public:
 
     void update_num_bytes_scan_from_source(int64_t scan_bytes) { _num_bytes_scan_from_source.fetch_add(scan_bytes); }
 
-<<<<<<< HEAD
+    // The bytes the load received from its clients through stream load pipes, as they were sent.
+    int64_t num_bytes_received_from_stream() const noexcept { return _num_bytes_received_from_stream.load(); }
+
+    void update_num_bytes_received_from_stream(int64_t bytes) { _num_bytes_received_from_stream.fetch_add(bytes); }
+
     void update_report_load_status(TReportExecStatusParams* load_params) {
         load_params->__set_loaded_rows(num_rows_load_sink());
         load_params->__set_sink_load_bytes(num_bytes_load_sink());
@@ -293,12 +297,6 @@ public:
         // Update datacache load metrics
         update_load_datacache_metrics(load_params);
     }
-=======
-    // The bytes the load received from its clients through stream load pipes, as they were sent.
-    int64_t num_bytes_received_from_stream() const noexcept { return _num_bytes_received_from_stream.load(); }
-
-    void update_num_bytes_received_from_stream(int64_t bytes) { _num_bytes_received_from_stream.fetch_add(bytes); }
->>>>>>> 3b9e3c6 ([BugFix] Fill in Stream Load fields missing or wrong in information_schema.loads (#84760))
 
     void update_num_datacache_read_bytes(const int64_t read_bytes) {
         _num_datacache_read_bytes.fetch_add(read_bytes, std::memory_order_relaxed);

@@ -34,6 +34,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <condition_variable>
 #include <deque>
 #include <mutex>
@@ -118,8 +119,6 @@ public:
         return _append_buffer_bytes;
     }
 
-<<<<<<< HEAD:be/src/runtime/stream_load/stream_load_pipe.h
-=======
     // The bytes the producer has put into the pipe, as it received them (a compressed body is not decompressed).
     int64_t total_appended_bytes() {
         std::unique_lock<std::mutex> l(_lock);
@@ -130,17 +129,6 @@ public:
     // reader looks at it.
     bool claim_received_bytes() { return !_received_bytes_claimed.exchange(true); }
 
-    // For a reader that does not block: registers a callback that runs once when the pipe becomes readable, i.e. it
-    // holds data, finishes or is cancelled. Returns false without registering when the pipe is readable already, so
-    // that the reader reads again instead of waiting. The callback runs on the thread that makes the pipe readable,
-    // outside the pipe's lock.
-    bool notify_when_readable(std::function<void()> callback);
-
-    // Drops the registered callback, which then does not run. One that a writer took just before may still be
-    // running, so a callback must only touch state that stays valid on its own.
-    void clear_readable_callback();
-
->>>>>>> 3b9e3c6 ([BugFix] Fill in Stream Load fields missing or wrong in information_schema.loads (#84760)):be/src/compute_env/load/stream_load_pipe.h
 private:
     Status _append(const ByteBufferPtr& buf);
 
