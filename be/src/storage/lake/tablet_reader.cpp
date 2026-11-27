@@ -606,8 +606,9 @@ static void warm_idg_indexes(PreparedTabletReadState* state, const TabletSchema&
                 VLOG(2) << "skip warming " << info.path << ": " << file_or.status();
                 continue;
             }
-            // The footer is small: the last block, or the last two when the footer starts in the one before.
-            const int64_t tail = std::max<int64_t>(0, entry->file_size - block_size) / block_size * block_size;
+            // The footer is small: the last block. A footer that starts in the block before is rare, and its read
+            // fetches that block as before.
+            const int64_t tail = (entry->file_size - 1) / block_size * block_size;
             if (start_index_warm(state, file_or.value().get(), true, tail, static_cast<size_t>(entry->file_size - tail),
                                  stats)) {
                 files.push_back(IdgFile{std::move(file_or).value(), entry->file_size, std::move(entry_indexes)});
