@@ -15,8 +15,11 @@
 package com.starrocks.planner;
 
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.Dictionary;
 import com.starrocks.common.util.DnsCache;
+import com.starrocks.thrift.TDataSink;
 import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.thrift.TOlapTableSchemaParam;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
@@ -50,7 +53,7 @@ public class DictionaryCacheSinkTest {
                 new TNetworkAddress("be-0.starrocks-be.svc.cluster.local", 8060),
                 new TNetworkAddress("cn-0.starrocks-cn.svc.cluster.local", 8060));
 
-        DictionaryCacheSink sink = new DictionaryCacheSink(nodes, null, 1L);
+        DictionaryCacheSink sink = new DictionaryCacheSink(nodes, null, 1L, false);
 
         Assertions.assertEquals(
                 Lists.newArrayList(new TNetworkAddress("10.0.0.11", 8060), new TNetworkAddress("10.0.0.12", 8060)),
@@ -69,9 +72,29 @@ public class DictionaryCacheSinkTest {
                 new TNetworkAddress("10.0.0.11", 8060),
                 new TNetworkAddress("no-such-host.invalid", 8060));
 
-        DictionaryCacheSink sink = new DictionaryCacheSink(nodes, null, 1L);
+        DictionaryCacheSink sink = new DictionaryCacheSink(nodes, null, 1L, false);
 
         Assertions.assertEquals(new TNetworkAddress("10.0.0.11", 8060), sink.getNodes().get(0));
         Assertions.assertEquals(new TNetworkAddress("no-such-host.invalid", 8060), sink.getNodes().get(1));
+    }
+
+    // The BE goes on without a failed node only when the FE asks for it.
+    @Test
+    public void testSinkCarriesTheSkipFailedNodesFlag() {
+        new MockUp<DictionaryCacheSink>() {
+            @Mock
+            TOlapTableSchemaParam buildTSchema() {
+                return new TOlapTableSchemaParam();
+            }
+        };
+        Dictionary dictionary = new Dictionary(1, "dict", "t", "default_catalog", "testDb",
+                Lists.newArrayList("key"), Lists.newArrayList("value"), null);
+        List<TNetworkAddress> nodes = Lists.newArrayList(new TNetworkAddress("10.0.0.11", 8060));
+
+        TDataSink skip = new DictionaryCacheSink(nodes, dictionary, 1L, true).toThrift();
+        TDataSink noSkip = new DictionaryCacheSink(nodes, dictionary, 1L, false).toThrift();
+
+        Assertions.assertTrue(skip.getDictionary_cache_sink().isSkip_failed_nodes());
+        Assertions.assertFalse(noSkip.getDictionary_cache_sink().isSkip_failed_nodes());
     }
 }

@@ -18,6 +18,7 @@
 #include <map>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <sstream>
 #include <string_view>
 #include <unordered_map>
@@ -601,7 +602,11 @@ public:
 
     void clear(DictionaryId dict_id, bool is_cancel = false /* trigger cancel */);
 
-    void get_info(DictionaryId dict_id, PProcessDictionaryCacheResult& response);
+    // Always sets dictionary_version, and txn_rows if txn_id is given. Both are kNotPresent if this node has
+    // no committed version or no such open txn. The FE reads an unset field as an old BE.
+    static constexpr int64_t kNotPresent = -1;
+    void get_info(DictionaryId dict_id, PProcessDictionaryCacheResult& response,
+                  std::optional<DictionaryCacheTxnId> txn_id);
 
     SchemaPtr get_dictionary_schema_by_id(const DictionaryId& dict_id);
     StatusOr<DictionaryCachePtr> get_dictionary_by_version(const DictionaryId& dict_id,
@@ -660,7 +665,10 @@ private:
     std::unordered_map<DictionaryId, std::shared_ptr<OrderedMutableDictionaryCache>> _mutable_dict_caches;
     // indicate dictionary is cancelled or not, this should be erase before return error status
     std::set<DictionaryId> _dict_cancel;
-    // protect _mutable_dict_caches && _dict_cancel
+    // dictionary id -> txn id -> rows that this node received for the txn. The FE leaves out a node with
+    // fewer rows than the others, because that node missed part of the data.
+    std::unordered_map<DictionaryId, std::map<DictionaryCacheTxnId, int64_t>> _txn_rows;
+    // protect _mutable_dict_caches && _dict_cancel && _txn_rows
     std::shared_mutex _refresh_lock;
 };
 

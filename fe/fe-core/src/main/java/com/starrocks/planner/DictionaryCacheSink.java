@@ -43,8 +43,10 @@ public class DictionaryCacheSink extends DataSink {
     private final List<TNetworkAddress> nodes;
     private final Dictionary dictionary;
     private final long txnId;
+    private final boolean skipFailedNodes;
 
-    public DictionaryCacheSink(List<TNetworkAddress> nodes, Dictionary dictionary, long txnId) {
+    public DictionaryCacheSink(List<TNetworkAddress> nodes, Dictionary dictionary, long txnId,
+                               boolean skipFailedNodes) {
         // Resolve here, at the boundary where the node list crosses over to a BE. The BE turns every
         // entry into a stub via HttpBrpcStubCache::get_http_stub(), whose cache is keyed by the resolved
         // EndPoint -- so a hostname costs one uncached getaddrinfo per node per refresh, since the BE has
@@ -56,6 +58,7 @@ public class DictionaryCacheSink extends DataSink {
                 .collect(Collectors.toList());
         this.dictionary = dictionary;
         this.txnId = txnId;
+        this.skipFailedNodes = skipFailedNodes;
     }
 
     public Dictionary getDictionary() {
@@ -81,6 +84,7 @@ public class DictionaryCacheSink extends DataSink {
         tTDictionaryCacheSink.setSchema(buildTSchema());
         tTDictionaryCacheSink.setMemory_limit(dictionary.getMemoryLimit());
         tTDictionaryCacheSink.setKey_size(dictionary.getKeys().size());
+        tTDictionaryCacheSink.setSkip_failed_nodes(skipFailedNodes);
         result.setDictionary_cache_sink(tTDictionaryCacheSink);
         return result;
     }
@@ -133,7 +137,7 @@ public class DictionaryCacheSink extends DataSink {
         return schemaParam;
     }
 
-    private TOlapTableSchemaParam buildTSchema() {
+    TOlapTableSchemaParam buildTSchema() {
         Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(new ConnectContext(),
                                         dictionary.getCatalogName(), dictionary.getDbName());
         String queryableObject = dictionary.getQueryableObject();

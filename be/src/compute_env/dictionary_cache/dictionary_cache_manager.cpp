@@ -220,6 +220,15 @@ Status DictionaryCacheManager::_refresh_encoded_chunk(DictionaryId dict_id, Dict
                 fmt::format("Reach the memory limit: {} bytes for dictionary, id: {}", memory_limit, dict_id));
     }
 
+    // Count the rows only when the whole chunk is in, so a node that failed a chunk has fewer rows.
+    {
+        std::unique_lock wlock(_refresh_lock);
+        auto iter = _mutable_dict_caches.find(dict_id);
+        if (iter != _mutable_dict_caches.end() && iter->second->find(txn_id) != iter->second->end()) {
+            _txn_rows[dict_id][txn_id] += encoded_key_column->size();
+        }
+    }
+
     return Status::OK();
 }
 
@@ -252,6 +261,7 @@ Status DictionaryCacheManager::commit(const PProcessDictionaryCacheRequest* requ
     _dict_cache_versions[dict_id] = txn_id;
 
     _mutable_dict_caches.erase(dict_id);
+    _txn_rows.erase(dict_id);
     return Status::OK();
 }
 
@@ -263,6 +273,7 @@ void DictionaryCacheManager::clear(DictionaryId dict_id, bool is_cancel) {
     if (_mutable_dict_caches.find(dict_id) != _mutable_dict_caches.end()) {
         _mutable_dict_caches.erase(_mutable_dict_caches.find(dict_id));
     }
+    _txn_rows.erase(dict_id);
 
     if (is_cancel) {
         _dict_cancel.insert(dict_id);
@@ -282,15 +293,39 @@ void DictionaryCacheManager::clear(DictionaryId dict_id, bool is_cancel) {
     }
 }
 
-void DictionaryCacheManager::get_info(DictionaryId dict_id, PProcessDictionaryCacheResult& response) {
-    std::shared_lock wlock1(_lock);
+void DictionaryCacheManager::get_info(DictionaryId dict_id, PProcessDictionaryCacheResult& response,
+                                      std::optional<DictionaryCacheTxnId> txn_id) {
+    {
+        std::shared_lock rlock(_lock);
 
-    long dictionary_memory_usage = 0;
-    if (_dict_cache.find(dict_id) != _dict_cache.end() && _dict_cache[dict_id] != nullptr) {
-        dictionary_memory_usage = _dict_cache[dict_id]->memory_usage();
+        long dictionary_memory_usage = 0;
+        if (_dict_cache.find(dict_id) != _dict_cache.end() && _dict_cache[dict_id] != nullptr) {
+            dictionary_memory_usage = _dict_cache[dict_id]->memory_usage();
+        }
+        response.set_dictionary_memory_usage(dictionary_memory_usage);
+
+        auto version = _dict_cache_versions.find(dict_id);
+        response.set_dictionary_version(version != _dict_cache_versions.end() ? version->second : kNotPresent);
     }
 
-    response.set_dictionary_memory_usage(dictionary_memory_usage);
+    if (!txn_id.has_value()) {
+        return;
+    }
+    std::shared_lock rlock(_refresh_lock);
+    auto txns = _mutable_dict_caches.find(dict_id);
+    if (txns == _mutable_dict_caches.end() || txns->second->find(*txn_id) == txns->second->end()) {
+        response.set_txn_rows(kNotPresent);
+        return;
+    }
+    int64_t rows = 0;
+    auto counts = _txn_rows.find(dict_id);
+    if (counts != _txn_rows.end()) {
+        auto count = counts->second.find(*txn_id);
+        if (count != counts->second.end()) {
+            rows = count->second;
+        }
+    }
+    response.set_txn_rows(rows);
 }
 
 SchemaPtr DictionaryCacheManager::get_dictionary_schema_by_id(const DictionaryId& dict_id) {

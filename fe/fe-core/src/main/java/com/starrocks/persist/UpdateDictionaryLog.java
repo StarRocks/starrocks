@@ -36,6 +36,10 @@ public class UpdateDictionaryLog implements Writable {
     @SerializedName("resetStateBeforeRefresh")
     private boolean resetStateBeforeRefresh;
 
+    // Set on the REFRESHING entry of an early refresh, so that a new leader still treats it as one.
+    @SerializedName("earlyRefresh")
+    private boolean earlyRefresh;
+
     public UpdateDictionaryLog(long dictionaryId, long ts) {
         this.dictionaryId = dictionaryId;
         this.ts = ts;
@@ -79,5 +83,13 @@ public class UpdateDictionaryLog implements Writable {
 
     public boolean isResetStateBeforeRefresh() {
         return resetStateBeforeRefresh;
+    }
+
+    public void setEarlyRefresh(boolean earlyRefresh) {
+        this.earlyRefresh = earlyRefresh;
+    }
+
+    public boolean isEarlyRefresh() {
+        return earlyRefresh;
     }
 }

@@ -287,6 +287,31 @@ INSTANTIATE_TEST_SUITE_P(KafkaRequestsWithFullOrDisabledPool, MetadataEvictionRe
                          testing::Combine(testing::Range(0, 4), testing::Values(1, 0)));
 #endif
 
+// -1 tells the FE that this node has no copy of the dictionary and no rows for the txn.
+TEST_F(InternalServiceTest, test_process_dictionary_cache_statistic) {
+    BackendInternalServiceImpl<PInternalService> service(ExecEnv::GetInstance(), nullptr, _load_channel_mgr.get());
+    PProcessDictionaryCacheRequest request;
+    request.set_type(PProcessDictionaryCacheRequestType::STATISTIC);
+    request.set_dict_id(98765);
+    request.set_txn_id(4321);
+    PProcessDictionaryCacheResult response;
+    brpc::Controller cntl;
+    MockClosure closure;
+
+    service.process_dictionary_cache(&cntl, &request, &response, &closure);
+    ASSERT_TRUE(closure.has_run());
+    ASSERT_OK(Status(response.status()));
+    ASSERT_EQ(-1, response.dictionary_version());
+    ASSERT_EQ(-1, response.txn_rows());
+
+    request.clear_txn_id();
+    PProcessDictionaryCacheResult no_txn_response;
+    MockClosure no_txn_closure;
+    service.process_dictionary_cache(&cntl, &request, &no_txn_response, &no_txn_closure);
+    ASSERT_OK(Status(no_txn_response.status()));
+    ASSERT_FALSE(no_txn_response.has_txn_rows());
+}
+
 TEST_F(InternalServiceTest, test_submit_mv_maintenance_task_not_supported) {
     BackendInternalServiceImpl<PInternalService> service(ExecEnv::GetInstance(), nullptr, _load_channel_mgr.get());
     PMVMaintenanceTaskRequest request;

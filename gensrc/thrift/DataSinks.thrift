@@ -216,6 +216,8 @@ struct TDictionaryCacheSink {
     4: optional Descriptors.TOlapTableSchemaParam schema
     5: optional i64 memory_limit
     6: optional i32 key_size
+    // If true, a node that fails gets no more data, and the sink goes on with the other nodes.
+    7: optional bool skip_failed_nodes
 }
 
 struct TOlapTableSink {

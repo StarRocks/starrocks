@@ -5152,6 +5152,34 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int refresh_dictionary_cache_thread_num = 2;
 
+    /**
+     * The leader refreshes a dictionary early when a node restarts, joins, or missed the last commit,
+     * because that node has no copy of the current version. This is the shortest time between two such
+     * early refreshes of one dictionary. A negative value turns early refreshes off. A value from 0 to 10 waits
+     * 10 seconds, because the scheduler checks every 10 seconds. Early refreshes also run for a dictionary with
+     * no automatic refresh, so its content can change at that time.
+     * Turn this on together with dictionary_refresh_leave_out_failed_nodes. Without it, an early refresh that fails
+     * at COMMIT on one node ends in CANCELLED, and then queries fail on every node.
+     */
+    @ConfField(mutable = true)
+    public static int dictionary_node_resync_min_interval_second = -1;
+
+    /**
+     * If a node still has no copy after an early refresh, the wait before the next one doubles, up to this time.
+     */
+    @ConfField(mutable = true)
+    public static int dictionary_node_resync_max_interval_second = 1800;
+
+    /**
+     * If true, a dictionary refresh leaves out a node that fails and goes on with the other nodes.
+     * Turn on early refreshes too, with dictionary_node_resync_min_interval_second. Without them, a left-out node
+     * keeps the old version until the next regular refresh, and queries on it fail.
+     * Turn this on only once every BE/CN runs a version that reports how many rows it received: a node that does not
+     * report it is left out, so refreshes fail until the upgrade is complete.
+     */
+    @ConfField(mutable = true)
+    public static boolean dictionary_refresh_leave_out_failed_nodes = false;
+
     /*
      * Replication config
      */
