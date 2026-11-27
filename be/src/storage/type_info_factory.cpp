@@ -15,8 +15,8 @@
 #include <utility>
 #include <vector>
 
-#include "storage/tablet_schema.h"
 #include "storage/types.h"
+#include "storage_primitive/schema_helper.h"
 
 namespace starrocks {
 
@@ -46,27 +46,7 @@ TypeInfoPtr get_type_info(const ColumnMetaPB& column_meta_pb) {
 }
 
 TypeInfoPtr get_type_info(const TabletColumn& col) {
-    if (col.type() == TYPE_ARRAY) {
-        const TabletColumn& child = col.subcolumn(0);
-        TypeInfoPtr child_type_info = get_type_info(child);
-        return get_array_type_info(child_type_info);
-    }
-    if (col.type() == TYPE_MAP) {
-        const TabletColumn& key_meta = col.subcolumn(0);
-        const TabletColumn& value_meta = col.subcolumn(1);
-        TypeInfoPtr key_type_info = get_type_info(key_meta);
-        TypeInfoPtr value_type_info = get_type_info(value_meta);
-        return get_map_type_info(key_type_info, value_type_info);
-    }
-    if (col.type() == TYPE_STRUCT) {
-        std::vector<TypeInfoPtr> field_types;
-        field_types.reserve(col.subcolumn_count());
-        for (int i = 0; i < col.subcolumn_count(); ++i) {
-            field_types.emplace_back(get_type_info(col.subcolumn(i)));
-        }
-        return get_struct_type_info(std::move(field_types));
-    }
-    return get_type_info(col.type(), col.precision(), col.scale());
+    return get_tablet_column_type_info(col);
 }
 
 } // namespace starrocks
