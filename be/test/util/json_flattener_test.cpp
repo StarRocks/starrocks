@@ -1495,4 +1495,64 @@ TEST_F(JsonFlattenerTest, testLegacyNegativeLargeintSubColumnKeepsSign) {
     }
 }
 
+// A key can hold objects in some rows and other values in others while the paths below it are sub-columns: a
+// compaction flattens the paths of one input's objects and keeps another input's values of the key in the remain.
+// A read of the key itself must give each row's value, from the remain when it is not an object.
+TEST_F(JsonFlattenerTest, testReadKeyHoldingObjectsAndOtherValues) {
+    const std::vector<std::string> inputs = {
+            R"({"id": 1, "q": 0})",         R"({"id": 2, "q": {"6": 15893, "7": 22485}})",
+            R"({"id": 3, "q": {"6": 50}})", R"({"id": 4, "q": 0})",
+            R"({"id": 5, "q": [1, 2]})",    R"({"id": 6})",
+            R"({"id": 7, "q": null})",      R"({"id": 8, "q": {}})"};
+    auto json_column = JsonColumn::create();
+    for (const auto& json : inputs) {
+        ASSIGN_OR_ABORT(auto jv, JsonValue::parse(json));
+        json_column->append(&jv);
+    }
+    JsonFlattener flattener({"id", "q.6"}, {TYPE_BIGINT, TYPE_BIGINT}, true);
+    flattener.flatten(json_column.get());
+    Columns flat_columns;
+    for (auto& c : flattener.mutable_result()) {
+        flat_columns.emplace_back(std::move(c));
+    }
+
+    // q as JSON, the way a JSON-typed access path or json_query reads it ("NULL": no value)
+    const std::vector<std::string> want_json = {
+            "0", R"({"6": 15893, "7": 22485})", R"({"6": 50})", "0", "[1, 2]", "NULL", "null", "{}"};
+    {
+        HyperJsonTransformer transformer({"q"}, {TYPE_JSON}, false);
+        transformer.init_read_task({"id", "q.6"}, {TYPE_BIGINT, TYPE_BIGINT}, true);
+        ASSERT_OK(transformer.trans(flat_columns));
+        auto result = transformer.mutable_result();
+        ASSERT_EQ(1, result.size());
+        ASSERT_EQ(inputs.size(), result[0]->size());
+        const auto* json =
+                down_cast<const JsonColumn*>(down_cast<const NullableColumn*>(result[0].get())->data_column().get());
+        for (size_t row = 0; row < inputs.size(); row++) {
+            if (want_json[row] == "NULL") {
+                EXPECT_TRUE(result[0]->is_null(row)) << "row " << row << ": " << result[0]->debug_item(row);
+                continue;
+            }
+            ASSERT_FALSE(result[0]->is_null(row)) << "row " << row;
+            // JsonValue::parse() reads a text that does not start with {, [ or " as a JSON string, so the
+            // number 0 and the JSON null are built directly.
+            JsonValue want = want_json[row] == "0"
+                                     ? JsonValue::from_int(0)
+                                     : want_json[row] == "null" ? JsonValue::from_null()
+                                                                : JsonValue::parse(want_json[row]).value();
+            EXPECT_EQ(0, want.compare(*json->get_object(row)))
+                    << "row " << row << ": " << json->get_object(row)->to_string_uncheck();
+        }
+    }
+    // q as a number, the way get_json_int(c, '$.q') reads it: the objects read as NULL, the numbers from the remain
+    {
+        HyperJsonTransformer transformer({"q"}, {TYPE_BIGINT}, false);
+        transformer.init_read_task({"id", "q.6"}, {TYPE_BIGINT, TYPE_BIGINT}, true);
+        ASSERT_OK(transformer.trans(flat_columns));
+        auto result = transformer.mutable_result();
+        ASSERT_EQ(1, result.size());
+        EXPECT_EQ("[0, NULL, NULL, 0, NULL, NULL, NULL, NULL]", result[0]->debug_string());
+    }
+}
+
 } // namespace starrocks
