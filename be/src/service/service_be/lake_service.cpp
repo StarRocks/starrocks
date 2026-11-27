@@ -2011,42 +2011,81 @@ void LakeServiceImpl::drop_tablet_cache(::google::protobuf::RpcController* contr
     }
 
     auto thread_pool = delete_tablet_thread_pool(_env);
+    TEST_SYNC_POINT_CALLBACK("LakeServiceImpl::drop_tablet_cache:thread_pool", &thread_pool);
     if (UNLIKELY(thread_pool == nullptr)) {
         cntl->SetFailed("no thread pool to run task");
         return;
     }
-    Status::OK().to_protobuf(response->mutable_status());
-    auto latch = BThreadCountDownLatch(request->tablets_size());
-    bthread::Mutex response_mtx;
-    for (auto& tablet : request->tablets()) {
-        int64_t tablet_id = tablet.tablet_id();
-        int64_t version = tablet.version();
-        auto task = std::make_shared<CancellableRunnable>(
-                [&, tablet_id, version] {
-                    DeferOp defer([&] { latch.count_down(); });
-                    auto st = lake::drop_tablet_cache(_tablet_mgr, tablet_id, version);
-                    if (!st.ok()) {
-                        std::lock_guard l(response_mtx);
-                        st.to_protobuf(response->mutable_status());
-                    }
-                },
-                [&] {
-                    Status st = Status::Cancelled("drop tablet cache task has been cancelled");
-                    LOG(WARNING) << st;
-                    std::lock_guard l(response_mtx);
-                    st.to_protobuf(response->mutable_status());
-                    latch.count_down();
-                });
-        auto st = thread_pool->submit(std::move(task));
-        if (!st.ok()) {
-            LOG(WARNING) << "Fail to submit drop tablet cache task: " << st;
-            std::lock_guard l(response_mtx);
-            st.to_protobuf(response->mutable_status());
-            latch.count_down();
+
+    // Version 1 is the initial empty metadata, with nothing to drop. A request with only such tablets, as for a
+    // partition that was never loaded, answers at once instead of waiting for the pool.
+    std::vector<std::pair<int64_t, int64_t>> tablets;
+    tablets.reserve(request->tablets_size());
+    for (const auto& tablet : request->tablets()) {
+        if (tablet.version() > 1) {
+            tablets.emplace_back(tablet.tablet_id(), tablet.version());
         }
+    }
+    if (tablets.empty()) {
+        Status::OK().to_protobuf(response->mutable_status());
+        return;
+    }
+
+    // The CLONE pool also runs drop_table and delete_tablet. Evicting the cache is best effort, so at most two requests
+    // are on the pool at a time and one of its threads stays free for that work. The other requests wait here, where
+    // they take neither a thread nor a slot of its queue, for at most 10 seconds; a request that has not got its turn
+    // by then leaves the files to the cache's own eviction.
+    constexpr int kMaxRequestsOnPool = 2;
+    int64_t max_wait_ms = 10 * 1000;
+    TEST_SYNC_POINT_CALLBACK("LakeServiceImpl::drop_tablet_cache:max_wait_ms", &max_wait_ms);
+    const int64_t wait_deadline_ms = butil::gettimeofday_ms() + max_wait_ms;
+    {
+        std::unique_lock lock(_dropping_cache_mutex);
+        while (_cache_drops_on_pool >= std::clamp(thread_pool->max_threads() - 1, 1, kMaxRequestsOnPool)) {
+            const int64_t wait_ms = wait_deadline_ms - butil::gettimeofday_ms();
+            if (wait_ms <= 0) {
+                lock.unlock();
+                auto wait_status = Status::TimedOut("too many drop tablet cache requests are running");
+                VLOG(3) << "Skip dropping the cache of " << tablets.size() << " tablets: " << wait_status;
+                wait_status.to_protobuf(response->mutable_status());
+                return;
+            }
+            TEST_SYNC_POINT("LakeServiceImpl::drop_tablet_cache:wait_for_pool");
+            _cache_drop_finished.wait_for(lock, wait_ms * 1000);
+        }
+        _cache_drops_on_pool++;
+    }
+    DeferOp release_pool_slot([&] {
+        std::lock_guard l(_dropping_cache_mutex);
+        _cache_drops_on_pool--;
+        _cache_drop_finished.notify_one();
+    });
+
+    Status task_status;
+    auto latch = BThreadCountDownLatch(1);
+    auto task = std::make_shared<CancellableRunnable>(
+            [&] {
+                DeferOp defer([&] { latch.count_down(); });
+                TEST_SYNC_POINT("LakeServiceImpl::drop_tablet_cache:task_run");
+                for (const auto& [tablet_id, version] : tablets) {
+                    lake::drop_tablet_cache(_tablet_mgr, tablet_id, version);
+                }
+            },
+            [&] {
+                task_status = Status::Cancelled("drop tablet cache task has been cancelled");
+                LOG(WARNING) << task_status;
+                latch.count_down();
+            });
+    auto st = thread_pool->submit(std::move(task));
+    if (!st.ok()) {
+        LOG(WARNING) << "Fail to submit drop tablet cache task: " << st << " tablets=" << tablets.size()
+                     << " queued_tasks=" << thread_pool->num_queued_tasks();
+        task_status = st;
+        latch.count_down();
     }
 
     latch.wait();
+    task_status.to_protobuf(response->mutable_status());
 }
 
 void LakeServiceImpl::vacuum(::google::protobuf::RpcController* controller, const ::starrocks::VacuumRequest* request,
