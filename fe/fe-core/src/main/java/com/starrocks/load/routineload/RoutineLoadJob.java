@@ -937,6 +937,11 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
 
     abstract RoutineLoadTaskInfo unprotectRenewTask(long timeToExecuteMs, RoutineLoadTaskInfo routineLoadTaskInfo);
 
+    // Returns true if a task aborted with "Offset out of range" should be renewed instead of pausing the job.
+    protected boolean retryOnOffsetOutOfRange(RoutineLoadTaskInfo routineLoadTaskInfo) {
+        return false;
+    }
+
     // called by the scheduler every time this job is scheduled, i.e. whenever it is in
     // NEED_SCHEDULE: the initial scheduling, after each resume, and on reschedules
     // (e.g. after a Kafka partition-count change).
@@ -1356,6 +1361,10 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
                 if (txnStatusChangeReason != null) {
                     switch (txnStatusChangeReason) {
                         case OFFSET_OUT_OF_RANGE:
+                            if (retryOnOffsetOutOfRange(routineLoadTaskInfo)) {
+                                break;
+                            }
+                            // fall through
                         case PAUSE:
                             String msg = "be " + taskBeId + " abort task "
                                     + "with reason: " + txnStatusChangeReasonString;

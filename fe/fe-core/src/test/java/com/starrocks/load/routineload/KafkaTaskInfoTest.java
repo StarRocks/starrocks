@@ -94,6 +94,69 @@ public class KafkaTaskInfoTest {
     }
 
     @Test
+    public void testReadyToExecuteChecksOffsetsAfterOffsetOutOfRange() throws Exception {
+        // the job's cached latest offset says there is new data, so a fresh task would skip the broker check
+        KafkaRoutineLoadJob kafkaRoutineLoadJob = new KafkaRoutineLoadJob();
+        kafkaRoutineLoadJob.setPartitionOffset(0, 101);
+
+        new MockUp<KafkaUtil>() {
+            @Mock
+            public Map<Integer, Long> getBeginningOffsets(String brokerList, String topic,
+                                                          ImmutableMap<String, String> properties,
+                                                          List<Integer> partitions,
+                                                          ComputeResource computeResource) throws StarRocksException {
+                Map<Integer, Long> offsets = Maps.newHashMap();
+                offsets.put(0, 50L);
+                return offsets;
+            }
+
+            @Mock
+            public Map<Integer, Long> getLatestOffsets(String brokerList, String topic,
+                                                       ImmutableMap<String, String> properties,
+                                                       List<Integer> partitions,
+                                                       ComputeResource computeResource) throws StarRocksException {
+                Map<Integer, Long> offsets = Maps.newHashMap();
+                offsets.put(0, 100L);
+                return offsets;
+            }
+        };
+
+        // still between the beginning and the latest offset: a transient error, run the task again
+        Map<Integer, Long> inRange = Maps.newHashMap();
+        inRange.put(0, 60L);
+        KafkaTaskInfo inRangeTask = new KafkaTaskInfo(UUIDUtil.genUUID(), kafkaRoutineLoadJob,
+                System.currentTimeMillis(), System.currentTimeMillis(), inRange,
+                Config.routine_load_task_timeout_second * 1000);
+        inRangeTask.setOffsetOutOfRangeStartTimeMs(System.currentTimeMillis());
+        Assertions.assertTrue(inRangeTask.readyToExecute());
+
+        // deleted by retention: pause
+        Map<Integer, Long> beforeBeginning = Maps.newHashMap();
+        beforeBeginning.put(0, 40L);
+        KafkaTaskInfo beforeBeginningTask = new KafkaTaskInfo(UUIDUtil.genUUID(), kafkaRoutineLoadJob,
+                System.currentTimeMillis(), System.currentTimeMillis(), beforeBeginning,
+                Config.routine_load_task_timeout_second * 1000);
+        Assertions.assertTrue(beforeBeginningTask.readyToExecute());
+        beforeBeginningTask.setOffsetOutOfRangeStartTimeMs(System.currentTimeMillis());
+        ExceptionChecker.expectThrowsWithMsg(RoutineLoadPauseException.class,
+                "Offset out of range: consume offset: 40 is smaller than the beginning offset: 50 " +
+                        "in kafka partition: 0. You can modify 'kafka_offsets' property through " +
+                        "ALTER ROUTINE LOAD and RESUME the job",
+                () -> beforeBeginningTask.readyToExecute());
+
+        // beyond the latest offset: pause, as before
+        Map<Integer, Long> beyondLatest = Maps.newHashMap();
+        beyondLatest.put(0, 101L);
+        KafkaTaskInfo beyondLatestTask = new KafkaTaskInfo(UUIDUtil.genUUID(), kafkaRoutineLoadJob,
+                System.currentTimeMillis(), System.currentTimeMillis(), beyondLatest,
+                Config.routine_load_task_timeout_second * 1000);
+        beyondLatestTask.setOffsetOutOfRangeStartTimeMs(System.currentTimeMillis());
+        ExceptionChecker.expectThrowsWithMsg(RoutineLoadPauseException.class,
+                "Consume offset: 101 is greater than the latest offset: 100 in kafka partition: 0.",
+                () -> beyondLatestTask.readyToExecute());
+    }
+
+    @Test
     public void testCheckReadyToExecuteFast() {
         KafkaRoutineLoadJob kafkaRoutineLoadJob = new KafkaRoutineLoadJob();
         kafkaRoutineLoadJob.setPartitionOffset(0, 101);

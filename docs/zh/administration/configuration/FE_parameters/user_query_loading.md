@@ -1494,6 +1494,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 内部系统表 `_statistics_.rejected_records` 保留的每日分区数。该值会被传递给 `TableKeeper`（下限为 1），并在每次 keeper 调度时被反写到目标表的 `partition_live_number` 属性。当需要将拒绝行历史保留更久（用于审计或更长时间窗口的回放）或存储预算紧张时，可调整此值。该值只影响新建的每日分区及 keeper 的 TTL 对齐，不会使已被清理的分区恢复。
 - 引入版本: -
 
+### `routine_load_offset_out_of_range_retry_timeout_second`
+
+- 默认值: 600
+- 类型: Long
+- 单位: 秒
+- 是否可变: Yes
+- 描述: Kafka Routine Load 任务首次因 "Offset out of range" 失败、且该 Offset 仍位于分区的起始 Offset 与最新 Offset 之间时，作业持续重试而不暂停的最长时间。这种情况可能在分区 Leader 切换期间短暂出现。每次重试前，任务会向 Kafka 检查分区的 Offset；如果 Offset 确实超出范围，作业会立即暂停。设置为 `0` 时，作业在首次遇到该错误时即暂停，与之前版本的行为一致。
+- 引入版本: -
+
 ### `routine_load_task_consume_second`
 
 - 默认值: 15
