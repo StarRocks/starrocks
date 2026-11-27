@@ -1395,6 +1395,14 @@ FROM test;
 * 类型：Long
 * 引入版本：v4.2
 
+### optimizer_materialized_view_preprocess_timelimit
+
+* 作用域：Session
+* 描述：指定物化视图改写预处理阶段为 SPJG 改写选择候选物化视图时可消耗的最大时间。当达到阈值时，剩余的相关物化视图将被跳过且不再进行校验，已校验的物化视图仍保留为改写候选。设置为正数表示时间上限，设置为 `0` 或负数表示不限制。仅当该变量的值小于 `new_planner_optimize_timeout` 时才生效。
+* 默认值：0
+* 类型：Long
+* 单位：毫秒
+
 ### optimizer_materialized_view_timelimit
 
 * 描述：指定一个物化视图改写规则可消耗的最大时间。当达到阈值时，将不再使用该规则进行查询改写。

@@ -567,6 +567,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     // --------------------------- Limitations for Materialized View ------------------------------------ //
     public static final String OPTIMIZER_MATERIALIZED_VIEW_TIMELIMIT = "optimizer_materialized_view_timelimit";
+    public static final String OPTIMIZER_MATERIALIZED_VIEW_PREPROCESS_TIMELIMIT =
+            "optimizer_materialized_view_preprocess_timelimit";
     public static final String CBO_MATERIALIZED_VIEW_REWRITE_RULE_OUTPUT_LIMIT =
             "cbo_materialized_view_rewrite_rule_output_limit";
     public static final String CBO_MATERIALIZED_VIEW_REWRITE_CANDIDATE_LIMIT =
@@ -656,6 +658,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CBO_REWRITE_MONOTONIC_MINMAX = "cbo_rewrite_monotonic_minmax_aggregation";
 
     public static final String CBO_ENABLE_PARALLEL_PREPARE_METADATA = "enable_parallel_prepare_metadata";
+    public static final String CBO_ENABLE_PARALLEL_PREFETCH_MV_BASE_TABLE_METADATA =
+            "enable_parallel_prefetch_mv_base_table_metadata";
 
     public static final String SKEW_JOIN_RAND_RANGE = "skew_join_rand_range";
     public static final String ENABLE_STATS_TO_OPTIMIZE_SKEW_JOIN = "enable_stats_to_optimize_skew_join";
@@ -2088,6 +2092,16 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = OPTIMIZER_MATERIALIZED_VIEW_TIMELIMIT)
     private long optimizerMaterializedViewTimeLimitMillis = 1000;
 
+    /**
+     * Time budget (in milliseconds) for choosing SPJG candidate MVs (MVChooseCandidates) in the MV rewrite
+     * preprocessor. Once exhausted, the remaining related MVs are skipped without being validated, and the
+     * MVs validated so far are kept as candidates and prepared as usual.
+     * - positive: use the given value. It only takes effect if it is less than new_planner_optimize_timeout.
+     * - 0 (default) or negative: no limit
+     */
+    @VariableMgr.VarAttr(name = OPTIMIZER_MATERIALIZED_VIEW_PREPROCESS_TIMELIMIT)
+    private long optimizerMaterializedViewPreprocessTimeLimitMillis = 0;
+
     @VariableMgr.VarAttr(name = ENABLE_QUERY_DUMP)
     private boolean enableQueryDump = false;
 
@@ -3509,6 +3523,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = CBO_ENABLE_PARALLEL_PREPARE_METADATA)
     private boolean enableParallelPrepareMetadata = false;
 
+    // Prefetch external base table metadata of related mvs in parallel before mv rewrite validity checks.
+    @VarAttr(name = CBO_ENABLE_PARALLEL_PREFETCH_MV_BASE_TABLE_METADATA)
+    private boolean enableParallelPrefetchMvBaseTableMetadata = false;
+
     // The percentage of rows that need to be contained in MCVs so that MCV propagation through operators is enabled
     // while losing bucket information. Lowering this threshold can lead to worse plans.
     @VarAttr(name = MCV_ROW_PERCENTAGE_PROPAGATION_THRESHOLD, flag = VariableMgr.INVISIBLE)
@@ -3554,6 +3572,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableParallelPrepareMetadata(boolean enableParallelPrepareMetadata) {
         this.enableParallelPrepareMetadata = enableParallelPrepareMetadata;
+    }
+
+    public boolean enableParallelPrefetchMvBaseTableMetadata() {
+        return enableParallelPrefetchMvBaseTableMetadata;
+    }
+
+    public void setEnableParallelPrefetchMvBaseTableMetadata(boolean enableParallelPrefetchMvBaseTableMetadata) {
+        this.enableParallelPrefetchMvBaseTableMetadata = enableParallelPrefetchMvBaseTableMetadata;
     }
 
     public void setAnnParams(String annParams) {
@@ -5161,6 +5187,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setOptimizerMaterializedViewTimeLimitMillis(long millis) {
         this.optimizerMaterializedViewTimeLimitMillis = millis;
+    }
+
+    public long getOptimizerMaterializedViewPreprocessTimeLimitMillis() {
+        return optimizerMaterializedViewPreprocessTimeLimitMillis;
+    }
+
+    public void setOptimizerMaterializedViewPreprocessTimeLimitMillis(long millis) {
+        this.optimizerMaterializedViewPreprocessTimeLimitMillis = millis;
     }
 
     public boolean getEnableGroupbyUseOutputAlias() {
