@@ -1906,14 +1906,10 @@ void drop_tablet_cache(TabletManager* tablet_mgr, int64_t tablet_id, int64_t ver
     // which may read the object storage. A size of 0 is unknown too, as for a .cols file written before its size was
     // recorded.
     auto drop_cache_func = [&](std::string& path, int64_t offset, int64_t size) {
-<<<<<<< HEAD
-        auto fs_or = FileSystem::CreateSharedFromString(path);
-=======
         if (size <= 0) {
             return;
         }
-        auto fs_or = FileSystemFactory::CreateSharedFromString(path);
->>>>>>> 787edb3 ([BugFix] Keep drop_tablet_cache from starving drop_table and stalling the recycle bin (#84757))
+        auto fs_or = FileSystem::CreateSharedFromString(path);
         if (fs_or.ok()) {
             TEST_SYNC_POINT_CALLBACK("drop_tablet_cache:drop_local_cache", &path);
             auto result = (*fs_or)->drop_local_cache(path, offset, size);
@@ -1930,7 +1926,7 @@ void drop_tablet_cache(TabletManager* tablet_mgr, int64_t tablet_id, int64_t ver
         // Only the metadata already in the metadata cache is used, so that dropping the cache reads nothing from
         // storage. A version that is not there ends the walk, because its prev_garbage_version is unknown.
         auto metadata = tablet_mgr->metacache()->lookup_tablet_metadata(
-                MetacacheKey::tablet_metadata(tablet_mgr->tablet_metadata_location(tablet_id, version)));
+                tablet_mgr->tablet_metadata_location(tablet_id, version));
         if (metadata == nullptr) {
             break;
         }

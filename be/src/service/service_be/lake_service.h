@@ -135,21 +135,12 @@ private:
 
     ExecEnv* _env;
     lake::TabletManager* _tablet_mgr;
-<<<<<<< HEAD
-=======
-    LoadChannelMgr* _load_channel_mgr;
-
-    // Tablets currently being built by this CN. Used to dedup repeated
-    // build_vector_index RPCs for the same tablet (e.g. after FE re-enqueue).
-    std::mutex _building_vi_mutex;
-    std::unordered_set<int64_t> _building_vi_tablets;
 
     // Guarded by _dropping_cache_mutex: the drop_tablet_cache requests on the CLONE pool, and the signal that one of
     // them has finished.
     bthread::Mutex _dropping_cache_mutex;
     int _cache_drops_on_pool = 0;
     bthread::ConditionVariable _cache_drop_finished;
->>>>>>> 787edb3 ([BugFix] Keep drop_tablet_cache from starving drop_table and stalling the recycle bin (#84757))
 };
 
 // Get txn_ids string from PublishVersionRequest (compatible with both new and old FE versions)

@@ -33,15 +33,7 @@
 
 #include "column/chunk.h"
 #include "column/fixed_length_column.h"
-<<<<<<< HEAD
 #include "common/config.h"
-=======
-#include "column/nullable_column.h"
-#include "common/config_lake_fwd.h"
-#include "common/thread/threadpool.h"
-#include "data_workflows/load/tablet_writer/load_channel_mgr.h"
-#include "exec/exec_env.h"
->>>>>>> 787edb3 ([BugFix] Keep drop_tablet_cache from starving drop_table and stalling the recycle bin (#84757))
 #include "fs/fs_util.h"
 #include "gutil/strings/util.h"
 #include "runtime/exec_env.h"
@@ -69,6 +61,7 @@
 #include "util/bthreads/util.h"
 #include "util/countdown_latch.h"
 #include "util/defer_op.h"
+#include "util/threadpool.h"
 
 namespace starrocks {
 
