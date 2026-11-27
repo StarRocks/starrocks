@@ -114,6 +114,41 @@ public class QueryConverterTest {
     }
 
     @Test
+    public void testTranslateLikePredicateWithEscape() {
+        SlotRef name = mockSlotRef("name", StringType.STRING);
+
+        // `a\%b` matches the literal `a%b`, so `%` must be emitted as itself and the escape stripped.
+        LikePredicate escapedPercent = new LikePredicate(
+                LikePredicate.Operator.LIKE, name, new StringLiteral("a\\%b"));
+        Assertions.assertEquals("{\"wildcard\":{\"name\":\"a%b\"}}",
+                queryConverter.convert(escapedPercent).toString());
+
+        // `a\_b` matches the literal `a_b`.
+        LikePredicate escapedUnderscore = new LikePredicate(
+                LikePredicate.Operator.LIKE, name, new StringLiteral("a\\_b"));
+        Assertions.assertEquals("{\"wildcard\":{\"name\":\"a_b\"}}",
+                queryConverter.convert(escapedUnderscore).toString());
+
+        // `\\%` is a literal backslash followed by a wildcard `%` -> `\*`.
+        LikePredicate literalBackslashThenWildcard = new LikePredicate(
+                LikePredicate.Operator.LIKE, name, new StringLiteral("\\\\%"));
+        Assertions.assertEquals("{\"wildcard\":{\"name\":\"\\\\*\"}}",
+                queryConverter.convert(literalBackslashThenWildcard).toString());
+
+        // `\\\%` is a literal backslash followed by an escaped literal `%` -> `\%`.
+        LikePredicate literalBackslashThenLiteralPercent = new LikePredicate(
+                LikePredicate.Operator.LIKE, name, new StringLiteral("\\\\\\%"));
+        Assertions.assertEquals("{\"wildcard\":{\"name\":\"\\\\%\"}}",
+                queryConverter.convert(literalBackslashThenLiteralPercent).toString());
+
+        // Unescaped wildcards still translate normally.
+        LikePredicate plainWildcards = new LikePredicate(
+                LikePredicate.Operator.LIKE, name, new StringLiteral("a%b_c"));
+        Assertions.assertEquals("{\"wildcard\":{\"name\":\"a*b?c\"}}",
+                queryConverter.convert(plainWildcards).toString());
+    }
+
+    @Test
     public void testTranslateRangePredicate() {
         SlotRef valueSlotRef = mockSlotRef("value", IntegerType.INT);
         IntLiteral intLiteral = new IntLiteral(1000);
