@@ -20,6 +20,7 @@
 #include <functional>
 #include <memory>
 #include <optional>
+#include <thread>
 
 #include "base/concurrency/countdown_latch.h"
 #include "base/testutil/assert.h"
@@ -1215,6 +1216,130 @@ TEST_F(LakePersistentIndexParallelCompactMgrTest, test_destroy_cb_with_tasks_in_
     ASSERT_TRUE(queued_task->cancelled());
     ASSERT_FALSE(queued_task->ran());
     ASSERT_FALSE(queued_task->reported_into_destroyed_cb());
+}
+
+// A compaction task with hooks that run before it runs or is cancelled.
+class HookedCompactTask : public LakePersistentIndexParallelCompactTask {
+public:
+    HookedCompactTask(const std::vector<std::vector<PersistentIndexSstablePB>>& input_sstables,
+                      TabletManager* tablet_mgr, TabletMetadataPtr metadata, std::function<void()> before_run,
+                      std::function<void()> before_cancel)
+            : LakePersistentIndexParallelCompactTask(input_sstables, tablet_mgr, std::move(metadata), false,
+                                                     UniqueId::gen_uid(), SstSeekRange()),
+              _before_run(std::move(before_run)),
+              _before_cancel(std::move(before_cancel)) {}
+
+    void run() override {
+        if (_before_run) {
+            _before_run();
+        }
+        _ran = true;
+        LakePersistentIndexParallelCompactTask::run();
+    }
+
+    void cancel() override {
+        if (_before_cancel) {
+            _before_cancel();
+        }
+        _cancelled = true;
+        LakePersistentIndexParallelCompactTask::cancel();
+    }
+
+    bool ran() const { return _ran; }
+    bool cancelled() const { return _cancelled; }
+
+private:
+    std::function<void()> _before_run;
+    std::function<void()> _before_cancel;
+    std::atomic<bool> _ran{false};
+    std::atomic<bool> _cancelled{false};
+};
+
+// ThreadPool::shutdown() takes the queued tasks off the token, wakes the token's waiter and only cancels those tasks
+// after its workers exit. wait_for() must not apply the result of a compaction whose tasks were dropped that way,
+// even before their cancellation has reported in.
+TEST_F(LakePersistentIndexParallelCompactMgrTest, test_wait_for_fails_when_pool_shutdown_drops_tasks) {
+    // One worker, so the second task stays queued while the first one runs.
+    std::unique_ptr<ThreadPool> pool;
+    ASSERT_OK(ThreadPoolBuilder("drop_tasks_test").set_min_threads(1).set_max_threads(1).build(&pool));
+
+    PersistentIndexSstablePB sst1, sst2;
+    ASSERT_OK(create_test_sstable("test_sst_1.sst", 0, 100, &sst1));
+    ASSERT_OK(create_test_sstable("test_sst_2.sst", 1000, 100, &sst2));
+
+    CountDownLatch running(1);
+    CountDownLatch release_running(1);
+    CountDownLatch waited(1);
+    std::atomic<bool> result_applied{false};
+    auto cb = std::make_unique<AsyncCompactCB>(pool->new_token(ThreadPool::ExecutionMode::CONCURRENT),
+                                               [&](const std::vector<PersistentIndexSstablePB>&) {
+                                                   result_applied = true;
+                                                   return Status::OK();
+                                               });
+    // Releases the hooks if an assertion below returns early.
+    DeferOp release_hooks([&]() {
+        release_running.count_down();
+        waited.count_down();
+    });
+
+    auto running_task = std::make_shared<HookedCompactTask>(
+            std::vector<std::vector<PersistentIndexSstablePB>>{{sst1}}, _tablet_mgr.get(), _tablet_metadata,
+            [&]() {
+                running.count_down();
+                release_running.wait();
+            },
+            nullptr);
+    // Its cancellation waits until wait_for() has returned, so wait_for() sees the dropped task before it is
+    // cancelled.
+    auto queued_task = std::make_shared<HookedCompactTask>(
+            std::vector<std::vector<PersistentIndexSstablePB>>{{sst2}}, _tablet_mgr.get(), _tablet_metadata, nullptr,
+            [&]() { (void)waited.wait_for(MonoDelta::FromSeconds(30)); });
+    ASSERT_OK(cb->submit(running_task));
+    ASSERT_TRUE(running.wait_for(MonoDelta::FromSeconds(30)));
+    ASSERT_OK(cb->submit(queued_task));
+
+    // shutdown() waits for the running task, so it runs on its own thread.
+    std::thread shutdown_thread([&pool]() { pool->shutdown(); });
+    // The pool status flips in the same critical section that takes the queued task off the token.
+    while (pool->is_pool_status_ok()) {
+        SleepFor(MonoDelta::FromMilliseconds(1));
+    }
+    release_running.count_down();
+
+    auto st = cb->wait_for();
+    waited.count_down();
+    shutdown_thread.join();
+
+    ASSERT_TRUE(st.status().is_aborted()) << st.status();
+    ASSERT_NE(std::string::npos, st.status().to_string().find("1 of 2 parallel compaction tasks did not run"))
+            << st.status();
+    ASSERT_FALSE(result_applied);
+    ASSERT_TRUE(running_task->ran());
+    ASSERT_FALSE(queued_task->ran());
+    ASSERT_TRUE(queued_task->cancelled());
+    // The cancellation has reported in, so destroying the AsyncCompactCB does not wait.
+    cb.reset();
+}
+
+// Lake compaction tasks and publishes can still compact a PK index after the manager is shut down at process stop.
+// They must fail rather than use a destroyed pool.
+TEST_F(LakePersistentIndexParallelCompactMgrTest, test_compact_after_shutdown_fails) {
+    auto mgr = std::make_unique<LakePersistentIndexParallelCompactMgr>(_tablet_mgr.get());
+    ASSERT_OK(mgr->init());
+
+    PersistentIndexSstablePB sst1, sst2;
+    ASSERT_OK(create_test_sstable("test_sst_1.sst", 0, 100, &sst1));
+    ASSERT_OK(create_test_sstable("test_sst_2.sst", 1000, 100, &sst2));
+    std::vector<std::vector<PersistentIndexSstablePB>> candidates;
+    candidates.push_back({sst1, sst2});
+
+    mgr->shutdown();
+    ASSERT_NE(nullptr, mgr->thread_pool());
+
+    std::vector<PersistentIndexSstablePB> output_sstables;
+    auto st = mgr->compact(candidates, _tablet_metadata, false, &output_sstables);
+    ASSERT_TRUE(st.is_service_unavailable()) << st;
+    ASSERT_TRUE(output_sstables.empty());
 }
 
 // ============================================================================
