@@ -606,6 +606,11 @@ tasks.test {
         .orElse(providers.gradleProperty("starrocks.ut.hang.dump.seconds"))
         .orNull
         ?.let { systemProperty("starrocks.ut.hang.dump.seconds", it) }
+    // the same for the directory ExitTraceHook writes its dump to, e.g. -Dstarrocks.ut.exit.dump.dir=/tmp/dumps
+    providers.systemProperty("starrocks.ut.exit.dump.dir")
+        .orElse(providers.gradleProperty("starrocks.ut.exit.dump.dir"))
+        .orNull
+        ?.let { systemProperty("starrocks.ut.exit.dump.dir", it) }
 
     // Add JMockit Java agent to JVM arguments
     val jmockitPath = configurations.testCompileClasspath.get().find { it.name.contains("jmockit") }?.absolutePath
