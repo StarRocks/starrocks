@@ -407,6 +407,64 @@ TEST_F(TransactionStreamLoadActionTest, txn_commit_success) {
     }
 }
 
+// The attachment of a transaction carries the bytes of all its load requests, not only those of the last one.
+TEST_F(TransactionStreamLoadActionTest, txn_prepare_reports_bytes_of_all_loads) {
+    TransactionManagerAction txn_action(&_env, _transaction_mgr.get());
+    {
+        HttpRequest b(_evhttp_req);
+        b._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+        b._headers.emplace(HttpHeaders::CONTENT_LENGTH, "0");
+        b._headers.emplace(HTTP_LABEL_KEY, "123");
+        b._params.emplace(HTTP_TXN_OP_KEY, TXN_BEGIN);
+        txn_action.handle(&b);
+
+        rapidjson::Document doc;
+        doc.Parse(k_response_str.c_str());
+        ASSERT_STREQ("OK", doc["Status"].GetString());
+    }
+
+    TransactionStreamLoadAction action(&_env, &_stream_load_orchestrator, _transaction_mgr.get());
+    for (const std::string content : {"abc", "defgh"}) {
+        HttpRequest request(_evhttp_req);
+        request.set_handler(&action);
+        evbuffer_add(request.get_evhttp_request()->input_buffer, content.data(), content.size());
+        request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+        request._headers.emplace(HttpHeaders::CONTENT_LENGTH, std::to_string(content.size()));
+        request._headers.emplace(HTTP_LABEL_KEY, "123");
+        ASSERT_EQ(0, action.on_header(&request));
+        action.on_chunk_data(&request);
+        action.handle(&request);
+
+        rapidjson::Document doc;
+        doc.Parse(k_response_str.c_str());
+        ASSERT_STREQ("OK", doc["Status"].GetString());
+    }
+
+    int64_t received_bytes = -1;
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("StreamLoadExecutor::prepare_txn::rpc");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+    SyncPoint::GetInstance()->SetCallBack("StreamLoadExecutor::prepare_txn::rpc", [&](void* arg) {
+        auto* request = static_cast<TLoadTxnCommitRequest*>(arg);
+        ASSERT_TRUE(request->__isset.txnCommitAttachment);
+        received_bytes = request->txnCommitAttachment.manualLoadTxnCommitAttachment.receivedBytes;
+    });
+
+    HttpRequest b(_evhttp_req);
+    b._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+    b._headers.emplace(HttpHeaders::CONTENT_LENGTH, "0");
+    b._headers.emplace(HTTP_LABEL_KEY, "123");
+    b._params.emplace(HTTP_TXN_OP_KEY, TXN_PREPARE);
+    txn_action.handle(&b);
+
+    rapidjson::Document doc;
+    doc.Parse(k_response_str.c_str());
+    ASSERT_STREQ("OK", doc["Status"].GetString());
+    ASSERT_EQ(8, received_bytes);
+}
+
 // Setup transaction stream load flow for prepare testing
 void setup_prepare_txn_test(TransactionManagerAction& txn_action, ExecEnv* env,
                             orchestration::StreamLoadOrchestrator* stream_load_orchestrator,

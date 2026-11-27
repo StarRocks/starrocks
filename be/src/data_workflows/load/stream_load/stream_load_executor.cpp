@@ -338,7 +338,10 @@ bool StreamLoadExecutor::collect_load_stat(StreamLoadContext* ctx, TTxnCommitAtt
         TManualLoadTxnCommitAttachment manual_load_attach;
         manual_load_attach.__set_loadedRows(ctx->number_loaded_rows);
         manual_load_attach.__set_filteredRows(ctx->number_filtered_rows);
-        manual_load_attach.__set_receivedBytes(ctx->receive_bytes);
+        // A transaction stream load receives its data over several requests and resets receive_bytes for each
+        // of them, so report total_receive_bytes, the bytes of the whole load. A plain stream load keeps the two
+        // equal.
+        manual_load_attach.__set_receivedBytes(ctx->total_receive_bytes);
         manual_load_attach.__set_loadedBytes(ctx->loaded_bytes);
         manual_load_attach.__set_unselectedRows(ctx->number_unselected_rows);
         manual_load_attach.__set_beginTxnTime(ctx->begin_txn_cost_nanos / 1000 / 1000);

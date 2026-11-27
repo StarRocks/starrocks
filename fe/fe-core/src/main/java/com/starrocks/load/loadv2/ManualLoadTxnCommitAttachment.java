@@ -25,15 +25,22 @@ public class ManualLoadTxnCommitAttachment extends TxnCommitAttachment {
     private long loadedRows;
     @SerializedName("fr")
     private long filteredRows;
-
+    // Persisted with the transaction so that a stream load task replayed from it keeps the counters.
+    @SerializedName("us")
     private long unselectedRows;
-    private long receivedBytes;
+    // -1 when unknown: the backend did not send it, or the attachment was persisted without it
+    @SerializedName("rb")
+    private long receivedBytes = -1;
+    @SerializedName("lb")
     private long loadedBytes;
     // optional
     @SerializedName("eu")
     private String errorLogUrl;
+    @SerializedName("bt")
     private long beginTxnTime;
+    @SerializedName("pt")
     private long planTime;
+    @SerializedName("rt")
     private long receiveDataTime;
 
     public ManualLoadTxnCommitAttachment() {
@@ -44,7 +51,9 @@ public class ManualLoadTxnCommitAttachment extends TxnCommitAttachment {
         super(TransactionState.LoadJobSourceType.BACKEND_STREAMING);
         this.loadedRows = tManualLoadTxnCommitAttachment.getLoadedRows();
         this.loadedBytes = tManualLoadTxnCommitAttachment.getLoadedBytes();
-        this.receivedBytes = tManualLoadTxnCommitAttachment.getReceivedBytes();
+        if (tManualLoadTxnCommitAttachment.isSetReceivedBytes()) {
+            this.receivedBytes = tManualLoadTxnCommitAttachment.getReceivedBytes();
+        }
         this.filteredRows = tManualLoadTxnCommitAttachment.getFilteredRows();
         this.unselectedRows = tManualLoadTxnCommitAttachment.getUnselectedRows();
         if (tManualLoadTxnCommitAttachment.isSetErrorLogUrl()) {

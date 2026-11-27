@@ -1084,6 +1084,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
             streamLoadTask.setLabel(label);
             streamLoadTask.setTUniqueId(loadId);
             streamLoadTask.setCoordinator(coord);
+            streamLoadTask.markLoadingStarted();
 
             QeProcessorImpl.INSTANCE.registerQuery(loadId, coord);
 

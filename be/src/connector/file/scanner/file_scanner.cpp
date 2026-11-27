@@ -66,6 +66,14 @@ void FileScanner::close() {
     if (!_schema_only) {
         ExprExecutor::close(_dest_expr_ctx, _state);
     }
+    // A pipe holds everything the load received once its producer finished it, or once the scanner read the end mark
+    // of its format. A reader that stops before either, or a pipe that another reader counted already, adds nothing.
+    for (const auto& pipe : _stream_load_pipes) {
+        if (_state != nullptr && (_read_to_format_end || pipe->finished()) && pipe->claim_received_bytes()) {
+            _state->update_num_bytes_received_from_stream(pipe->total_appended_bytes());
+        }
+    }
+    _stream_load_pipes.clear();
 }
 
 Status FileScanner::init_expr_ctx() {
@@ -328,6 +336,7 @@ Status FileScanner::create_sequential_file(const TBrokerRangeDesc& range_desc, c
             range_desc.load_id.printTo(ss);
             return Status::InternalError(std::string(ss.str()));
         }
+        _stream_load_pipes.push_back(pipe);
         auto stream = std::make_shared<StreamLoadPipeInputStream>(std::move(pipe));
         src_file = std::make_shared<SequentialFile>(std::move(stream), "stream-load-pipe");
         break;

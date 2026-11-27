@@ -177,8 +177,9 @@ std::unique_ptr<TReportExecStatusParams> ExecStateReporter::create_report_exec_s
                 params.delta_urls.push_back(to_http_path(master_token, it));
             }
         }
+        // An instance that only reads a stream load pipe and sends its rows on still reports the bytes it received.
         if (runtime_state->num_rows_load_sink() > 0 || runtime_state->num_rows_load_filtered() > 0 ||
-            runtime_state->num_rows_load_unselected() > 0) {
+            runtime_state->num_rows_load_unselected() > 0 || runtime_state->num_bytes_received_from_stream() > 0) {
             params.__isset.load_counters = true;
             static std::string s_dpp_normal_all = "dpp.norm.ALL";
             static std::string s_dpp_abnormal_all = "dpp.abnorm.ALL";
@@ -189,6 +190,11 @@ std::unique_ptr<TReportExecStatusParams> ExecStateReporter::create_report_exec_s
             params.load_counters.emplace(s_dpp_abnormal_all, std::to_string(runtime_state->num_rows_load_filtered()));
             params.load_counters.emplace(s_unselected_rows, std::to_string(runtime_state->num_rows_load_unselected()));
             params.load_counters.emplace(s_loaded_bytes, std::to_string(runtime_state->num_bytes_load_sink()));
+            if (runtime_state->num_bytes_received_from_stream() > 0) {
+                static std::string s_received_bytes = "received.bytes";
+                params.load_counters.emplace(s_received_bytes,
+                                             std::to_string(runtime_state->num_bytes_received_from_stream()));
+            }
         }
         if (!runtime_state->get_error_log_file_path().empty()) {
             params.__set_tracking_url(to_load_error_http_path(runtime_state->get_error_log_file_path()));

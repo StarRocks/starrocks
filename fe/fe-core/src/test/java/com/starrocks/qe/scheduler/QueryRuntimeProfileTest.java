@@ -130,6 +130,24 @@ public class QueryRuntimeProfileTest {
     }
 
     @Test
+    public void testReceivedBytesAggregateOnlyWhenReported() {
+        QueryRuntimeProfile profile = new QueryRuntimeProfile(connectContext, jobSpec, false);
+        // An instance that reads no stream load pipe, or runs on an older backend, does not report them.
+        profile.buildLoadInformationUpdates(null, new TReportExecStatusParams()
+                .setLoad_counters(Map.of(LoadEtlTask.DPP_NORMAL_ALL, "7", LoadJob.LOADED_BYTES, "100")))
+                .forEach(Runnable::run);
+        Assertions.assertFalse(profile.getLoadCounters().containsKey(LoadJob.RECEIVED_BYTES));
+
+        for (int i = 0; i < 2; i++) {
+            profile.buildLoadInformationUpdates(null, new TReportExecStatusParams()
+                    .setLoad_counters(Map.of(LoadEtlTask.DPP_NORMAL_ALL, "0", LoadJob.RECEIVED_BYTES, "64")))
+                    .forEach(Runnable::run);
+        }
+        Assertions.assertEquals("128", profile.getLoadCounters().get(LoadJob.RECEIVED_BYTES));
+        Assertions.assertEquals("7", profile.getLoadCounters().get(LoadEtlTask.DPP_NORMAL_ALL));
+    }
+
+    @Test
     public void testLoadCountersAndCacheMetricsAggregateAcrossReports() {
         QueryRuntimeProfile profile = new QueryRuntimeProfile(connectContext, jobSpec, false);
         TReportExecStatusParams params = new TReportExecStatusParams()
