@@ -1,4 +1,9 @@
 *code-workspace
-*/__pycache__/
+__pycache__/
 /dist/
 /starrocks.egg-info/
+/test.cfg
+/.profiles.txt
+/scratch/
+/scratch_*/
+/*_test_schema.db

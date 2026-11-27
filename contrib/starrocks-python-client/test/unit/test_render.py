@@ -16,7 +16,8 @@ import re
 from unittest.mock import Mock
 
 from alembic.autogenerate.api import AutogenContext
-import pytest
+from sqlalchemy import testing
+from sqlalchemy.testing import fixtures
 
 from starrocks.alembic.ops import (
     AlterTableDistributionOp,
@@ -67,7 +68,7 @@ def _normalize_py_call(s: str) -> str:
     return s
 
 
-class TestTableRendering:
+class TableRenderingTest(fixtures.TestBase):
     def test_render_alter_table_distribution(self):
         ctx = Mock()
         op = AlterTableDistributionOp("t1", "HASH(k1, k2)", buckets=10, schema="s1")
@@ -199,7 +200,7 @@ NON_STARROCKS_TYPE_TEST_CASES = [
 ]
 
 
-class TestDataTypeRendering:
+class DataTypeRenderingTest(fixtures.TestBase):
     """Test rendering of StarRocks data types in Alembic autogenerate"""
 
     def _create_mock_autogen_context(self):
@@ -211,7 +212,7 @@ class TestDataTypeRendering:
         ctx.imports = set()
         return AutogenContext(ctx, {}, None, True)
 
-    @pytest.mark.parametrize("type_instance, expected_render", BASIC_RENDER_TEST_CASES)
+    @testing.combinations(*BASIC_RENDER_TEST_CASES, argnames="type_instance, expected_render")
     def test_render_basic_types(self, type_instance, expected_render):
         """Test rendering of basic data types"""
         autogen_context = self._create_mock_autogen_context()
@@ -219,14 +220,14 @@ class TestDataTypeRendering:
         assert result == expected_render
         assert "from starrocks import *" in autogen_context.imports
 
-    @pytest.mark.parametrize("type_instance, expected_render", COMPLEX_RENDER_TEST_CASES)
+    @testing.combinations(*COMPLEX_RENDER_TEST_CASES, argnames="type_instance, expected_render")
     def test_render_complex_types(self, type_instance, expected_render):
         """Test rendering of complex data types"""
         autogen_context = self._create_mock_autogen_context()
         result = render_column_type('type', type_instance, autogen_context)
         assert result == expected_render
 
-    @pytest.mark.parametrize("type_instance, expected_render", EDGE_CASE_RENDER_TEST_CASES)
+    @testing.combinations(*EDGE_CASE_RENDER_TEST_CASES, argnames="type_instance, expected_render")
     def test_render_edge_cases(self, type_instance, expected_render):
         """Test edge cases in type rendering"""
         autogen_context = self._create_mock_autogen_context()
