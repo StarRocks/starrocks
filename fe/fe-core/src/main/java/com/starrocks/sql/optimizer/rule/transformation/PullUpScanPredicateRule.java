@@ -171,13 +171,10 @@ public class PullUpScanPredicateRule extends TransformationRule {
 
         Map<ColumnRefOperator, ScalarOperator> scanProjectionMap;
         if (newScanOperator.getProjection() != null) {
-            // since pulled-up predicates must use some columns, we no longer need auto fill column.
-            scanProjectionMap = newScanOperator.getProjection().getColumnRefMap();
-            scanProjectionMap.keySet().removeIf(columnRefOperator -> columnRefOperator.getName().equals("auto_fill_col"));
-            if (scanProjectionMap.isEmpty()) {
-                scanProjectionMap = null;
-                newScanOperator.setProjection(null);
-            }
+            // Parent operators can refer to generated constant columns in the scan outputs.
+            Projection projection = newScanOperator.getProjection();
+            newScanOperator.setProjection(new Projection(new HashMap<>(projection.getColumnRefMap()),
+                    new HashMap<>(projection.getCommonSubOperatorMap()), projection.needReuseLambdaDependentExpr()));
         }
 
         if (newScanOperator.getProjection() == null && newProjections.isEmpty() && allPredicatesColumnFromTableColumn) {
