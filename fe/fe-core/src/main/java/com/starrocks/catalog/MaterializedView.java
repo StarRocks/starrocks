@@ -1981,25 +1981,61 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             setActive();
             return CompletableFuture.completedFuture(null);
         }
+        return rebuildRelationshipOnReplay("MVReplayActivate", "replayed activation", "replay active failed: ",
+                true);
+    }
+
+    /**
+     * Replay the leader adopting the base tables of a redefined connector view, see {@link #replaceBaseTableInfos}.
+     * The journal already carries the resolved base tables, so they are adopted, and the versions of the old ones
+     * cleared, right away. What {@link #fixRelationship} derives on top resolves every base table through its
+     * connector, so it runs asynchronously, off the replay thread and outside the caller's lock, as for
+     * {@link #activateOnReplay}: a slow or unreachable external catalog must not hold up the journals replayed after
+     * this one, or the checkpoint. Until then, rewrite does not use the mv, which has no versions of its new base
+     * tables.
+     *
+     * <p>On the checkpoint thread nothing is derived: the image only keeps the persisted state.
+     *
+     * <p>NOTE: caller need to hold the mv write lock; the returned future does not.
+     */
+    public CompletableFuture<?> replaceBaseTableInfosOnReplay(List<BaseTableInfo> journaledBaseTableInfos) {
+        adoptRedefinedBaseTableInfos(journaledBaseTableInfos);
+        if (GlobalStateMgr.isCheckpointThread()) {
+            return CompletableFuture.completedFuture(null);
+        }
+        return rebuildRelationshipOnReplay("MVReplayRedefinedBaseTables", "replayed base-table redefinition",
+                "replay base-table redefinition failed: ", false);
+    }
+
+    /**
+     * Rebuild what {@link #fixRelationship} derives from the persisted state a replay adopted, asynchronously, and
+     * apply its verdict only if no other status change was replayed meanwhile.
+     *
+     * @param leaderVerifiedActive whether the leader journaled the entry only once the mv was active, so that a
+     *                             negative verdict here is a divergence from the leader
+     */
+    private CompletableFuture<?> rebuildRelationshipOnReplay(String taskName, String replayed,
+                                                             String failureReasonPrefix,
+                                                             boolean leaderVerifiedActive) {
         final long epoch;
         synchronized (this) {
             epoch = statusEpoch;
         }
-        return CachingMvPlanContextBuilder.submitAsyncTask(buildTaskName("MVReplayActivate"), () -> {
+        return CachingMvPlanContextBuilder.submitAsyncTask(buildTaskName(taskName), () -> {
             InactiveReason reason;
             try {
                 onReloadImplHeavy();
                 reason = checkIsActiveOnLoadBlocking();
             } catch (Throwable e) {
-                LOG.warn("rebuild the relationship of replayed activation failed for mv: {}", this, e);
-                reason = InactiveReason.ofInactive("replay active failed: " + e.getMessage());
+                LOG.warn("rebuild the relationship of {} failed for mv: {}", replayed, this, e);
+                reason = InactiveReason.ofInactive(failureReasonPrefix + e.getMessage());
             }
             boolean stale;
             synchronized (this) {
                 stale = statusEpoch != epoch;
                 if (stale) {
-                    LOG.info("status of mv {} changed while its replayed activation was being rebuilt, "
-                            + "dropping the stale verdict", getName());
+                    LOG.info("status of mv {} changed while its {} was being rebuilt, dropping the stale verdict",
+                            getName(), replayed);
                 } else {
                     setInActiveReason(reason);
                 }
@@ -2008,10 +2044,10 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             // the base-table links and the rewrite cache. DROP takes the mv out of the catalog before it
             // cleans up, so checking after every side effect above means one of the two always runs last.
             if (!isInCatalog()) {
-                undoActivationOfDroppedMv("dropped while its replayed activation was being rebuilt");
+                undoActivationOfDroppedMv("dropped while its " + replayed + " was being rebuilt");
                 return null;
             }
-            if (!stale && !reason.isActive) {
+            if (leaderVerifiedActive && !stale && !reason.isActive) {
                 // The leader journals ACTIVE only once the activation actually succeeded, so failing to
                 // reproduce it here is a real divergence between this FE and the leader.
                 LOG.error("replayed ACTIVE for materialized view {} but could not rebuild its base-table "
@@ -3430,7 +3466,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
 
     /**
      * {@link #replaceBaseTableInfos} without relinking the new base tables, which resolves them through their
-     * connectors. For a caller that relinks them itself, see #activateOnReplay.
+     * connectors. For a caller that relinks them itself, see #activateOnReplay and #replaceBaseTableInfosOnReplay.
      */
     private void adoptRedefinedBaseTableInfos(List<BaseTableInfo> newBaseTableInfos) {
         // by name: an activation resolves the base tables again, and a connector hands out new ids for the same ones
@@ -3458,7 +3494,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     public void replayAlterMaterializedViewBaseTableInfos(AlterMaterializedViewBaseTableInfosLog log) {
         if (log.isBaseTablesRedefined()) {
             LOG.info("Replay redefined base table infos log for mv {}", this.getName());
-            replaceBaseTableInfos(log.getBaseTableInfos());
+            replaceBaseTableInfosOnReplay(log.getBaseTableInfos());
             return;
         }
         int mvAlterType = log.getAlterType();

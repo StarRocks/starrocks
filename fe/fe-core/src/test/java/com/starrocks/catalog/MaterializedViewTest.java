@@ -62,6 +62,7 @@ import com.starrocks.utframe.UtFrameUtils;
 import mockit.Invocation;
 import mockit.Mock;
 import mockit.MockUp;
+import org.awaitility.Awaitility;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.MethodOrderer.MethodName;
@@ -436,8 +437,12 @@ public class MaterializedViewTest extends StarRocksTestBase {
         Assertions.assertTrue(mv.isActive(), mv.getInactiveReason());
         Assertions.assertEquals(Lists.newArrayList(t2Info), mv.getBaseTableInfos());
         Assertions.assertFalse(t1.getRelatedMaterializedViews().contains(mv.getMvId()));
-        Assertions.assertTrue(t2.getRelatedMaterializedViews().contains(mv.getMvId()));
         Assertions.assertFalse(versionMap.containsKey(t1.getId()));
+        // The relationship to the new base tables is rebuilt off the replay thread, see
+        // MaterializedView#replaceBaseTableInfosOnReplay.
+        Awaitility.await().atMost(30, TimeUnit.SECONDS)
+                .until(() -> t2.getRelatedMaterializedViews().contains(mv.getMvId()));
+        Assertions.assertTrue(mv.isActive(), mv.getInactiveReason());
 
         starRocksAssert.dropMaterializedView("mv_replay_redefined");
     }

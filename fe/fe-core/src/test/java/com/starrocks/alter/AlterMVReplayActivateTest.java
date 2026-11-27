@@ -21,6 +21,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.MockedMetadataMgr;
 import com.starrocks.connector.hive.MockedHiveMetadata;
+import com.starrocks.persist.AlterMaterializedViewBaseTableInfosLog;
 import com.starrocks.persist.AlterMaterializedViewStatusLog;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.gson.GsonUtils;
@@ -116,10 +117,11 @@ public class AlterMVReplayActivateTest extends MVTestBase {
     }
 
     // The mv-plan-cache executor also runs unrelated plan builds; park only an asynchronous activation: the
-    // rebuild of a replayed one, or the check that follows a reload.
+    // rebuild of a replayed one or of a replayed base-table redefinition, or the check that follows a reload.
     private static boolean isReplayRebuild() {
         for (StackTraceElement frame : Thread.currentThread().getStackTrace()) {
             if (frame.getMethodName().contains("activateOnReplay")
+                    || frame.getMethodName().contains("rebuildRelationshipOnReplay")
                     || frame.getMethodName().contains("checkAndSetActive")) {
                 return true;
             }
@@ -419,6 +421,68 @@ public class AlterMVReplayActivateTest extends MVTestBase {
         } finally {
             starRocksAssert.ddl("DROP MATERIALIZED VIEW IF EXISTS " + mvName);
             starRocksAssert.dropTable(mixedBase);
+        }
+    }
+
+    /**
+     * Replaying the leader adopting the base tables of a redefined connector view adopts the journaled ones under the
+     * MV lock, but rebuilds the relationship on top, which resolves them through the connector, after the replay
+     * released it: a slow external catalog must not hold up the journals replayed after it.
+     */
+    @Test
+    public void testReplayedBaseTableRedefinitionDoesNotResolveAnExternalBaseTableUnderTheLock() throws Exception {
+        String mvName = "mv_replay_redefined_hive";
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW " + mvName + "\n" + HIVE_MV_DEFINITION);
+        try {
+            MaterializedView mv = getMv(DB_NAME, mvName);
+            List<BaseTableInfo> infos = Lists.newArrayList(mv.getBaseTableInfos());
+
+            installProbe();
+            GlobalStateMgr.getCurrentState().getAlterJobMgr().replayAlterMaterializedViewBaseTableInfos(
+                    AlterMaterializedViewBaseTableInfosLog.ofRedefinedBaseTables(mv.getDbId(), mv.getId(), infos));
+
+            Assertions.assertFalse(probe.lock.everUnderLock(LockProbeHiveMetadata.GET_TABLE),
+                    "replay resolved an external base table while holding the MV lock");
+            Assertions.assertEquals(infos, mv.getBaseTableInfos());
+            // The resolution moved out of the lock rather than disappearing: the rebuild did reach the connector.
+            Awaitility.await().atMost(30, TimeUnit.SECONDS)
+                    .until(() -> probe.rebuildLock.calls(LockProbeHiveMetadata.GET_TABLE) > 0);
+            probe.rebuildLock.assertReachedOutsideTheLock(LockProbeHiveMetadata.GET_TABLE,
+                    "the rebuild resolved an external base table while holding an FE metadata lock");
+            awaitActive(mv);
+        } finally {
+            starRocksAssert.dropMaterializedView(mvName);
+        }
+    }
+
+    /** Like {@link #testCheckpointReplayWritesTheLeadersStateIntoTheImage}, for a base-table redefinition. */
+    @Test
+    public void testCheckpointReplayOfBaseTableRedefinitionDoesNotReachTheConnector() throws Exception {
+        String mvName = "mv_replay_redefined_checkpoint";
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW " + mvName + "\n" + HIVE_MV_DEFINITION);
+        try {
+            MaterializedView mv = getMv(DB_NAME, mvName);
+            List<BaseTableInfo> infos = Lists.newArrayList(mv.getBaseTableInfos());
+
+            installProbe();
+            Field checkpointThreadId = GlobalStateMgr.class.getDeclaredField("checkpointThreadId");
+            checkpointThreadId.setAccessible(true);
+            long previous = checkpointThreadId.getLong(null);
+            checkpointThreadId.setLong(null, Thread.currentThread().getId());
+            try {
+                Assertions.assertTrue(GlobalStateMgr.isCheckpointThread());
+                Assertions.assertTrue(mv.replaceBaseTableInfosOnReplay(infos).isDone(),
+                        "the checkpoint replay must not leave anything running behind it");
+            } finally {
+                checkpointThreadId.setLong(null, previous);
+            }
+
+            Assertions.assertEquals(infos, mv.getBaseTableInfos());
+            Assertions.assertEquals(0, probe.lock.calls(LockProbeHiveMetadata.GET_TABLE)
+                            + probe.rebuildLock.calls(LockProbeHiveMetadata.GET_TABLE),
+                    "the checkpoint replay reached the connector");
+        } finally {
+            starRocksAssert.dropMaterializedView(mvName);
         }
     }
 
