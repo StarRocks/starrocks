@@ -66,4 +66,12 @@ BatchWriteLoadParams get_load_parameters_from_brpc(const std::map<std::string, s
 // checked. format and skip_header are the values of the request, empty when it does not set them.
 Status check_merge_commit_skip_header(const std::string& format, const std::string& skip_header);
 
+// Merge commit appends the body of every request of a merge window to one stream and scans it as one file, but the
+// Arrow scanner reads a file as one IPC stream: it stops at the end of the first request's stream, so the other
+// requests would be reported as loaded with none of their rows, and it fails the whole load when the stream is still
+// empty at its first read. Refuse the arrow format on every way a request reaches merge commit. format is the value of
+// the request, empty when it does not set one; it is matched case-insensitively, as parse_format of the Stream Load
+// action and the FE match it.
+Status check_merge_commit_format(const std::string& format);
+
 } // namespace starrocks

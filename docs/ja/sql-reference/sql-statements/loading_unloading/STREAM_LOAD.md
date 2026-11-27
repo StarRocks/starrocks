@@ -83,7 +83,7 @@ http://<fe_host>:<fe_http_port>/api/<database_name>/<table_name>/_stream_load
 
 ```Bash
 -T <file_path>
--H "format: CSV | JSON"
+-H "format: CSV | JSON | ARROW"
 -H "column_separator: <column_separator>"
 -H "row_delimiter: <row_delimiter>"
 -H "columns: <column1_name>[, <column2_name>, ... ]"
@@ -104,7 +104,7 @@ http://<fe_host>:<fe_http_port>/api/<database_name>/<table_name>/_stream_load
 | パラメータ | 必須 | 説明 |
 | ---------- | -------- | ------------------------------------------------------------ |
 | file_path  | はい | データファイルの保存パス。ファイル名の拡張子は任意で含めることができます。|
-| format     | いいえ | データファイルの形式。有効な値：`CSV`および`JSON`。デフォルト値：`CSV`。|
+| format     | いいえ | データファイルの形式。有効な値：`CSV`、`JSON`、および`ARROW`。`ARROW`はArrow IPCストリーミング形式を表します。Arrow IPCファイル形式はサポートされていません。デフォルト値：`CSV`。|
 | partitions | いいえ | データファイルをロードするパーティション。デフォルトでは、このパラメータを指定しない場合、システムはデータファイルをテーブルのすべてのパーティションにロードします。|
 | temporary_partitions| いいえ | データファイルをロードする[一時パーティション](../../../table_design/data_distribution/Temporary_partition.md) の名前。複数の一時パーティションを指定でき、カンマ（,）で区切る必要があります。|
 | columns    | いいえ | データファイルとテーブル間の列マッピング。<br />データファイルのフィールドをテーブルの列に順番にマッピングできる場合は、このパラメータを指定する必要はありません。代わりに、このパラメータを使用してデータ変換を実装できます。たとえば、CSVデータファイルをロードし、そのファイルがテーブルの2つの列（`id`と`city`）に順番にマッピングできる2つの列で構成されている場合、`"columns: city,tmp_id, id = tmp_id * 100"`と指定できます。詳細については、このトピックの[列マッピング](#column-mapping)セクションを参照してください。|
@@ -190,6 +190,7 @@ Merge Commit最適化は、単一テーブルに対して**同時** Stream Load�
 
 - Merge Commitは**同質** 読み込みリクエストを単一のデータベースとテーブルにマージすることのみをサポートします。「同質」とは、Stream Loadパラメータが同一であることを意味し、共通パラメータ、JSON形式パラメータ、CSV形式パラメータ、`opt_properties`、およびMerge Commitパラメータが含まれます。
 - CSV形式のデータを読み込む場合、各行が行区切り文字で終わることを確認する必要があります。`skip_header`はサポートされていません。
+- Arrow形式はサポートされていません。Merge Commitを有効にしたArrow形式のリクエストは拒否されます。
 - サーバーはトランザクションのラベルを自動的に生成します。指定された場合は無視されます。
 - Merge Commitは複数の読み込みリクエストを単一のトランザクションにマージします。1つのリクエストにデータ品質の問題が含まれている場合、トランザクション内のすべてのリクエストが失敗します。
 
