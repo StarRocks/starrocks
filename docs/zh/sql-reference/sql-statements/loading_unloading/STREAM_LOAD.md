@@ -83,7 +83,7 @@ http://<fe_host>:<fe_http_port>/api/<database_name>/<table_name>/_stream_load
 
 ```Bash
 -T <file_path>
--H "format: CSV | JSON"
+-H "format: CSV | JSON | ARROW"
 -H "column_separator: <column_separator>"
 -H "row_delimiter: <row_delimiter>"
 -H "columns: <column1_name>[, <column2_name>, ... ]"
@@ -104,7 +104,7 @@ http://<fe_host>:<fe_http_port>/api/<database_name>/<table_name>/_stream_load
 | 参数 | 是否必填 | 描述 |
 | ---------- | -------- | ------------------------------------------------------------ |
 | file_path | 是 | 数据文件的保存路径。您可以选择性地包含文件名的扩展名。|
-| format | 否 | 数据文件的格式。有效值：`CSV` 和 `JSON`。默认值：`CSV`。|
+| format | 否 | 数据文件的格式。有效值：`CSV`、`JSON` 和 `ARROW`。`ARROW` 表示 Arrow IPC stream 格式，不支持 Arrow IPC file 格式。默认值：`CSV`。|
 | partitions | 否 | 您要将数据文件加载到的分区。默认情况下，如果不指定此参数，系统会将数据文件加载到表的所有分区中。|
 | temporary_partitions | 否 | 您要将数据文件加载到的[临时分区](../../../table_design/data_distribution/Temporary_partition.md)的名称。您可以指定多个临时分区，多个分区之间必须用逗号（,）分隔。|
 | columns | 否 | 数据文件与表之间的列映射关系。<br />如果数据文件中的字段可以按顺序映射到表中的列，则无需指定此参数。您可以使用此参数实现数据转换。例如，如果您加载一个 CSV 数据文件，该文件由两列组成，可以按顺序映射到表的两列 `id` 和 `city`，则可以指定 `"columns: city,tmp_id, id = tmp_id * 100"`。更多信息，请参阅本主题中的「[列映射](#column-mapping)」部分。|
@@ -190,6 +190,7 @@ http://<fe_host>:<fe_http_port>/api/<database_name>/<table_name>/_stream_load
 
 - Merge Commit 仅支持将**同构** 加载请求合并到单个数据库和表中。「同构」表示 Stream Load 参数完全相同，包括：公共参数、JSON 格式参数、CSV 格式参数、`opt_properties` 以及 Merge Commit 参数。
 - 加载 CSV 格式数据时，必须确保每行以行分隔符结尾。不支持 `skip_header`。
+- 不支持 Arrow 格式。开启 Merge Commit 的 Arrow 格式请求会被拒绝。
 - 服务器自动为事务生成标签。如果指定了标签，将被忽略。
 - Merge Commit 将多个加载请求合并为单个事务。如果某个请求包含数据质量问题，则事务中的所有请求都将失败。
 

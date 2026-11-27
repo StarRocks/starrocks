@@ -225,6 +225,10 @@ void BatchWriteMgr::receive_stream_load_rpc(brpc::Controller* cntl, const PStrea
         }
         ctx->timeout_second = timeout_second;
     }
+    Status format_status = check_merge_commit_format(GET_PARAMETER_OR_EMPTY(parameters, HTTP_FORMAT_KEY));
+    if (UNLIKELY(!format_status.ok())) {
+        ASSIGN_AND_RETURN(ctx->status, format_status);
+    }
     Status skip_header_status = check_merge_commit_skip_header(GET_PARAMETER_OR_EMPTY(parameters, HTTP_FORMAT_KEY),
                                                                GET_PARAMETER_OR_EMPTY(parameters, HTTP_SKIP_HEADER));
     if (UNLIKELY(!skip_header_status.ok())) {

@@ -81,7 +81,7 @@ Describes the data file that you want to load. The `data_desc` descriptor can in
 
 ```Bash
 -T <file_path>
--H "format: CSV | JSON"
+-H "format: CSV | JSON | ARROW"
 -H "column_separator: <column_separator>"
 -H "row_delimiter: <row_delimiter>"
 -H "columns: <column1_name>[, <column2_name>, ... ]"
@@ -102,7 +102,7 @@ The parameters in the `data_desc` descriptor can be divided into three types: co
 | Parameter  | Required | Description                                                  |
 | ---------- | -------- | ------------------------------------------------------------ |
 | file_path  | Yes      | The save path of the data file. You can optionally include the extension of the file name. |
-| format     | No       | The format of the data file. Valid values: `CSV` and `JSON`. Default value: `CSV`. |
+| format     | No       | The format of the data file. Valid values: `CSV`, `JSON`, and `ARROW`. `ARROW` indicates the Arrow IPC streaming format. The Arrow IPC file format is not supported. Default value: `CSV`. |
 | partitions | No       | The partitions into which you want to load the data file. By default, if you do not specify this parameter, the system loads the data file into all partitions of the table. |
 | temporary_partitions|  No       | The name of the [temporary partition](../../../table_design/data_distribution/Temporary_partition.md) into which you want to load data file. You can specify multiple temporary partitions, which must be separated by commas (,).|
 | columns    | No       | The column mapping between the data file and the table.<br/>If the fields in the data file can be mapped in sequence onto the columns in the table, you do not need to specify this parameter. Instead, you can use this parameter to implement data conversions. For example, if you load a CSV data file and the file consists of two columns that can be mapped in sequence onto the two columns, `id` and `city`, of the table, you can specify `"columns: city,tmp_id, id = tmp_id * 100"`. For more information, see the "[Column mapping](#column-mapping)" section in this topic. |
@@ -187,6 +187,7 @@ Note that the Merge Commit optimization is suitable for the scenario with **conc
 
 - Merge Commit only supports merging **homogeneous** loading requests into a single database and table. "Homogeneous" indicates that the Stream Load parameters are identical, including: common parameters, JSON format parameters, CSV format parameters, `opt_properties`, and Merge Commit parameters.
 - For loading CSV-formatted data, you must ensure that each row ends with a line separator. `skip_header` is not supported.
+- The Arrow format is not supported. A request in this format that enables Merge Commit is rejected.
 - The server automatically generates labels for transactions. They will be ignored if specified.
 - Merge Commit merges multiple loading requests into a single transaction. If one request contains data quality issues, all requests in the transaction will fail.
 

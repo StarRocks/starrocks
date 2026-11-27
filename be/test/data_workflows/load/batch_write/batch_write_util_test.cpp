@@ -97,4 +97,19 @@ TEST(BatchWriteUtilTest, check_merge_commit_skip_header) {
             << overflow;
 }
 
+TEST(BatchWriteUtilTest, check_merge_commit_format) {
+    // The arrow format in any case, as parse_format of the Stream Load action and the FE accept it.
+    for (const char* format : {"arrow", "ARROW", "Arrow"}) {
+        Status st = check_merge_commit_format(format);
+        ASSERT_TRUE(st.is_invalid_argument()) << format << ": " << st;
+        ASSERT_NE(std::string::npos, st.message().find("The arrow format is not supported by merge commit"))
+                << format << ": " << st;
+    }
+    // No format, which is CSV, and the other formats are not refused.
+    for (const char* format : {"", "csv", "CSV", "gzip", "bzip2", "lz4", "deflate", "zstd", "json", "JSON"}) {
+        Status st = check_merge_commit_format(format);
+        ASSERT_TRUE(st.ok()) << format << ": " << st;
+    }
+}
+
 } // namespace starrocks
