@@ -416,35 +416,6 @@ public class CachedStatisticStorageTest {
         }
     }
 
-<<<<<<< HEAD
-=======
-    @Test
-    public void testInvalidateConnectorTableColumnStatisticsByUuid() {
-        CachedStatisticStorage cachedStatisticStorage = new CachedStatisticStorage();
-        try {
-            // null / empty UUID is a no-op and must not throw.
-            cachedStatisticStorage.invalidateConnectorTableColumnStatistics(null, ImmutableList.of("c1"));
-            cachedStatisticStorage.invalidateConnectorTableColumnStatistics("", ImmutableList.of("c1"));
-            // A normal UUID invalidates by key without resolving the table.
-            cachedStatisticStorage.invalidateConnectorTableColumnStatistics(
-                    "hive0.partitioned_db.t1.1234", ImmutableList.of("c1", "c2"));
-        } catch (Exception e) {
-            Assertions.fail();
-        }
-    }
-
-    @Test
-    public void testInvalidateConnectorHistogramStatisticsByUuid() {
-        CachedStatisticStorage cachedStatisticStorage = new CachedStatisticStorage();
-        try {
-            cachedStatisticStorage.invalidateConnectorHistogramStatistics(null, ImmutableList.of("c1"));
-            cachedStatisticStorage.invalidateConnectorHistogramStatistics(
-                    "hive0.partitioned_db.t1.1234", ImmutableList.of("c1"));
-        } catch (Exception e) {
-            Assertions.fail();
-        }
-    }
-
     private static Table tableWithPartitionCount(int partitionCount) {
         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("test", "t0");
         return new Table(table.getId(), table.getName(), Table.TableType.OLAP, table.getFullSchema()) {
@@ -622,7 +593,6 @@ public class CachedStatisticStorageTest {
                 storage.partitionStatistics.synchronous().getIfPresent(keys.get(1)).orElseThrow());
     }
 
->>>>>>> b6505c7 ([BugFix] Bound partition statistics refresh batches (#82916))
     @ParameterizedTest
     @ValueSource(booleans = {true, false})
     public void testRefreshReplacesInFlightPartitionLoad(boolean isSync) {
