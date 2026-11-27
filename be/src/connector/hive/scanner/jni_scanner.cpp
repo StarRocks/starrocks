@@ -17,6 +17,7 @@
 #include <type_traits>
 #include <utility>
 
+#include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
 #include "column/array_column.h"
 #include "column/map_column.h"
@@ -27,6 +28,7 @@
 #include "fmt/core.h"
 #include "fs/credential/cloud_configuration_factory.h"
 #include "runtime/descriptors_ext.h"
+#include "runtime/java/java_env.h"
 #include "runtime/java/java_runtime.h"
 #include "runtime/java/jvm_helper.h"
 #include "runtime/java/native_method_helper.h"
@@ -66,6 +68,22 @@ Status JniScanner::do_open(RuntimeState* state) {
 }
 
 void JniScanner::do_close(RuntimeState* runtime_state) noexcept {
+    if (_jni_scanner_obj == nullptr && _jni_scanner_cls == nullptr) {
+        return;
+    }
+    // The last reference to a QueryContext can be dropped inside a brpc completion callback, and then
+    // the scanner is closed on a bthread, which cannot attach to the JVM: getting a JNIEnv there fails
+    // a CHECK and takes the whole process down. Run the JNI calls on a pthread of the JVM call pool
+    // instead and wait for them; call_function_in_pthread() runs them inline on a pthread already.
+    Status st = JavaEnv::GetInstance()->call_function_in_pthread([this]() {
+        _close_jni_scanner();
+        return Status::OK();
+    });
+    LOG_IF(WARNING, !st.ok()) << "Failed to close the off-heap table scanner: " << st;
+}
+
+void JniScanner::_close_jni_scanner() {
+    TEST_SYNC_POINT("JniScanner::_close_jni_scanner");
     if (_jni_scanner_obj != nullptr) {
         JNIEnv* env = JVMHelper::getInstance().getEnv();
         if (_jni_scanner_close != nullptr) {
