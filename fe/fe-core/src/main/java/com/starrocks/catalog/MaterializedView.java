@@ -2555,6 +2555,15 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                     .append("\" = \"").append(zstdCompressionColumns).append("\"");
         }
 
+        // file_bundling, whichever way it is set. A shared-data MV created before the property applied to materialized
+        // views has no entry for it and reads as false; left out, it would fall back to Config.enable_file_bundling
+        // when this DDL is replayed, and the new MV would use another publish path and metadata format.
+        if (isCloudNativeMaterializedView()
+                && properties.keySet().stream().noneMatch(PropertyAnalyzer.PROPERTIES_FILE_BUNDLING::equalsIgnoreCase)) {
+            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_FILE_BUNDLING)
+                    .append("\" = \"").append(isFileBundling()).append("\"");
+        }
+
         // colocate_with
         String colocateGroup = getColocateGroup();
         if (colocateGroup != null) {
