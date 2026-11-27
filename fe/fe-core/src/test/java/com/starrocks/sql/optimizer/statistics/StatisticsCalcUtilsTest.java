@@ -21,11 +21,18 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.OptimizerFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
+import com.starrocks.sql.optimizer.dump.DumpInfo;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.rule.tree.JsonPathRewriteRule;
+import com.starrocks.statistic.BasicStatsMeta;
+import com.starrocks.statistic.StatsConstants;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.VarcharType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.AfterAll;
@@ -34,8 +41,11 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 
+import java.time.LocalDateTime;
 import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -98,6 +108,76 @@ public class StatisticsCalcUtilsTest {
     @AfterEach
     public void after() throws Exception {
         starRocksAssert.dropTable("test_partition_table");
+    }
+
+    @Test
+    public void testEstimateScanColumnsWithJsonSubfields() {
+        OlapTable table = (OlapTable) starRocksAssert.getTable("statistics_calc_utils_test", "test_partition_table");
+        ColumnRefOperator jsonRef = new ColumnRefOperator(10, VarcharType.VARCHAR, "j.a", true);
+        jsonRef.setHints(List.of(JsonPathRewriteRule.COLUMN_REF_HINT));
+        ColumnRefOperator regularRef = new ColumnRefOperator(11, IntegerType.INT, "k1", true);
+        ColumnRefOperator dottedRef = new ColumnRefOperator(12, IntegerType.INT, "literal.dot", true);
+        Map<ColumnRefOperator, Column> columns = new LinkedHashMap<>();
+        columns.put(jsonRef, new Column("j.a", VarcharType.VARCHAR));
+        columns.put(regularRef, table.getColumn("k1"));
+        columns.put(dottedRef, new Column("literal.dot", IntegerType.INT));
+
+        ColumnStatistic regularStats = new ColumnStatistic(1, 10, 0, 4, 10);
+        ColumnStatistic dottedStats = new ColumnStatistic(1, 20, 0, 4, 20);
+        Histogram histogram = Mockito.mock(Histogram.class);
+        StatisticStorage storage = Mockito.mock(StatisticStorage.class);
+        Mockito.when(storage.getColumnStatistics(table, List.of("k1", "literal.dot")))
+                .thenReturn(List.of(regularStats, dottedStats));
+        Mockito.when(storage.getHistogramStatistics(table, List.of("k1", "literal.dot")))
+                .thenReturn(Map.of("k1", histogram));
+        GlobalStateMgr state = GlobalStateMgr.getCurrentState();
+        StatisticStorage original = state.getStatisticStorage();
+        OptimizerContext context = Mockito.mock(OptimizerContext.class);
+        DumpInfo dumpInfo = Mockito.mock(DumpInfo.class);
+        Mockito.when(context.getDumpInfo()).thenReturn(dumpInfo);
+        try {
+            state.setStatisticStorage(storage);
+            Statistics stats = StatisticsCalcUtils.estimateScanColumns(table, columns, context).build();
+            Assertions.assertTrue(stats.getColumnStatistic(jsonRef).isUnknown());
+            Assertions.assertEquals(regularStats.getDistinctValuesCount(),
+                    stats.getColumnStatistic(regularRef).getDistinctValuesCount());
+            Assertions.assertSame(histogram, stats.getColumnStatistic(regularRef).getHistogram());
+            Assertions.assertSame(dottedStats, stats.getColumnStatistic(dottedRef));
+            Mockito.verify(storage).getColumnStatistics(table, List.of("k1", "literal.dot"));
+            Mockito.verify(storage).getHistogramStatistics(table, List.of("k1", "literal.dot"));
+            Mockito.verify(dumpInfo).addTableStatistics(table, "k1", stats.getColumnStatistic(regularRef));
+            Mockito.verify(dumpInfo).addTableStatistics(table, "j.a", stats.getColumnStatistic(jsonRef));
+
+            Statistics jsonOnly = StatisticsCalcUtils.estimateScanColumns(table,
+                    Map.of(jsonRef, columns.get(jsonRef))).build();
+            Assertions.assertTrue(jsonOnly.getColumnStatistic(jsonRef).isUnknown());
+        } finally {
+            state.setStatisticStorage(original);
+        }
+    }
+
+    @Test
+    public void testPartitionStatisticsWithJsonSubfields() {
+        OlapTable table = (OlapTable) starRocksAssert.getTable("statistics_calc_utils_test", "test_partition_table");
+        ColumnRefOperator jsonRef = new ColumnRefOperator(10, VarcharType.VARCHAR, "j.a", true);
+        jsonRef.setHints(List.of(JsonPathRewriteRule.COLUMN_REF_HINT));
+        Map<ColumnRefOperator, Column> columns = Map.of(jsonRef, new Column("j.a", VarcharType.VARCHAR));
+        GlobalStateMgr state = GlobalStateMgr.getCurrentState();
+        StatisticStorage original = state.getStatisticStorage();
+        StatisticStorage storage = Mockito.mock(StatisticStorage.class);
+        BasicStatsMeta meta = new BasicStatsMeta(0, table.getId(), List.of("k1"),
+                StatsConstants.AnalyzeType.FULL, LocalDateTime.now(), Map.of());
+        state.getAnalyzeMgr().getBasicStatsMetaMap().put(table.getId(), meta);
+        try {
+            state.setStatisticStorage(storage);
+            LogicalOlapScanOperator scan = new LogicalOlapScanOperator(table, columns,
+                    Map.of(columns.get(jsonRef), jsonRef), null, -1, null);
+            Assertions.assertNull(StatisticsCalcUtils.getPartitionStatistics(scan, table, columns, Statistics.builder()));
+            Mockito.verifyNoInteractions(storage);
+        } finally {
+            state.setStatisticStorage(original);
+            state.getAnalyzeMgr().getBasicStatsMetaMap().remove(table.getId());
+        }
     }
 
     /**
