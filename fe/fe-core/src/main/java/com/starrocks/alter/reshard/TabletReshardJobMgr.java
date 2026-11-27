@@ -359,27 +359,6 @@ public class TabletReshardJobMgr extends FrontendDaemon implements GsonPostProce
         reshardingTabletInfos.remove(tabletId);
     }
 
-<<<<<<< HEAD
-=======
-    // tabletReshardJobs is persistent (@SerializedName, save/load via image) and
-    // reshardingTabletInfos is also serialized through writer.writeJson(this), so neither
-    // map should be cleared on demotion - the next leader resumes those jobs from the same
-    // maps. A job's shard creation in flight belongs to the leader session that submitted
-    // it, so it is forgotten here: when this node is re-elected, the same job objects submit
-    // their own requests instead of waiting on or consuming the request of the session that ended.
-    // A worker still running checks its lease before starting each (partition, index) batch and starts
-    // no further batch once the lease is invalid; a batch already started may finish, including
-    // StarOSAgent's transport retry of the same request.
-    // Runs on the scheduler thread after its loop has exited, so no job runs concurrently.
-    @Override
-    protected void onStopped() {
-        super.onStopped();
-        for (TabletReshardJob job : tabletReshardJobs.values()) {
-            job.resetShardCreation();
-        }
-    }
-
->>>>>>> 3f6ea02 ([BugFix] Create a reshard job's StarOS shards without holding the reshard scheduler (#84764))
     @Override
     protected void runAfterCatalogReady() {
         // Hard-gate the whole reshard tick: this is a FrontendDaemon (not stopped on demotion),
