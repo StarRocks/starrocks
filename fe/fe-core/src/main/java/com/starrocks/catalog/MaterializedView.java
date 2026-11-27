@@ -2520,6 +2520,29 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             sb.append(Joiner.on(", ").join(bfColumnNames)).append("\"");
         }
 
+<<<<<<< HEAD
+=======
+        // per-column ZSTD compression. ALTER TABLE mv SET (...) accepts this property and rewrites
+        // the MV's tablets, so leaving it out here would make the setting invisible and lose it in
+        // any flow that recreates the view from this DDL.
+        String zstdCompressionColumns =
+                getCommonProperties().get(PropertyAnalyzer.PROPERTIES_ZSTD_COMPRESSION_COLUMNS);
+        if (zstdCompressionColumns != null) {
+            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                    .append(PropertyAnalyzer.PROPERTIES_ZSTD_COMPRESSION_COLUMNS)
+                    .append("\" = \"").append(zstdCompressionColumns).append("\"");
+        }
+
+        // file_bundling, whichever way it is set. A shared-data MV created before the property applied to materialized
+        // views has no entry for it and reads as false; left out, it would fall back to Config.enable_file_bundling
+        // when this DDL is replayed, and the new MV would use another publish path and metadata format.
+        if (isCloudNativeMaterializedView()
+                && properties.keySet().stream().noneMatch(PropertyAnalyzer.PROPERTIES_FILE_BUNDLING::equalsIgnoreCase)) {
+            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_FILE_BUNDLING)
+                    .append("\" = \"").append(isFileBundling()).append("\"");
+        }
+
+>>>>>>> cd79024 ([BugFix] Keep file_bundling=false through CREATE TABLE LIKE and SHOW CREATE rebuilds (#84759))
         // colocate_with
         String colocateGroup = getColocateGroup();
         if (colocateGroup != null) {
