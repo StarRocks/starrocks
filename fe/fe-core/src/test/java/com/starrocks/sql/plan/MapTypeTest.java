@@ -83,4 +83,22 @@ public class MapTypeTest extends PlanTestBase {
                 "  |  group by: \n" +
                 "  |  limit: 1");
     }
+
+    @Test
+    public void testIsNullOnMapLiteralWithNullType() throws Exception {
+        // map{} is MAP<NULL_TYPE, NULL_TYPE>, no map_size signature matches it
+        String[] sqls = {
+                "select map{} is null",
+                "select map{} is not null",
+                "select map{1:NULL} is null",
+                "select map{NULL:'a'} is null",
+                "select count(*) from test_map where map{} is null",
+                "select map{} is null from test_map",
+        };
+        for (String sql : sqls) {
+            getFragmentPlan(sql);
+        }
+        String plan = getFragmentPlan("select map{1:'a'} is null from test_map");
+        assertContains(plan, "map_size");
+    }
 }
