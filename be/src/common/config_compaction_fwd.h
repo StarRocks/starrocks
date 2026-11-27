@@ -148,6 +148,11 @@ CONF_Int32(starlet_star_cache_block_size_bytes, "1048576");
 // Target cache blocks a lake compaction task requests ahead across its input segments; zero disables it.
 // Every input segment keeps at least one block ahead, so an input with more segments than this exceeds it.
 CONF_mInt32(lake_compaction_prefetch_window_blocks, "32");
+// Experimental. When true, the blocks a lake compaction task holds ahead never exceed
+// lake_compaction_prefetch_window_blocks: its input segments share them, a block going to whichever segment asks once
+// another segment's block has been read, instead of every segment keeping at least one block ahead. Applies to the
+// compaction tasks started afterwards.
+CONF_mBool(lake_compaction_prefetch_strict_budget, "false");
 
 #endif
 CONF_mInt64(lake_compaction_stream_buffer_size_bytes, "1048576"); // 1MB

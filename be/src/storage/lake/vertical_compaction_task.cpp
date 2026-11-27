@@ -309,7 +309,8 @@ Status VerticalCompactionTask::compact_column_group(
                                   .buffer_size = _stream_buffer_size,
                                   .hold_segments = _hold_input_segments,
                                   .remote_read = remote_read_context(),
-                                  .compaction_prefetch_blocks = prefetch_blocks_per_segment()};
+                                  .compaction_prefetch_blocks = prefetch_blocks_per_segment(),
+                                  .compaction_prefetch_budget = prefetch_budget()};
 
     // Apply range filter to ALL column groups (key and non-key) so that segment
     // iterators produce the same row subsets. TabletReader requires start_key and

@@ -24,6 +24,7 @@
 #include "fs/fs.h"
 #include "runtime/mem_tracker.h"
 #include "storage/lake/versioned_tablet.h"
+#include "storage/rowset/read_ahead_budget.h"
 
 namespace starrocks {
 class TxnLogPB;
@@ -95,6 +96,8 @@ public:
 
 protected:
     int32_t prefetch_blocks_per_segment() const;
+    // The task's read-ahead budget its input segments share, or null when each segment keeps its own share ahead.
+    ReadAheadBudget* prefetch_budget() const { return _prefetch_budget.get(); }
 
     // Remote reads of this task are one background flow of the remote I/O scheduler.
     RemoteReadContext remote_read_context() const {
@@ -144,6 +147,14 @@ protected:
     int64_t _sst_input_bytes = 0;
     int32_t _sst_output_files = 0;
     int64_t _sst_output_bytes = 0;
+
+private:
+    // Blocks the task may hold ahead across its input segments, within the worker memory limit; 0 for none.
+    int64_t prefetch_task_blocks() const;
+
+    // Set when the task started under lake_compaction_prefetch_strict_budget. The readers that hold its blocks are
+    // local to execute(), so it outlives them.
+    std::unique_ptr<ReadAheadBudget> _prefetch_budget;
 };
 
 } // namespace starrocks::lake

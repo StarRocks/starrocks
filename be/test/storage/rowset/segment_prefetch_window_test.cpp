@@ -325,6 +325,65 @@ TEST_F(SegmentPrefetchWindowTest, window_without_budget_stays_out_of_node_limit)
     EXPECT_EQ(0, windows.value());
 }
 
+// The input segments of a compaction task that share the task's budget hold no more blocks ahead together than it
+// has: with one block each, a segment held back gets one once another gives its block up.
+// The task's budget stays out of the node's query budget and metrics.
+TEST_F(SegmentPrefetchWindowTest, task_budget_bounds_its_windows) {
+    auto& node = StorageMetrics::instance()->lake_scan_read_ahead_blocks;
+    auto& windows = StorageMetrics::instance()->lake_scan_read_ahead_windows;
+    ASSERT_EQ(0, node.value());
+    ASSERT_EQ(0, windows.value());
+    ReadAheadBudget task(2);
+    SparseRange<> range(0, kRows);
+    std::vector<std::unique_ptr<SegmentPrefetchWindow>> segments;
+    for (int i = 0; i < 3; ++i) {
+        segments.push_back(std::make_unique<SegmentPrefetchWindow>(
+                std::vector<SegmentPrefetchWindow::Column>{{_reader, &_stream, 0}}, &range, 0, 1, 2.0, kBlockSize,
+                &_stats, &task));
+    }
+    EXPECT_EQ(3, task.members());
+    for (auto& segment : segments) {
+        segment->advance(0);
+    }
+    EXPECT_EQ(1u, segments[0]->ahead_blocks());
+    EXPECT_EQ(1u, segments[1]->ahead_blocks());
+    EXPECT_EQ(0u, segments[2]->ahead_blocks());
+    EXPECT_EQ(2, task.held_blocks());
+    EXPECT_EQ(0, node.value());
+    EXPECT_EQ(0, windows.value());
+
+    // Past its first page, the first segment gives its block back and asks for its next page right away.
+    segments[0]->advance(_pages[1].first);
+    EXPECT_EQ(1u, segments[0]->ahead_blocks());
+    EXPECT_EQ(2, task.held_blocks());
+    segments[2]->advance(0);
+    EXPECT_EQ(0u, segments[2]->ahead_blocks());
+    // A segment that is done leaves its block to the one held back.
+    segments[1].reset();
+    segments[2]->advance(0);
+    EXPECT_EQ(1u, segments[2]->ahead_blocks());
+    EXPECT_EQ(2, task.held_blocks());
+    segments.clear();
+    EXPECT_EQ(0, task.held_blocks());
+    EXPECT_EQ(0, task.members());
+}
+
+// A budget with a limit of its own keeps to it whatever lake_scan_read_ahead_max_blocks says.
+TEST(ReadAheadBudgetTest, own_limit_ignores_node_limit) {
+    const int64_t old_limit = config::lake_scan_read_ahead_max_blocks;
+    DeferOp restore([&] { config::lake_scan_read_ahead_max_blocks = old_limit; });
+    config::lake_scan_read_ahead_max_blocks = 0;
+    ReadAheadBudget budget(3);
+    auto member = budget.join();
+    auto grant = budget.acquire(5, 0, 100);
+    EXPECT_EQ(3u, grant.blocks());
+    EXPECT_FALSE(budget.has_room());
+    config::lake_scan_read_ahead_max_blocks = 100;
+    EXPECT_EQ(0u, budget.acquire(1, 3, 100).blocks());
+    grant.release();
+    EXPECT_TRUE(budget.has_room());
+}
+
 // A grant gives its blocks back when released, moved over, or destroyed.
 TEST(ReadAheadBudgetTest, grant_gives_back_its_blocks) {
     const int64_t old_limit = config::lake_scan_read_ahead_max_blocks;

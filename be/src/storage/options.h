@@ -48,6 +48,7 @@
 namespace starrocks {
 
 class MemTracker;
+class ReadAheadBudget;
 class TableMetricsManager;
 
 struct EngineOptions {
@@ -89,6 +90,9 @@ struct LakeIOOptions {
     RemoteReadContext remote_read;
     // Share of the compaction task's read-ahead budget assigned to one input segment.
     int32_t compaction_prefetch_blocks = 0;
+    // The compaction task's read-ahead budget, shared by its input segments and owned by the task; null when each
+    // segment keeps compaction_prefetch_blocks ahead by itself.
+    ReadAheadBudget* compaction_prefetch_budget = nullptr;
 };
 
 } // namespace starrocks

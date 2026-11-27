@@ -39,20 +39,37 @@ CompactionTask::CompactionTask(VersionedTablet tablet, std::vector<std::shared_p
                                                     "Compaction-" + std::to_string(_tablet.metadata()->id()),
                                                     RuntimeEnv::GetInstance()->compaction_mem_tracker())),
           _context(context),
-          _tablet_schema(std::move(tablet_schema)) {}
+          _tablet_schema(std::move(tablet_schema)) {
+#ifdef USE_STAROS
+    if (config::lake_compaction_prefetch_strict_budget) {
+        if (const int64_t blocks = prefetch_task_blocks(); blocks > 0) {
+            _prefetch_budget = std::make_unique<ReadAheadBudget>(blocks);
+        }
+    }
+#endif
+}
 
-int32_t CompactionTask::prefetch_blocks_per_segment() const {
+int64_t CompactionTask::prefetch_task_blocks() const {
 #ifdef USE_STAROS
     int64_t blocks = config::lake_compaction_prefetch_window_blocks;
     if (blocks <= 0 || config::starlet_star_cache_block_size_bytes <= 0) {
         return 0;
     }
-    // Leave headroom for the read buffers, merge and writer. Count every physical input
-    // segment, including non-overlapping segments that may be consumed one at a time.
+    // Leave headroom for the read buffers, merge and writer.
     const int64_t limit = config::compaction_memory_limit_per_worker;
     if (limit > 0) {
         blocks = std::min(blocks, limit / 8 / config::starlet_star_cache_block_size_bytes);
     }
+    return std::max<int64_t>(0, blocks);
+#else
+    return 0;
+#endif
+}
+
+int32_t CompactionTask::prefetch_blocks_per_segment() const {
+#ifdef USE_STAROS
+    const int64_t blocks = prefetch_task_blocks();
+    // Count every physical input segment, including non-overlapping segments that may be consumed one at a time.
     int64_t segments = 0;
     for (const auto& rowset : _input_rowsets) {
         segments += rowset->num_segments();
@@ -61,9 +78,10 @@ int32_t CompactionTask::prefetch_blocks_per_segment() const {
         return 0;
     }
     // Keep at least one block ahead per segment: an input of many small segments would otherwise
-    // round its share down to zero and read every block on demand. The budget is then a target: with
-    // more segments than blocks the task requests one block per segment, above the budget and the
-    // memory cap; the remote I/O scheduler's in-flight limit and retain budget bound what it holds.
+    // round its share down to zero and read every block on demand. Without the task budget
+    // (lake_compaction_prefetch_strict_budget) the budget is then a target: with more segments than
+    // blocks the task requests one block per segment, above the budget and the memory cap. With it,
+    // the segments take turns with the task's blocks.
     return static_cast<int32_t>(std::max<int64_t>(1, blocks / segments));
 #else
     return 0;

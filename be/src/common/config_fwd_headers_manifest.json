@@ -790,6 +790,7 @@
         "meta_threshold_to_manual_compact",
         "lake_compaction_stream_buffer_size_bytes",
         "lake_compaction_prefetch_window_blocks",
+        "lake_compaction_prefetch_strict_budget",
         "starlet_star_cache_block_size_bytes",
         "lake_compaction_check_valid_interval_minutes",
         "lake_compact_slow_log_ms",

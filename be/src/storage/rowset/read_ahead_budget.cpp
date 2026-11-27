@@ -50,7 +50,9 @@ ReadAheadBudget::Member& ReadAheadBudget::Member::operator=(Member&& other) noex
 void ReadAheadBudget::Member::leave() {
     if (_budget != nullptr) {
         _budget->_members.fetch_sub(1, std::memory_order_relaxed);
-        StorageMetrics::instance()->lake_scan_read_ahead_windows.increment(-1);
+        if (_budget->reports_metrics()) {
+            StorageMetrics::instance()->lake_scan_read_ahead_windows.increment(-1);
+        }
         _budget = nullptr;
     }
 }
@@ -60,14 +62,20 @@ ReadAheadBudget* ReadAheadBudget::instance() {
     return &budget;
 }
 
+int64_t ReadAheadBudget::limit() const {
+    return _fixed_limit > 0 ? _fixed_limit : config::lake_scan_read_ahead_max_blocks;
+}
+
 ReadAheadBudget::Member ReadAheadBudget::join() {
     _members.fetch_add(1, std::memory_order_relaxed);
-    StorageMetrics::instance()->lake_scan_read_ahead_windows.increment(1);
+    if (reports_metrics()) {
+        StorageMetrics::instance()->lake_scan_read_ahead_windows.increment(1);
+    }
     return Member(this);
 }
 
 size_t ReadAheadBudget::share(size_t own_limit) const {
-    const int64_t limit = config::lake_scan_read_ahead_max_blocks;
+    const int64_t limit = this->limit();
     if (limit <= 0) {
         return own_limit;
     }
@@ -79,7 +87,7 @@ ReadAheadBudget::Grant ReadAheadBudget::acquire(size_t want, size_t held, size_t
     if (want == 0) {
         return {};
     }
-    const int64_t limit = config::lake_scan_read_ahead_max_blocks;
+    const int64_t limit = this->limit();
     const int64_t room = static_cast<int64_t>(share(own_limit)) - static_cast<int64_t>(held);
     const int64_t ask = std::min(static_cast<int64_t>(want), room);
     int64_t got = 0;
@@ -104,12 +112,14 @@ ReadAheadBudget::Grant ReadAheadBudget::acquire(size_t want, size_t held, size_t
     if (got == 0) {
         return {};
     }
-    StorageMetrics::instance()->lake_scan_read_ahead_blocks.increment(got);
+    if (reports_metrics()) {
+        StorageMetrics::instance()->lake_scan_read_ahead_blocks.increment(got);
+    }
     return Grant(this, static_cast<size_t>(got));
 }
 
 bool ReadAheadBudget::has_room() {
-    const int64_t limit = config::lake_scan_read_ahead_max_blocks;
+    const int64_t limit = this->limit();
     if (limit <= 0 || held_blocks() < limit) {
         return true;
     }
@@ -119,11 +129,15 @@ bool ReadAheadBudget::has_room() {
 
 void ReadAheadBudget::give_back(size_t blocks) {
     _held.fetch_sub(static_cast<int64_t>(blocks), std::memory_order_relaxed);
-    StorageMetrics::instance()->lake_scan_read_ahead_blocks.increment(-static_cast<int64_t>(blocks));
+    if (reports_metrics()) {
+        StorageMetrics::instance()->lake_scan_read_ahead_blocks.increment(-static_cast<int64_t>(blocks));
+    }
 }
 
 void ReadAheadBudget::count_capped() {
-    StorageMetrics::instance()->lake_scan_read_ahead_capped_total.increment(1);
+    if (reports_metrics()) {
+        StorageMetrics::instance()->lake_scan_read_ahead_capped_total.increment(1);
+    }
 }
 
 } // namespace starrocks

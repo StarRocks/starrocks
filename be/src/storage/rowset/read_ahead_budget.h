@@ -28,8 +28,16 @@ namespace starrocks {
 // stops for any reason -- consumed, cancelled, failed -- returns what it held. The members share the limit equally:
 // each holds at most the limit divided by their number (at least one block), so a scan that starts later still gets
 // its share.
+//
+// A budget built with its own limit (a lake compaction task's) works the same way, but holds that many blocks and
+// reports nothing to the node metrics.
 class ReadAheadBudget {
 public:
+    // The node's query budget: lake_scan_read_ahead_max_blocks, reported to the node metrics.
+    ReadAheadBudget() = default;
+    // A budget of its own with a fixed limit of `limit` blocks (positive).
+    explicit ReadAheadBudget(int64_t limit) : _fixed_limit(limit) {}
+
     class Grant {
     public:
         Grant() = default;
@@ -86,9 +94,13 @@ public:
     int64_t members() const { return _members.load(std::memory_order_relaxed); }
 
 private:
+    int64_t limit() const;
+    bool reports_metrics() const { return _fixed_limit <= 0; }
     void give_back(size_t blocks);
     void count_capped();
 
+    // Positive for a budget with a limit of its own; otherwise the node's limit applies.
+    const int64_t _fixed_limit = 0;
     std::atomic<int64_t> _held{0};
     std::atomic<int64_t> _members{0};
 };
