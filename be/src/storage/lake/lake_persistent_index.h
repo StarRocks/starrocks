@@ -398,9 +398,19 @@ private:
 
     bool is_memtable_full() const;
 
-    bool too_many_rebuild_files() const;
+    // Whether a reload that has to rebuild |file_cnt| files and |row_cnt| rows is costly enough
+    // that commit() should flush the memtable rather than leave those rows to the next load.
+    static bool too_many_rebuild(size_t file_cnt, int64_t row_cnt);
 
-    bool too_many_rebuild_rows() const;
+    // Merge the sstables of the async flushes that have finished, oldest first, stopping at the
+    // first one still running. Never waits.
+    Status _merge_finished_flushes();
+
+    // Wait for every async flush and merge its sstable.
+    Status _wait_inactive_flushes(int64_t wait_timeout_us);
+
+    // The sstable metadata of _sstable_filesets, oldest first.
+    Status _dump_sstable_meta(PersistentIndexSstableMetaPB* sstable_meta) const;
 
     // batch get
     // |n|: size of key/value array
@@ -451,8 +461,9 @@ private:
     // Key range of a range-distribution tablet, set by load_from_lake_tablet; empty when the tablet
     // is unbounded (or not range-distributed).
     std::optional<SstSeekRange> _tablet_sst_range;
-    size_t _need_rebuild_file_cnt{0};
-    int64_t _need_rebuild_row_cnt{0};
+    // Set by a load that rebuilt rows from segments: the next commit() waits for the async flushes
+    // still running, so the rebuilt rows reach the metadata instead of being rebuilt by the next load.
+    bool _wait_flush_on_commit{false};
     // Collection of sstable fileset, from old to new.
     std::vector<std::unique_ptr<PersistentIndexSstableFileset>> _sstable_filesets;
 
