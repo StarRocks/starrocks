@@ -32,7 +32,8 @@ class IcebergChunkSink : public PartitionedConnectorChunkSink {
 public:
     IcebergChunkSink(std::vector<std::string> partition_columns, std::vector<std::string> transform_exprs,
                      std::vector<std::unique_ptr<ColumnEvaluator>>&& partition_column_evaluators,
-                     std::unique_ptr<PartitionChunkWriterFactory> partition_chunk_writer_factory, RuntimeState* state);
+                     std::unique_ptr<PartitionChunkWriterFactory> partition_chunk_writer_factory, RuntimeState* state,
+                     bool count_loaded_rows = true);
 
     ~IcebergChunkSink() override = default;
 
@@ -44,6 +45,7 @@ public:
 
 private:
     std::vector<std::string> _transform_exprs;
+    bool _count_loaded_rows;
 };
 
 struct IcebergChunkSinkContext : public ConnectorSinkContext {
@@ -76,6 +78,10 @@ struct IcebergChunkSinkContext : public ConnectorSinkContext {
     // Optional tag inserted into file name prefix to distinguish writers.
     // Empty by default (standalone INSERT). Set to "data" for RowDelta composite sinks.
     std::string writer_tag;
+
+    // Whether committed data rows are added to the loaded-row count. RowDelta composite sinks set it
+    // to false because the composite sink counts each statement row once.
+    bool count_loaded_rows = true;
 };
 
 class IcebergChunkSinkProvider : public ConnectorSinkProvider {

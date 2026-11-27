@@ -201,6 +201,43 @@ TEST_F(IcebergChunkSinkTest, test_factory) {
     }
 }
 
+// A row-delta data sub-sink still reports its file but leaves row counting to the composite sink.
+TEST_F(IcebergChunkSinkTest, test_callback_without_row_count) {
+    SCOPED_UPDATE(bool, config::enable_connector_sink_spill, false);
+
+    auto sink_ctx = std::make_shared<connector::IcebergChunkSinkContext>();
+    sink_ctx->path = "/path/to/directory/";
+    sink_ctx->column_names = {"k1"};
+    sink_ctx->format = formats::PARQUET;
+    sink_ctx->compression_type = TCompressionType::NO_COMPRESSION;
+    sink_ctx->column_evaluators = ColumnSlotIdEvaluator::from_types({TypeDescriptor::from_logical_type(TYPE_INT)});
+    sink_ctx->runtime_state = _runtime_state.get();
+    sink_ctx->count_loaded_rows = false;
+    IcebergChunkSinkProvider provider(sink_ctx);
+    auto sink = provider.create_sink(0).value();
+    formats::AsyncFlushStreamPoller poller;
+    SinkMemoryManager mgr(nullptr, nullptr);
+    ASSERT_OK(sink->init(&poller, nullptr, &mgr));
+    auto chunk_sink = dynamic_cast<IcebergChunkSink*>(sink.get());
+    ASSERT_NE(chunk_sink, nullptr);
+
+    chunk_sink->callback_on_commit(CommitResult{
+            .file_result =
+                    {
+                            .io_status = Status::OK(),
+                            .format = formats::PARQUET,
+                            .file_statistics =
+                                    {
+                                            .record_count = 100,
+                                    },
+                            .location = "path/to/directory/data.parquet",
+                    },
+    });
+
+    EXPECT_EQ(_runtime_state->sink_commit_infos().size(), 1u);
+    EXPECT_EQ(_runtime_state->num_rows_load_sink(), 0);
+}
+
 TEST_F(IcebergChunkSinkTest, test_factory_requires_runtime_state) {
     auto sink_ctx = std::make_shared<connector::IcebergChunkSinkContext>();
     IcebergChunkSinkProvider provider(sink_ctx);
