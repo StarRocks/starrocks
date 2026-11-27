@@ -673,4 +673,5 @@ public class HDFSBackendSelectorTest {
             Assertions.assertEquals("Failed to find backend to execute", e.getMessage());
         }
     }
+
 }

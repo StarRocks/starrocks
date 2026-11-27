@@ -79,7 +79,7 @@ public class CatalogMgr {
     private final ReadWriteLock catalogLock = new ReentrantReadWriteLock();
 
     public static final ImmutableList<String> CATALOG_PROC_NODE_TITLE_NAMES = new ImmutableList.Builder<String>()
-            .add("Catalog").add("Type").add("Comment")
+            .add("Catalog").add("Type").add("Comment").add("Location")
             .build();
 
     private final CatalogProcNode procNode = new CatalogProcNode();
@@ -487,7 +487,8 @@ public class CatalogMgr {
             } finally {
                 readUnlock();
             }
-            result.addRow(Lists.newArrayList(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, "Internal", DEFAULT_CATALOG_COMMENT));
+            result.addRow(Lists.newArrayList(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, "Internal",
+                    DEFAULT_CATALOG_COMMENT, ""));
             return result;
         }
     }

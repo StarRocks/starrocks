@@ -27,6 +27,7 @@ import com.starrocks.planner.PlanNodeId;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.qe.scheduler.DefaultWorkerProvider;
 import com.starrocks.qe.scheduler.LazyWorkerProvider;
+import com.starrocks.qe.scheduler.LocationRestrictedWorkerProvider;
 import com.starrocks.qe.scheduler.WorkerProvider;
 import com.starrocks.qe.scheduler.assignment.BackendSelectorFactory;
 import com.starrocks.qe.scheduler.assignment.FragmentAssignmentStrategy;
@@ -105,6 +106,33 @@ public class BucketAwareBackendSelectorTest {
         BucketProperty bucketProperty = new BucketProperty(TBucketFunction.MURMUR3_X86_32, 10,
                 new Column("c1", IntegerType.INT));
         return new ColocatedBackendSelector.Assignment(bucketNum, numScanNodes, Optional.of(List.of(bucketProperty)));
+    }
+
+    @Test
+    public void testBalanceUsesPreferredConnectorWorkersOnly() throws StarRocksException {
+        final int bucketNum = 4;
+        final int scanRangesPerBucket = 1;
+        List<TScanRangeLocations> locations = genScanRangeLocations(bucketNum, scanRangesPerBucket);
+        ColocatedBackendSelector.Assignment colocatedAssignment = genColocatedAssignment(bucketNum, 1);
+        WorkerProvider base = genWorkerProvider(Set.of(1L, 2L));
+        // Allowed L∪N = {1,2}; preferred connector L = {1} only.
+        WorkerProvider restricted = new LocationRestrictedWorkerProvider(base, Set.of(1L, 2L), Set.of(1L));
+
+        new Expectations() {
+            {
+                scanNode.getId();
+                result = new PlanNodeId(1);
+            }
+        };
+
+        BucketAwareBackendSelector selector = new BucketAwareBackendSelector(
+                scanNode, locations, colocatedAssignment, restricted, false, false, SessionVariableConstants.BALANCE);
+        selector.computeScanRangeAssignment();
+
+        Map<Integer, Long> seqToWorkerId = colocatedAssignment.getSeqToWorkerId();
+        Assertions.assertEquals(bucketNum, seqToWorkerId.size());
+        Assertions.assertTrue(seqToWorkerId.values().stream().allMatch(id -> id == 1L),
+                "BALANCE must not place connector buckets on N-only workers");
     }
 
     @Test

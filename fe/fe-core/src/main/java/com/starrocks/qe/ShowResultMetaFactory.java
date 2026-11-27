@@ -1308,6 +1308,7 @@ public class ShowResultMetaFactory implements AstVisitorExtendInterface<ShowResu
                 .addColumn(new Column("Catalog", TypeFactory.createVarcharType(256)))
                 .addColumn(new Column("Type", TypeFactory.createVarcharType(20)))
                 .addColumn(new Column("Comment", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("Location", TypeFactory.createVarcharType(256)))
                 .build();
     }
 

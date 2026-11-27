@@ -33,6 +33,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
@@ -71,11 +72,13 @@ public class BucketAwareBackendSelector implements BackendSelector {
 
     private Map<Integer, Long> assignBucketToWorker() throws StarRocksException {
         Map<Integer, Long> bucketSeqToWorkerId = new HashMap<>();
+        // Prefer label-matched connector workers when restricted; same pool as HDFSBackendSelector.
+        Collection<ComputeNode> connectorWorkers = workerProvider.getWorkersForConnectorScan();
 
         if (assignMode.equals(SessionVariableConstants.ELASTIC)) {
             // use consistent hashing to schedule remote scan ranges
             HashRing<Integer, ComputeNode> hashRing = new RendezvousHashRing<>(Hashing.murmur3_128(), new BucketIdFunnel(),
-                    new HDFSBackendSelector.ComputeNodeFunnel(), workerProvider.getAllWorkers());
+                    new HDFSBackendSelector.ComputeNodeFunnel(), connectorWorkers);
             // mapping bucket seq to worker id
             for (int i = 0; i < colocatedAssignment.getBucketNum(); i++) {
                 List<ComputeNode> backends = hashRing.get(i, 1);
@@ -85,7 +88,7 @@ public class BucketAwareBackendSelector implements BackendSelector {
                 bucketSeqToWorkerId.put(i, backends.get(0).getId());
             }
         } else {
-            List<ComputeNode> workers = workerProvider.getAllWorkers().stream()
+            List<ComputeNode> workers = connectorWorkers.stream()
                     .sorted(Comparator.comparingLong(ComputeNode::getId)).toList();
             if (workers.isEmpty()) {
                 throw new StarRocksException("Failed to find backend to execute");
