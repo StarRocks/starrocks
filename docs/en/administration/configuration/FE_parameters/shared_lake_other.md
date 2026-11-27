@@ -974,6 +974,15 @@ Use `ADMIN SET FRONTEND CONFIG` for dynamic changes; you do not need to edit eac
 - Description: The share of the FE JVM heap for one Delta Log JSON file cache shared by all Delta Lake catalogs. `0` (default) keeps a cache per catalog, bounded by the catalog property `deltalake_json_meta_cache_memory_usage_ratio`. When it is greater than `0`, that catalog property is ignored. Valid values are from `0` to `1`. Changing this item requires an FE restart.
 - Introduced in: -
 
+### `enable_delta_lake_s3_start_after_listing`
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether Delta Lake catalogs list the `_delta_log` directory of a table on S3 (`s3://`, `s3a://`, `s3n://`) starting from the requested version, using the S3 `start-after` parameter, instead of listing all of its files. This speeds up snapshot loading for tables with long logs. When the storage rejects the request (for example, an S3-compatible service without `start-after` support), the FE falls back to a full listing for that request. Set it to `false` to always use Delta's default full listing. Valid values: `true` and `false`. Changes take effect immediately for all catalogs without an FE restart.
+- Introduced in: -
+
 ### `iceberg_data_file_cache_global_memory_ratio`
 
 - Default: 0

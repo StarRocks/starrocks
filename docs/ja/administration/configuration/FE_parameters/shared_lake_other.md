@@ -987,6 +987,15 @@ replication 移行では、`lake_compaction_max_tasks = 0` を維持したまま
 - 説明：すべての Delta Lake カタログで共有する 1 つの Delta Log JSON ファイルキャッシュに使用できる FE JVM ヒープの割合。デフォルトの `0` では、カタログごとに専用のキャッシュを持ち、その上限はカタログプロパティ `deltalake_json_meta_cache_memory_usage_ratio` で決まります。`0` より大きい場合、そのカタログプロパティは無視されます。有効な値は `0` から `1` までです。変更を反映するには FE の再起動が必要です。
 - 導入時期：-
 
+### `enable_delta_lake_s3_start_after_listing`
+
+- デフォルト：true
+- タイプ：Boolean
+- 単位：-
+- 変更可能：Yes
+- 説明：Delta Lake カタログが S3（`s3://`、`s3a://`、`s3n://`）上のテーブルの `_delta_log` ディレクトリを一覧表示する際に、すべてのファイルを一覧表示する代わりに、S3 の `start-after` パラメータを使用して要求されたバージョンから一覧表示するかどうか。ログが長いテーブルのスナップショットの読み込みが速くなります。ストレージがこのリクエストを拒否した場合（例えば `start-after` をサポートしない S3 互換サービス）、FE はそのリクエストについて完全な一覧表示にフォールバックします。`false` に設定すると、常に Delta のデフォルトの完全な一覧表示を使用します。有効な値：`true` と `false`。変更は FE を再起動せずに、すべてのカタログに即座に反映されます。
+- 導入時期：-
+
 ### `iceberg_data_file_cache_global_memory_ratio`
 
 - デフォルト：0
