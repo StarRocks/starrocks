@@ -15,6 +15,7 @@
 package io.trino.plugin.starrocks;
 
 import com.starrocks.data.load.stream.properties.StreamLoadProperties;
+import io.trino.plugin.jdbc.RemoteTableName;
 import io.trino.spi.connector.ConnectorInsertTableHandle;
 import io.trino.spi.connector.ConnectorOutputTableHandle;
 import io.trino.spi.connector.ConnectorPageSink;
@@ -26,7 +27,7 @@ import org.apache.http.impl.client.DefaultRedirectStrategy;
 import org.apache.http.impl.client.HttpClientBuilder;
 import org.apache.http.impl.client.HttpClients;
 
-import javax.inject.Inject;
+import com.google.inject.Inject;
 
 import static java.util.Objects.requireNonNull;
 
@@ -55,8 +56,9 @@ public class StarRocksPageSinkProvider
     public ConnectorPageSink createPageSink(ConnectorTransactionHandle transactionHandle, ConnectorSession session, ConnectorOutputTableHandle tableHandle, ConnectorPageSinkId pageSinkId)
     {
         StarRocksOutputTableHandle starRocksOutputTableHandle = (StarRocksOutputTableHandle) tableHandle;
+        RemoteTableName remoteTableName = starRocksOutputTableHandle.getRemoteTableName();
         StarRocksOperationApplier applier = new StarRocksOperationApplier(
-                starRocksOutputTableHandle.getSchemaName(), starRocksOutputTableHandle.getTableName(), starRocksOutputTableHandle.getTemporaryTableName(), starRocksOutputTableHandle.getColumnNames(), starRocksOutputTableHandle.getIsPkTable(), streamLoadProperties, clientBuilder);
+                remoteTableName.getSchemaName().orElse(null), remoteTableName.getTableName(), starRocksOutputTableHandle.getTemporaryTableName(), starRocksOutputTableHandle.getColumnNames(), starRocksOutputTableHandle.getIsPkTable(), streamLoadProperties, clientBuilder);
         return new StarRocksPageSink(starRocksOutputTableHandle, applier, pageSinkId);
     }
 
@@ -64,8 +66,9 @@ public class StarRocksPageSinkProvider
     public ConnectorPageSink createPageSink(ConnectorTransactionHandle transactionHandle, ConnectorSession session, ConnectorInsertTableHandle tableHandle, ConnectorPageSinkId pageSinkId)
     {
         StarRocksOutputTableHandle starRocksOutputTableHandle = (StarRocksOutputTableHandle) tableHandle;
+        RemoteTableName remoteTableName = starRocksOutputTableHandle.getRemoteTableName();
         StarRocksOperationApplier applier = new StarRocksOperationApplier(
-                starRocksOutputTableHandle.getSchemaName(), starRocksOutputTableHandle.getTableName(), starRocksOutputTableHandle.getTemporaryTableName(), starRocksOutputTableHandle.getColumnNames(), starRocksOutputTableHandle.getIsPkTable(), streamLoadProperties, clientBuilder);
+                remoteTableName.getSchemaName().orElse(null), remoteTableName.getTableName(), starRocksOutputTableHandle.getTemporaryTableName(), starRocksOutputTableHandle.getColumnNames(), starRocksOutputTableHandle.getIsPkTable(), streamLoadProperties, clientBuilder);
         return new StarRocksPageSink(starRocksOutputTableHandle, applier, pageSinkId);
     }
 }
