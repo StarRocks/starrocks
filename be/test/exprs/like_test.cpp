@@ -16,6 +16,11 @@
 #include <gtest/gtest.h>
 
 #include "butil/time.h"
+<<<<<<< HEAD
+=======
+#include "column/chunk.h"
+#include "common/bloom_filter.h"
+>>>>>>> 3c4c163 ([BugFix] Give the substring LIKE / REGEXP result its own NULL column (#84694))
 #include "exprs/function_call_expr.h"
 #include "exprs/like_predicate.h"
 #include "exprs/mock_vectorized_expr.h"
@@ -261,6 +266,76 @@ TEST_F(LikeTest, haystackNullableLike) {
     }
 
     ASSERT_TRUE(LikePredicate::like_close(context, FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
+                        .ok());
+}
+
+TEST_F(LikeTest, substringLikeOwnsItsNullColumn) {
+    // LIKE '%es%' runs the substring matcher. Its result must not share the haystack's NULL column: when both
+    // are in one chunk and the chunk is filtered, a shared NULL column is filtered twice and the haystack's
+    // NULL flags shift (RB-1182).
+    auto context = FunctionContext::create_test_context();
+    std::unique_ptr<FunctionContext> ctx(context);
+    Columns columns;
+
+    const size_t num_rows = 20;
+    auto haystack = BinaryColumn::create();
+    auto null = NullColumn::create();
+    for (size_t i = 0; i < num_rows; ++i) {
+        // rows 2, 5, 8, ... are NULL
+        null->append(i % 3 == 2);
+        haystack->append(i % 2 == 0 ? "test" : "other");
+    }
+    ColumnPtr haystack_column = NullableColumn::create(std::move(haystack), std::move(null));
+    columns.emplace_back(haystack_column);
+    columns.emplace_back(ColumnHelper::create_const_column<TYPE_VARCHAR>("%es%", 1));
+    context->set_constant_columns(columns);
+    ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+
+    ColumnPtr result = LikePredicate::like(context, columns).value();
+    ASSERT_TRUE(result->is_nullable());
+    ASSERT_NE(down_cast<const NullableColumn*>(result.get())->null_column().get(),
+              down_cast<const NullableColumn*>(haystack_column.get())->null_column().get());
+
+    // filter both columns of one chunk: drop row 0 and every fourth row
+    Chunk chunk;
+    chunk.append_column(haystack_column, 0);
+    chunk.append_column(result, 1);
+    Filter filter(num_rows, 1);
+    for (size_t i = 0; i < num_rows; i += 4) {
+        filter[i] = 0;
+    }
+    chunk.filter(filter);
+
+    const auto& kept_haystack = chunk.get_column_by_slot_id(0);
+    const auto& kept_result = chunk.get_column_by_slot_id(1);
+    size_t row = 0;
+    for (size_t i = 0; i < num_rows; ++i) {
+        if (!filter[i]) {
+            continue;
+        }
+        ASSERT_EQ(i % 3 == 2, kept_haystack->is_null(row)) << "row " << i;
+        ASSERT_EQ(i % 3 == 2, kept_result->is_null(row)) << "row " << i;
+        if (i % 3 != 2) {
+            ASSERT_EQ(i % 2 == 0 ? "test" : "other", kept_haystack->get(row).get_slice().to_string()) << "row " << i;
+            ASSERT_EQ(i % 2 == 0, kept_result->get(row).get_uint8()) << "row " << i;
+        }
+        ++row;
+    }
+    ASSERT_EQ(row, chunk.num_rows());
+
+    // a nullable haystack without NULLs gives a non-nullable result
+    auto no_null_haystack = BinaryColumn::create();
+    for (size_t i = 0; i < num_rows; ++i) {
+        no_null_haystack->append("test");
+    }
+    Columns no_null_columns;
+    no_null_columns.emplace_back(NullableColumn::create(std::move(no_null_haystack), NullColumn::create(num_rows, 0)));
+    no_null_columns.emplace_back(columns[1]);
+    ColumnPtr no_null_result = LikePredicate::like(context, no_null_columns).value();
+    ASSERT_FALSE(no_null_result->is_nullable());
+    ASSERT_EQ(num_rows, no_null_result->size());
+
+    ASSERT_TRUE(LikePredicate::like_close(context, FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                         .ok());
 }
 
