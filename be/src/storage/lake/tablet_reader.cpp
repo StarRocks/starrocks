@@ -57,6 +57,7 @@
 #include "storage/query/split_morsel_queue.h"
 #include "storage/query/split_scan_morsel.h"
 #include "storage/rowset/column_reader.h"
+#include "storage/rowset/read_ahead_budget.h"
 #include "storage/rowset/rowid_range_option.h"
 #include "storage/rowset/rowset_options.h"
 #include "storage/rowset/segment_iterator.h"
@@ -2062,7 +2063,8 @@ Status TabletReader::init_collector(const TabletReaderParams& params) {
 #ifdef USE_STAROS
         if (_union_reads_ahead) {
             _collect_iter = new_union_iterator(std::move(seg_iters), config::lake_scan_read_ahead_segments,
-                                               config::remote_prefetch_window_blocks);
+                                               config::remote_prefetch_window_blocks,
+                                               [] { return ReadAheadBudget::instance()->has_room(); });
         } else {
             _collect_iter = new_union_iterator(std::move(seg_iters));
         }

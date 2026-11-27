@@ -67,6 +67,13 @@ public:
     // value means long-running compactions, not a cache to resize.
     METRIC_DEFINE_INT_GAUGE(lake_compaction_held_segment_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_COUNTER(segment_file_not_found_total, MetricUnit::OPERATIONS);
+    // Cache blocks the query scans have asked for ahead of their reads and not read yet, all scans together; the segment
+    // readers that read ahead, among which lake_scan_read_ahead_max_blocks is shared; and the times a scan asked for
+    // fewer blocks ahead, or started no next segment early, because of that limit: the node held it, or the reader
+    // held its share.
+    METRIC_DEFINE_INT_GAUGE(lake_scan_read_ahead_blocks, MetricUnit::BLOCKS);
+    METRIC_DEFINE_INT_GAUGE(lake_scan_read_ahead_windows, MetricUnit::NOUNIT);
+    METRIC_DEFINE_INT_COUNTER(lake_scan_read_ahead_capped_total, MetricUnit::OPERATIONS);
 
     METRIC_DEFINE_UINT_GAUGE(update_primary_index_num, MetricUnit::OPERATIONS);
     METRIC_DEFINE_UINT_GAUGE(update_primary_index_bytes_total, MetricUnit::BYTES);
