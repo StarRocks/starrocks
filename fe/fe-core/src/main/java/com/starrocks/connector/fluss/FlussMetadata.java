@@ -31,11 +31,12 @@ import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.PartitionInfo;
-import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -46,11 +47,9 @@ import com.starrocks.type.Type;
 import org.apache.fluss.client.admin.Admin;
 import org.apache.fluss.client.initializer.BucketOffsetsRetrieverImpl;
 import org.apache.fluss.client.initializer.LatestOffsetsInitializer;
-import org.apache.fluss.client.initializer.OffsetsInitializer;
 import org.apache.fluss.config.Configuration;
 import org.apache.fluss.config.TableConfig;
 import org.apache.fluss.flink.lake.LakeSplitGenerator;
-import org.apache.fluss.flink.source.split.LogSplit;
 import org.apache.fluss.flink.source.split.SourceSplitBase;
 import org.apache.fluss.lake.source.LakeSource;
 import org.apache.fluss.lake.source.LakeSplit;
@@ -66,16 +65,19 @@ import org.apache.logging.log4j.Logger;
 
 import java.time.ZoneId;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.function.Supplier;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
+import static com.google.common.base.Preconditions.checkState;
 import static com.starrocks.connector.ConnectorTableId.CONNECTOR_ID_GENERATOR;
 import static com.starrocks.connector.PartitionUtil.toHivePartitionName;
 import static org.apache.fluss.flink.utils.CatalogExceptionUtils.isDatabaseNotExist;
@@ -85,6 +87,7 @@ import static org.apache.fluss.flink.utils.LakeSourceUtils.createLakeSource;
 
 public class FlussMetadata implements ConnectorMetadata {
     private static final Logger LOG = LogManager.getLogger(FlussMetadata.class);
+    private static final String KV_SNAPSHOT_LEASE_ID_PREFIX = "starrocks-";
 
     private static final String LAKE_TABLE_SUFFIX = "$lake";
     public static final String RT_TABLE_SUFFIX = "$rt";
@@ -292,16 +295,20 @@ public class FlussMetadata implements ConnectorMetadata {
 
     @Override
     public List<RemoteFileInfo> getRemoteFiles(Table table, GetRemoteFilesParams params) {
-        RemoteFileInfo remoteFileInfo = new RemoteFileInfo();
         FlussTable flussTable = (FlussTable) table;
         TableInfo tableInfo = flussTable.getTableInfo();
         TableConfig tableConfig = tableInfo.getTableConfig();
-        if (!tableConfig.isDataLakeEnabled()
-                || tableConfig.getDataLakeFormat().orElse(null) != DataLakeFormat.PAIMON) {
+        boolean realTimeRead = flussTable.getTableNameSuffix().equals(RT_TABLE_SUFFIX);
+        boolean lakeUnionReadable = tableConfig.isDataLakeEnabled()
+                && tableConfig.getDataLakeFormat().orElse(null) == DataLakeFormat.PAIMON;
+        // A plain or $lake read of a log table needs the Paimon lake.
+        if (!realTimeRead && !tableInfo.hasPrimaryKey() && !lakeUnionReadable) {
             throw new StarRocksConnectorException(
                     "Fluss table %s.%s.%s is not supported. StarRocks only supports reading Fluss tables with " +
-                            "'table.datalake.enabled' = 'true' and 'table.datalake.format' = 'paimon'",
-                    catalogName, flussTable.getCatalogDBName(), flussTable.getCatalogTableName());
+                            "'table.datalake.enabled' = 'true' and 'table.datalake.format' = 'paimon'. " +
+                            "Query %s$rt to read the Fluss log.",
+                    catalogName, flussTable.getCatalogDBName(), flussTable.getCatalogTableName(),
+                    flussTable.getCatalogTableName());
         }
 
         List<PartitionKey> selectedPartitionKeys = params.getPartitionKeys();
@@ -309,86 +316,146 @@ public class FlussMetadata implements ConnectorMetadata {
             Objects.requireNonNull(selectedPartitionKeys,
                     "FlussScanNode should provide selected partition keys for partitioned Fluss tables");
             if (selectedPartitionKeys.isEmpty()) {
-                FlussSplitsInfo flussSplitsInfo = new FlussSplitsInfo(Lists.newArrayList(), Lists.newArrayList());
-                remoteFileInfo.setFiles(ImmutableList.of(
-                        FlussRemoteFileDesc.createFlussRemoteFileDesc(flussSplitsInfo)));
-                return Lists.newArrayList(remoteFileInfo);
+                return toRemoteFileInfos(new FlussSplitsInfo(List.of(), List.of(), FlussKvSnapshotLease.NONE));
             }
         }
 
         TablePath identifier = TablePath.of(flussTable.getCatalogDBName(), flussTable.getCatalogTableName());
-
-        OffsetsInitializer.BucketOffsetsRetriever bucketOffsetsRetriever =
-                new BucketOffsetsRetrieverImpl(admin, identifier);
-
-        // From here on split planning is remote on both sides: the lake source reads the Paimon
-        // snapshot, and LakeSplitGenerator asks the coordinator for bucket offsets. The early returns
-        // above (no selected partitions) reach neither.
+        // From here on split planning is remote: the lake source reads the Paimon snapshot, and both
+        // planners ask the coordinator for snapshots and bucket offsets. The early return above reaches neither.
         BlockingCallValidator.validateNotUnderLock("fluss", catalogName);
-        List<Predicate> lakePredicates = Lists.newArrayList();
-        LakeSource<LakeSplit> lakeSource =
-                createLakeSource(flussTable.getTableInfo().getTablePath(), flussTable.buildRuntimeConf().toMap());
         try {
-            lakePredicates = convertLakePredicates(flussTable, params.getPredicate());
+            Collection<org.apache.fluss.metadata.PartitionInfo> partitions = flussTable.isUnPartitioned()
+                    ? null : getSelectedPartitions(flussTable, identifier, selectedPartitionKeys);
+            FlussOnlySplitPlanner flussOnly =
+                    new FlussOnlySplitPlanner(admin, identifier, tableInfo, partitions);
+            if (realTimeRead) {
+                // A $rt read only scans the Fluss log, so it neither needs nor checks the lake.
+                return toRemoteFileInfos(
+                        new FlussSplitsInfo(List.of(), flussOnly.planLogTable(), FlussKvSnapshotLease.NONE));
+            }
+            if (lakeUnionReadable) {
+                FlussSplitsInfo lakeUnionRead =
+                        planLakeUnionRead(flussTable, params.getPredicate(), identifier, partitions);
+                if (lakeUnionRead != null) {
+                    return toRemoteFileInfos(lakeUnionRead);
+                }
+                if (!tableInfo.hasPrimaryKey()) {
+                    throw new StarRocksConnectorException("No readable Fluss lake snapshot exists for table %s.%s.%s. " +
+                            "Query %s$rt to read the Fluss log.", catalogName, flussTable.getCatalogDBName(),
+                            flussTable.getCatalogTableName(), flussTable.getCatalogTableName());
+                }
+            }
+            // Fluss holds all current rows of a primary-key table, so it is read from Fluss alone when the lake
+            // can't be union-read. Primary-key tables never carry a read mode suffix; getTable rejects it.
+            return toRemoteFileInfos(planPrimaryKeyTable(flussOnly));
+        } catch (StarRocksConnectorException e) {
+            throw e;
+        } catch (Exception e) {
+            if (e instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+            }
+            Throwable cause = ExceptionUtils.stripExecutionException(e);
+            LOG.error("Failed to get Fluss splits for table {}.{}.{}.",
+                    catalogName, flussTable.getCatalogDBName(), flussTable.getCatalogTableName(), cause);
+            throw new StarRocksConnectorException(String.format("Failed to get Fluss splits for table %s.%s.%s: %s",
+                    catalogName, flussTable.getCatalogDBName(), flussTable.getCatalogTableName(), cause.getMessage()),
+                    cause);
+        }
+    }
+
+    private static List<RemoteFileInfo> toRemoteFileInfos(FlussSplitsInfo flussSplitsInfo) {
+        RemoteFileInfo remoteFileInfo = new RemoteFileInfo();
+        remoteFileInfo.setFiles(ImmutableList.of(FlussRemoteFileDesc.createFlussRemoteFileDesc(flussSplitsInfo)));
+        return Lists.newArrayList(remoteFileInfo);
+    }
+
+    /** Plans a union read of the Paimon lake snapshot and the Fluss log after it; null when there is no snapshot. */
+    private FlussSplitsInfo planLakeUnionRead(FlussTable flussTable, ScalarOperator predicate,
+                                              TablePath identifier,
+                                              Collection<org.apache.fluss.metadata.PartitionInfo> partitions)
+            throws Exception {
+        TableInfo tableInfo = flussTable.getTableInfo();
+        LakeSource<LakeSplit> lakeSource =
+                createLakeSource(tableInfo.getTablePath(), flussTable.buildRuntimeConf().toMap());
+        List<Predicate> lakePredicates;
+        try {
+            lakePredicates = convertLakePredicates(flussTable, predicate);
             if (!lakePredicates.isEmpty()) {
                 lakeSource.withFilters(lakePredicates);
             }
         } catch (Exception e) {
             LOG.warn("Failed to push down predicates to lake source for table {}, " +
-                    "falling back to scan without filter pushdown", identifier, e);
+                    "falling back to scan without filter pushdown", tableInfo.getTablePath(), e);
             lakePredicates = Lists.newArrayList();
         }
-
-        Supplier<Set<org.apache.fluss.metadata.PartitionInfo>> listPartitionSupplier;
-        if (flussTable.isUnPartitioned()) {
-            listPartitionSupplier = LinkedHashSet::new;
-        } else {
-            Set<String> selectedQualifiedPartitionNames = selectedPartitionKeys.stream()
-                    .filter(Objects::nonNull)
-                    .map(partitionKey -> toHivePartitionName(flussTable.getPartitionColumnNames(), partitionKey))
-                    .collect(Collectors.toCollection(LinkedHashSet::new));
-            Map<String, org.apache.fluss.metadata.PartitionInfo> allPartitions =
-                    flussPartitionInfos.computeIfAbsent(identifier, ignored -> loadPartitionInfo(
-                            flussTable.getCatalogDBName(), flussTable.getCatalogTableName()));
-            Set<org.apache.fluss.metadata.PartitionInfo> selectedPartitions = allPartitions.values().stream()
-                    .filter(partitionInfo -> selectedQualifiedPartitionNames.contains(
-                            partitionInfo.getResolvedPartitionSpec().getPartitionQualifiedName()))
-                    .collect(Collectors.toCollection(LinkedHashSet::new));
-            listPartitionSupplier = () -> selectedPartitions;
-        }
-        List<SourceSplitBase> splits = new ArrayList<>();
-        LakeSplitGenerator lakeSplitGenerator = new LakeSplitGenerator(
-                tableInfo, admin,
-                lakeSource, bucketOffsetsRetriever,
-                new LatestOffsetsInitializer(), tableInfo.getNumBuckets(), listPartitionSupplier);
-        try {
-            splits = lakeSplitGenerator.generateHybridLakeFlussSplits();
-        } catch (Exception e) {
-            LOG.error("Failed to get Fluss splits for table {}.{}.{}.",
-                    catalogName, flussTable.getCatalogDBName(), flussTable.getCatalogTableName(), e);
-            throw new StarRocksConnectorException("Failed to get Fluss splits for table %s.%s.%s: %s",
-                    catalogName, flussTable.getCatalogDBName(), flussTable.getCatalogTableName(), e.getMessage());
-        }
+        Set<org.apache.fluss.metadata.PartitionInfo> selectedPartitions =
+                partitions == null ? new LinkedHashSet<>() : new LinkedHashSet<>(partitions);
+        List<SourceSplitBase> splits = new LakeSplitGenerator(tableInfo, admin, lakeSource,
+                new BucketOffsetsRetrieverImpl(admin, identifier),
+                new LatestOffsetsInitializer(), tableInfo.getNumBuckets(), () -> selectedPartitions)
+                .generateHybridLakeFlussSplits();
         if (splits == null) {
             // Fluss returns null when no readable lake snapshot exists.
-            // TODO: Generate bounded LogSplits directly for $rt reads so they do not require a lake snapshot.
-            throw new StarRocksConnectorException("No readable Fluss lake snapshot exists for table %s.%s.%s",
-                    catalogName, flussTable.getCatalogDBName(), flussTable.getCatalogTableName());
+            return null;
         }
         if (flussTable.getTableNameSuffix().equals(LAKE_TABLE_SUFFIX)) {
-            splits = splits.stream().filter(SourceSplitBase::isLakeSplit)
-                    .collect(Collectors.toList());
+            splits = splits.stream().filter(SourceSplitBase::isLakeSplit).collect(Collectors.toList());
         }
-        if (flussTable.getTableNameSuffix().equals(RT_TABLE_SUFFIX)) {
-            splits = splits.stream().filter(sp -> sp instanceof LogSplit)
-                    .collect(Collectors.toList());
-        }
+        return new FlussSplitsInfo(lakePredicates, splits, FlussKvSnapshotLease.NONE);
+    }
 
-        FlussSplitsInfo flussSplitsInfo = new FlussSplitsInfo(lakePredicates, splits);
-        List<RemoteFileDesc> remoteFileDescs = ImmutableList.of(
-                FlussRemoteFileDesc.createFlussRemoteFileDesc(flussSplitsInfo));
-        remoteFileInfo.setFiles(remoteFileDescs);
-        return Lists.newArrayList(remoteFileInfo);
+    private FlussSplitsInfo planPrimaryKeyTable(FlussOnlySplitPlanner flussOnly) throws Exception {
+        FlussKvSnapshotLease lease = newKvSnapshotLease();
+        boolean planned = false;
+        try {
+            FlussSplitsInfo flussSplitsInfo = new FlussSplitsInfo(List.of(), flussOnly.planPrimaryKeyTable(lease), lease);
+            planned = true;
+            return flussSplitsInfo;
+        } finally {
+            if (!planned) {
+                lease.close();
+            }
+        }
+    }
+
+    /**
+     * A lease for the KV snapshots a query reads. FlussScanNode#clear drops it when the query ends. In case
+     * nothing does, it expires once the query can no longer be running: the query timeout plus the longest
+     * wait in the query queue, which starts after planning. A plain EXPLAIN never runs or clears its scans,
+     * so it takes no lease.
+     */
+    private FlussKvSnapshotLease newKvSnapshotLease() {
+        ConnectContext context = ConnectContext.get();
+        checkState(context != null, "Fluss split planning runs within a query");
+        StatementBase.ExplainLevel explainLevel = context.getExplainLevel();
+        if (explainLevel != null && explainLevel != StatementBase.ExplainLevel.ANALYZE
+                && explainLevel != StatementBase.ExplainLevel.SCHEDULER) {
+            return FlussKvSnapshotLease.NONE;
+        }
+        int queuePendingTimeoutS = GlobalStateMgr.getCurrentState().getSlotManager()
+                .getQueryQueuePendingTimeoutSecond(context.getCurrentWarehouseId());
+        long leaseDurationMs = TimeUnit.SECONDS.toMillis(
+                (long) context.getExecTimeoutWithoutPendingTime() + queuePendingTimeoutS);
+        // Named after the query, plus a suffix that keeps two scans of one query apart.
+        String leaseId = KV_SNAPSHOT_LEASE_ID_PREFIX + context.getQueryId() + "-"
+                + UUID.randomUUID().toString().substring(0, 8);
+        return new FlussKvSnapshotLease(admin, leaseId, leaseDurationMs);
+    }
+
+    private Set<org.apache.fluss.metadata.PartitionInfo> getSelectedPartitions(
+            FlussTable flussTable, TablePath identifier, List<PartitionKey> selectedPartitionKeys) {
+        Set<String> selectedQualifiedPartitionNames = selectedPartitionKeys.stream()
+                .filter(Objects::nonNull)
+                .map(partitionKey -> toHivePartitionName(flussTable.getPartitionColumnNames(), partitionKey))
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        Map<String, org.apache.fluss.metadata.PartitionInfo> allPartitions =
+                flussPartitionInfos.computeIfAbsent(identifier, ignored -> loadPartitionInfo(
+                        flussTable.getCatalogDBName(), flussTable.getCatalogTableName()));
+        return allPartitions.values().stream()
+                .filter(partitionInfo -> selectedQualifiedPartitionNames.contains(
+                        partitionInfo.getResolvedPartitionSpec().getPartitionQualifiedName()))
+                .collect(Collectors.toCollection(LinkedHashSet::new));
     }
 
     private List<Predicate> convertLakePredicates(FlussTable flussTable, ScalarOperator predicate) {

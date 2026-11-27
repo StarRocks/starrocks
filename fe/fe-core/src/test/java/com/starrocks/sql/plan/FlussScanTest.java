@@ -23,6 +23,7 @@ import com.starrocks.catalog.FlussTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorMetadataRequestContext;
@@ -30,13 +31,18 @@ import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.MockedMetadataMgr;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.RemoteFileInfo;
+import com.starrocks.connector.fluss.FlussKvSnapshotLease;
 import com.starrocks.connector.fluss.FlussRemoteFileDesc;
 import com.starrocks.connector.fluss.FlussSplitsInfo;
 import com.starrocks.planner.FlussScanNode;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.QueryState;
+import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
+import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -50,10 +56,12 @@ import com.starrocks.type.IntegerType;
 import com.starrocks.type.StringType;
 import com.starrocks.utframe.LockProbe;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Expectations;
 import mockit.Invocation;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
+import mockit.Verifications;
 import org.apache.fluss.client.Connection;
 import org.apache.fluss.client.ConnectionFactory;
 import org.apache.fluss.client.admin.Admin;
@@ -72,6 +80,7 @@ import org.junit.jupiter.api.Test;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicLong;
 
 public class FlussScanTest extends PlanTestBase {
@@ -160,6 +169,98 @@ public class FlussScanTest extends PlanTestBase {
     }
 
     @Test
+    public void testScanReleasesItsKvSnapshotLeaseWhenCleared(@Mocked SourceSplitBase split,
+                                                              @Mocked FlussKvSnapshotLease lease) throws Exception {
+        mockEncodeSplit(false);
+        new Expectations() {
+            {
+                lease.leaseId();
+                result = Optional.of("starrocks-lease-1");
+            }
+        };
+        mockedFlussMetadata.setSplits(ImmutableList.of(split));
+        mockedFlussMetadata.kvSnapshotLease = lease;
+        Tracers.register(connectContext);
+        Tracers.init(Tracers.Mode.VARS, Tracers.Module.EXTERNAL, false, false);
+        ExecPlan execPlan;
+        Map<String, String> traceVars = Maps.newHashMap();
+        try {
+            execPlan = getExecPlan("select id from fluss0.fluss_db.log_events");
+            Tracers.getAllVars().forEach(var -> traceVars.put(var.getName(), String.valueOf(var.getValue())));
+        } finally {
+            Tracers.close();
+        }
+        // The lease id is in the query trace, so a lease left in Fluss can be matched to its query.
+        Assertions.assertEquals("starrocks-lease-1", traceVars.get("Fluss.scan.log_events.kvSnapshotLeaseId"),
+                traceVars.toString());
+        FlussScanNode scanNode = Assertions.assertInstanceOf(FlussScanNode.class, execPlan.getScanNodes().get(0));
+        new Verifications() {
+            {
+                lease.close();
+                times = 0;
+            }
+        };
+
+        // The coordinator clears scan nodes when the query ends, fails or is cancelled.
+        scanNode.clear();
+        new Verifications() {
+            {
+                lease.close();
+                times = 1;
+            }
+        };
+    }
+
+    @Test
+    public void testPlanningFailureAfterLeasingReleasesTheLease(@Mocked SourceSplitBase split,
+                                                               @Mocked FlussKvSnapshotLease lease) {
+        mockEncodeSplit(true);
+        mockedFlussMetadata.setSplits(ImmutableList.of(split));
+        mockedFlussMetadata.kvSnapshotLease = lease;
+
+        // The scan was never registered, so only the builder itself can release what setup leased.
+        Assertions.assertThrows(StarRocksPlannerException.class,
+                () -> getExecPlan("select id from fluss0.fluss_db.log_events"));
+        new Verifications() {
+            {
+                lease.close();
+                times = 1;
+            }
+        };
+    }
+
+    @Test
+    public void testExplainLevelIsVisibleToTheConnectorWhilePlanning() throws Exception {
+        // FlussMetadata takes no KV snapshot lease for a plain EXPLAIN, which it tells from the session's
+        // explain level, so the level must already be set when the scan is planned.
+        StmtExecutor executor = new StmtExecutor(connectContext, UtFrameUtils.parseStmtWithNewParser(
+                "explain select id from fluss0.fluss_db.log_events", connectContext));
+        executor.execute();
+
+        Assertions.assertNotEquals(QueryState.MysqlStateType.ERR, connectContext.getState().getStateType(),
+                connectContext.getState().getErrorMessage());
+        Assertions.assertEquals(StatementBase.ExplainLevel.NORMAL, mockedFlussMetadata.explainLevelWhilePlanning);
+    }
+
+    private static void mockEncodeSplit(boolean fail) {
+        if (fail) {
+            new MockUp<FlussScanNode>() {
+                @Mock
+                public static String encodeSplitToString(SourceSplitBase ignored) {
+                    throw new IllegalStateException("cannot encode split");
+                }
+            };
+        } else {
+            new MockUp<FlussScanNode>() {
+                @Mock
+                public static String encodeSplitToString(SourceSplitBase ignored) {
+                    return "encoded-split";
+                }
+            };
+        }
+    }
+
+    @Test
     public void testPartitionPrune() throws Exception {
         String plan = getVerboseExplain(
                 "select * from fluss0.fluss_db.log_part_string where category = 'phone'");
@@ -243,6 +344,8 @@ public class FlussScanTest extends PlanTestBase {
         private final Map<String, FlussTable> tables;
         private GetRemoteFilesParams lastParams;
         private List<SourceSplitBase> splits = Collections.emptyList();
+        private FlussKvSnapshotLease kvSnapshotLease = FlussKvSnapshotLease.NONE;
+        private StatementBase.ExplainLevel explainLevelWhilePlanning;
 
         private MockedFlussMetadata() {
             tables = ImmutableMap.of(
@@ -253,6 +356,8 @@ public class FlussScanTest extends PlanTestBase {
         private void reset() {
             lastParams = null;
             splits = Collections.emptyList();
+            kvSnapshotLease = FlussKvSnapshotLease.NONE;
+            explainLevelWhilePlanning = null;
         }
 
         private void setSplits(List<SourceSplitBase> splits) {
@@ -301,8 +406,9 @@ public class FlussScanTest extends PlanTestBase {
         @Override
         public List<RemoteFileInfo> getRemoteFiles(Table table, GetRemoteFilesParams params) {
             lastParams = params;
+            explainLevelWhilePlanning = ConnectContext.get().getExplainLevel();
 
-            FlussSplitsInfo flussSplitsInfo = new FlussSplitsInfo(Collections.emptyList(), splits);
+            FlussSplitsInfo flussSplitsInfo = new FlussSplitsInfo(Collections.emptyList(), splits, kvSnapshotLease);
             RemoteFileInfo remoteFileInfo = new RemoteFileInfo();
             remoteFileInfo.setFiles(ImmutableList.of(
                     FlussRemoteFileDesc.createFlussRemoteFileDesc(flussSplitsInfo)));

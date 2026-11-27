@@ -2064,6 +2064,7 @@ public class PlanFragmentBuilder {
             flussScanNode.setScanOptimizeOption(node.getScanOptimizeOption());
             flussScanNode.computeStatistics(optExpression.getStatistics());
             currentExecGroup.add(flussScanNode, true);
+            boolean scanNodePrepared = false;
             try {
                 // set predicate
                 ScalarOperatorToExpr.FormatterContext formatterContext =
@@ -2082,9 +2083,15 @@ public class PlanFragmentBuilder {
                 prepareCommonExpr(scanNodePredicates, node.getScanOperatorPredicates(), context);
                 prepareMinMaxExpr(scanNodePredicates, node.getScanOperatorPredicates(), context, referenceTable);
                 scanNodePredicates.getNonPartitionConjuncts().addAll(scanNodePredicates.getNoEvalPartitionConjuncts());
+                scanNodePrepared = true;
             } catch (Exception e) {
                 LOG.warn("Fluss scan node get scan range locations failed : ", e);
                 throw new StarRocksPlannerException(e.getMessage(), INTERNAL_ERROR);
+            } finally {
+                if (!scanNodePrepared) {
+                    // Not registered yet, so a failed plan's cleanup would not find the lease setup took.
+                    flussScanNode.clear();
+                }
             }
 
             flussScanNode.setLimit(node.getLimit());

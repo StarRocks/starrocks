@@ -24,6 +24,7 @@ import com.starrocks.connector.CatalogConnector;
 import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.RemoteFileInfo;
+import com.starrocks.connector.fluss.FlussKvSnapshotLease;
 import com.starrocks.connector.fluss.FlussRemoteFileDesc;
 import com.starrocks.connector.fluss.FlussSplitsInfo;
 import com.starrocks.credential.CloudConfiguration;
@@ -65,6 +66,7 @@ public class FlussScanNode extends ScanNode {
     private final HDFSScanNodePredicates scanNodePredicates = new HDFSScanNodePredicates();
     private final List<TScanRangeLocations> scanRangeLocationsList = new ArrayList<>();
     private CloudConfiguration cloudConfiguration = null;
+    private volatile FlussKvSnapshotLease kvSnapshotLease = FlussKvSnapshotLease.NONE;
 
     public FlussScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
         super(id, desc, planNodeName);
@@ -103,6 +105,12 @@ public class FlussScanNode extends ScanNode {
         return scanRangeLocationsList;
     }
 
+    // Runs when the query ends, fails or is cancelled, and when planning fails after this scan was set up.
+    @Override
+    public void clear() {
+        kvSnapshotLease.close();
+    }
+
     public void setupScanRangeLocations(TupleDescriptor tupleDescriptor, ScalarOperator predicate,
                                         long limit) throws IOException {
         List<String> fieldNames =
@@ -128,6 +136,7 @@ public class FlussScanNode extends ScanNode {
 
         FlussRemoteFileDesc remoteFileDesc = (FlussRemoteFileDesc) fileInfos.get(0).getFiles().get(0);
         FlussSplitsInfo flussSplitsInfo = remoteFileDesc.getFlussSplitsInfo();
+        kvSnapshotLease = flussSplitsInfo.getKvSnapshotLease();
         List<SourceSplitBase> splits = flussSplitsInfo.getFlussSplits();
 
         if (splits.isEmpty()) {
@@ -146,6 +155,7 @@ public class FlussScanNode extends ScanNode {
     private void traceReaderMetrics() {
         String prefix = "Fluss.scan." + flussTable.getCatalogTableName() + ".";
         Tracers.record(EXTERNAL, prefix + "totalSplitNum", String.valueOf(scanRangeLocationsList.size()));
+        kvSnapshotLease.leaseId().ifPresent(leaseId -> Tracers.record(EXTERNAL, prefix + "kvSnapshotLeaseId", leaseId));
     }
 
     public void addSplitScanRangeLocations(SourceSplitBase split, String predicateInfo) {

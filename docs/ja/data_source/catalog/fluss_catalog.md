@@ -15,7 +15,11 @@ Fluss catalog は、データを StarRocks にロードせずに Apache Fluss �
 
 ## 使用上の注意
 
-現在のバージョンでは、Fluss catalog は DataLake が有効で、lake storage として Apache Paimon を使用する Fluss テーブルのクエリのみをサポートします。
+現在のバージョンでは：
+
+- Union read と Lake read は、DataLake が有効で、lake storage として Apache Paimon を使用する Fluss テーブルのみをサポートします。
+- ログテーブルに対する Real-time read（`$rt`）は、任意の lake storage、または lake storage のないテーブルで使用でき、lake snapshot を必要としません。
+- Union read できない主キーテーブル（lake storage がない、Paimon 以外の lake 形式、または lake snapshot がまだない）に対する通常のクエリは、最新の KV snapshot とその後のログをマージして、Fluss から現在の全行を読み取ります。BE はマージ中、各バケットの最後の KV snapshot 以降のログを Java メモリに保持するため、書き込みの多いテーブルで `kv.snapshot.interval` が長い場合は、より大きな BE Java ヒープ（`be.conf` の `JAVA_OPTS`）が必要です。
 
 ## Fluss catalog の作成
 
