@@ -52,6 +52,9 @@ void CompactionTaskStats::collect(const OlapReaderStatistics& reader_stats) {
     column_iterator_init_ns = reader_stats.column_iterator_init_ns;
     io_count_local_disk = reader_stats.io_count_local_disk;
     io_count_remote = reader_stats.io_count_remote;
+    remote_prefetch_ranges = reader_stats.remote_prefetch_ranges;
+    remote_prefetch_blocks = reader_stats.remote_prefetch_blocks;
+    remote_prefetch_rejected_blocks = reader_stats.remote_prefetch_rejected_blocks;
     // Note: read_segment_count is managed explicitly in compaction task code
     // by summing rowset->num_segments(), not from reader_stats.
 }
@@ -114,6 +117,9 @@ CompactionTaskStats CompactionTaskStats::operator+(const CompactionTaskStats& th
     diff.column_iterator_init_ns += that.column_iterator_init_ns;
     diff.io_count_local_disk += that.io_count_local_disk;
     diff.io_count_remote += that.io_count_remote;
+    diff.remote_prefetch_ranges += that.remote_prefetch_ranges;
+    diff.remote_prefetch_blocks += that.remote_prefetch_blocks;
+    diff.remote_prefetch_rejected_blocks += that.remote_prefetch_rejected_blocks;
     diff.input_rowset_count += that.input_rowset_count;
     diff.input_row_count += that.input_row_count;
     diff.output_row_count += that.output_row_count;
@@ -180,6 +186,9 @@ CompactionTaskStats CompactionTaskStats::operator-(const CompactionTaskStats& th
     diff.column_iterator_init_ns -= that.column_iterator_init_ns;
     diff.io_count_local_disk -= that.io_count_local_disk;
     diff.io_count_remote -= that.io_count_remote;
+    diff.remote_prefetch_ranges -= that.remote_prefetch_ranges;
+    diff.remote_prefetch_blocks -= that.remote_prefetch_blocks;
+    diff.remote_prefetch_rejected_blocks -= that.remote_prefetch_rejected_blocks;
     diff.input_rowset_count -= that.input_rowset_count;
     diff.input_row_count -= that.input_row_count;
     diff.output_row_count -= that.output_row_count;
@@ -261,6 +270,9 @@ static void fill_stats_fields(rapidjson::Document& root, const CompactionTaskSta
     root.AddMember("read_remote_sec", rapidjson::Value(s.io_ns_read_remote / TIME_UNIT_NS_PER_SECOND), allocator);
     root.AddMember("read_remote_mb", rapidjson::Value(s.io_bytes_read_remote / BYTES_UNIT_MB), allocator);
     root.AddMember("read_remote_count", rapidjson::Value(s.io_count_remote), allocator);
+    root.AddMember("remote_prefetch_ranges", rapidjson::Value(s.remote_prefetch_ranges), allocator);
+    root.AddMember("remote_prefetch_blocks", rapidjson::Value(s.remote_prefetch_blocks), allocator);
+    root.AddMember("remote_prefetch_rejected_blocks", rapidjson::Value(s.remote_prefetch_rejected_blocks), allocator);
     root.AddMember("read_local_count", rapidjson::Value(s.io_count_local_disk), allocator);
     root.AddMember("segment_init_ns", rapidjson::Value(s.segment_init_ns), allocator);
     root.AddMember("column_iterator_init_ns", rapidjson::Value(s.column_iterator_init_ns), allocator);

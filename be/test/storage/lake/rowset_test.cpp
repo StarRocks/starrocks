@@ -1100,6 +1100,37 @@ TEST_F(LakeRowsetTest, test_chunk_size_charges_stream_buffers) {
               task.chunk_size_with_held_segments(kLimit / 8, kRows, kFootprint, kSources, kLimit / 2));
 }
 
+#ifdef USE_STAROS
+TEST_F(LakeRowsetTest, compaction_prefetch_divides_budget_across_physical_segments) {
+    create_rowsets_for_testing();
+    auto rs = std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, 0);
+    ASSERT_EQ(3, rs->num_segments());
+    CompactionTaskContext context(next_id(), _tablet_metadata->id(), 456, false, false, nullptr);
+    VersionedTablet vt(nullptr, _tablet_metadata);
+    VerticalCompactionTask task(vt, {rs}, &context, _tablet_schema);
+    const auto saved_window = config::lake_compaction_prefetch_window_blocks;
+    const auto saved_limit = config::compaction_memory_limit_per_worker;
+    DeferOp restore([&] {
+        config::lake_compaction_prefetch_window_blocks = saved_window;
+        config::compaction_memory_limit_per_worker = saved_limit;
+    });
+
+    config::compaction_memory_limit_per_worker = 0;
+    config::lake_compaction_prefetch_window_blocks = 0;
+    EXPECT_EQ(0, task.prefetch_blocks_per_segment());
+    // A budget smaller than the segment count still keeps one block ahead per segment.
+    config::lake_compaction_prefetch_window_blocks = 1;
+    EXPECT_EQ(1, task.prefetch_blocks_per_segment());
+    config::lake_compaction_prefetch_window_blocks = 9;
+    EXPECT_EQ(3, task.prefetch_blocks_per_segment());
+    config::compaction_memory_limit_per_worker = 8LL * 6 * config::starlet_star_cache_block_size_bytes;
+    EXPECT_EQ(2, task.prefetch_blocks_per_segment());
+    // A memory limit below one block turns the read-ahead off.
+    config::compaction_memory_limit_per_worker = 8LL * config::starlet_star_cache_block_size_bytes - 1;
+    EXPECT_EQ(0, task.prefetch_blocks_per_segment());
+}
+#endif
+
 // A pass over a large fan-in picks the shrunk buffer for both its own segment loads and the reader it
 // feeds, and counts itself in the task stats.
 TEST_F(LakeRowsetTest, test_vertical_pass_shrinks_stream_buffer) {

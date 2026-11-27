@@ -767,13 +767,15 @@ public class TaskManager implements MemoryTrackable {
                     wal -> task.setState(Constants.TaskState.ACTIVE)
             );
         }
-        resumeTaskInternal(task);
+        // Replay only marks the task ACTIVE and start() schedules it once this FE leads, so no follower
+        // future can outlive a replayed suspend or drop that never cancels it.
+        resumeTaskInternal(task, !isReplay);
     }
 
     /**
      * Internal method to resume a task without writing edit log.
      */
-    private void resumeTaskInternal(Task task) {
+    private void resumeTaskInternal(Task task, boolean schedule) {
         if (task == null) {
             return;
         }
@@ -782,11 +784,8 @@ public class TaskManager implements MemoryTrackable {
         }
         try {
             task.setState(Constants.TaskState.ACTIVE);
-            if (task.getType() == Constants.TaskType.PERIODICAL) {
-                TaskSchedule schedule = task.getSchedule();
-                if (schedule != null) {
-                    registerScheduler(task);
-                }
+            if (schedule && task.getType() == Constants.TaskType.PERIODICAL && task.getSchedule() != null) {
+                registerScheduler(task);
             }
             // reset consecutive failure number
             task.resetConsecutiveFailCount();
@@ -977,7 +976,10 @@ public class TaskManager implements MemoryTrackable {
 
     private void changeTask(Task currentTask, Constants.TaskType changedType, TaskSchedule changedSchedule) {
         if (currentTask.getType() == Constants.TaskType.PERIODICAL) {
-            periodFutureMap.remove(currentTask.getId());
+            ScheduledFuture<?> future = periodFutureMap.remove(currentTask.getId());
+            if (future != null) {
+                future.cancel(false);
+            }
             currentTask.setState(Constants.TaskState.UNKNOWN);
             currentTask.setSchedule(null);
         }
@@ -1065,7 +1067,7 @@ public class TaskManager implements MemoryTrackable {
                     lastScheduleTime, periodSeconds, taskStartTime, currentDateTime);
             try {
                 task.setLastScheduleTime(TimeUtils.getEpochSeconds());
-                SubmitResult submitResult = executeTask(task.getName());
+                SubmitResult submitResult = executeTask(task.getName(), new ExecuteOption(task));
                 LOG.info("trigger periodical task immediately result: {}, task: {}", submitResult, task);
             } catch (Exception e) {
                 LOG.warn("failed to execute periodical task immediately: {}", task, e);

@@ -18,6 +18,10 @@ Inserts data into an Iceberg table. This feature is supported from v3.1 onwards.
 
 Similar to loading data into StarRocks native tables, if you have the [INSERT privilege](../../../administration/user_privs/authorization/privilege_item.md#table) on an Iceberg table, you can use the [INSERT](../../../sql-reference/sql-statements/loading_unloading/INSERT.md) statement to sink the data to the Iceberg table. Currently, only Parquet-formatted Iceberg tables are supported.
 
+For Parquet data files, StarRocks honors the Iceberg table properties `write.parquet.page-size-bytes`, `write.parquet.dict-size-bytes`, and `write.parquet.row-group-size-bytes`. Each value must be a positive integer no greater than 2,147,483,647 bytes; an invalid value rejects the write. If a property is absent, StarRocks uses its writer default: 1 MiB for data pages and dictionary pages, and 128 MiB for row groups. These properties do not configure position-delete files.
+
+For Parquet data files, set the Iceberg table property `write.parquet.compression-level` to an integer to control the selected codec's compression level. Accepted ranges are -131072 to 22 for ZSTD, -1 to 9 for GZIP, and 0 to 11 for Brotli. Other codecs do not support an explicit level. An invalid value rejects the write. If this property is absent, the Parquet writer uses its codec default. The level does not apply to position-delete files.
+
 ### Syntax
 
 ```SQL
@@ -130,6 +134,10 @@ You cannot specify the `column_name` property if you have specified the PARTITIO
    ```SQL
    INSERT OVERWRITE partition_tbl_1 partition(dt='2023-09-01',id=1) SELECT 'close';
    ```
+
+### Parquet data-page version
+
+For Parquet data files, the Iceberg table property `write.parquet.page-version` accepts `v1` or `v2` (case-insensitive). If absent, StarRocks writes DataPage V1. An invalid value rejects the write. DataPage V2 writes are rejected when the data-file schema contains a BOOLEAN column, including one nested in an array, map, or struct, because the StarRocks reader cannot currently decode its RLE-encoded values. This property does not configure position-delete files. Parquet data-page version is separate from Iceberg table format version.
 
 ## DELETE
 

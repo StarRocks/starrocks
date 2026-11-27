@@ -54,6 +54,7 @@ import java.time.zone.ZoneOffsetTransition;
 import java.time.zone.ZoneRules;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
@@ -65,6 +66,63 @@ public final class IcebergUtil {
     // `connector_sink_target_max_file_size` is set. Kept at 1 GiB to preserve
     // StarRocks' historical default; Iceberg's own default is 512 MiB.
     static final long DEFAULT_TARGET_FILE_SIZE_BYTES = 1024L * 1024 * 1024;
+
+    /** Returns an explicitly configured positive Parquet writer size, or null when absent. */
+    public static Integer getPositiveIntProperty(Map<String, String> properties, String key) {
+        String value = properties.get(key);
+        if (value == null) {
+            return null;
+        }
+        try {
+            int size = Integer.parseInt(value);
+            Preconditions.checkArgument(size > 0, "%s must be a positive 32-bit byte count: %s", key, value);
+            return size;
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException(key + " must be a positive 32-bit byte count: " + value, e);
+        }
+    }
+
+    /** Returns the configured data-file Parquet compression level, or null when absent. */
+    public static Integer getParquetCompressionLevel(Map<String, String> properties, String codec) {
+        String value = properties.get(TableProperties.PARQUET_COMPRESSION_LEVEL);
+        if (value == null) {
+            return null;
+        }
+        final int level;
+        try {
+            level = Integer.parseInt(value);
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException("write.parquet.compression-level must be an integer: " + value, e);
+        }
+        boolean supported;
+        switch (codec.toLowerCase(Locale.ROOT)) {
+            case "zstd":
+                supported = level >= -131072 && level <= 22;
+                break;
+            case "gzip":
+                supported = level >= -1 && level <= 9;
+                break;
+            case "brotli":
+                supported = level >= 0 && level <= 11;
+                break;
+            default:
+                throw new IllegalArgumentException("write.parquet.compression-level is unsupported for codec " + codec);
+        }
+        Preconditions.checkArgument(supported, "write.parquet.compression-level %s is invalid for codec %s",
+                value, codec);
+        return level;
+    }
+
+    /** Returns an explicit Iceberg Parquet data-page version, or null when absent. */
+    public static String getParquetDataPageVersion(Map<String, String> properties) {
+        String value = properties.get("write.parquet.page-version");
+        if (value == null) {
+            return null;
+        }
+        Preconditions.checkArgument("v1".equalsIgnoreCase(value) || "v2".equalsIgnoreCase(value),
+                "write.parquet.page-version must be v1 or v2: %s", value);
+        return value.toLowerCase(Locale.ROOT);
+    }
 
     public static String fileName(String path) {
         return path.substring(path.lastIndexOf('/') + 1);

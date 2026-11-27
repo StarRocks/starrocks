@@ -13,6 +13,7 @@ Version history
   - The deprecated argument names (`target_max_files_size`, `partitioned_by`, `line_delimiter`, `oauth2_client_credential` and `oauth2_client_endpoint`) issue a `DeprecationWarning`, and will be removed in a later release.
   - Every property value is written as a string, a bool as `true` or `false`: `trim_space=True` and `use_legacy_encoding=True` used to be a bare `True`, which is a syntax error. A missing value, an enum, or any other value that isn't a string, number or bool raises `CompileError`.
   - A `%` in a property value, as in a SAS token, is escaped for the driver instead of failing in pymysql's parameter formatting. Write it once: a `%%` doubled by hand now reaches StarRocks as `%%`.
+- Run every test, with SQLAlchemy's and Alembic's dialect suites, in one `pytest` run under SQLAlchemy's testing plugin, on SQLAlchemy 2.0 and 1.4 and in parallel, and the compiler and unit tests without a cluster, with `--db offline` (by @rad-pat)
 
 **1.3.5**
 

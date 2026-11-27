@@ -455,6 +455,24 @@ products: [oss, enterprise, cloud, anywhere]
 - 类型：Gauge
 - 描述：本 BE/CN 启动以来，重试的 publish 直接使用存储中已写好的新版本 tablet 元数据、不再重新 apply 事务的 tablet 累积次数。只统计重试（该分区之前的 publish 请求已经发出、但没有完成）且新版本不在元数据缓存中的情况；命中元数据缓存的 tablet 和首次 publish 都不计入。仅适用于存算分离集群。启用 `dump_metrics_with_bvar` 后，通过 `/metrics` 导出。
 
+## `lake_scan_read_ahead_blocks`
+
+- 单位：个
+- 类型：瞬时值
+- 描述：仅存算分离模式。本 BE/CN 上所有查询扫描合计已发出预读、但还没读到的缓存块数，包括每个 Segment 的预读窗口（`remote_prefetch_window_blocks`）和提前开始的 Segment（`lake_scan_read_ahead_segments`）。上限由 `lake_scan_read_ahead_max_blocks` 控制。
+
+## `lake_scan_read_ahead_capped_total`
+
+- 单位：次数
+- 类型：累积
+- 描述：仅存算分离模式。本 BE/CN 已持有 `lake_scan_read_ahead_max_blocks` 个预读块，或者 Segment 已用满自己的那一份，查询扫描因此少发预读、或不提前开始下一个 Segment 的次数。该值持续增长说明上限正在压住预读，相应的数据改为读到时再取。
+
+## `lake_scan_read_ahead_windows`
+
+- 单位：个
+- 类型：瞬时值
+- 描述：仅存算分离模式。本 BE/CN 上查询扫描中正在预读的 Segment 个数。设置了 `lake_scan_read_ahead_max_blocks` 时，每个 Segment 最多持有该上限除以此数的预读块。
+
 ## `lake_segment_cache_hit_minute`
 
 - 单位：次数
@@ -734,6 +752,13 @@ products: [oss, enterprise, cloud, anywhere]
 
 - 单位：计数
 - 描述：通过网络发送的数据包总数。
+
+## `object_storage_fast_retry_total`
+
+- 单位：计数
+- 类型：累计
+- 标签：`request`（`put_object` 或 `head_object`），`result`（`expired`、`resend_fast`、`resend_slow`、`resend_error` 或 `no_budget`）
+- 描述：发往存算分离对象存储的小请求的快速重发（`enable_object_storage_fast_retry`）的事件数。`expired`：带短超时的一次发送没有及时收到响应，被中止。`resend_fast`：一次重发在短超时内收到响应。`resend_slow`：一次重发收到了响应，但用时超过短超时。`resend_error`：一次重发以网络错误结束，之后由 SDK 按原来的方式重试。`no_budget`：预算（`object_storage_fast_retry_budget_percent`）用完，一次发送没有带短超时。在 `enable_poco_client_for_aws_sdk` 为 `false` 时注册。
 
 ## `ordinal_index_mem_bytes`
 

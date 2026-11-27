@@ -35,6 +35,55 @@
 #include "runtime/query_statistics.h"
 
 namespace starrocks {
+namespace {
+
+void per_scan_counters_to_pb(int32_t plan_node_id, const ScanAuditCounters& c, PerScanStatsItemPB* item) {
+    item->set_plan_node_id(plan_node_id);
+    if (c.mask & ScanAuditCounters::PHYSICAL_ROWS) item->set_physical_rows_read(c.physical_rows);
+    if (c.mask & ScanAuditCounters::LOGICAL_ROWS) item->set_logical_rows_read(c.logical_rows);
+    if (c.mask & ScanAuditCounters::OUTPUT_ROWS) item->set_output_rows(c.output_rows);
+    if (c.mask & ScanAuditCounters::REMOTE_BYTES) item->set_remote_bytes(c.remote_bytes);
+    if (c.mask & ScanAuditCounters::CACHE_BYTES) item->set_cache_bytes(c.cache_bytes);
+}
+
+void per_scan_counters_to_thrift(int32_t plan_node_id, const ScanAuditCounters& c, TAuditPerScanStatsItem* item) {
+    item->__set_plan_node_id(plan_node_id);
+    if (c.mask & ScanAuditCounters::PHYSICAL_ROWS) item->__set_physical_rows_read(c.physical_rows);
+    if (c.mask & ScanAuditCounters::LOGICAL_ROWS) item->__set_logical_rows_read(c.logical_rows);
+    if (c.mask & ScanAuditCounters::OUTPUT_ROWS) item->__set_output_rows(c.output_rows);
+    if (c.mask & ScanAuditCounters::REMOTE_BYTES) item->__set_remote_bytes(c.remote_bytes);
+    if (c.mask & ScanAuditCounters::CACHE_BYTES) item->__set_cache_bytes(c.cache_bytes);
+}
+
+ScanAuditCounters per_scan_counters_from_pb(const PerScanStatsItemPB& item) {
+    ScanAuditCounters c;
+    if (item.has_physical_rows_read()) {
+        c.mask |= ScanAuditCounters::PHYSICAL_ROWS;
+        c.physical_rows = item.physical_rows_read();
+    }
+    if (item.has_logical_rows_read()) {
+        c.mask |= ScanAuditCounters::LOGICAL_ROWS;
+        c.logical_rows = item.logical_rows_read();
+    }
+    if (item.has_output_rows()) {
+        c.mask |= ScanAuditCounters::OUTPUT_ROWS;
+        c.output_rows = item.output_rows();
+    }
+    if (item.has_remote_bytes()) {
+        c.mask |= ScanAuditCounters::REMOTE_BYTES;
+        c.remote_bytes = item.remote_bytes();
+    }
+    if (item.has_cache_bytes()) {
+        c.mask |= ScanAuditCounters::CACHE_BYTES;
+        c.cache_bytes = item.cache_bytes();
+    }
+    return c;
+}
+
+} // namespace
+} // namespace starrocks
+
+namespace starrocks {
 
 void QueryStatistics::to_pb(PQueryStatistics* statistics) {
     DCHECK(statistics != nullptr);
@@ -71,6 +120,9 @@ void QueryStatistics::to_pb(PQueryStatistics* statistics) {
             new_stats_item->set_table_id(table_id);
             new_stats_item->set_scan_rows(stats_item->scan_rows);
             new_stats_item->set_scan_bytes(stats_item->scan_bytes);
+        }
+        for (const auto& [plan_node_id, counters] : _per_scan_stats_items) {
+            per_scan_counters_to_pb(plan_node_id, counters, statistics->add_per_scan_stats_items());
         }
     }
 
@@ -122,6 +174,12 @@ void QueryStatistics::to_params(TAuditStatistics* params) {
             new_stats_item.__set_scan_rows(stats_item->scan_rows);
             new_stats_item.__set_scan_bytes(stats_item->scan_bytes);
         }
+        if (!_per_scan_stats_items.empty()) {
+            params->__isset.per_scan_stats_items = true;
+            for (const auto& [plan_node_id, counters] : _per_scan_stats_items) {
+                per_scan_counters_to_thrift(plan_node_id, counters, &params->per_scan_stats_items.emplace_back());
+            }
+        }
     }
 }
 
@@ -140,6 +198,7 @@ void QueryStatistics::clear() {
     {
         std::lock_guard l(_lock);
         _ai_statistics.reset();
+        _per_scan_stats_items.clear();
     }
 }
 
@@ -153,6 +212,18 @@ void QueryStatistics::update_stats_item(int64_t table_id, int64_t scan_rows, int
             iter->second->scan_bytes += scan_bytes;
         }
     }
+}
+
+void QueryStatistics::update_per_scan_stats_item(int32_t plan_node_id, const ScanAuditCounters& counters) {
+    _per_scan_stats_items[plan_node_id].add(counters);
+}
+
+void QueryStatistics::add_per_scan_stats(int32_t plan_node_id, const ScanAuditCounters& counters) {
+    if (counters.empty()) {
+        return;
+    }
+    std::lock_guard l(_lock);
+    update_per_scan_stats_item(plan_node_id, counters);
 }
 
 void QueryStatistics::update_exec_stats_item(uint32_t node_id, int64_t push, int64_t pull, int64_t pred_filter,
@@ -245,9 +316,11 @@ void QueryStatistics::merge(int sender_id, QueryStatistics& other) {
         std::unordered_map<int64_t, std::shared_ptr<ScanStats>> other_stats_item;
         std::unordered_map<uint32_t, std::shared_ptr<NodeExecStats>> other_exec_stats_items;
         std::unique_ptr<AIExecutionStatistics> other_ai_statistics;
+        std::unordered_map<int32_t, ScanAuditCounters> other_per_scan_stats_items;
         {
             std::lock_guard l(other._lock);
             other_stats_item.swap(other._stats_items);
+            other_per_scan_stats_items.swap(other._per_scan_stats_items);
             other_exec_stats_items.swap(other._exec_stats_items);
             other_ai_statistics.swap(other._ai_statistics);
         }
@@ -261,6 +334,9 @@ void QueryStatistics::merge(int sender_id, QueryStatistics& other) {
         }
         for (const auto& [table_id, stats_item] : other_stats_item) {
             update_stats_item(table_id, stats_item->scan_rows, stats_item->scan_bytes);
+        }
+        for (const auto& [plan_node_id, counters] : other_per_scan_stats_items) {
+            update_per_scan_stats_item(plan_node_id, counters);
         }
         for (const auto& [node_id, exec_stats_item] : other_exec_stats_items) {
             update_exec_stats_item(node_id, exec_stats_item->push_rows, exec_stats_item->pull_rows,
@@ -326,6 +402,9 @@ void QueryStatistics::merge_pb(const PQueryStatistics& statistics) {
         for (int i = 0; i < statistics.stats_items_size(); ++i) {
             const auto& stats_item = statistics.stats_items(i);
             update_stats_item(stats_item.table_id(), stats_item.scan_rows(), stats_item.scan_bytes());
+        }
+        for (const auto& item : statistics.per_scan_stats_items()) {
+            update_per_scan_stats_item(item.plan_node_id(), per_scan_counters_from_pb(item));
         }
         for (int i = 0; i < statistics.node_exec_stats_items_size(); ++i) {
             const auto& exec_stats_item = statistics.node_exec_stats_items(i);

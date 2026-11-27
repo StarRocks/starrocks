@@ -19,6 +19,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.ScanNode;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.base.ColumnIdentifier;
@@ -1962,6 +1963,25 @@ public class AggregateTest extends PlanTestBase {
                 "  |  group by: \n" +
                 "  |  \n" +
                 "  0:OlapScanNode");
+        // count of a column-free expression that is not a literal can be NULL on every row, so it is not
+        // the row count (RB-1129)
+        sql = "select count(nullif(upper('a'), 'A')) from test_all_type_not_null";
+        plan = getFragmentPlan(sql);
+        assertNotContains(plan, "MetaScan");
+        assertContains(plan, "0:OlapScanNode");
+        // the same for an argument that is NULL on every row after constant folding (RB-1439) or after the
+        // projection of a derived table is merged into it (RB-1438)
+        for (String nullArgSql : new String[] {
+                "select count(false + interval 1 day) from test_all_type_not_null",
+                "select count(case when c is null then 1 end) from " +
+                        "(select trim(false) c from test_all_type_not_null) s"}) {
+            plan = getFragmentPlan(nullArgSql);
+            assertNotContains(plan, "MetaScan");
+            assertContains(plan, "0:OlapScanNode");
+        }
+        sql = "select count(1) from test_all_type_not_null";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "0:MetaScan");
         // with count distinct, shouldn't apply RewriteSimpleAggToMetaScanRule
         sql = "select count(distinct t1b) from test_all_type_not_null";
         plan = getFragmentPlan(sql);
@@ -3671,6 +3691,27 @@ public class AggregateTest extends PlanTestBase {
             }
         } finally {
             connectContext.getSessionVariable().setNewPlanerAggStage(oldStage);
+        }
+    }
+
+    @Test
+    public void testNoRuntimeAdaptiveDopWithSpill() throws Exception {
+        String sql = "select t0.v1, t0.v2 from t1 cross join t0 group by t0.v1, t0.v2";
+        SessionVariable sv = connectContext.getSessionVariable();
+        boolean oldAdaptive = sv.isEnableRuntimeAdaptiveDop();
+        boolean oldSpill = sv.isEnableSpill();
+        try {
+            sv.setEnableRuntimeAdaptiveDop(true);
+            sv.setEnableSpill(false);
+            ExecPlan plan = getExecPlan(sql);
+            Assertions.assertTrue(plan.getFragments().stream().anyMatch(PlanFragment::isUseRuntimeAdaptiveDop));
+
+            sv.setEnableSpill(true);
+            plan = getExecPlan(sql);
+            Assertions.assertTrue(plan.getFragments().stream().noneMatch(PlanFragment::isUseRuntimeAdaptiveDop));
+        } finally {
+            sv.setEnableRuntimeAdaptiveDop(oldAdaptive);
+            sv.setEnableSpill(oldSpill);
         }
     }
 }

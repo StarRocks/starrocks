@@ -23,6 +23,7 @@ import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.MaterializedViewExceptions;
@@ -53,6 +54,7 @@ import com.starrocks.scheduler.TaskRunContext;
 import com.starrocks.scheduler.mv.BaseTableSnapshotInfo;
 import com.starrocks.scheduler.mv.MVRefreshExecutor;
 import com.starrocks.scheduler.mv.MVRefreshProcessor;
+import com.starrocks.scheduler.mv.pct.PCTPredicateBuilder;
 import com.starrocks.scheduler.persist.MVTaskRunExtraMessage;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
@@ -60,16 +62,29 @@ import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.PlannerMetaLocker;
+import com.starrocks.sql.analyzer.QueryAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.analyzer.mv.IVMAnalyzer;
 import com.starrocks.sql.analyzer.mv.IvmRefreshDefinition;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.SelectList;
+import com.starrocks.sql.ast.SelectListItem;
+import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.TableRelation;
+import com.starrocks.sql.ast.expression.CompoundPredicate;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.IsNullPredicate;
+import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.common.PCellSortedSet;
+import com.starrocks.sql.common.PCellUtils;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.transaction.GlobalTransactionMgr;
+import com.starrocks.transaction.TransactionState;
+import com.starrocks.transaction.TransactionStatus;
 import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.Collection;
@@ -95,6 +110,8 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
     private final Map<BaseTableInfo, TvrVersionRange> stagedTvrDeltaMap = Maps.newConcurrentMap();
     // whether the next task run is needed
     private boolean hasNextTaskRun = false;
+    // Whether this run's write became visible in time: only then does the run record its versions and freshness.
+    private boolean writeVisible = true;
 
     public MVIVMRefreshProcessor(Database db, MaterializedView mv,
                                  MvTaskRunContext mvContext,
@@ -111,6 +128,7 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
         // Reset per-call buffer to prevent accumulation across retries within the same task run
         // (processor instance is reused by retryProcessTaskRun).
         this.stagedTvrDeltaMap.clear();
+        this.writeVisible = true;
         waitForCommittedMvTransactionsVisible();
         mvPctRefreshSynchronizer.syncAndCheckPCTPartitions();
 
@@ -137,6 +155,9 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
                 .allMatch(TvrVersionRange::isEmpty);
         if (isTaskRunSkipped) {
             logger.info("No base table has changed, skip the refresh for materialized view: {}", mv.getName());
+            if (!mvContext.isExplain()) {
+                recordVersionsLeftUnrecorded();
+            }
             // No base-table change means the MV is confirmed fresh as of this run's start.
             confirmFreshness();
             // Every delta here is a point range (from == to): the window records that the
@@ -201,6 +222,63 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
         }
         logger.info("Waited {} ms for the committed transactions of materialized view {} to become visible",
                 System.currentTimeMillis() - startMs, mv.getName());
+    }
+
+    /**
+     * The insert may return once its write is committed, before it is visible. Queries take an MV partition as fresh
+     * when the version map records the base versions it was refreshed to, so the run records them, and the view's
+     * freshness, only once the write is visible. A run that waits in vain leaves them to a later refresh.
+     */
+    private boolean waitForWriteVisible(long txnId) {
+        TransactionState txn = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                .getTransactionState(db.getId(), txnId);
+        if (txn == null || (txn.getTransactionStatus() != TransactionStatus.COMMITTED
+                && txn.getTransactionStatus() != TransactionStatus.VISIBLE)) {
+            return true;
+        }
+        long timeoutMs = Config.mv_incremental_refresh_wait_visible_timeout_ms;
+        long startMs = System.currentTimeMillis();
+        try (Timer ignored = Tracers.watchScope("MVRefreshWaitWriteVisible")) {
+            // The latch is released once the publish has updated the partitions, not when the status turns VISIBLE.
+            while (!txn.waitTransactionVisible(100, TimeUnit.MILLISECONDS)) {
+                boolean killed = mvContext.getTaskRun() != null && mvContext.getTaskRun().isKilled();
+                if (killed || System.currentTimeMillis() - startMs >= timeoutMs) {
+                    logger.warn("The write of materialized view {} in transaction {} is not visible after {} ms, see " +
+                                    "mv_incremental_refresh_wait_visible_timeout_ms; its versions are left to a later " +
+                                    "refresh, and queries take the partitions it wrote as stale until then",
+                            mv.getName(), txnId, System.currentTimeMillis() - startMs);
+                    return false;
+                }
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return false;
+        }
+        return true;
+    }
+
+    /**
+     * A run whose write was not visible in time left its versions unrecorded, and a run that reads no change has no
+     * write to record them with. No base table changed since the view's last write, which is visible by now (waited
+     * for above), so the partitions the version map still takes as changed hold the base tables as they are.
+     */
+    private void recordVersionsLeftUnrecorded() {
+        try (Timer ignored = Tracers.watchScope("MVRefreshRecordVersionsLeftUnrecorded")) {
+            mvPctRefreshSynchronizer.updatePCTToRefreshMetas(/* skipBatchFilter */ true);
+            if (PCellUtils.isNotEmpty(pctMVToRefreshedPartitions)) {
+                updatePCTMeta(null, pctMVToRefreshedPartitions, pctRefTableRefreshPartitions, Maps.newHashMap());
+            }
+        } catch (Exception e) {
+            logger.warn("Failed to record the versions left unrecorded for materialized view: {}, error: {}",
+                    mv.getName(), e.getMessage(), e);
+        }
+    }
+
+    @Override
+    public void confirmFreshness() {
+        if (writeVisible) {
+            super.confirmFreshness();
+        }
     }
 
     /**
@@ -270,8 +348,12 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
                 executor.executePlan(execPlan, insertStmt);
             }
 
-            try (Timer ignored = Tracers.watchScope("MVRefreshUpdateMeta")) {
-                updatePCTMeta(execPlan, pctMVToRefreshedPartitions, pctRefTableRefreshPartitions, Maps.newHashMap());
+            writeVisible = waitForWriteVisible(insertStmt.getTxnId());
+            if (writeVisible) {
+                try (Timer ignored = Tracers.watchScope("MVRefreshUpdateMeta")) {
+                    updatePCTMeta(execPlan, pctMVToRefreshedPartitions, pctRefTableRefreshPartitions,
+                            Maps.newHashMap());
+                }
             }
 
             return Constants.TaskRunState.SUCCESS;
@@ -630,6 +712,7 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
                     String derivedSelectSql = IvmRefreshDefinition.derive(ctx, mv);
                     insertStmt = generateInsertAst(ctx, PCellSortedSet.of(), mv.getIVMTaskDefinition(derivedSelectSql));
                     analyzeInsertStmt(insertStmt);
+                    insertStmt = boundDeltaToRetainedPartitions(insertStmt);
                     insertStmt = buildInsertPlan(insertStmt);
                     ctx.setExecutionId(UUIDUtil.toTUniqueId(ctx.getQueryId()));
                 }
@@ -647,6 +730,61 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
             ctx.getSessionVariable().setEnableIVMRefresh(prevIvmEnabled);
             ctx.getSessionVariable().setTvrTargetMvid(prevTvrTargetMvId);
         }
+    }
+
+    /**
+     * Drop delta rows for partitions retention refused to create, the way pct bounds its insert. Anything the
+     * sync did not refuse -- a partition created after it ran, say -- is deliberately left alone: that still
+     * fails loudly and heals next round, where filtering it would lose the rows silently.
+     */
+    private InsertStmt boundDeltaToRetainedPartitions(InsertStmt insertStmt) throws AnalysisException {
+        // Only ever drop rows for a partition that is not there. Retention can refuse a cell whose partition an
+        // earlier round created and the ttl scheduler has not collected yet; those rows still have a home.
+        PCellSortedSet refused = PCellSortedSet.of(mvContext.getRetentionRefusedMvCells());
+        mv.getVisiblePartitionNames().forEach(refused::removeByName);
+        if (refused.isEmpty()) {
+            return insertStmt;
+        }
+        TableName mvName = new TableName(db.getFullName(), mv.getName());
+        Expr inRefused = new PCTPredicateBuilder(getMvPctRefreshPartitioner())
+                .buildMVPartitionPredicate(mvName, refused);
+        // A literal reads the same for every row, so it cannot bound a partition set -- and keeping a row
+        // unless it is refused turns a literal TRUE into a filter that drops the whole delta.
+        if (inRefused == null || inRefused instanceof LiteralExpr) {
+            logger.warn("Cannot bound the incremental delta to the retained partitions, refusing to filter: {}",
+                    refused.getPartitionNames());
+            return insertStmt;
+        }
+
+        wrapQueryWithFilter(insertStmt, mvName, keepUnlessRefused(inRefused));
+        logger.info("Incremental refresh keeps the delta out of retention-refused mv partitions: {}",
+                refused.getPartitionNames());
+        return insertStmt;
+    }
+
+    /**
+     * Keep a row unless it provably belongs to a refused partition. Membership reads UNKNOWN for a null
+     * partition key only while no refused cell claims nulls -- buildMVPartitionPredicate folds IS NULL into the
+     * ones that do -- so the escape has to test the predicate, not the column it reads.
+     */
+    @VisibleForTesting
+    static Expr keepUnlessRefused(Expr inRefused) {
+        Expr notInRefused = new CompoundPredicate(CompoundPredicate.Operator.NOT, inRefused, null);
+        Expr membershipUnknown = new IsNullPredicate(inRefused.clone(), false);
+        return new CompoundPredicate(CompoundPredicate.Operator.OR, notInRefused, membershipUnknown);
+    }
+
+    private void wrapQueryWithFilter(InsertStmt insertStmt, TableName alias, Expr keep) {
+        QueryStatement queryStatement = insertStmt.getQueryStatement();
+        SubqueryRelation inner = new SubqueryRelation(queryStatement);
+        inner.setAlias(alias);
+        List<SelectListItem> items = queryStatement.getQueryRelation().getColumnOutputNames().stream()
+                .map(name -> new SelectListItem(new SlotRef(alias, name), null))
+                .collect(Collectors.toList());
+        QueryStatement filtered =
+                new QueryStatement(new SelectRelation(new SelectList(items, false), inner, keep, null, null));
+        insertStmt.setQueryStatement(filtered);
+        new QueryAnalyzer(mvContext.getCtx()).analyze(filtered);
     }
 
     private void analyzeInsertStmt(InsertStmt insertStmt) throws AnalysisException {

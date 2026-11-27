@@ -16,7 +16,9 @@ package com.starrocks.statistic.base;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.type.StructType;
 import com.starrocks.type.Type;
 
@@ -49,10 +51,17 @@ public class ColumnClassifier {
             String columnName = columnNames.get(i);
             Type columnType = columnTypes.get(i);
 
-            if (table.getColumn(columnName) != null) {
+            Column column = table.getColumn(columnName);
+            if (column != null) {
                 if (columnType.canStatistic()) {
                     if (!columnType.isCollectionType()) {
-                        columnStats.add(new PrimitiveTypeColumnStats(columnName, columnType));
+                        // UNIQUE/AGG value columns cannot rely on ZoneMaps for metadata min/max collection.
+                        boolean metaSupported = true;
+                        if (table instanceof OlapTable olapTable) {
+                            metaSupported = column.isKey() || (olapTable.getKeysType() != KeysType.UNIQUE_KEYS &&
+                                    olapTable.getKeysType() != KeysType.AGG_KEYS);
+                        }
+                        columnStats.add(new PrimitiveTypeColumnStats(columnName, columnType, metaSupported));
                     } else {
                         columnStats.add(new CollectionTypeColumnStats(columnName, columnType, isManualJob));
                     }

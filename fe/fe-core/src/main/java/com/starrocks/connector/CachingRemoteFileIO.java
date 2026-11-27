@@ -145,6 +145,18 @@ public class CachingRemoteFileIO implements RemoteFileIO {
                 .collect(Collectors.toList());
     }
 
+    /**
+     * As {@link #getPresentPathKeysOfTable(String)}, by the catalog names of the table, for when its location is not
+     * known. No remote I/O.
+     */
+    public List<RemotePathKey> getPresentPathKeysOfTable(String dbName, String tableName) {
+        return cache.asMap().keySet().stream()
+                .filter(pathKey -> pathKey.getScanContext() != null
+                        && dbName.equalsIgnoreCase(pathKey.getScanContext().dbName)
+                        && tableName.equalsIgnoreCase(pathKey.getScanContext().tableName))
+                .collect(Collectors.toList());
+    }
+
     public void updateRemoteFiles(RemotePathKey pathKey) {
         if (fileIO instanceof CachingRemoteFileIO) {
             ((CachingRemoteFileIO) fileIO).updateRemoteFiles(pathKey);

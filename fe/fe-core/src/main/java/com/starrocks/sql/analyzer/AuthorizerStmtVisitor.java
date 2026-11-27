@@ -3340,7 +3340,25 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
                     context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                     PrivilegeType.CREATE_PIPE.name(), ObjectType.DATABASE.name(), statement.getPipeName().getDbName());
         }
+        // OR REPLACE drops the existing pipe, so it also needs DROP on that pipe; PipeManager.createPipe
+        // checks again at execution, as the pipe may be created or replaced in between
+        PipeName pipeName = statement.getPipeName();
+        if (statement.isReplace() &&
+                GlobalStateMgr.getCurrentState().getPipeManager().mayGetPipe(pipeName).isPresent()) {
+            checkDropPipe(context, pipeName);
+        }
         return null;
+    }
+
+    public static void checkDropPipe(ConnectContext context, PipeName pipeName) {
+        try {
+            Authorizer.checkPipeAction(context, pipeName, PrivilegeType.DROP);
+        } catch (AccessDeniedException e) {
+            AccessDeniedException.reportAccessDenied(
+                    InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    PrivilegeType.DROP.name(), ObjectType.PIPE.name(), pipeName.toString());
+        }
     }
 
     @Override

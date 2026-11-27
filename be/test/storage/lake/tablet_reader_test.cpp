@@ -1522,7 +1522,7 @@ TEST_F(LakeDuplicateTabletReaderTest, test_parallel_read_error_waits_all_futures
     EXPECT_EQ(1, reader->stats().phy_segments_count);
 }
 
-// The segment readers read ahead only in StarOS builds (see SegmentIterator::_should_read_ahead()).
+// The segment readers read ahead only in StarOS builds (see SegmentIterator::_read_ahead_blocks()).
 #ifdef USE_STAROS
 // A local file system whose files accept cache warm-ups, as starlet's do, so that segment readers build real read-ahead
 // windows on local segment files. A warm-up only returns a handle; the reads go to the local file as before.
@@ -1893,6 +1893,86 @@ TEST_F(LakeDuplicateTabletReaderTest, test_read_ahead_across_segments_of_a_rowse
             EXPECT_EQ(0, early_inits) << rowsets;
         }
     }
+}
+
+// A compaction reader reads ahead by its own budget (LakeIOOptions::compaction_prefetch_blocks), not by the query
+// window: with no budget it warms nothing even though remote_prefetch_window_blocks is set, with one it warms its input
+// segment files, and it returns the same rows either way.
+TEST_F(LakeDuplicateTabletReaderTest, test_compaction_reads_ahead_by_its_budget) {
+    VersionedTablet tablet(_tablet_mgr.get(), _tablet_metadata);
+    std::vector<std::pair<int, int>> expected;
+    {
+        ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, next_id()));
+        ASSERT_OK(writer->open());
+        for (int s = 0; s < 3; s++) {
+            std::vector<int> k(20000);
+            std::vector<int> v(20000);
+            for (int i = 0; i < 20000; i++) {
+                k[i] = s * 20000 + i;
+                v[i] = k[i] * 3;
+                expected.emplace_back(k[i], v[i]);
+            }
+            auto c0 = Int32Column::create();
+            auto c1 = Int32Column::create();
+            c0->append_numbers(k.data(), k.size() * sizeof(int));
+            c1->append_numbers(v.data(), v.size() * sizeof(int));
+            ASSERT_OK(writer->write(Chunk({std::move(c0), std::move(c1)}, _schema)));
+            ASSERT_OK(writer->finish());
+        }
+        auto* rowset = _tablet_metadata->add_rowsets();
+        rowset->set_overlapped(false);
+        rowset->set_id(1);
+        for (const auto& file : writer->segments()) {
+            auto* segment_meta = rowset->add_segment_metas();
+            segment_meta->set_filename(file.path);
+            segment_meta->set_size(file.size.value());
+        }
+        ASSERT_EQ(3, rowset->segment_metas_size());
+        writer->close();
+    }
+    _tablet_metadata->set_version(2);
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+
+    ASSIGN_OR_ABORT(auto local_fs, FileSystemFactory::CreateSharedFromString(kTestDirectory));
+    auto fs = std::make_shared<WarmableFileSystem>(local_fs);
+    const bool scheduler_was_enabled = remote_io_scheduler_enabled();
+    DeferOp restore([&] { g_remote_io_scheduler_enabled.store(scheduler_was_enabled); });
+    g_remote_io_scheduler_enabled.store(true);
+    ConfigResetGuard<int32_t> window_guard(&config::remote_prefetch_window_blocks, 128);
+
+    auto compact_read = [&](int32_t prefetch_blocks) {
+        auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), _tablet_metadata, *_schema);
+        CHECK_OK(reader->prepare());
+        TabletReaderParams params;
+        params.reader_type = ReaderType::READER_CUMULATIVE_COMPACTION;
+        params.lake_io_opts.fill_data_cache = true;
+        params.lake_io_opts.fs = fs;
+        params.lake_io_opts.remote_read =
+                RemoteReadContext::for_background(RemoteReadContext::Workload::COMPACTION, 42);
+        params.lake_io_opts.compaction_prefetch_blocks = prefetch_blocks;
+        CHECK_OK(reader->open(params));
+        std::vector<std::pair<int, int>> rows;
+        auto chunk = ChunkFactory::new_chunk(*_schema, 4096);
+        while (true) {
+            chunk->reset();
+            Status st = reader->get_next(chunk.get());
+            if (st.is_end_of_file()) {
+                break;
+            }
+            CHECK_OK(st);
+            for (size_t i = 0; i < chunk->num_rows(); i++) {
+                rows.emplace_back(chunk->get(i)[0].get_int32(), chunk->get(i)[1].get_int32());
+            }
+        }
+        reader->close();
+        return rows;
+    };
+
+    EXPECT_EQ(expected, compact_read(0));
+    EXPECT_EQ(0, fs->warms.load());
+
+    EXPECT_EQ(expected, compact_read(4));
+    EXPECT_GT(fs->warms.load(), 0);
 }
 #endif // USE_STAROS
 
@@ -2982,6 +3062,9 @@ TEST_F(LakeTabletReaderSpit, test_parallel_rowset_stats_survive_iterator_reads) 
         auto* stats = static_cast<SegmentReadOptions*>(arg)->stats;
         stats->sample_build_histogram_count++;
         stats->flat_json_hits["parallel-test"]++;
+        stats->remote_prefetch_ranges += 3;
+        stats->remote_prefetch_blocks += 2;
+        stats->remote_prefetch_rejected_blocks += 1;
     });
 
     auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), _tablet_metadata, *_schema);
@@ -3011,6 +3094,10 @@ TEST_F(LakeTabletReaderSpit, test_parallel_rowset_stats_survive_iterator_reads) 
     EXPECT_EQ(reader->stats().raw_rows_read, reader->realtime_stats().raw_rows_read);
     EXPECT_EQ(reader->stats().raw_rows_read, reader->compaction_stats().raw_rows_read);
     EXPECT_EQ(reader->stats().compressed_bytes_read, reader->compaction_stats().compressed_bytes_read);
+    // Compaction reports the prefetch of every rowset reader while the reader is still open.
+    EXPECT_EQ(6, reader->compaction_stats().remote_prefetch_ranges);
+    EXPECT_EQ(4, reader->compaction_stats().remote_prefetch_blocks);
+    EXPECT_EQ(2, reader->compaction_stats().remote_prefetch_rejected_blocks);
     EXPECT_TRUE(reader->compaction_stats().flat_json_hits.empty());
 
     // Profile reporting for a reused reader resets every private accumulator while its old
@@ -3949,6 +4036,101 @@ TEST_F(LakeTabletReaderSpit, test_column_reader_keeps_index_root_pages) {
         EXPECT_EQ(roots.ordinal.size, reader->index_root_pages().ordinal.size);
         EXPECT_EQ(roots.zone_map.offset, reader->index_root_pages().zone_map.offset);
     }
+}
+
+// The bitmap index roots of a predicate column are warmed with its other index roots. In this small segment each root
+// is the only data page of its column, which the load of the index does not read, so the roots are still warmed once
+// the segment has loaded the bitmap index.
+TEST_F(LakeTabletReaderSpit, test_index_warm_includes_bitmap_index_roots) {
+    _tablet_metadata->mutable_schema()->mutable_column(1)->set_has_bitmap_index(true);
+    _tablet_schema = TabletSchema::create(_tablet_metadata->schema());
+    write_two_rowsets_with_three_segments();
+    // Keep only rowset 2, whose single segment all the warm calls below belong to.
+    _tablet_metadata->mutable_rowsets()->DeleteSubrange(0, 1);
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+
+    ConfigResetGuard<bool> warm_guard(&config::lake_scan_warm_index, true);
+    ConfigResetGuard<bool> open_guard(&config::lake_scan_parallel_segment_open, false);
+    const bool old_scheduler = g_remote_io_scheduler_enabled.exchange(true);
+    auto* sync = SyncPoint::GetInstance();
+    sync->EnableProcessing();
+    DeferOp cleanup([&] {
+        sync->ClearAllCallBacks();
+        sync->DisableProcessing();
+        g_remote_io_scheduler_enabled.store(old_scheduler);
+    });
+    std::vector<std::pair<int64_t, size_t>> ranges;
+    sync->SetCallBack("TabletReader::warm_prepared_indexes::warm", [&](void* arg) {
+        auto* call = static_cast<IndexWarmCall*>(arg);
+        ranges.emplace_back(std::get<0>(*call), std::get<1>(*call));
+        *std::get<2>(*call) = std::make_shared<FakeIndexWarmHandle>();
+    });
+    std::unique_ptr<ColumnPredicate> pred(new_column_eq_predicate(get_type_info(TYPE_INT), 1, "8"));
+    auto read = [&]() {
+        ranges.clear();
+        auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), _tablet_metadata, *_schema);
+        EXPECT_OK(reader->prepare());
+        TabletReaderParams params;
+        params.reader_type = READER_QUERY;
+        PredicateAndNode root;
+        root.add_child(PredicateColumnNode(pred.get()));
+        params.pred_tree = PredicateTree::create(std::move(root));
+        EXPECT_OK(reader->open(params));
+        auto chunk = ChunkFactory::new_chunk(*_schema, 1024);
+        int64_t rows = 0;
+        while (true) {
+            chunk->reset();
+            auto st = reader->get_next(chunk.get());
+            if (st.is_end_of_file()) break;
+            EXPECT_OK(st);
+            rows += chunk->num_rows();
+        }
+        EXPECT_EQ(1, rows); // c1 = 8 is the row with key 4
+        auto stats = reader->stats();
+        reader->close();
+        return stats;
+    };
+    auto covered = [&](const PagePointer& page) {
+        for (const auto& [offset, length] : ranges) {
+            if (offset <= static_cast<int64_t>(page.offset) &&
+                static_cast<int64_t>(page.offset + page.size) <= offset + static_cast<int64_t>(length)) {
+                return true;
+            }
+        }
+        return false;
+    };
+
+    _tablet_mgr->metacache()->prune();
+    const auto cold = read();
+    EXPECT_EQ(1, cold.lake_prepared_tablet_warm_index_segments);
+
+    // A cached segment whose bitmap index is loaded: the next scan still warms its bitmap roots, which are data pages.
+    _tablet_mgr->metacache()->prune();
+    auto rowsets = Rowset::get_rowsets(_tablet_mgr.get(), _tablet_metadata);
+    ASSERT_EQ(1, rowsets.size());
+    ASSIGN_OR_ABORT(auto segments, rowsets[0]->segments(true));
+    ASSERT_EQ(1, segments.size());
+    auto* column = const_cast<ColumnReader*>(segments[0]->column(1));
+    const auto roots = column->index_root_pages();
+    ASSERT_GT(roots.bitmap_dict_value.size, 0);
+    ASSERT_GT(roots.bitmap_ordinal.size, 0);
+    EXPECT_TRUE(covered(roots.bitmap_dict_value));
+    EXPECT_TRUE(covered(roots.bitmap_ordinal));
+    ASSIGN_OR_ABORT(auto file, segments[0]->new_segment_read_file());
+    OlapReaderStatistics load_stats;
+    IndexReadOptions opts;
+    opts.read_file = file->stream().get();
+    opts.stats = &load_stats;
+    BitmapIndexIterator* raw = nullptr;
+    ASSERT_OK(column->new_bitmap_index_iterator(opts, &raw));
+    std::unique_ptr<BitmapIndexIterator> iter(raw);
+    ASSERT_TRUE(column->has_loaded_bitmap_index());
+    EXPECT_TRUE(roots.bitmap_dict_value_root_is_data);
+    EXPECT_TRUE(roots.bitmap_ordinal_root_is_data);
+    const auto warm = read();
+    EXPECT_EQ(cold.lake_prepared_tablet_warm_index_skipped, warm.lake_prepared_tablet_warm_index_skipped);
+    EXPECT_TRUE(covered(roots.bitmap_dict_value));
+    EXPECT_TRUE(covered(roots.bitmap_ordinal));
 }
 
 // Concurrent readers of the index roots while other threads load the indexes see the same, stable values.

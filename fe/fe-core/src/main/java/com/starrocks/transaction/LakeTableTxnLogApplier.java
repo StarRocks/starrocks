@@ -262,11 +262,13 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
                         // older than the UNSHARE. Hand it to applyVisibleLogBatch, which runs it after the
                         // version publication, preserving the single-transaction order below.
                         pending.unshareCutoverPending = true;
-                    } else if (partition.finishUnshare()) {
+                    } else if (partition.isUnsharing()) {
                         // This method runs under the transaction-visible table write lock. Make the query-layout
-                        // cutover part of the same catalog mutation as the UNSHARE version, then invalidate any
-                        // optimistic plan that captured the parent layout before this point.
+                        // cutover part of the same catalog mutation as the UNSHARE version. Invalidate optimistic
+                        // plans before the cutover: one that recorded an older version and resolves the child layout
+                        // afterwards must fail validation.
                         table.lastSchemaUpdateTime.set(System.nanoTime());
+                        partition.finishUnshare();
                     }
                 }
             } else {
@@ -374,9 +376,9 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
         tabletStats.clear();
     }
 
-    // Leader publish holds the table WRITE lock for the entire call. Replay does not refresh these
-    // transient stats, and skips the query (single-transaction replay does not hold the table lock).
-    // A batch reuses the call-local snapshot across transactions and targets without rescanning jobs.
+    // Leader publish holds the table WRITE lock for the entire call, and so does replay. Replay does not
+    // refresh these transient stats, and skips the query. A batch reuses the call-local snapshot across
+    // transactions and targets without rescanning jobs.
     private Set<Long> getReshardingPartitionsLocked() {
         return table.getState() == OlapTable.OlapTableState.TABLET_RESHARD
                 && GlobalStateMgr.getCurrentState().isLeader() && !GlobalStateMgr.isCheckpointThread()
@@ -419,12 +421,12 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
             DeferredPublish pending = entry.getValue();
             PartitionCommitInfo partitionCommitInfo = pending.finalCommitInfo;
             partition.updateVisibleVersion(partitionCommitInfo.getVersion(), partitionCommitInfo.getVersionTime());
-            // Strictly after the version publication above, matching the single-transaction order: the
-            // planner resolves the queryable layout before it reads the visible version, so a layout
-            // cutover that landed first could be paired with a version older than the UNSHARE, whose
-            // child tablets have no metadata object at that version.
-            if (pending.unshareCutoverPending && partition.finishUnshare()) {
+            // Strictly after the version publication above, matching the single-transaction order: a layout
+            // cutover that landed first could be paired with a version older than the UNSHARE, whose child
+            // tablets have no metadata object at that version. Invalidate before the cutover, as there.
+            if (pending.unshareCutoverPending && partition.isUnsharing()) {
                 table.lastSchemaUpdateTime.set(System.nanoTime());
+                partition.finishUnshare();
             }
         }
     }

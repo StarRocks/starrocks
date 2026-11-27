@@ -599,6 +599,7 @@
         "enable_resolve_hostname_to_ip_in_load_error_url",
         "priority_networks",
         "net_use_ipv6_when_priority_networks_empty",
+        "net_wait_for_local_ip_timeout_s",
         "be_http_port",
         "be_http_port",
         "brpc_query_ignore_overcrowded",
@@ -655,7 +656,14 @@
         "aws_sdk_logging_trace_enabled",
         "aws_sdk_logging_trace_level",
         "aws_sdk_enable_compliant_rfc3986_encoding",
-        "enable_poco_client_for_aws_sdk"
+        "enable_poco_client_for_aws_sdk",
+        "enable_object_storage_fast_retry",
+        "object_storage_fast_retry_put_timeout_ms",
+        "object_storage_fast_retry_put_short_attempts",
+        "object_storage_fast_retry_put_max_bytes",
+        "object_storage_fast_retry_head_timeout_ms",
+        "object_storage_fast_retry_head_short_attempts",
+        "object_storage_fast_retry_budget_percent"
       ]
     },
     {
@@ -789,6 +797,8 @@
         "max_segment_file_size",
         "meta_threshold_to_manual_compact",
         "lake_compaction_stream_buffer_size_bytes",
+        "lake_compaction_prefetch_window_blocks",
+        "starlet_star_cache_block_size_bytes",
         "lake_compaction_check_valid_interval_minutes",
         "lake_compact_slow_log_ms",
         "lake_compaction_max_bytes_per_subtask",
@@ -948,6 +958,7 @@
         "enable_lake_prepared_split_pre_refinement",
         "lake_scan_parallel_segment_open",
         "lake_scan_read_ahead_segments",
+        "lake_scan_read_ahead_max_blocks",
         "lake_flush_thread_num_per_store",
         "lake_tablet_rows_splitted_ratio",
         "lake_tablet_ignore_invalid_delete_predicate",

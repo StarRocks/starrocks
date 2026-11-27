@@ -29,8 +29,10 @@ import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.thrift.TIcebergSchema;
 import com.starrocks.thrift.TIcebergSchemaField;
 import org.apache.paimon.CoreOptions;
+import org.apache.paimon.catalog.Identifier;
 import org.apache.paimon.format.parquet.ParquetSchemaConverter;
 import org.apache.paimon.table.SpecialFields;
+import org.apache.paimon.table.system.SystemTableLoader;
 import org.apache.paimon.types.ArrayType;
 import org.apache.paimon.types.DataField;
 import org.apache.paimon.types.DataType;
@@ -42,9 +44,25 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 public class PaimonUtils {
+
+    /** Returns the HMS base name for a native Paimon system table, including branch-qualified names. */
+    public static String systemTableBaseName(String dbName, String fullName) {
+        Identifier id = Identifier.create(dbName, fullName);
+        try {
+            String suffix = id.getSystemTableName();
+            if (suffix != null && SystemTableLoader.SYSTEM_TABLES.contains(suffix.toLowerCase(Locale.ROOT))
+                    && !id.getTableName().isEmpty()) {
+                return id.getTableName();
+            }
+        } catch (IllegalArgumentException ignored) {
+            // A literal HMS name containing '$' need not be a valid Paimon identifier.
+        }
+        return null;
+    }
 
     public static TIcebergSchema getTPaimonSchema(RowType rowType) {
         // reuse TIcebergSchema directly for compatibility.

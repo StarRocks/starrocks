@@ -30,12 +30,6 @@ StarRocks 将其底层数据存储在按列组织的数据文件中。每个数�
 
 ### 创建全文倒排索引
 
-在创建全文倒排索引之前，需要启用 FE 配置项 `enable_experimental_gin`。
-
-```sql
-ADMIN SET FRONTEND CONFIG ("enable_experimental_gin" = "true");
-```
-
 :::note
 在为表创建全文倒排索引时，必须禁用该表的 `replicated_storage` 功能。
 - 对于 v4.0 及更高版本，创建索引时该功能会自动禁用。

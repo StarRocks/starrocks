@@ -360,7 +360,16 @@ Enable this option only after **all target CNs** support it. A normalized replic
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: Whether a query scan in a shared-data cluster, split or not, asynchronously warms the index pages it reads next once it has opened the tablet's segments: the short key index of every segment, the zone map and bloom filter root pages of the predicate columns, and the ordinal index root pages of the read columns. Scans do not wait for the warming, and read as usual if it fails. Segments that the segment metadata filter (`enable_lake_segment_metadata_filter`) excludes from the scan are not warmed. This item takes effect only for queries, and only when the remote I/O scheduler is enabled (`remote_io_scheduler_enable`). It is independent of `lake_scan_parallel_segment_open`. The query profile reports the warming in `TabletPrepareIndexWarmSegments`, `TabletPrepareIndexWarmRanges`, `TabletPrepareIndexWarmBlocks`, `TabletPrepareIndexWarmSkipped`, and `TabletPrepareIndexWarmPrunedSegments`.
+- Description: Whether a query scan in a shared-data cluster, split or not, asynchronously warms the index pages it reads next once it has opened the tablet's segments: the short key index of every segment, the zone map, bloom filter, and bitmap index root pages of the predicate columns, and the ordinal index root pages of the read columns. In the same way, the bitmap index lookups of equality and `IN` predicates request the dictionary pages of all their values at once, and then the pages of all the bitmaps they select, before reading them. Scans do not wait for the warming, and read as usual if it fails. Segments that the segment metadata filter (`enable_lake_segment_metadata_filter`) excludes from the scan are not warmed. This item takes effect only for queries, and only when the remote I/O scheduler is enabled (`remote_io_scheduler_enable`). It is independent of `lake_scan_parallel_segment_open`. The query profile reports the warming in `TabletPrepareIndexWarmSegments`, `TabletPrepareIndexWarmRanges`, `TabletPrepareIndexWarmBlocks`, `TabletPrepareIndexWarmSkipped`, and `TabletPrepareIndexWarmPrunedSegments`, and the bitmap index page requests in `BitmapIndexPrefetchPages` and `BitmapIndexPrefetchBlocks`.
+
+### lake_scan_read_ahead_max_blocks
+
+- Default: 2048
+- Type: Long
+- Unit: -
+- Is mutable: Yes
+- Description: The cache blocks that all query scans on a BE/CN together may have asked to fetch ahead of their reads and not yet read. This covers the blocks `remote_prefetch_window_blocks` lets each segment keep ahead and those of the segments that `lake_scan_read_ahead_segments` starts early. The segments that read ahead share the limit equally: each keeps at most the limit divided by their number (at least one block), so a scan that starts later still gets its share, and a segment that holds more than its share asks for no more until its reads have consumed the excess. While the node holds this many, a segment asks for no more blocks ahead and a tablet scan starts no next segment early; their reads fetch the data when they reach it. The blocks a read is about to consume are always fetched. Blocks are reserved atomically, so concurrent scans never take the total past the limit. `0` means no limit. The metrics `lake_scan_read_ahead_blocks`, `lake_scan_read_ahead_windows`, and `lake_scan_read_ahead_capped_total` report the current total, the segments that share the limit, and how often the limit held read-ahead back.
+- Introduced in: -
 
 ### lake_scan_read_ahead_segments
 
@@ -504,13 +513,22 @@ Enable this option only after **all target CNs** support it. A normalized replic
 - Description: With late materialization, the columns that are read only for the rows passing the predicates are fetched chunk by chunk once those rows are known. From the fourth chunk of a segment reader onwards, once those rows have touched at least this fraction of the pages they span, these columns are read ahead like the predicate columns. A value greater than 1 disables the switch. A change applies to segment readers opened afterwards. Takes effect only when `remote_io_scheduler_enable` is `true`.
 - Introduced in: -
 
+### lake_compaction_prefetch_window_blocks
+
+- Default: 32
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: Experimental. Target number of Data Cache blocks a lake compaction task prefetches across its input segments. The budget is capped at one eighth of the configured per-worker memory limit and divided among the physical input segments, rounding down. Each segment still prefetches at least one block, so an input with more segments than the budget prefetches one block per segment and exceeds both the budget and the memory cap. Zero disables prefetch. Requires the remote I/O scheduler, a cache-enabled table, and data cache fills for the compaction mode. Eligible scalar pages use the COMPACTION workload.
+- Introduced in: -
+
 ### remote_prefetch_window_blocks
 
 - Default: 128
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: The maximum number of Data Cache blocks that a query's segment reader requests ahead of what it is consuming, including blocks that are queued, being fetched, or fetched but not read yet. It limits how far a reader runs ahead of itself; when the blocks are fetched is decided by the scheduler. Loads, compaction, and other background reads do not read ahead. `0` disables the read-ahead. A change applies to segment readers opened afterwards. Takes effect only when `remote_io_scheduler_enable` is `true`.
+- Description: The maximum number of Data Cache blocks that a query's segment reader requests ahead of what it is consuming, including blocks that are queued, being fetched, or fetched but not read yet. It limits how far a reader runs ahead of itself; when the blocks are fetched is decided by the scheduler. Loads and other background reads do not read ahead; compaction reads ahead under `lake_compaction_prefetch_window_blocks`. `0` disables the read-ahead. A change applies to segment readers opened afterwards. Takes effect only when `remote_io_scheduler_enable` is `true`.
 - Introduced in: -
 
 ### remote_read_adaptive_limit
@@ -1238,6 +1256,15 @@ Enable this option only after **all target CNs** support it. A normalized replic
 - Is mutable: Yes
 - Description: High water memory threshold expressed as a percentage of the process memory limit. When total memory consumption rises above this percentage, BE begins to free memory gradually (currently by evicting data cache and update cache, and by shrinking the shared-data metadata caches) to relieve pressure. The monitor uses this value to compute memory_high = mem_limit * memory_high_level / 100 and, if consumption `>` memory_high, performs controlled eviction guided by the GC advisor; if consumption exceeds memory_urgent_level (a separate config), more aggressive immediate reductions occur. This value is also consulted to disable certain memory‑intensive operations (for example, primary-key preload) when the threshold is exceeded. Must satisfy validation with memory_urgent_level (memory_urgent_level `>` memory_high_level, memory_high_level `>=` 1, memory_urgent_level `<=` 100).
 - Introduced in: v3.2.0
+
+### olap_string_max_length
+
+- Default: 1048576
+- Type: Int
+- Unit: Bytes
+- Is mutable: Yes
+- Description: Maximum string length used by BE string functions, such as `repeat` and `concat`, to limit the size of each result. The default is 1 MiB. These functions return `NULL` when a result exceeds this limit. The limit is measured in bytes, not characters.
+- Introduced in: -
 
 ### report_exec_rpc_request_retry_num
 

@@ -37,6 +37,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.common.Version;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.tvr.TvrDeltaStats;
@@ -76,7 +77,9 @@ import com.starrocks.connector.iceberg.cost.IcebergStatisticProvider;
 import com.starrocks.connector.iceberg.io.IcebergCachingFileIO;
 import com.starrocks.connector.iceberg.io.IcebergPlanningIoStats;
 import com.starrocks.connector.iceberg.procedure.IcebergProcedureRegistry;
+import com.starrocks.connector.iceberg.procedure.RewriteDataFilesProcedure;
 import com.starrocks.connector.metadata.MetadataTableType;
+import com.starrocks.connector.share.iceberg.IcebergTablePayload;
 import com.starrocks.connector.share.iceberg.SerializableTable;
 import com.starrocks.connector.statistics.StatisticsUtils;
 import com.starrocks.credential.CloudConfiguration;
@@ -85,6 +88,8 @@ import com.starrocks.metric.MetricRepo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AlterClause;
+import com.starrocks.sql.ast.AlterTableOperationClause;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
@@ -103,6 +108,7 @@ import com.starrocks.sql.optimizer.rewrite.ExternalScanPredicates;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.statistic.AnalyzeMgr;
 import com.starrocks.statistic.StatisticUtils;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TIcebergDataFile;
 import com.starrocks.thrift.TIcebergFileContent;
 import com.starrocks.thrift.TSinkCommitInfo;
@@ -160,6 +166,7 @@ import org.apache.iceberg.exceptions.ValidationException;
 import org.apache.iceberg.expressions.Binder;
 import org.apache.iceberg.expressions.Evaluator;
 import org.apache.iceberg.expressions.Expression;
+import org.apache.iceberg.expressions.ExpressionParser;
 import org.apache.iceberg.expressions.ExpressionUtil;
 import org.apache.iceberg.expressions.Expressions;
 import org.apache.iceberg.expressions.Projections;
@@ -487,7 +494,19 @@ public class IcebergMetadata implements ConnectorMetadata {
             }
             asyncRefreshOthersFeMetadataCache(dbName, tableName);
         }
+        // Schema and property changes, branches and tags, and the table procedures (rollback, cherry-pick,
+        // expire snapshots, ...) all commit new table metadata. A rename drops the old name.
+        if (!commitsOnlyThroughSink(stmt)) {
+            invalidateOthersFeTable(dbName, tableName);
+        }
         return resultSet;
+    }
+
+    // rewrite_data_files commits through finishSink, which has already told the other FEs: do not wait for them twice
+    private static boolean commitsOnlyThroughSink(AlterTableStmt stmt) {
+        List<AlterClause> clauses = stmt.getAlterClauseList();
+        return !clauses.isEmpty() && clauses.stream().allMatch(clause -> clause instanceof AlterTableOperationClause op
+                && op.getTableProcedure() instanceof RewriteDataFilesProcedure);
     }
 
     @Override
@@ -520,6 +539,7 @@ public class IcebergMetadata implements ConnectorMetadata {
             if (shouldInvalidateCache) {
                 invalidateCacheAfterCommit(dbName, tableName);
                 asyncRefreshOthersFeMetadataCache(dbName, tableName);
+                invalidateOthersFeTable(dbName, tableName);
             }
         }
     }
@@ -785,6 +805,10 @@ public class IcebergMetadata implements ConnectorMetadata {
         } catch (UncheckedIOException | ValidationException | CommitFailedException | CommitStateUnknownException e) {
             LOG.error("Failed to execute metadata delete on {}.{}", dbName, tableName, e);
             ConnectorMetricsMgr.increaseDeleteTotalFail(ConnectorMetricsMgr.CONNECTOR_ICEBERG, e, deleteType);
+            if (e instanceof CommitStateUnknownException) {
+                // The delete may have been applied: drop the cached table everywhere, as truncateTable does
+                invalidateCachesAfterDelete(dbName, tableName);
+            }
             throw new StarRocksConnectorException(
                     String.format("Failed to execute metadata delete on %s.%s", dbName, tableName), e);
         } finally {
@@ -792,9 +816,13 @@ public class IcebergMetadata implements ConnectorMetadata {
                     System.currentTimeMillis() - startMs, deleteType);
         }
 
-        // Invalidate cache after commit
+        invalidateCachesAfterDelete(dbName, tableName);
+    }
+
+    private void invalidateCachesAfterDelete(String dbName, String tableName) {
         invalidateCacheAfterCommit(dbName, tableName);
         asyncRefreshOthersFeMetadataCache(dbName, tableName);
+        invalidateOthersFeTable(dbName, tableName);
     }
 
     /**
@@ -829,6 +857,7 @@ public class IcebergMetadata implements ConnectorMetadata {
             tables.remove(TableIdentifier.of(stmt.getDbName(), stmt.getTableName()));
             dropNameKeyedStatistics(stmt.getDbName(), stmt.getTableName());
             asyncRefreshOthersFeMetadataCache(stmt.getDbName(), stmt.getTableName());
+            invalidateOthersFeTable(stmt.getDbName(), stmt.getTableName());
             return;
         }
 
@@ -845,6 +874,8 @@ public class IcebergMetadata implements ConnectorMetadata {
         tables.remove(TableIdentifier.of(stmt.getDbName(), stmt.getTableName()));
         StatisticUtils.dropStatisticsAfterDropTable(icebergTable);
         asyncRefreshOthersFeMetadataCache(stmt.getDbName(), stmt.getTableName());
+        // Otherwise the other FEs keep serving the dropped table, and a table re-created under its name
+        invalidateOthersFeTable(stmt.getDbName(), stmt.getTableName());
     }
 
     /**
@@ -1326,10 +1357,30 @@ public class IcebergMetadata implements ConnectorMetadata {
             fileIO = ((IcebergCachingFileIO) fileIO).getWrappedIO();
         }
 
-        String serializedTable = SerializationUtil.serializeToBase64(new SerializableTable(nativeTable, fileIO));
+        SerializableTable serializableTable = new SerializableTable(nativeTable, fileIO);
+        String serializedTable = SerializationUtil.serializeToBase64(serializableTable);
+        // The JSON forms a BE of another build reads instead of the Java-serialized ones (rolling upgrade). Only
+        // built while some node runs another build than this FE, or always in mode 2 (tests), where it carries no
+        // build so that every BE reads it.
+        String jsonPayload = null;
+        String predicateJson = null;
+        int payloadMode = Config.iceberg_metadata_table_payload_mode;
+        if (payloadMode == 2 || (payloadMode == 1 && anyNodeOfAnotherBuild())) {
+            try {
+                jsonPayload = IcebergTablePayload.toJson(serializableTable, payloadMode == 2 ? "" : metadataPayloadBuild());
+                predicateJson = jsonPayload == null ? null : ExpressionParser.toJson(predicate);
+            } catch (RuntimeException e) {
+                // The BE still reads the Java form. Never log the payload: it holds storage credentials.
+                LOG.warn("Failed to build the JSON payload of iceberg table {}.{}: {}", dbName, tableName,
+                        e.getClass().getSimpleName());
+                jsonPayload = null;
+                predicateJson = null;
+            }
+        }
 
         if (IcebergMetaSplit.onlyNeedSingleSplit(metadataTableType)) {
-            return new IcebergMetaSpec(serializedTable, List.of(IcebergMetaSplit.placeholderSplit()), false);
+            return new IcebergMetaSpec(serializedTable, jsonPayload, predicateJson,
+                    List.of(IcebergMetaSplit.placeholderSplit()), false);
         }
 
         if (metadataTableType == MetadataTableType.ENTRIES) {
@@ -1337,7 +1388,7 @@ public class IcebergMetadata implements ConnectorMetadata {
             for (ManifestFile manifest : snapshot.allManifests(nativeTable.io())) {
                 remoteMetaSplits.add(IcebergMetaSplit.from(manifest));
             }
-            return new IcebergMetaSpec(serializedTable, remoteMetaSplits, false);
+            return new IcebergMetaSpec(serializedTable, jsonPayload, predicateJson, remoteMetaSplits, false);
         }
 
         if (allSnapshots) {
@@ -1357,7 +1408,7 @@ public class IcebergMetadata implements ConnectorMetadata {
                     remoteMetaSplits.add(IcebergMetaSplit.from(manifest));
                 }
             }
-            return new IcebergMetaSpec(serializedTable, remoteMetaSplits, false);
+            return new IcebergMetaSpec(serializedTable, jsonPayload, predicateJson, remoteMetaSplits, false);
         }
 
         List<ManifestFile> dataManifests = snapshot.dataManifests(nativeTable.io());
@@ -1373,14 +1424,29 @@ public class IcebergMetadata implements ConnectorMetadata {
             for (ManifestFile file : matchingDeleteManifests) {
                 remoteMetaSplits.add(IcebergMetaSplit.from(file));
             }
-            return new IcebergMetaSpec(serializedTable, remoteMetaSplits, false);
+            return new IcebergMetaSpec(serializedTable, jsonPayload, predicateJson, remoteMetaSplits, false);
         }
 
         boolean loadColumnStats = enableCollectColumnStatistics(ConnectContext.get()) ||
                 (!matchingDeleteManifests.isEmpty() && mayHaveEqualityDeletes(snapshot) &&
                         catalogProperties.enableDistributedPlanLoadColumnStatsWithEqDelete());
 
-        return new IcebergMetaSpec(serializedTable, remoteMetaSplits, loadColumnStats);
+        return new IcebergMetaSpec(serializedTable, jsonPayload, predicateJson, remoteMetaSplits, loadColumnStats);
+    }
+
+    // The build the FE stamps on the JSON form; the BE compares it with its own (jni_scanner.cpp). It is the
+    // same VERSION-COMMIT_HASH string a node reports in its heartbeat.
+    static String metadataPayloadBuild() {
+        return Version.STARROCKS_VERSION + "-" + Version.STARROCKS_COMMIT_HASH;
+    }
+
+    // Whether an alive backend or compute node runs another build than this FE (a rolling upgrade), so it may
+    // not deserialize the Java form. A node that has not reported its version counts as another build.
+    private static boolean anyNodeOfAnotherBuild() {
+        String build = metadataPayloadBuild();
+        return GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().backendAndComputeNodeStream()
+                .filter(ComputeNode::isAlive)
+                .anyMatch(node -> !build.equals(node.getVersion()));
     }
 
     private void triggerIcebergPlanFilesIfNeeded(PredicateSearchKey key, Table table) {
@@ -3226,9 +3292,14 @@ public class IcebergMetadata implements ConnectorMetadata {
             }
         }
 
-        // The commit writes no edit log, and the refresh the commit dispatched to the other FEs is not waited
-        // for: make them drop the pre-commit table before the statement returns. Outside the commit queue, so
-        // a slow peer does not hold up the next commit to the table.
+        // Outside the commit queue, so a slow peer does not hold up the next commit to the table.
+        invalidateOthersFeTable(dbName, tableName);
+    }
+
+    // A change to an Iceberg table writes no edit log, so the journal wait of a forwarded statement does nothing
+    // for it, and the refresh dispatched to the other FEs is not waited for: make them drop the pre-change table
+    // before the statement returns, so that a read on any FE sees the change. Never throws.
+    private void invalidateOthersFeTable(String dbName, String tableName) {
         GlobalStateMgr.getCurrentState().invalidateOthersFeTable(new TableName(catalogName, dbName, tableName),
                 Config.iceberg_commit_invalidate_other_fe_timeout_ms);
     }

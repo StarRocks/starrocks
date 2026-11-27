@@ -287,6 +287,7 @@ public class StatisticsCollectionTrigger {
 
     private void prepareAnalyzeJobForLoad() {
         TableCommitInfo tableCommitInfo = txnState.getIdToTableCommitInfos().get(table.getId());
+        // The broker-load publisher already holds the table WRITE lock when useLock is false.
         Locker locker = new Locker();
         if (useLock) {
             locker.lockTablesWithIntensiveDbLock(db.getId(), List.of(table.getId()), LockType.READ);
@@ -342,17 +343,16 @@ public class StatisticsCollectionTrigger {
                     LOG.debug("Statistics collection not triggered for DML type: {}", dmlType);
                 }
             }
+            if (partitionIds.isEmpty()) {
+                return;
+            }
+            // Partition row counts traverse mutable subpartition maps, so read them before releasing the lock.
+            analyzeType = decideAnalyzeTypeForLoad(txnState, (OlapTable) table);
         } finally {
             if (useLock) {
                 locker.unLockTablesWithIntensiveDbLock(db.getId(), List.of(table.getId()), LockType.READ);
             }
         }
-        if (partitionIds.isEmpty()) {
-            return;
-        }
-
-        analyzeType = decideAnalyzeTypeForLoad(txnState, (OlapTable) table);
-
         if (analyzeType != SAMPLE) {
             partitionTabletRowCounts.clear();
         }
@@ -407,12 +407,23 @@ public class StatisticsCollectionTrigger {
             return null;
         }
 
-        // Use BasicStatsMeta.getTotalRows() for more accurate totalRows
-        long totalRows = getTotalRowsFromStatsMeta(table);
+        if (dmlType == DmlType.INSERT_INTO && loadRows <= 0) {
+            return null;
+        }
+
+        // First-load INSERTs are compared with the selected partitions, not the table's historical rows.
+        // UPDATE keeps using the table statistics when available.
+        long totalRows = dmlType == DmlType.UPDATE
+                ? getTotalRowsFromStatsMeta(table) : getTotalRowsFromPartitions(table);
         double deltaRatio = 1.0 * loadRows / (totalRows + 1);
         if (deltaRatio < Config.statistic_sample_collect_ratio_threshold_of_first_load) {
+            LOG.debug("skip {} statistics collection for table {}: loadRows={}, totalRows={}, deltaRatio={}, threshold={}",
+                    dmlType, table.getId(), loadRows, totalRows, deltaRatio,
+                    Config.statistic_sample_collect_ratio_threshold_of_first_load);
             return null;
-        } else if (loadRows > Config.statistic_sample_collect_rows) {
+        }
+
+        if (loadRows > Config.statistic_sample_collect_rows) {
             return SAMPLE;
         } else {
             return StatsConstants.AnalyzeType.FULL;
@@ -431,6 +442,10 @@ public class StatisticsCollectionTrigger {
         }
         
         // Fallback to partition.getRowCount() if no stats meta exists
+        return getTotalRowsFromPartitions(table);
+    }
+
+    private long getTotalRowsFromPartitions(OlapTable table) {
         return partitionIds.stream()
                 .mapToLong(p -> table.mayGetPartition(p).stream().mapToLong(Partition::getRowCount).sum())
                 .sum();

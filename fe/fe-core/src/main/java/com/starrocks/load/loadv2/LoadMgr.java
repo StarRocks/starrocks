@@ -119,6 +119,10 @@ public class LoadMgr implements MemoryTrackable {
     protected final WarehouseLoadInfoBuilder warehouseLoadInfoBuilder =
             new WarehouseLoadInfoBuilder();
 
+    // Every listed job that finished before this time is in loads_history. Long.MAX_VALUE while this FE does not sync
+    // loads_history, so removeOldLoadJob keeps nothing for it.
+    private volatile long loadsHistorySyncedBeforeMs = Long.MAX_VALUE;
+
     public LoadMgr(LoadJobScheduler loadJobScheduler) {
         this.loadJobScheduler = loadJobScheduler;
     }
@@ -525,16 +529,39 @@ public class LoadMgr implements MemoryTrackable {
             int numJobsToRemove = idToLoadJob.size() - Config.label_keep_max_num;
             if (numJobsToRemove > 0) {
                 LOG.debug("remove {} jobs from {}", numJobsToRemove, jobs.size());
+                // A job loads_history does not have yet stays for a later cleanup, unless that leaves more than
+                // twice LABEL_KEEP_MAX_NUM jobs. The jobs come in finish time order, so the rest are not synced either.
+                long syncedBeforeMs = loadsHistorySyncedBeforeMs;
+                long numUnsyncedJobsToRemove = idToLoadJob.size() - 2L * Config.label_keep_max_num;
+                int removed = 0;
+                int removedUnsynced = 0;
                 Iterator<LoadJob> iterator = jobs.iterator();
-                for (int i = 0; i != numJobsToRemove && iterator.hasNext(); ++i) {
+                while (removed != numJobsToRemove && iterator.hasNext()) {
                     LoadJob job = iterator.next();
+                    if (job.getFinishTimestamp() >= syncedBeforeMs) {
+                        if (removed >= numUnsyncedJobsToRemove) {
+                            break;
+                        }
+                        removedUnsynced++;
+                    }
                     LOG.debug("remove redundant job: {}", job.getLabel());
                     unprotectedRemoveJobReleatedMeta(job);
+                    removed++;
+                }
+                if (removedUnsynced > 0) {
+                    LOG.warn("loads_history misses {} load jobs: more than twice label_keep_max_num ({}) jobs " +
+                            "finished before the loads history sync copied them", removedUnsynced,
+                            Config.label_keep_max_num);
                 }
             }
         } finally {
             writeUnlock();
         }
+    }
+
+    // Called by LoadsHistorySyncer, as StreamLoadMgr#setLoadsHistorySyncedBeforeMs.
+    public void setLoadsHistorySyncedBeforeMs(long syncedBeforeMs) {
+        loadsHistorySyncedBeforeMs = syncedBeforeMs;
     }
 
     public void removeLoadJobsByDb(long dbId) {

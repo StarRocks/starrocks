@@ -1,0 +1,49 @@
+name: BACKPORT COMPLETENESS
+
+# The `backport-completeness` commit status, required on the release branches: a backport
+# must change every file of the PR it backports, or its owner confirms in a PR comment the
+# files it leaves out on purpose (as with ai-backport-check). ci-tool
+# lib/backport_completeness.py does it all: it posts a status on every release-branch PR
+# (success when it is not a backport), so the required context never stays pending, and it
+# keeps one comment listing the files left out with the confirmation line.
+
+on:
+  pull_request_target:
+    branches:
+      - "branch*"
+    types: [opened, reopened, edited, synchronize]
+  issue_comment:
+    types: [created, edited]
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: read
+  statuses: write
+
+concurrency:
+  group: backport-completeness-${{ github.event.pull_request.number || github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    # Comments: only a confirmation can change the result, and not the bot's own comment,
+    # which quotes the line.
+    if: >
+      github.event_name == 'pull_request_target' ||
+      (github.event.issue.pull_request &&
+       contains(github.event.comment.body, 'I have confirmed the files this backport leaves out of its source PR.') &&
+       !contains(github.event.comment.body, '<!-- backport-completeness'))
+    runs-on: [self-hosted, quick]
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+      PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
+      # The comment is untrusted: read from the environment, never put in the script.
+      EVENT_USER: ${{ github.event.comment.user.login }}
+      EVENT_BODY: ${{ github.event.comment.body }}
+    steps:
+      - name: compare with the source PR
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && (cd ci-tool && git pull -q || true)
+          python3 ci-tool/lib/backport_completeness.py

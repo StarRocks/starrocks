@@ -37,6 +37,7 @@
 #include "column/column_helper.h"
 #include "column/datum_tuple.h"
 #include "common/config_exec_fwd.h"
+#include "common/config_lake_fwd.h"
 #include "common/config_rowset_fwd.h"
 #include "common/config_scan_io_fwd.h"
 #include "common/config_starlet_fwd.h"
@@ -526,8 +527,10 @@ private:
     // Remote I/O scheduler only: (re)creates the cache read-ahead window of the current scan context, starting at
     // `start_row`.
     void _init_prefetch_window(rowid_t start_row);
-    // Whether this reader reads ahead through SegmentPrefetchWindow at all.
-    bool _should_read_ahead() const;
+    // How many cache blocks this reader reads ahead through SegmentPrefetchWindow; zero for none.
+    int32_t _read_ahead_blocks() const;
+    // lake_scan_warm_index: whether the bitmap index lookups ask for the pages they read ahead of the reads.
+    bool _should_prefetch_bitmap_index_pages() const;
     void _reset_prefetch_window() {
         _prefetch_window.reset();
         _prefetch_late_columns.clear();
@@ -1228,26 +1231,45 @@ Status SegmentIterator::start_read_ahead(bool* started) {
     return Status::OK();
 }
 
-bool SegmentIterator::_should_read_ahead() const {
+int32_t SegmentIterator::_read_ahead_blocks() const {
+#ifdef USE_STAROS
+    const auto& opts = _opts.lake_io_opts;
+    if (!remote_io_scheduler_enabled() || _context == nullptr || !opts.remote_read.is_set ||
+        _segment->lake_tablet_manager() == nullptr || !opts.fill_data_cache || opts.skip_disk_cache ||
+        opts.cache_file_only || _scan_range.empty() || (!_opts.asc_hint && config::desc_hint_split_range > 0)) {
+        return 0;
+    }
+    if (opts.remote_read.workload == RemoteReadContext::Workload::QUERY) {
+        return config::remote_prefetch_window_blocks;
+    }
+    // Late-materialized row batches can submit urgent warms outside the normal window.
+    // Compaction uses only the bounded page window, with the file's original transaction context.
+    if (opts.remote_read.workload == RemoteReadContext::Workload::COMPACTION && !_context->_late_materialize) {
+        return opts.compaction_prefetch_blocks;
+    }
+#endif
+    return 0;
+}
+
+bool SegmentIterator::_should_prefetch_bitmap_index_pages() const {
 #ifndef USE_STAROS
-    // Read-ahead goes through the shared-data remote I/O scheduler, which exists only in StarOS builds.
     return false;
 #else
-    // Only a lake query read that fills the cache, in ascending row order, reads ahead. Loads, background work such as
-    // compaction, and reads nobody attributed read what they need as they go.
+    // The pages a bitmap index lookup reads depend on the predicate's values, so the tablet reader cannot warm them
+    // when it opens the segments; the lookups of a lake query read that fills the cache ask for them instead.
     const auto& remote_read = _opts.lake_io_opts.remote_read;
-    return remote_io_scheduler_enabled() && config::remote_prefetch_window_blocks > 0 && _context != nullptr &&
-           remote_read.is_set && remote_read.workload == RemoteReadContext::Workload::QUERY &&
-           _segment->lake_tablet_manager() != nullptr && _opts.lake_io_opts.fill_data_cache &&
-           !_opts.lake_io_opts.skip_disk_cache && !_opts.lake_io_opts.cache_file_only && !_scan_range.empty() &&
-           (_opts.asc_hint || config::desc_hint_split_range <= 0);
+    return config::lake_scan_warm_index && remote_io_scheduler_enabled() && remote_read.is_set &&
+           remote_read.workload == RemoteReadContext::Workload::QUERY && _segment->lake_tablet_manager() != nullptr &&
+           _opts.lake_io_opts.fill_data_cache && !_opts.lake_io_opts.skip_disk_cache &&
+           !_opts.lake_io_opts.cache_file_only;
 #endif // USE_STAROS
 }
 
 void SegmentIterator::_init_prefetch_window(rowid_t start_row) {
     _reset_prefetch_window();
 #ifdef USE_STAROS
-    if (!_should_read_ahead()) {
+    const int32_t blocks = _read_ahead_blocks();
+    if (blocks <= 0) {
         return;
     }
     // Scalar columns, read from the segment file or from a delta column group file; the others (complex types,
@@ -1298,8 +1320,11 @@ void SegmentIterator::_init_prefetch_window(rowid_t start_row) {
         return;
     }
     _prefetch_window = std::make_unique<SegmentPrefetchWindow>(
-            std::move(columns), &_scan_range, start_row, config::remote_prefetch_window_blocks,
-            config::remote_prefetch_late_read_ahead_ratio, config::starlet_star_cache_block_size_bytes, _opts.stats);
+            std::move(columns), &_scan_range, start_row, blocks, config::remote_prefetch_late_read_ahead_ratio,
+            config::starlet_star_cache_block_size_bytes, _opts.stats,
+            // Only query scans share the node read-ahead budget; compaction keeps its own window bound.
+            _opts.lake_io_opts.remote_read.workload == RemoteReadContext::Workload::QUERY ? ReadAheadBudget::instance()
+                                                                                          : nullptr);
 #else
     (void)start_row;
 #endif // USE_STAROS
@@ -1510,8 +1535,14 @@ Status SegmentIterator::_init_ann_reader() {
                 fmt::format("vector index is missing from the schema of segment {}", _segment->file_name()));
     }
 
-    if (_segment->skip_vector_index()) {
-        // Footer marks no .vi for this segment.
+    // A column-mode partial update moves the vector column into a .cols file, which this segment's .vi does
+    // not index: searching the .vi would rank rows by their old vectors.
+    const ColumnUID vector_col_uid = tablet_index_meta->col_unique_ids()[0];
+    const bool vector_column_in_dcg = std::any_of(_dcgs.begin(), _dcgs.end(), [&](const auto& dcg) {
+        return dcg->get_column_idx(vector_col_uid).first >= 0;
+    });
+    if (_segment->skip_vector_index() || vector_column_in_dcg) {
+        // Footer marks no .vi for this segment, or the .vi is stale.
         _vector_index_ctx->use_vector_index = false;
     } else {
 #ifdef WITH_TENANN
@@ -1711,6 +1742,17 @@ struct IndexOnlyPredicateChecker {
     }
 };
 
+// Expression predicates and the OR subtrees holding one.
+struct ExprPredicateChecker {
+    bool operator()(const PredicateColumnNode& node) const { return node.col_pred()->is_expr_predicate(); }
+
+    template <CompoundNodeType Type>
+    bool operator()(const PredicateCompoundNode<Type>& node) const {
+        return std::any_of(node.children().begin(), node.children().end(),
+                           [&](const auto& child) { return child.visit(*this); });
+    }
+};
+
 StatusOr<roaring::Roaring> evaluate_pred_tree_to_bitmap(
         const PredicateTree& pred_tree, const Schema& schema,
         const std::vector<std::unique_ptr<ColumnIterator>>& column_iterators_by_cid,
@@ -1735,6 +1777,11 @@ StatusOr<roaring::Roaring> evaluate_pred_tree_to_bitmap(
     if (used_tree.empty()) {
         return candidate;
     }
+
+    // A contiguous batch may read across short gaps between the runs of `candidate` only when the tree has no
+    // expression predicates: those are cheap and safe to evaluate on the rows outside `candidate`, while an
+    // expression is never computed for a row outside it.
+    const bool bridge_gaps = !used_tree.visit(ExprPredicateChecker());
 
     // cid -> field index in `schema`.
     std::unordered_map<ColumnId, size_t> cid_2_fid;
@@ -1780,8 +1827,32 @@ StatusOr<roaring::Roaring> evaluate_pred_tree_to_bitmap(
     SparseRange<> rows = roaring2range(candidate);
     roaring::Roaring result;
     std::vector<uint8_t> selection;
-    for (auto iter = rows.new_iterator(); iter.has_more();) {
-        Range<> r = iter.next(kEvalBatch);
+    // A delete vector scattered over the segment splits `candidate` into many short runs. A batch per run costs about
+    // 1us (column, seek, chunk, tree evaluation) while reading a row costs a few ns, so a contiguous batch reads
+    // across gaps of up to kMaxBridgedGap rows, and the rows it picks up from the gaps are dropped at the end.
+    constexpr rowid_t kMaxBridgedGap = 128;
+    size_t run = 0;
+    rowid_t next_row = rows.empty() ? 0 : rows[0].begin();
+    bool bridged = false;
+    const auto next_span = [&]() {
+        const rowid_t begin = std::max(next_row, rows[run].begin());
+        const rowid_t limit = begin + kEvalBatch;
+        rowid_t end = std::min(rows[run].end(), limit);
+        while (bridge_gaps && end == rows[run].end() && run + 1 < rows.size() &&
+               rows[run + 1].begin() - end <= kMaxBridgedGap && rows[run + 1].begin() < limit) {
+            ++run;
+            bridged = true;
+            end = std::min(rows[run].end(), limit);
+        }
+        if (end == rows[run].end()) {
+            ++run;
+        }
+        next_row = end;
+        return Range<>(begin, end);
+    };
+    while (run < rows.size()) {
+        // A batch is one contiguous span of at most kEvalBatch rows.
+        Range<> r = next_span();
         const uint32_t bn = r.end() - r.begin();
 
         // Build a chunk keyed by column id so PredicateTree::evaluate (chunk->get_column_by_id(cid))
@@ -1819,6 +1890,9 @@ StatusOr<roaring::Roaring> evaluate_pred_tree_to_bitmap(
                 result.add(r.begin() + i);
             }
         }
+    }
+    if (bridged) {
+        result &= candidate;
     }
     return result;
 }
@@ -2333,16 +2407,6 @@ bool SegmentIterator::need_early_materialize_subfield(const FieldPtr& field) {
     }
     return false;
 }
-
-struct ExprPredicateChecker {
-    bool operator()(const PredicateColumnNode& node) const { return node.col_pred()->is_expr_predicate(); }
-
-    template <CompoundNodeType Type>
-    bool operator()(const PredicateCompoundNode<Type>& node) const {
-        return std::any_of(node.children().begin(), node.children().end(),
-                           [&](const auto& child) { return child.visit(*this); });
-    }
-};
 
 void SegmentIterator::_init_column_predicates() {
     SCOPED_RAW_TIMER(&_opts.stats->init_context_ns);
@@ -2859,7 +2923,7 @@ Status SegmentIterator::_get_row_ranges_by_zone_map() {
             _opts.delete_predicates[i].predicates_of_column(cid, &preds);
         }
         DCHECK(!preds.empty());
-        _del_predicates.insert({cid, ColumnOrPredicate(get_type_info(preds[0]->type_info()), cid, preds)});
+        _del_predicates.insert({cid, ColumnOrPredicate(preds[0]->type_info_ptr(), cid, preds)});
     }
 
     // -------------------------------------------------------------
@@ -3329,6 +3393,7 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
                 brute_force_vec_col->resize(0);
             }
             _opts.stats->rows_del_filtered += old_sz;
+            _opts.stats->rows_del_filtered_after_read += old_sz;
         } else if (deletes > 0) {
             // flip boolean result.
             for (size_t i = 0; i < old_sz; i++) {
@@ -3343,6 +3408,7 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
                 brute_force_vec_col->filter_range(_selection, 0, old_sz);
             }
             _opts.stats->rows_del_filtered += old_sz - new_sz;
+            _opts.stats->rows_del_filtered_after_read += old_sz - new_sz;
         }
     }
 
@@ -4766,6 +4832,7 @@ Status SegmentIterator::_apply_bitmap_index() {
     RETURN_IF(!config::enable_index_bitmap_filter, Status::OK());
     RETURN_IF(_scan_range.empty(), Status::OK());
     DCHECK_EQ(_predicate_columns, _opts.pred_tree.num_columns());
+    const bool prefetch = _should_prefetch_bitmap_index_pages();
 
     {
         SCOPED_RAW_TIMER(&_opts.stats->bitmap_index_iterator_init_ns);
@@ -4778,7 +4845,7 @@ Status SegmentIterator::_apply_bitmap_index() {
             cid_2_ucid[field->id()] = field->uid();
         }
 
-        RETURN_IF_ERROR(_bitmap_index_evaluator.init([&cid_2_ucid,
+        RETURN_IF_ERROR(_bitmap_index_evaluator.init([&cid_2_ucid, prefetch,
                                                       this](ColumnId cid) -> StatusOr<BitmapIndexIterator*> {
             // NOTE: deliberately the column's OWN unique id, not storage_column_uid(). An extended
             // column (JSON subfield) owns no bitmap index, so this misses every delta column group and
@@ -4802,6 +4869,7 @@ Status SegmentIterator::_apply_bitmap_index() {
             opts.lake_io_opts = _opts.lake_io_opts;
             opts.read_file = _column_files[cid].get();
             opts.stats = _opts.stats;
+            opts.prefetch_bitmap_index_pages = prefetch;
             // IDG context — without this, the IDG branch in
             // ColumnReader::new_bitmap_index_iterator is unreachable and
             // fast-path built bitmap indexes stored in .idx sidecar files
@@ -4836,7 +4904,7 @@ Status SegmentIterator::_apply_bitmap_index() {
     {
         SCOPED_RAW_TIMER(&_opts.stats->bitmap_index_filter_timer);
         const auto input_rows = _scan_range.span_size();
-        RETURN_IF_ERROR(_bitmap_index_evaluator.evaluate(_scan_range, _opts.pred_tree));
+        RETURN_IF_ERROR(_bitmap_index_evaluator.evaluate(_scan_range, _opts.pred_tree, prefetch));
         _opts.stats->rows_bitmap_index_filtered += input_rows - _scan_range.span_size();
     }
 

@@ -82,6 +82,7 @@ import com.starrocks.common.Version;
 import com.starrocks.common.profile.RawScopedTimer;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
+import com.starrocks.common.util.AuditStatisticsUtil;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.LogUtil;
 import com.starrocks.common.util.ProfileKeyDictionary;
@@ -383,6 +384,10 @@ public class StmtExecutor {
     private boolean isInternalStmt = false;
     // Stores the last generated exec plan, used to dump the plan to fe.plan.log on query failure.
     private ExecPlan lastExecPlan = null;
+    // Per-scan read statistics of each execution attempt, for the ScanStats audit column.
+    private final ScanStatsRecorder scanStatsRecorder = new ScanStatsRecorder();
+    // The plan a statement that runs no retry loop ran, when it is not lastExecPlan (the INSERT of a CTAS).
+    private ExecPlan scanStatsFallbackPlan = null;
 
     // Whether the DML attempt handleDMLStmtWithProfile last ran lost the plain insert commit race and is to run
     // again. Decided once, there, and read by handleDMLStmtRetryingPlainInsertConflict: were the two to decide
@@ -1171,6 +1176,7 @@ public class StmtExecutor {
                     // a per-attempt snapshot of it, distinct from lastExecPlan, which tracks the latest
                     // generated plan for the failure dump in fe.plan.log.
                     final ExecPlan attemptPlan = retryContext.getExecPlan();
+                    final long attemptStartMs = System.currentTimeMillis();
                     try {
                         //reset query id for each retry
                         if (i > 0) {
@@ -1219,6 +1225,7 @@ public class StmtExecutor {
                             throw e;
                         }
                     } finally {
+                        recordScanStatsAttempt(i, attemptStartMs, attemptPlan, needRetry);
                         boolean isAsync = false;
                         try {
                             if (needRetry) {
@@ -1671,6 +1678,8 @@ public class StmtExecutor {
             context.setCTAS(true);
             InsertStmt insertStmt = createTableAsSelectStmt.getInsertStmt();
             ExecPlan execPlan = StatementPlanner.plan(insertStmt, context);
+            // The plan that reads the source tables; the CTAS statement itself has none.
+            scanStatsFallbackPlan = execPlan;
             handleDMLStmtWithProfile(execPlan, ((CreateTableAsSelectStmt) parsedStmt).getInsertStmt());
             if (context.getState().getStateType() == MysqlStateType.ERR) {
                 dropTableCreatedByCTAS(createTableAsSelectStmt);
@@ -3350,6 +3359,49 @@ public class StmtExecutor {
 
         context.getMysqlChannel().flush();
         context.getState().setStateType(MysqlStateType.NOOP);
+    }
+
+    // Called when an attempt of the query retry loop ends. A retried attempt keeps the statistics it reported; the
+    // last one is completed with the statement's statistics when it is audited, see getScanStatsForAuditLog.
+    private void recordScanStatsAttempt(int attemptId, long startTimeMs, ExecPlan attemptPlan, boolean retried) {
+        try {
+            if (!context.getSessionVariable().isEnableCollectTableLevelScanStats()) {
+                return;
+            }
+            long endTimeMs = System.currentTimeMillis();
+            if (retried) {
+                PQueryStatistics statistics = statisticsForAuditLog;
+                if (statistics == null && coord != null) {
+                    statistics = coord.getAuditStatistics();
+                }
+                scanStatsRecorder.recordRetriedAttempt(attemptId, context.getExecutionId(), startTimeMs, endTimeMs,
+                        attemptPlan, AuditStatisticsUtil.copyProtobuf(statistics));
+            } else {
+                scanStatsRecorder.recordLastAttempt(attemptId, context.getExecutionId(), startTimeMs, endTimeMs,
+                        attemptPlan);
+            }
+        } catch (Exception e) {
+            LOG.warn("Failed to record the scan statistics of query {}", DebugUtil.printId(context.getExecutionId()), e);
+        }
+    }
+
+    /**
+     * The ScanStats audit column: the read statistics of every scan, per execution attempt. Null when the session
+     * does not collect scan statistics or the statement ran no plan.
+     */
+    public String getScanStatsForAuditLog(PQueryStatistics finalStatistics, ScanStatsRecorder.AttemptState finalState,
+                                          boolean referencesTables) {
+        if (!context.getSessionVariable().isEnableCollectTableLevelScanStats()) {
+            return null;
+        }
+        try {
+            ExecPlan fallbackPlan = scanStatsFallbackPlan != null ? scanStatsFallbackPlan : lastExecPlan;
+            return scanStatsRecorder.toJson(finalState, finalStatistics, referencesTables, fallbackPlan,
+                    context.getExecutionId(), context.getStartTime(), System.currentTimeMillis());
+        } catch (Exception e) {
+            LOG.warn("Failed to build the scan statistics of query {}", DebugUtil.printId(context.getExecutionId()), e);
+            return null;
+        }
     }
 
     public void setQueryStatistics(PQueryStatistics statistics) {

@@ -31,7 +31,7 @@ To enable Multi-table Transaction, you must running your cluster on StarRocks v4
 
 | Capability                   | Description                                                  |
 | ---------------------------- | ------------------------------------------------------------ |
-| Cross-table atomic commit    | All tables within the same flush cycle share one StarRocks transaction label. The Prepare and Commit operations are unified. |
+| Cross-table atomic commit    | All tables within the same flush cycle share one StarRocks transaction label. One unified `POST /api/transaction/commit` is issued for the label (no prepare call — StarRocks does not support prepare for multi-table transactions). |
 | Source transaction integrity | Commit timing is controlled by the `transactionEnd` flag. Commit only occurs at complete source transaction boundaries. |
 | Sub-second data visibility   | Data is periodically flushed to StarRocks (`/api/transaction/load`). It is committed when the `transactionEnd` and the timer conditions are met |
 | N:1 transaction mapping      | Multiple source transactions can accumulate in a single StarRocks transaction. They do not have to be mapped 1:1. |
@@ -66,7 +66,7 @@ To enable Multi-table Transaction, you must running your cluster on StarRocks v4
 - Type: Long
 - Default: `1048576` (1 MB)
 - Unit: Bytes
-- Description: An interval-elapsed chunk switch only fires once a region's active chunk has accumulated at least this many bytes, so low-volume partitions batch more source transactions into one stream-load instead of emitting many tiny requests. Half-full headroom, buffer-size memory pressure, or a full `sink.buffer-flush.interval-ms` elapsing since the partition last switched all force a switch regardless — so even with a large threshold a continuous low-volume stream is still switched at roughly the flush interval and never withheld indefinitely. Set `<=0` to disable the size gate and restore the prior per-interval switching behavior.
+- Description: An interval-elapsed chunk switch only fires once a region's active chunk has accumulated at least this many bytes, so low-volume partitions batch more source transactions into one stream-load instead of emitting many tiny requests. Half-full headroom, buffer-size memory pressure, or a full `sink.buffer-flush.interval-ms` elapsing since the partition last switched all force a switch regardless — so even with a large threshold a continuous low-volume stream is still switched at roughly the flush interval and never withheld indefinitely. Set `<=0` to disable the size gate and restore the prior per-interval switching behavior. When `mini-switch-interval-ms` is equal to (or larger than) `sink.buffer-flush.interval-ms`, this option has no effect on the txnEnd switch (see Chunk Lifecycle and `miniInterval` Batching).
 
 #### `sink.transaction.multi-table.max-txn-bytes`
 
@@ -101,6 +101,11 @@ To enable Multi-table Transaction, you must running your cluster on StarRocks v4
 
 -  Recommended Value: `1000`
 -  Description: Controls the commit cycle. You can set it to `1000` to achieve the freshness of approximately one second.
+
+#### `sink.http.keep-alive.enabled`
+
+-  Recommended Value: `true`
+-  Description: Recommended. Loads and BEGIN / PREPARE / COMMIT / ROLLBACK reuse HTTP connections instead of opening a new connection for every request. Off by default (see Best Practices 6).
 
 #### `sink.properties.format`
 
@@ -359,7 +364,9 @@ public class WriteMultipleTablesWithTransaction {
         String password = params.get("password", "");
 
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
-        env.enableCheckpointing(10_000);  // Checkpoint is for recovery only; does not affect commit cycle
+        // Aligned checkpoints only. Each checkpoint also drains and commits the
+        // open shared transaction (see Best Practices 3).
+        env.enableCheckpointing(10_000);
 
         // --- Source ---
         // Replace with an actual Kafka Source that deserializes into TxnEvent
@@ -383,8 +390,11 @@ public class WriteMultipleTablesWithTransaction {
         // --- Step 3: Configure the connector ---
         // sink.transaction.multi-table.enabled=true activates per-partition region
         // tracking inside StreamLoadManagerV2: each partition's regions are switched
-        // independently when its txnEnd arrives, and commit triggers only when all
-        // active partitions have been switched.
+        // together, independently of other partitions, at its txnEnd boundaries.
+        // The timer-driven commit does not wait for every partition: it switches
+        // the partitions that are at a clean boundary, and a partition that is
+        // mid-transaction contributes only the chunks it switched earlier — its
+        // in-progress rows go into the next shared transaction.
         StarRocksSinkOptions options = StarRocksSinkOptions.builder()
                 .withProperty("jdbc-url", jdbcUrl)
                 .withProperty("load-url", loadUrl)
@@ -396,6 +406,7 @@ public class WriteMultipleTablesWithTransaction {
                 .withProperty("sink.semantic", "at-least-once")
                 .withProperty("sink.transaction.multi-table.enabled", "true")  // Enable multi-table txn
                 .withProperty("sink.buffer-flush.interval-ms", "1000")         // ~1s data freshness
+                .withProperty("sink.http.keep-alive.enabled", "true")          // Recommended: reuse HTTP connections
                 .withProperty("sink.properties.format", "json")
                 .withProperty("sink.properties.strip_outer_array", "true")
                 .build();
@@ -441,16 +452,18 @@ keyBy(sourcePartition) ———— Ensures same-partition rows go to the same s
   v
 StarRocksDynamicSinkFunctionV2 (via SinkFunctionFactory.createSinkFunction)
   |
-  |  +——————————— StreamLoadManagerV2 (multi-table txn mode) —————————-——+
+  |  +——————————— StreamLoadManagerV2 (multi-table txn mode) ———————————+
   |  |                                                                   |
-  |  |  Per-partition, per-table regions:                                |
+  |  |  Per-partition, per-table regions:                                 |
   |  |    Region(P0, orders), Region(P0, order_items)                    |
   |  |    Region(P2, orders), Region(P2, order_items)                    |
   |  |                                                                   |
   |  |  Each region tracks:                                              |
   |  |    - activeChunk / inactiveChunks                                 |
-  |  |    - lastSwitchTimeMs      (for miniInterval batching)            |
   |  |    - activeChunkCleanBoundary (true iff last task event is txnEnd)|
+  |  |    - commit watermark (set at the commit cut, see below)          |
+  |  |  Each partition tracks:                                           |
+  |  |    - last switch time         (for miniInterval batching)         |
   |  |                                                                   |
   |  |  write(partition, db, table, row)  [task thread]                  |
   |  |    -> routes to Region(partition, db, table)                      |
@@ -459,34 +472,39 @@ StarRocksDynamicSinkFunctionV2 (via SinkFunctionFactory.createSinkFunction)
   |  |       activeChunk only freezes at a txnEnd boundary               |
   |  |                                                                   |
   |  |  setCommitAllowed(partition, txnEnd=true)  [task thread]          |
-  |  |    -> region.tryMiniIntervalSwitch():                             |
-  |  |         sets activeChunkCleanBoundary = true                      |
-  |  |         if (now - lastSwitchTimeMs >= miniInterval                |
-  |  |             && activeChunk has data): switchChunkForCommit        |
-  |  |         else: data batches into activeChunk with subsequent       |
-  |  |               completed source transactions (N:1 mapping)         |
+  |  |    -> marks every region of the partition clean                   |
+  |  |    -> if (miniInterval elapsed && a region >= minSwitchBytes)     |
+  |  |          || commitInterval elapsed || half-full || cache pressure:|
+  |  |           lockstepSwitchPartition  (freshness-bounded)            |
+  |  |       else: batch into activeChunk with later txns (N:1)          |
   |  |    -> PartitionCommitTracker.onTxnEnd(partition)                  |
   |  |                                                                   |
   |  |  SharedTransactionCoordinator:                                    |
   |  |    -> eagerly opens shared txn before any flush                   |
   |  |    -> all autonomous flushes use the shared label                 |
-  |  |    -> recycles idle txn at 80% of server timeout                  |
+  |  |    -> recycles the txn at 80% of the BEGIN timeout                |
   |  |                                                                   |
   |  |  Manager thread (every scanningFrequency):                        |
-  |  |    -> tryForceCleanSwitch per region:                             |
-  |  |         if cleanBoundary && has data && miniInterval elapsed      |
-  |  |             -> switchChunkForCommit (source-idle fallback)        |
+  |  |    -> force-switch clean partitions (source-idle):                |
+  |  |         if all-clean && has data && (pressure                     |
+  |  |             || (bytes>=minSwitchBytes && miniInterval elapsed))   |
+  |  |             -> lockstepSwitchPartition                            |
   |  |    -> tryStartTimerDrivenCommit:                                  |
-  |  |         if commitInterval elapsed && hasDataLoaded                |
+  |  |         if commitInterval elapsed && committable data             |
   |  |             -> set commitInFlight = true                          |
   |  |    -> autonomous flush: drain inactiveChunks via streamLoad       |
   |  |       (never touches activeChunk in multi-table mode)             |
   |  |                                                                   |
   |  |  Manager thread (commitInFlight=true):                            |
-  |  |    -> triggerLoadIfNeeded per region (HTTP /api/transaction/load) |
+  |  |    -> commit cut, per partition:                                  |
+  |  |         clean: switch activeChunk, then set watermark             |
+  |  |         dirty: set watermark at its last switch; its              |
+  |  |                activeChunk goes into the next shared txn          |
+  |  |    -> triggerLoadIfNeeded for chunks <= watermark                 |
+  |  |       (HTTP /api/transaction/load)                                |
   |  |    -> wait all loads complete                                     |
   |  |    -> unified commit via SharedTransactionCoordinator             |
-  |  |    -> reset tracker; open next shared txn                         |
+  |  |    -> lift watermarks; reset tracker; open next shared txn        |
   |  +———————————————————————————————————————————————————————————————————+
   |
   v
@@ -497,21 +515,35 @@ StarRocks (test.orders + test.order_items)
 
 ### Chunk Lifecycle and `miniInterval` Batching
 
-Each `(partition, table)` region has one `activeChunk` (currently accepting writes) and a FIFO of `inactiveChunks` (frozen data, pending HTTP load). In multi-table transaction mode, the **only** way data moves from `activeChunk` into `inactiveChunks` is via `switchChunkForCommit`, which is called from exactly three sites:
+Each `(partition, table)` region has one `activeChunk` (currently accepting writes) and a FIFO of `inactiveChunks` (frozen data, pending HTTP load). In multi-table transaction mode, the **only** way data moves from `activeChunk` into `inactiveChunks` is a commit switch, taken only at a clean transaction boundary and, except for the savepoint, applied to all regions of a partition together (`lockstepSwitchPartition`). It happens at exactly four sites:
 
-1. **Task thread, on txnEnd** — via `region.tryMiniIntervalSwitch()` inside `setCommitAllowed(partition, true)`. This is the common path.
+1. **Task thread, on txnEnd** — inside `setCommitAllowed(partition, true)`, which marks every region of the partition clean and then makes one switch decision for the whole partition (rule below). This is the common path.
 
-2. **Manager thread, source-idle fallback** — via `region.tryForceCleanSwitch()` on every scan cycle, for regions whose `activeChunk` has been sitting idle at a clean transaction boundary.
+2. **Manager thread, source-idle force-switch** — `managerForceSwitchCleanBoundaryRegions()` on every scan cycle, for partitions whose regions are **all** at a clean boundary and at least one holds rows. Under pressure (buffered bytes reached `buffer-size`, or a region's `activeChunk` is half-full) the partition is switched at once; otherwise only when a region holds at least `min-switch-bytes` **and** `miniSwitchIntervalMs` has elapsed since the partition's last switch. Idle data below `min-switch-bytes` is left for the commit cut.
 
-3. **Manager thread, savepoint/recycle** — force-switch all regions after verifying every region is at a clean boundary.
+3. **Manager thread, commit cut** — at the start of every timer-driven commit and every recycle (see Manager Thread — Time-Driven Commit and Shared Transaction Coordination): switches every clean partition and freezes a commit watermark on every region.
 
-To avoid one HTTP load per source transaction in high-throughput CDC, the task thread only performs a switch when at least `miniSwitchIntervalMs` has elapsed since the previous switch on the same region. `miniSwitchIntervalMs` is computed as `min(1000 ms, max(100 ms, commitInterval / 10))`, so a 1-second commit interval batches at 100 ms while a 30-second interval caps batching at 1 second. Within a miniInterval window, multiple completed source transactions accumulate into the same `activeChunk` (N:1 mapping) and are frozen together on the next switch.
+4. **Manager thread, savepoint** — the checkpoint flush force-switches every region after verifying every region is at a clean boundary (see Best Practices 3).
 
-Each region carries two fields that drive these decisions:
+To avoid one HTTP load per source transaction in high-throughput CDC, the txnEnd path switches the partition only when **any** of these holds; otherwise the completed transaction stays in `activeChunk` and is batched with later ones:
 
-- `lastSwitchTimeMs` — epoch ms of the most recent switch. Initially 0, so the very first txnEnd after region creation always triggers a switch.
+- at least `miniSwitchIntervalMs` has elapsed since the partition's last switch **and** at least one of its regions' `activeChunk` holds at least `sink.transaction.multi-table.min-switch-bytes` (default 1 MB; `<= 0` disables this size check);
 
-- `activeChunkCleanBoundary` — `true` if the most recent task-thread event on this region was either an `onTxnEnd` or a `switchChunk`. `false` after any `write()`. The manager thread's `tryForceCleanSwitch` only runs when this flag is `true`, so it can never freeze partial source-transaction data.
+- a full `commitInterval` has elapsed since the partition's last switch (the freshness upper bound, so the size gate never defers completed data indefinitely);
+
+- a region's `activeChunk` reached half of the write-block cap (that is, `buffer-size` bytes);
+
+- buffered bytes across all regions reached `buffer-size`.
+
+When auto-derived, `miniSwitchIntervalMs` is `min(1000 ms, max(500 ms, commitInterval / 4))`, so a 2-second commit interval batches at 500 ms while a 4-second-or-longer interval caps batching at 1 second (an explicit `sink.transaction.multi-table.mini-switch-interval-ms` overrides this). Within that window multiple completed source transactions accumulate into the same `activeChunk` (N:1 mapping) and are frozen together on the next switch.
+
+The size gate only matters while `miniSwitchIntervalMs` is shorter than `commitInterval`. If `mini-switch-interval-ms` is set equal to (or larger than) `sink.buffer-flush.interval-ms` — or is auto-derived to 500 ms for a commit interval of 500 ms or less — the freshness bound is reached no later than the interval, so every txnEnd after the interval switches regardless of size and `min-switch-bytes` has no effect on the txnEnd path.
+
+Two pieces of state drive these decisions:
+
+- The partition's last switch time (kept per partition by the manager, so all regions of a partition batch together). Initially 0, so the very first txnEnd of a partition always triggers a switch.
+
+- `activeChunkCleanBoundary` (per region) — `true` if the most recent task-thread event on this region was either a txnEnd or a switch. `false` after any `write()`. The manager-thread switches re-check this flag on every region of the partition under the regions' write locks and skip the partition if any region is dirty, so they can never freeze partial source-transaction data.
 
 ### Task Thread — Write and txnEnd
 
@@ -525,11 +557,12 @@ invoke(record)                                           [Flink task thread]
   |  if record carries transactionEnd=true:
   |      setCommitAllowed(partition, true)
   |          for each region owned by this partition:
-  |              region.tryMiniIntervalSwitch():
-  |                  cleanBoundary = true       // always (txnEnd observed)
-  |                  if (now - lastSwitchTimeMs >= miniInterval
-  |                      && activeChunk has data):
-  |                      switchChunkForCommit()  // freezes activeChunk
+  |              cleanBoundary = true           // always (txnEnd observed)
+  |          if (activeChunk has data) and (
+  |                (miniInterval elapsed && bytes >= minSwitchBytes)
+  |             || commitInterval elapsed since last switch   // freshness bound
+  |             || half-full headroom || memory pressure):
+  |              lockstepSwitchPartition()      // freezes all regions together
   |          partitionTracker.onTxnEnd(partition)  // safety bookkeeping only
 ```
 
@@ -541,17 +574,23 @@ The manager thread runs a scan loop at `scanningFrequency`. Each iteration:
 
 1. **Ensure shared transaction**: open a new one (eager) or proactively recycle the current one if it is approaching the StarRocks server-side timeout (80% of `timeout` header, default 480 s).
 
-2. **Source-idle fallback**: call `region.tryForceCleanSwitch()` on every region to freeze any `activeChunk` that is clean and has been idle for at least `miniInterval`. This handles the "source paused after a few txnEnds" case where the task thread stopped before issuing a fresh switch.
+2. **Source-idle fallback**: force-switch any partition whose regions are **all** at a clean boundary once it has accumulated `min-switch-bytes` and `miniSwitchIntervalMs` has elapsed since its last switch, or at once under memory pressure (see Chunk Lifecycle and `miniInterval` Batching). Below the size threshold the idle data is not switched here — the time-driven commit below cuts and commits it instead (see step 3), so a source that pauses still becomes visible within one `commitInterval`. This handles the "source paused after a few txnEnds" case where the task thread stopped before issuing a fresh switch.
 
 3. **Time-driven commit trigger**: call `tryStartTimerDrivenCommit()`, which sets `commitInFlight=true` if **both** conditions hold:
 
    - `now - lastCommitTimeMs >= commitInterval` (the configured `sink.buffer-flush.interval-ms`).
 
-   - There is data to commit — either `txnCoordinator.hasDataLoaded()` is true or at least one region still has pending inactiveChunks.
+   - There is data to commit — `txnCoordinator.hasDataLoaded()` is true, at least one region has pending inactiveChunks, or some partition is entirely at a clean boundary with buffered active rows (deferred below the size gate) that the commit cut will freeze. This last check is evaluated at partition scope, so a lone clean region whose sibling table is still mid-transaction does not arm a commit cycle that cannot make progress.
 
 4. **Autonomous flush**: drain any region whose `inactiveChunks` is non-empty via the `FlushAndCommitStrategy`. Multi-table mode's `flush()` only streams out already-frozen inactive chunks — it **never** touches `activeChunk`. This preserves the invariant that every chunk reaching StarRocks under the shared label comes from completed source transactions.
 
-When `commitInFlight=true` the main loop enters `processMultiTableCommit`, which waits for in-flight loads, triggers loads for any remaining inactive chunks, runs the unified commit via `SharedTransactionCoordinator`, updates `lastCommitTimeMs`, resets the tracker, and opens a new shared transaction for the next cycle.
+When `commitInFlight=true` the main loop enters `processMultiTableCommit`. Its first step is the **commit cut**, which decides what goes into this label. The cut works per partition and does not wait for every partition to reach a clean boundary. Under the partition's region write locks (so a concurrent txnEnd switch cannot land in between):
+
+- A **clean** partition (every region at a clean boundary, at least one with rows) is switched in lockstep, then every region's commit watermark is set to its newest switched chunk.
+
+- A **dirty** partition (any region mid-transaction) is not switched; its regions' watermarks are set at their last switch. The chunks it switched earlier are committed now, and its `activeChunk` (the in-progress source transaction plus any completed transactions batched with it) goes into the next shared transaction.
+
+If any partition's locks are busy, the cut is retried on the next scan. Only chunks at or below the watermark are loaded under this label; chunks switched after the cut wait for the next one. The commit then waits for in-flight loads, triggers loads for the remaining eligible chunks, runs the unified commit via `SharedTransactionCoordinator`, lifts the watermarks, updates `lastCommitTimeMs`, resets the tracker, and opens a new shared transaction for the next cycle.
 
 ### Shared Transaction Coordination
 
@@ -559,9 +598,9 @@ All tables within the same commit cycle share a single StarRocks transaction man
 
 1. **Eager transaction opening**: A shared transaction is opened eagerly before any autonomous flush, so all HTTP loads use the shared label. This eliminates the data-loss window where an independent-label flush could be orphaned when a shared transaction later overwrites the label.
 
-2. **Unified commit**: After all regions' data is loaded, a single `commit` is executed for the shared label. Multi-table transactions skip the `prepare` step because StarRocks does not support `TXN_PREPARE` in multi-table mode.
+2. **Unified commit**: After all regions' data is loaded, a single `POST /api/transaction/commit` is executed for the shared label. Multi-table transactions skip the `prepare` step because StarRocks does not support `TXN_PREPARE` in multi-table mode.
 
-3. **Idle transaction recycling**: If the shared transaction remains open longer than 80% of the StarRocks server-side timeout (default: 480s for a 600s timeout), it is proactively recycled (commit-or-rollback + reopen) to prevent server-side timeout errors. Recycle fails fast if any region has in-progress transaction data (clean-boundary violation) or any partition has written data without ever receiving a txnEnd.
+3. **Transaction recycling**: If the shared transaction has been open (measured from its BEGIN, not from its last load) longer than 80% of the BEGIN `timeout` header (default: 480s for the 600s the connector sends), it is proactively recycled (commit-or-rollback + reopen) to prevent server-side timeout errors. The recycle uses the same per-partition commit cut as the timer-driven commit, so a partition that is mid-transaction is simply carried into the next label. Recycle fails fast only if a partition has written data without receiving any txnEnd since the last commit. Recycling is best-effort: it waits while a commit cycle is in flight or any region is still loading or retrying, so a load that never returns (possible with the default `sink.socket.timeout-ms=-1`) can still let the label reach its deadline. Set a finite `sink.socket.timeout-ms` to bound this.
 
 ### 6.5 PartitionCommitTracker (Safety Bookkeeping)
 
@@ -589,10 +628,10 @@ When a region's `inactiveChunks` becomes non-empty, the manager thread's autonom
 | Commit never includes partial source transactions | Every chunk reaching StarRocks originates from `switchChunkForCommit`. Autonomous flush never switches `activeChunk` in multi-table mode. |
 | Per-partition isolation                           | Each `(partition, table)` has its own region. One partition's switch never affects another's data. |
 | Within-partition ordering                         | `keyBy(sourcePartition)` routes same-partition rows to the same sink subtask. |
-| Task thread is non-blocking                       | `tryMiniIntervalSwitch` is O(regions-in-partition). HTTP work happens asynchronously on the manager thread. |
-| Source-idle data visibility                       | Manager thread's `tryForceCleanSwitch` freezes clean `activeChunk`s after `miniInterval` of idleness, so data remains visible within `commitInterval + miniInterval` even if the source pauses. |
+| No HTTP I/O on the txnEnd path                    | The partition switch decision in `setCommitAllowed` is O(regions-in-partition), and all HTTP work happens asynchronously on the manager thread. This is not a non-blocking guarantee: the task thread can wait for a region write lock held by a manager-thread switch, re-split an oversized frozen chunk row by row when its own switch freezes one (see Limitation 7), park in `blockIfCacheFull`, and block during a checkpoint (see Best Practices 3). |
+| Source-idle data visibility                       | If the source pauses below `min-switch-bytes`, the time-driven commit's partition-scope clean-boundary detection cuts and commits the idle `activeChunk`, so data becomes visible within about one `commitInterval` even if the source never resumes. |
 | Autonomous flushes are transaction-safe           | Every load uses the shared label. Every frozen chunk is from completed source transactions. |
-| Idle transactions do not timeout                   | Shared transactions are recycled at 80% of server timeout. Recycle fails fast on in-progress data. |
+| Shared transactions are recycled before their deadline (best effort) | Shared transactions are recycled at 80% of the BEGIN `timeout`. A mid-transaction partition is carried into the next label, and recycle fails fast only on a partition that wrote data without any txnEnd. Recycling waits while a commit cycle or a load is in flight, so a load that never returns (default `sink.socket.timeout-ms=-1`) can let the label pass its deadline; a finite socket timeout bounds this. |
 | Per-partition independent commit                  | A partition with a completed source transaction commits on the next commit interval, independent of other partitions' in-progress transactions. |
 
 ### N:1 Transaction Mapping
@@ -610,27 +649,35 @@ commitInterval elapsed
                                                   -> K1 + K2 + K3 atomically committed to StarRocks
 ```
 
-Because the commit decision is time-driven (not tied to a specific txnEnd), the connector amortizes HTTP-load and begin/commit overhead across many small source transactions without any configuration changes. For a CDC source emitting 100 txnEnds per second with `commitInterval=1 s`, `miniInterval=100 ms`, the connector issues at most ~10 load calls per second instead of ~100.
+Because the commit decision is time-driven (not tied to a specific txnEnd), the connector amortizes HTTP-load and begin/commit overhead across many small source transactions without any configuration changes. For a CDC source emitting 100 txnEnds per second with `commitInterval=1 s` (so the auto-derived `miniInterval=500 ms`), the connector issues at most ~2 load calls per second instead of ~100; with the default `min-switch-bytes` size gate a low-volume stream batches even further, down to about one load per `commitInterval` (the freshness bound at which a below-threshold chunk is still switched).
 
 ## Limitations
 
-- **Requires `sink.version=V2`**: V1 does not support transaction stream load.
+1. **Requires `sink.version=V2`**: V1 does not support transaction stream load.
 
-- **At-least-once only**: Failed retries may produce duplicate writes. Multi-table mode guarantees all tables within the same batch succeed or fail together, but does not provide global exactly-once. For PRIMARY KEY tables, duplicate writes are idempotent (upsert).
+2. **At-least-once only**: Failed retries may produce duplicate writes. Multi-table mode guarantees all tables within the same batch succeed or fail together, but does not provide global exactly-once. For PRIMARY KEY tables, duplicate writes are idempotent (upsert).
 
-- **All tables must be in the same database**: StarRocks multi-table transactions are database-scoped; cross-database transactions are not supported.
+3. **All tables must be in the same database**: StarRocks multi-table transactions are database-scoped; cross-database transactions are not supported.
 
-- **Transaction scope is per sink subtask + per partition**: Each sink subtask maintains its own StarRocks transaction independently. Atomicity is guaranteed **within a single source transaction** (all rows for one txnEnd on one partition, across all tables that partition writes to). Data visibility across **different** source partitions can interleave: once partition P0's source transaction has fully arrived and the commit interval has elapsed, P0's data is committed even if partition P1's source transaction is still in progress. Applications that require cross-partition atomicity at the StarRocks level must either use a single source partition or coordinate commits upstream.
+4. **Transaction scope is per sink subtask + per partition**: Each sink subtask maintains its own StarRocks transaction independently. Atomicity is guaranteed **within a single source transaction** (all rows for one txnEnd on one partition, across all tables that partition writes to). Data visibility across **different** source partitions can interleave: once partition P0's source transaction has fully arrived and the commit interval has elapsed, P0's data is committed even if partition P1's source transaction is still in progress. Applications that require cross-partition atomicity at the StarRocks level must either use a single source partition or coordinate commits upstream. In short, the source-transaction guarantee holds per lane only, where a lane is one `sourcePartition` on one sink subtask. Everything committed under one label, including rows from several lanes, becomes visible atomically, but nothing controls which source transactions of different lanes end up in the same label: a related transaction on another lane can land in an earlier or later label, and lanes on different sink subtasks never share a label.
 
-- **Data visibility latency**: Governed by `sink.buffer-flush.interval-ms` and the internal `miniInterval = min(1000, max(100, commitInterval/10))`. In a continuously flowing CDC stream, an individual row becomes visible in StarRocks within roughly `commitInterval + miniInterval` of its source commit. During a source pause, previously-committed data remains visible while any row between the last switch and the pause becomes visible after one more `miniInterval` (handled by the manager-thread clean-boundary fallback).
+5. **Data visibility latency**: Governed by `sink.buffer-flush.interval-ms` (the commit interval). A completed source transaction is first frozen out of the `activeChunk` — either as soon as the partition reaches `sink.transaction.multi-table.min-switch-bytes` (default 1 MB), or, for a low-volume partition below that threshold, at most one `commitInterval` after its last switch (the freshness bound enforced on the task thread at txnEnd) — and is then published by the next time-driven commit. So in a continuously flowing CDC stream an individual row becomes visible within roughly one `commitInterval` when the partition is busy enough to reach the size gate, and within up to two `commitInterval` windows in the low-volume worst case (one to freeze the below-threshold chunk, one to commit it). During a source pause, previously-committed data remains visible and the last idle sub-threshold chunk is committed within one more `commitInterval` via the time-driven commit's clean-boundary detection. Set `min-switch-bytes <= 0` to switch on every interval (lowest latency, more/smaller loads).
 
-- **Depends on StarRocks cluster transaction settings**: Monitor running txn limits, prepared timeout (default 600s), and label retention. Ensure `sink.buffer-flush.interval-ms` is significantly shorter than the StarRocks transaction timeout.
+6. **Depends on StarRocks cluster transaction settings**: Monitor running txn limits, the transaction timeout, and label retention. The transaction timeout is the `timeout` header the connector sends on BEGIN — 600 s unless `sink.properties.timeout` overrides it — and StarRocks treats it as an absolute deadline measured from BEGIN, not an idle timeout: loads into the label do not extend it. The connector recycles the shared transaction at 80% of it (480 s by default). Ensure `sink.buffer-flush.interval-ms` is significantly shorter than this timeout.
 
-- **activeChunk memory growth under large source transactions**: Because multi-table mode disables chunk-size-triggered internal switching (to preserve the clean-transaction-boundary invariant), `activeChunk` can grow until the next txnEnd arrives. `sink.transaction.multi-table.buffer-size` (soft) and `2 × buffer-size` (hard, via `blockIfCacheFull`) only bound the *flushable* part of the buffer — frozen chunks and all-clean partitions. Bytes that cannot leave the buffer before a txnEnd (the in-progress transaction itself, plus completed rows of sibling tables in the same partition that the lockstep rule holds back) are never waited on: once the buffer is at the hard cap and nothing is flushable, the writer logs a WARN (`Write-block cap ... reached with nothing flushable`) and keeps buffering until txnEnd, after which the partition is switched and drained. So a single source transaction may exceed `2 × buffer-size`; its size is bounded only by `sink.transaction.multi-table.max-txn-bytes` (default unlimited) and the TaskManager heap. Size the heap for the largest expected source transaction times the number of sink subtasks per TaskManager, set `max-txn-bytes` if you prefer a clear failure over heap pressure, and split unbounded transactions (bulk bootstraps) upstream. At switch time a frozen chunk larger than the load body limit — the smaller of `sink.chunk-limit` (3 GB by default) and `sink.transaction.multi-table.buffer-size` — is re-cut into several load requests under the same shared label, so no single `/api/transaction/load` body exceeds that limit, except for a single row that is itself larger than it.
+7. **activeChunk memory growth under large source transactions**: Because multi-table mode disables chunk-size-triggered internal switching (to preserve the clean-transaction-boundary invariant), `activeChunk` can grow until the next txnEnd arrives. `sink.transaction.multi-table.buffer-size` (soft) and `2 × buffer-size` (hard, via `blockIfCacheFull`) only bound the *flushable* part of the buffer — frozen chunks and all-clean partitions. Bytes that cannot leave the buffer before a txnEnd (the in-progress transaction itself, plus completed rows of sibling tables in the same partition that the lockstep rule holds back) are never waited on: once the buffer is at the hard cap and nothing is flushable, the writer logs a WARN (`Write-block cap ... reached with nothing flushable`) and keeps buffering until txnEnd, after which the partition is switched and drained. So a single source transaction may exceed `2 × buffer-size`; its size is bounded only by `sink.transaction.multi-table.max-txn-bytes` (default unlimited) and the TaskManager heap. Size the heap for the largest expected source transaction times the number of sink subtasks per TaskManager, set `max-txn-bytes` if you prefer a clear failure over heap pressure, and split unbounded transactions (bulk bootstraps) upstream. At switch time a frozen chunk larger than the load body limit — the smaller of `sink.chunk-limit` (3 GB by default) and `sink.transaction.multi-table.buffer-size` — is re-cut into several load requests under the same shared label, so no single `/api/transaction/load` body exceeds that limit, except for a single row that is itself larger than it.
 
-- **Cross-database writes are rejected**: Multi-table transactions validate that all regions belong to the same database. Writing to tables in different databases within the same commit cycle will throw an error.
+8. **Cross-database writes are rejected**: Multi-table transactions validate that all regions belong to the same database. Writing to tables in different databases within the same commit cycle will throw an error.
 
-- **Incompatible with merge commit**: `sink.properties.enable_merge_commit=true` cannot be combined with `sink.transaction.multi-table.enabled=true`. Merge commit routes writes through `MergeCommitManager`, which lacks the partition-aware `write(int, ...)` / `setCommitAllowed(int, ...)` hooks that multi-table mode relies on for transaction boundaries. The connector fails fast at validation time if both are enabled.
+9. **Incompatible with merge commit**: `sink.properties.enable_merge_commit=true` cannot be combined with `sink.transaction.multi-table.enabled=true`. Merge commit routes writes through `MergeCommitManager`, which lacks the partition-aware `write(int, ...)` / `setCommitAllowed(int, ...)` hooks that multi-table mode relies on for transaction boundaries. The connector fails fast at validation time if both are enabled.
+
+10. **Exactly one upstream producer per `sourcePartition`**: Clean boundaries are positional — a partition is at a clean boundary iff the last row the sink subtask received for it carried txnEnd; the connector does not track which source transaction a row belongs to. If two producers (two assembler subtasks, or two sources whose partition numbers collide, such as partition 0 of two Kafka topics) emit rows with the same `sourcePartition`, their rows interleave at the sink, one producer's txnEnd marks the partition clean while the other's transaction is still in progress, and the next switch can commit that transaction partially. Key the TransactionAssembler by the same value the sink keys by, and make `sourcePartition` unique across all sources.
+
+11. **Aligned checkpoints only**: The checkpoint flush requires every region to be at a clean boundary when the barrier reaches the sink (see Best Practices 3). Aligned checkpoints guarantee this, because the assembler emits a whole source transaction within one `processElement()` call and the barrier cannot fall between its rows. Unaligned checkpoints (`execution.checkpointing.unaligned.enabled`; `execution.checkpointing.unaligned` before Flink 1.20) let the barrier overtake in-flight rows and reach the sink mid-transaction. This includes the aligned-then-unaligned mode, where unaligned checkpoints are enabled together with `execution.checkpointing.aligned-checkpoint-timeout` and a checkpoint switches to unaligned once the timeout expires; the timeout has no effect while unaligned checkpoints are disabled. The checkpoint then fails, the open label is rolled back and the job fails over.
+
+12. **Data-quality rejections abort the whole label**: For a multi-table transaction, StarRocks applies strict mode and `max_filter_ratio` at commit, not at each `/api/transaction/load`. A rejection fails the commit and aborts the whole label — every table's rows in that commit cycle, not only the table with the bad rows. The connector reports a commit failure and the job fails over; the same rows are replayed, so it keeps failing until the rows or the load settings are fixed.
+
+13. **StarRocks v4.1.6 and earlier can report a failed multi-table commit as OK**: On these versions a multi-table commit that failed on the server can be returned to the client as `OK`. The connector then treats the label as committed, so the rows of that commit cycle can be silently missing. Fixed by StarRocks PR [#80351](https://github.com/StarRocks/starrocks/pull/80351) (CelerData backport: commit `1ceb0763cf`).
 
 ## Monitoring and Troubleshooting
 
@@ -644,13 +691,15 @@ Recommended metrics:
   - Running/prepared txn count
   - Txn timeout occurrences
   - Label conflicts
+- **On the Connector Side**
+  - The `sharedTxnLatencyMs` histogram: the time from when the earliest row of a shared transaction entered the sink buffer until the transaction committed. Each commit also logs it per label: `[MultiTxn] SharedTransaction committed successfully: label=<label>, firstRowTimeMs=<epoch ms>, latencyMs=<ms>` (both `-1` when unknown).
 
 ### Common issues
 
 #### `transaction not existed`
 
 - Cause: StarRocks transaction timeout
-- Solution: The connector automatically recycles idle transactions at 80% of server timeout. If this still occurs, check if prepared timeout is too short or flush interval is too large.
+- Solution: The connector automatically recycles the shared transaction at 80% of the BEGIN `timeout` (measured from BEGIN). If this still occurs, check whether `sink.properties.timeout` is too short, the flush interval is too large, or a load hung past the deadline (set a finite `sink.socket.timeout-ms`).
 
 #### `too many running txns`
 
@@ -665,7 +714,7 @@ Recommended metrics:
 #### High data visibility latency
 
 - Cause: Commit conditions are not met.
-- Solution: Verify upstream data has correct `transactionEnd=true` markers; expect up to `commitInterval + miniInterval` latency per row. If latency exceeds this budget, check the manager thread is not stuck in a recycle or in-flight load (see `StarRocks-Sink-Manager` logs).
+- Solution: Verify upstream data has correct `transactionEnd=true` markers; for a low-volume partition below `min-switch-bytes`, expect up to ~2×`commitInterval` per row (one interval to freeze the below-threshold chunk, one to commit it). If latency exceeds this budget, check the manager thread is not stuck in a recycle or in-flight load (see `StarRocks-Sink-Manager` logs), or lower `min-switch-bytes`.
 
 #### `Write-block cap ... reached with nothing flushable` (WARN)
 
@@ -691,10 +740,12 @@ Recommended metrics:
    - Every row must have `setSourcePartition(partition)`.
    - All rows must be emitted synchronously within a single `processElement()` call.
 
-2. **keyBy before sink is mandatory**: `rows.keyBy(DefaultStarRocksRowData::getSourcePartition).addSink(sink)` — omitting this breaks within-partition transaction ordering.
+2. **keyBy before sink is mandatory**: `rows.keyBy(DefaultStarRocksRowData::getSourcePartition).addSink(sink)` — omitting this breaks within-partition transaction ordering. Each `sourcePartition` value must also come from exactly one upstream producer (see Limitation 10).
 
-3. **Checkpoint is decoupled from commit**: Checkpoint interval can be set to a large value (for example, 60 seconds) for fault recovery. Data visibility is governed by `sink.buffer-flush.interval-ms` (for example, 1000ms).
+3. **Checkpoints also commit**: Data visibility is governed by `sink.buffer-flush.interval-ms` (for example, 1000ms), but checkpoints are not decoupled from commit. In at-least-once mode `snapshotState` calls `flush()`, which blocks the task thread until the whole buffer — including completed transactions still batched in `activeChunk` — is loaded and the open shared label is committed. The flush has a budget of 1.1 × the transaction timeout (660 s by default), but it is checked only between waits and is not a hard cap: the drain waits for every in-flight `/api/transaction/load` without a deadline, and with the default `sink.socket.timeout-ms=-1` a load whose response never arrives can keep the checkpoint, and the task thread, blocked indefinitely. Set a finite `sink.socket.timeout-ms`, longer than the slowest expected load, so that a hung load fails the job instead. If the barrier arrives while any partition is mid-transaction, the flush throws, the open label is rolled back and the job fails over (see Limitations 10 and 11). A larger checkpoint interval (for example, 60 seconds) means fewer of these forced commits.
 
 4. **Keep routing strategies stable**: Avoid single transactions writing to an excessive number of distinct tables, which increases transaction duration and failure probability.
 
 5. **Fault injection testing before production**: Kill TaskManagers / introduce network jitter and verify data correctness after checkpoint recovery.
+
+6. **Enable HTTP keep-alive**: Set `sink.http.keep-alive.enabled=true`. A shared transaction sends a BEGIN, many loads and a COMMIT, and without keep-alive each of them opens a new TCP (and TLS) connection. A connection that fails during any of these requests fails the whole shared transaction, which rolls back every table in it and fails the job over, so fewer new connections means fewer such failures, for example behind a load balancer that can reset new connections. With keep-alive on, a request on a reused connection that the server or a load balancer closed is sent again on a new connection where that cannot write data twice. Keep `sink.http.keep-alive.idle-timeout-ms` (default 60000) shorter than the idle timeout of every proxy or load balancer between Flink and StarRocks; an AWS Network Load Balancer drops connections idle for 350 seconds by default.

@@ -357,7 +357,16 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 类型：Boolean
 - 单位：-
 - 是否动态：是
-- 描述：存算分离集群中，查询扫描（无论是否切分）打开 Tablet 的 Segment 后，是否异步预热随后要读取的索引页，包括每个 Segment 的短键索引、谓词列的 zone map 和 bloom filter 根页，以及读取列的 ordinal index 根页。扫描不等待预热完成；预热失败时照常读取。被 Segment 元数据过滤（`enable_lake_segment_metadata_filter`）排除的 Segment 不预热。该项只对查询生效，且仅在启用远程 I/O 调度器（`remote_io_scheduler_enable`）时有效，与 `lake_scan_parallel_segment_open` 相互独立。预热情况记录在 Query Profile 的 `TabletPrepareIndexWarmSegments`、`TabletPrepareIndexWarmRanges`、`TabletPrepareIndexWarmBlocks`、`TabletPrepareIndexWarmSkipped` 和 `TabletPrepareIndexWarmPrunedSegments` 中。
+- 描述：存算分离集群中，查询扫描（无论是否切分）打开 Tablet 的 Segment 后，是否异步预热随后要读取的索引页，包括每个 Segment 的短键索引、谓词列的 zone map、bloom filter 和 bitmap 索引根页，以及读取列的 ordinal index 根页。等值和 `IN` 谓词在用 bitmap 索引查找时也会提前一次性请求所有值所在的字典页，随后再一次性请求选中的全部 bitmap 所在的页，然后才读取。扫描不等待预热完成；预热失败时照常读取。被 Segment 元数据过滤（`enable_lake_segment_metadata_filter`）排除的 Segment 不预热。该项只对查询生效，且仅在启用远程 I/O 调度器（`remote_io_scheduler_enable`）时有效，与 `lake_scan_parallel_segment_open` 相互独立。预热情况记录在 Query Profile 的 `TabletPrepareIndexWarmSegments`、`TabletPrepareIndexWarmRanges`、`TabletPrepareIndexWarmBlocks`、`TabletPrepareIndexWarmSkipped` 和 `TabletPrepareIndexWarmPrunedSegments` 中，bitmap 索引页的请求情况记录在 `BitmapIndexPrefetchPages` 和 `BitmapIndexPrefetchBlocks` 中。
+
+### lake_scan_read_ahead_max_blocks
+
+- 默认值：2048
+- 类型：Long
+- 单位：-
+- 是否动态：是
+- 描述：一个 BE/CN 上所有查询扫描合计最多可以有多少个已发出预读、但还没读到的缓存块，包括 `remote_prefetch_window_blocks` 允许每个 Segment 提前读的块，以及 `lake_scan_read_ahead_segments` 提前开始的 Segment 的块。正在预读的 Segment 平分该上限：每个 Segment 最多持有上限除以这些 Segment 的个数（至少 1 块），后开始的扫描也能拿到自己的一份；已持有的块多于这一份的 Segment，要等读掉多出的部分后才会再发预读。达到该值后，Segment 不再多发预读，Tablet 扫描也不再提前开始下一个 Segment，相应的数据改为读到时再取。马上要读的块不受限制。预读块以原子方式预留，多个扫描并发时合计也不会超过该值。设为 `0` 表示不限制。指标 `lake_scan_read_ahead_blocks`、`lake_scan_read_ahead_windows` 和 `lake_scan_read_ahead_capped_total` 分别记录当前合计值、分摊上限的 Segment 个数，以及上限压住预读的次数。
+- 引入版本：-
 
 ### lake_scan_read_ahead_segments
 
@@ -501,13 +510,22 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：启用延迟物化时，只为通过谓词的行读取的列，会在这些行确定后按 Chunk 逐批读取。从 Segment Reader 的第四个 Chunk 起，如果这些行已经触及其所跨页面的比例达到该值，这些列改为与谓词列一样预读。取值大于 1 时从不切换。修改后对之后打开的 Segment Reader 生效。仅当 `remote_io_scheduler_enable` 为 `true` 时生效。
 - 引入版本：-
 
+### lake_compaction_prefetch_window_blocks
+
+- 默认值：32
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：实验参数。单个 lake compaction 任务提前读取并填入 Data Cache 的目标块数。预算最多占已配置的每 worker 内存限额的八分之一，按物理输入 segment 数平均分配并向下取整。每个 segment 至少提前 1 块，因此 segment 数多于预算时，每个 segment 各读 1 块，总量会超过预算和内存上限。0 表示关闭。需要启用 remote I/O scheduler、表缓存及对应 compaction 模式的缓存填充。符合条件的标量数据页使用 COMPACTION 工作负载。
+- 引入版本：-
+
 ### remote_prefetch_window_blocks
 
 - 默认值：128
 - 类型：Int
 - 单位：-
 - 是否动态：是
-- 描述：查询的 Segment Reader 最多提前请求多少个 Data Cache 缓存块，包括排队中、读取中以及已读取但尚未消费的缓存块。该参数限制 Reader 超前的距离，缓存块何时读取由调度器决定。导入、Compaction 等后台读取不预读。设为 `0` 关闭预读。修改后对之后打开的 Segment Reader 生效。仅当 `remote_io_scheduler_enable` 为 `true` 时生效。
+- 描述：查询的 Segment Reader 最多提前请求多少个 Data Cache 缓存块，包括排队中、读取中以及已读取但尚未消费的缓存块。该参数限制 Reader 超前的距离，缓存块何时读取由调度器决定。导入等其他后台读取不预读，compaction 的预读由 `lake_compaction_prefetch_window_blocks` 控制。设为 `0` 关闭预读。修改后对之后打开的 Segment Reader 生效。仅当 `remote_io_scheduler_enable` 为 `true` 时生效。
 - 引入版本：-
 
 ### remote_read_adaptive_limit
@@ -1252,6 +1270,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 单位：Percent
 - 是否动态：否
 - 描述：内存紧急阈值（占进程内存上限的百分比）。当消耗超过该值时会触发更激进的即时回收；需满足 `memory_urgent_level > memory_high_level` 且不超过 100。
+- 引入版本：-
+
+### olap_string_max_length
+
+- 默认值：1048576
+- 类型：Int
+- 单位：字节
+- 是否动态：是
+- 描述：BE 字符串函数（如 `repeat` 和 `concat`）用于限制单个结果大小的最大字符串长度，默认值为 1 MiB。当结果超过此限制时，这些函数返回 `NULL`。此限制按字节数计算，而非字符数。
 - 引入版本：-
 
 ### report_exec_rpc_request_retry_num

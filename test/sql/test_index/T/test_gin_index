@@ -2,7 +2,6 @@
 create database test_gin_index;
 use  test_gin_index;
 
-ADMIN SET FRONTEND CONFIG ("enable_experimental_gin" = "true");
 -- DUPLICATE KEY table with GIN index
 CREATE TABLE `t1_dup` (
     `id1` bigint(20) NOT NULL COMMENT "",
@@ -87,7 +86,6 @@ drop database test_gin_index;
 -- name: test_add_gin_index @native
 create database test_gin_add_${uuid0};
 use test_gin_add_${uuid0};
-ADMIN SET FRONTEND CONFIG ("enable_experimental_gin" = "true");
 -- DUPLICATE KEY table without GIN index, then add GIN index after data load
 CREATE TABLE t2_dup (
     id1 bigint(20) NOT NULL COMMENT "",
@@ -134,7 +132,6 @@ drop database test_gin_add_${uuid0};
 -- name: test_gin_not_match_excludes_null @native
 create database test_gin_null_${uuid0};
 use test_gin_null_${uuid0};
-ADMIN SET FRONTEND CONFIG ("enable_experimental_gin" = "true");
 
 CREATE TABLE t_null (
     id int NOT NULL,

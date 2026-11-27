@@ -455,6 +455,24 @@ StarRocksクラスターの監視サービスを構築する方法の詳細に�
 - タイプ: Gauge
 - 説明: この BE/CN の起動以降、再試行された publish が、ストレージにすでに書き込まれている新しいバージョンの tablet メタデータを使い、トランザクションを再適用しなかった tablet の累積回数。再試行（そのパーティションの以前の publish リクエストが送信され、完了しなかった場合）で、新しいバージョンがメタデータキャッシュにない場合のみカウントされます。メタデータキャッシュでヒットした tablet と初回の publish はカウントされません。共有データクラスタのみ。`dump_metrics_with_bvar` が有効な場合に `/metrics` で公開されます。
 
+## `lake_scan_read_ahead_blocks`
+
+- 単位: 個
+- タイプ: 瞬時値
+- 説明: 共有データモード専用。この BE/CN 上のすべてのクエリスキャンが先読みとして取得を要求し、まだ読んでいないキャッシュブロックの合計数。各 Segment の先読みウィンドウ（`remote_prefetch_window_blocks`）と、早めに開始した Segment（`lake_scan_read_ahead_segments`）を含みます。上限は `lake_scan_read_ahead_max_blocks` で制御します。
+
+## `lake_scan_read_ahead_capped_total`
+
+- 単位: 件数
+- タイプ: 累積
+- 説明: 共有データモード専用。この BE/CN がすでに `lake_scan_read_ahead_max_blocks` 個の先読みブロックを保持していた、または Segment が自分の分をすでに保持していたため、クエリスキャンが先読みを減らした、または次の Segment を早めに開始しなかった回数。値が増え続ける場合は上限が先読みを抑えており、該当するデータは読む時点で取得されます。
+
+## `lake_scan_read_ahead_windows`
+
+- 単位: 個
+- タイプ: 瞬時値
+- 説明: 共有データモード専用。この BE/CN 上のクエリスキャンで先読み中の Segment の数。`lake_scan_read_ahead_max_blocks` が設定されている場合、各 Segment が保持できる先読みブロックは、その上限をこの数で割った数までです。
+
 ## `lake_segment_cache_hit_minute`
 
 - 単位: 件数
@@ -734,6 +752,13 @@ StarRocksクラスターの監視サービスを構築する方法の詳細に�
 
 - 単位: カウント
 - 説明: ネットワーク経由で送信されたパケットの合計数。
+
+## `object_storage_fast_retry_total`
+
+- 単位: カウント
+- タイプ: 累積
+- ラベル: `request` (`put_object` または `head_object`)、`result` (`expired`、`resend_fast`、`resend_slow`、`resend_error`、または `no_budget`)
+- 説明: 共有データクラスタのオブジェクトストレージへの小さなリクエストに対する高速再送（`enable_object_storage_fast_retry`）のイベント数。`expired`: 短いタイムアウトを設定した送信が時間内に応答を受け取れず、中断されました。`resend_fast`: 再送が短いタイムアウト以内に応答を受け取りました。`resend_slow`: 再送は応答を受け取りましたが、短いタイムアウトより長くかかりました。`resend_error`: 再送がネットワークエラーで終了し、その後は SDK が通常どおりリクエストをリトライします。`no_budget`: 予算（`object_storage_fast_retry_budget_percent`）が尽きたため、短いタイムアウトなしで送信されました。`enable_poco_client_for_aws_sdk` が `false` の場合に登録されます。
 
 ## `ordinal_index_mem_bytes`
 

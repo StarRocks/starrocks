@@ -25,10 +25,9 @@ StarRocks 提供的 Flink connector，相比于 Flink 提供的 [flink-connector
 
 | Connector | Flink                         | StarRocks     | Java | Scala     |
 |-----------|-------------------------------|---------------| ---- |-----------|
+| 1.2.17    | 1.16,1.17,1.18,1.19,1.20      | 2.1 及更高版本 | 8    | 2.11,2.12 |
+| 1.2.16    | 1.16,1.17,1.18,1.19,1.20      | 2.1 及更高版本 | 8    | 2.11,2.12 |
 | 1.2.15    | 1.16,1.17,1.18,1.19,1.20      | 2.1 及更高版本 | 8    | 2.11,2.12 |
-| 1.2.14    | 1.16,1.17,1.18,1.19,1.20      | 2.1 及更高版本 | 8    | 2.11,2.12 |
-| 1.2.12    | 1.16,1.17,1.18,1.19,1.20      | 2.1 及更高版本 | 8    | 2.11,2.12 |
-| 1.2.11    | 1.15,1.16,1.17,1.18,1.19,1.20 | 2.1 及更高版本 | 8    | 2.11,2.12 |
 
 ## 获取 Flink connector
 
@@ -222,6 +221,18 @@ Flink connector JAR 文件的命名格式如下：
 - **是否必填**：否
 - **默认值**：10000
 - **描述**：自 1.2.7 版本起支持。等待 FE 返回 HTTP 100-continue 响应的超时时间。取值范围：`3000` 到 `60000`。单位：毫秒（ms）。
+
+#### sink.http.keep-alive.enabled
+
+- **是否必填**：否
+- **默认值**：false
+- **描述**：自 1.2.17 版本起支持。Stream Load 请求和事务请求（begin、prepare、commit、rollback）是否复用 HTTP 连接（keep-alive），而不是为每个请求新建一个连接。每个 sink 子任务到每个主机最多保持 `sink.io.thread-count` + 2 个连接。当 `sink.version` 为 `V2` 时生效。默认关闭：除非将此参数设置为 `true`，否则与早期版本一样，每个请求都会新建一个连接。
+
+#### sink.http.keep-alive.idle-timeout-ms
+
+- **是否必填**：否
+- **默认值**：60000
+- **描述**：自 1.2.17 版本起支持。空闲时间超过此值的 keep-alive 连接将不再被复用，并会在超时后 10 秒内关闭。单位：毫秒。该值必须小于 Flink 与 StarRocks 之间每个代理或负载均衡器的空闲超时时间。例如，AWS Network Load Balancer 默认会断开空闲 350 秒的 TCP 连接。
 
 #### sink.ignore.update-before
 
@@ -492,6 +503,7 @@ Flink connector 提供以下指标来监控导入情况。
 | totalFlushSucceededTimes | Counter |  flush 数据的成功次数。                           |
 | totalFlushFailedTimes    | Counter | flush 数据的失败次数。                                   |
 | totalFilteredRows        | Counter | 已过滤的行数，这些行数也包含在 totalFlushRows 中。 |
+| sharedTxnLatencyMs       | Histogram | 仅适用于多表事务模式：从共享事务的最早一行进入 sink 缓冲区到该事务提交所经过的时间（毫秒）。 |
 
 ## 使用示例
 

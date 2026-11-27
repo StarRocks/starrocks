@@ -197,6 +197,10 @@ public class AnalyzeExprTest {
         analyzeSuccess("select any_match(null)");
         analyzeSuccess("select any_match([])");
         analyzeSuccess("select all_match([])");
+        // none_match shares the lambda handling of its siblings; these cover the two entry points it
+        // adds: the high-order whitelist (lambda form) and the registered signature (no-lambda form).
+        analyzeSuccess("select none_match([0],x->1)");
+        analyzeSuccess("select none_match([])");
 
         analyzeFail("select all_match((x,y) -> x < y, []);");
         analyzeFail("select all_match((x,y) -> x < y, [],{});");

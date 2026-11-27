@@ -23,6 +23,7 @@
 #include "column/runtime_type_traits.h"
 #include "column/struct_column.h"
 #include "common/config_scan_io_fwd.h"
+#include "common/util/debug_util.h"
 #include "fmt/core.h"
 #include "fs/credential/cloud_configuration_factory.h"
 #include "runtime/descriptors_ext.h"
@@ -698,6 +699,13 @@ std::unique_ptr<JniScanner> create_iceberg_metadata_jni_scanner(const JniScanner
     jni_scanner_params["load_column_stats"] = options.scan_node->load_column_stats ? "true" : "false";
     jni_scanner_params["scanner_type"] = options.scan_node->metadata_table_type;
     jni_scanner_params["table_cache_capacity"] = std::to_string(config::iceberg_metadata_table_cache_capacity);
+    // The JSON forms FE and BE of different builds can both read: the scanner reads them instead of the
+    // Java-serialized ones when the FE that wrote them is not of this build (see IcebergTablePayload).
+    if (options.scan_node->__isset.iceberg_metadata_payload) {
+        jni_scanner_params["iceberg_metadata_payload"] = options.scan_node->iceberg_metadata_payload;
+        jni_scanner_params["iceberg_predicate_json"] = options.scan_node->iceberg_predicate_json;
+        jni_scanner_params["reader_build"] = get_short_version();
+    }
 
     const std::string scanner_factory_class = "com/starrocks/connector/iceberg/IcebergMetadataScannerFactory";
     return std::make_unique<JniScanner>(scanner_factory_class, jni_scanner_params);

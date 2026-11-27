@@ -1,0 +1,31 @@
+-- name: test_meta_rewrite_count_null_arg
+create table t1 (id int, a int) duplicate key(id) distributed by hash(id) buckets 1 properties ("replication_num" = "1");
+-- result:
+-- !result
+insert into t1 values (1, 10), (2, 20), (3, 30);
+-- result:
+-- !result
+select count(nullif(upper('a'), 'A')) from t1;
+-- result:
+0
+-- !result
+select count(false + interval 1 day) from t1;
+-- result:
+0
+-- !result
+select count(([a, id] is null and id <=> 3) + interval 1 day) from t1;
+-- result:
+0
+-- !result
+select count(case when c is null then 1 end) from (select trim(false) c from t1) s;
+-- result:
+0
+-- !result
+select count(*) from (select trim(false) c from t1) s where c is null;
+-- result:
+0
+-- !result
+select count(1), count(*), count(id) from t1;
+-- result:
+3	3	3
+-- !result

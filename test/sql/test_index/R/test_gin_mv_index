@@ -5,9 +5,6 @@ create database test_gin_mv_index_${uuid0};
 use test_gin_mv_index_${uuid0};
 -- result:
 -- !result
-ADMIN SET FRONTEND CONFIG ("enable_experimental_gin" = "true");
--- result:
--- !result
 CREATE TABLE `base_t` (
     `id` int(11) NOT NULL COMMENT "",
     `content` varchar(200) NOT NULL COMMENT "",

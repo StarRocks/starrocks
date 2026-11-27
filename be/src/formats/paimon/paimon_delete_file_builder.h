@@ -28,9 +28,12 @@ public:
     explicit PaimonDeleteFileBuilder(FileSystem* fs) : _fs(fs) {}
     ~PaimonDeleteFileBuilder() = default;
     StatusOr<DeletionBitmapPtr> build(const TPaimonDeletionFile& paimon_deletion_file);
+    // Bytes read from the deletion file by build(); it reads the file system directly, not the DataCache.
+    int64_t bytes_read() const { return _bytes_read; }
 
 private:
     FileSystem* _fs;
+    int64_t _bytes_read = 0;
 
     // Structure of a deletion file is: 1 byte version num + n * {4 bytes deletion vector length + 4 bytes magic num
     // + (length - 4) bytes bitmap + 4 bytes CRC num}, n is equal to num of data files

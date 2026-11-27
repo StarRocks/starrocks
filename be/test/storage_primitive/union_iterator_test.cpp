@@ -271,6 +271,39 @@ TEST_F(UnionIteratorTest, read_ahead_within_budget) {
 }
 
 // NOLINTNEXTLINE
+TEST_F(UnionIteratorTest, read_ahead_waits_for_room) {
+    std::vector<std::shared_ptr<ReadAheadIntIterator>> children;
+    std::vector<ChunkIteratorPtr> iters;
+    for (int i = 0; i < 6; i++) {
+        children.push_back(std::make_shared<ReadAheadIntIterator>(std::vector<int32_t>{i}, 1, true));
+        iters.push_back(children.back());
+    }
+    bool room = false;
+    int asked = 0;
+    auto iter = new_union_iterator(std::move(iters), 8, 100, [&] {
+        asked++;
+        return room;
+    });
+    ASSERT_TRUE(iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
+    ChunkPtr chunk = ChunkFactory::new_chunk(iter->schema(), 1024);
+    ASSERT_TRUE(iter->get_next(chunk.get()).ok());
+    // No room: nothing starts early, and the union asks again after the next chunk.
+    EXPECT_EQ(1, asked);
+    for (int i = 0; i < 6; i++) {
+        EXPECT_EQ(0, children[i]->start_calls()) << i;
+    }
+    room = true;
+    chunk->reset();
+    ASSERT_TRUE(iter->get_next(chunk.get()).ok());
+    // Child 1 is read now; the ones after it start.
+    EXPECT_EQ(0, children[1]->start_calls());
+    for (int i = 2; i < 6; i++) {
+        EXPECT_EQ(1, children[i]->start_calls()) << i;
+    }
+    EXPECT_EQ((std::vector<int32_t>{2, 3, 4, 5}), read_all(iter));
+}
+
+// NOLINTNEXTLINE
 TEST_F(UnionIteratorTest, read_ahead_stops_without_child_support) {
     std::vector<std::shared_ptr<ReadAheadIntIterator>> children;
     std::vector<ChunkIteratorPtr> iters;

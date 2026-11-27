@@ -171,7 +171,16 @@ public class QueryAnalyzer {
      * while deferring normal table analysis to the locked phase.
      */
     public void analyzeFilesOnly(StatementBase node) {
-        new FilesOnlyVisitor().process(node, new Scope(RelationId.anonymous(), new RelationFields()));
+        // The planner calls this when AnalyzerUtils#collectFileTableFunctionRelation finds a files() call; resolving
+        // what that same walk finds leaves none of them to the analyzer, which runs under the planner lock.
+        AnalyzerUtils.collectFileTableFunctionRelation(node).forEach(this::initializeFileTableIfAbsent);
+    }
+
+    private void initializeFileTableIfAbsent(FileTableFunctionRelation relation) {
+        if (relation.getTable() instanceof TableFunctionTable) {
+            return;
+        }
+        relation.setTable(resolveTableFunctionTable(relation.getProperties(), relation.getPushDownSchemaFunc()));
     }
 
     /**
@@ -2224,6 +2233,8 @@ public class QueryAnalyzer {
      */
     private class ExternalTablesOnlyVisitor extends AstTraverser<Void, Void> {
         private final Deque<Set<String>> cteNameStack = new ArrayDeque<>();
+        // Whether the with clause whose CTEs are being walked is WITH RECURSIVE; see visitCTE.
+        private boolean inRecursiveWithClause = false;
         private final boolean refreshFilesystemExternalTables;
         private int viewExpansionDepth;
 
@@ -2237,28 +2248,74 @@ public class QueryAnalyzer {
 
         @Override
         public Void visitSelect(SelectRelation node, Void context) {
-            if (node.hasWithClause()) {
-                cteNameStack.push(collectCteNames(node.getCteRelations()));
-                try {
-                    return super.visitSelect(node, context);
-                } finally {
-                    cteNameStack.pop();
-                }
-            }
-            return super.visitSelect(node, context);
+            inWithClauseOf(node, () -> super.visitSelect(node, context));
+            return null;
         }
 
         @Override
         public Void visitSetOp(SetOperationRelation node, Void context) {
-            if (node.hasWithClause()) {
-                cteNameStack.push(collectCteNames(node.getCteRelations()));
-                try {
-                    return super.visitSetOp(node, context);
-                } finally {
+            inWithClauseOf(node, () -> super.visitSetOp(node, context));
+            return null;
+        }
+
+        /** Run {@code body} in the scope of the with clause of {@code node}, which {@link #visitCTE} fills. */
+        private void inWithClauseOf(QueryRelation node, Runnable body) {
+            boolean scoped = node.hasWithClause();
+            boolean enclosingRecursive = inRecursiveWithClause;
+            if (scoped) {
+                cteNameStack.push(new HashSet<>());
+            }
+            inRecursiveWithClause = node.isHasRecursiveCTE();
+            try {
+                body.run();
+            } finally {
+                inRecursiveWithClause = enclosingRecursive;
+                if (scoped) {
                     cteNameStack.pop();
                 }
             }
-            return super.visitSetOp(node, context);
+        }
+
+        /**
+         * A CTE's name comes into scope where the analyzer brings it in: after its own definition, so in
+         * {@code WITH t0 AS (SELECT * FROM t0)} the inner {@code t0} is the table, but before the recursive members
+         * of a recursive one, where a self-reference is the CTE. Taking the first for the CTE would leave an
+         * external table of that name to the locked analyzer; taking the second for a table would look it up in the
+         * current catalog, a connector round trip for a table that is not there.
+         */
+        @Override
+        public Void visitCTE(CTERelation node, Void context) {
+            if (node.isRecursive() && !node.isAnchor()) {
+                // A reference to a recursive CTE, in an analyzed statement: it shares the definition's query, which
+                // contains it. AstTraverser#visitCTE stops here too; walking on would go round the cycle for good.
+                return null;
+            }
+            UnionRelation union = AnalyzerUtils.recursiveCteUnion(node, inRecursiveWithClause);
+            if (union == null) {
+                super.visitCTE(node, context);
+                declareCte(node);
+                return null;
+            }
+            if (union.hasWithClause()) {
+                // The union's own with clause is not in scope for its operands here, but the analyzer reads its
+                // CTEs when it falls back to a CTE that is not recursive. Walk them in a scope of their own.
+                inWithClauseOf(union, () -> union.getCteRelations().forEach(cte -> visit(cte, context)));
+            }
+            // The anchor, the first operand, comes before the name; the recursive members after it.
+            List<QueryRelation> operands = union.getRelations();
+            visit(operands.get(0), context);
+            declareCte(node);
+            for (QueryRelation member : operands.subList(1, operands.size())) {
+                visit(member, context);
+            }
+            return null;
+        }
+
+        /** Bring the name of {@code cte} into scope in the with clause being walked. */
+        private void declareCte(CTERelation cte) {
+            if (!cteNameStack.isEmpty() && cte.getName() != null) {
+                cteNameStack.peek().add(cte.getName());
+            }
         }
 
         /**
@@ -2431,20 +2488,25 @@ public class QueryAnalyzer {
         }
 
         /**
-         * Run {@code body} with these CTE names in scope, the way {@link #visitSelect} does for a with
-         * clause: a name that resolves to a CTE must not be pre-resolved as a table.
+         * Run {@code body} with these CTEs in scope, the way {@link #visitSelect} does for a with clause: a
+         * name that resolves to a CTE must not be pre-resolved as a table. {@link #visitCTE} brings each name
+         * into scope once its definition has been walked.
          */
         private void withCteScope(List<CTERelation> cteRelations, Runnable body) {
             boolean scoped = cteRelations != null && !cteRelations.isEmpty();
+            boolean enclosingRecursive = inRecursiveWithClause;
             if (scoped) {
-                cteNameStack.push(collectCteNames(cteRelations));
+                cteNameStack.push(new HashSet<>());
             }
+            // A DML's with clause is not WITH RECURSIVE.
+            inRecursiveWithClause = false;
             try {
                 if (scoped) {
                     cteRelations.forEach(this::visit);
                 }
                 body.run();
             } finally {
+                inRecursiveWithClause = enclosingRecursive;
                 if (scoped) {
                     cteNameStack.pop();
                 }
@@ -2709,16 +2771,6 @@ public class QueryAnalyzer {
             return null;
         }
 
-        private Set<String> collectCteNames(List<CTERelation> cteRelations) {
-            Set<String> names = Sets.newHashSet();
-            for (CTERelation cteRelation : cteRelations) {
-                if (cteRelation.getName() != null) {
-                    names.add(cteRelation.getName());
-                }
-            }
-            return names;
-        }
-
         private boolean isCteName(String name) {
             if (cteNameStack.isEmpty()) {
                 return false;
@@ -2729,113 +2781,6 @@ public class QueryAnalyzer {
                 }
             }
             return false;
-        }
-    }
-
-    /**
-     * A lightweight visitor that only resolves FileTableFunctionRelation so that
-     * files() schema can be inferred without acquiring DB/table locks. Normal tables/views are skipped.
-     */
-    private class FilesOnlyVisitor implements AstVisitorExtendInterface<Scope, Scope> {
-        public FilesOnlyVisitor() {}
-
-        public Scope process(ParseNode node, Scope scope) {
-            return node.accept(this, scope);
-        }
-
-        @Override
-        public Scope visitQueryStatement(QueryStatement node, Scope parent) {
-            QueryRelation queryRelation = node.getQueryRelation();
-            if (queryRelation != null && !queryRelation.getCteRelations().isEmpty()) {
-                for (CTERelation cteRelation : queryRelation.getCteRelations()) {
-                    process(cteRelation.getCteQueryStatement(), parent);
-                }
-            }
-            return process(queryRelation, parent);
-        }
-
-        @Override
-        public Scope visitQueryRelation(QueryRelation node, Scope parent) {
-            return process(node, parent);
-        }
-
-        @Override
-        public Scope visitSelect(SelectRelation selectRelation, Scope scope) {
-            Relation r = selectRelation.getRelation();
-            // Only touch files(); keep others intact
-            if (r instanceof FileTableFunctionRelation) {
-                FileTableFunctionRelation f = (FileTableFunctionRelation) r;
-                initializeFileTableIfAbsent(f);
-            } else if (r instanceof JoinRelation) {
-                visitJoin((JoinRelation) r, scope);
-            } else if (r instanceof SubqueryRelation) {
-                visitSubqueryRelation((SubqueryRelation) r, scope);
-            } else if (r instanceof SetOperationRelation) {
-                visitSetOp((SetOperationRelation) r, scope);
-            } else if (r instanceof PivotRelation) {
-                PivotRelation p = (PivotRelation) r;
-                process(p.getQuery(), scope);
-            }
-            return scope;
-        }
-
-        public Scope visitJoin(JoinRelation join, Scope scope) {
-            Relation l = join.getLeft();
-            Relation r = join.getRight();
-            // SubqueryRelation/SetOperationRelation/PivotRelation are intentionally skipped here, because
-            // pre-analyzing them would still require table metadata and locks; the full analyzer pass will
-            // revisit them after files() has been resolved where necessary.
-            if (l instanceof FileTableFunctionRelation) {
-                FileTableFunctionRelation f = (FileTableFunctionRelation) l;
-                initializeFileTableIfAbsent(f);
-            } else if (l instanceof JoinRelation) {
-                visitJoin((JoinRelation) l, scope);
-            } else if (l instanceof SelectRelation) {
-                visitSelect((SelectRelation) l, scope);
-            } else if (l instanceof SubqueryRelation) {
-                visitSubqueryRelation((SubqueryRelation) l, scope);
-            } else if (l instanceof SetOperationRelation) {
-                visitSetOp((SetOperationRelation) l, scope);
-            }
-
-            // Same as the left side. We continue to recurse into joins, subqueries and set operations to locate
-            // nested files() invocations, while still avoiding any metadata access for normal table relations.
-            if (r instanceof FileTableFunctionRelation) {
-                FileTableFunctionRelation f = (FileTableFunctionRelation) r;
-                initializeFileTableIfAbsent(f);
-                // Do NOT mark lateral here: the relation remains a FileTableFunctionRelation, and the main analyzer
-                // will decide whether lateral semantics are required once it has the final relation type.
-            } else if (r instanceof JoinRelation) {
-                visitJoin((JoinRelation) r, scope);
-            } else if (r instanceof SelectRelation) {
-                visitSelect((SelectRelation) r, scope);
-            } else if (r instanceof SubqueryRelation) {
-                visitSubqueryRelation((SubqueryRelation) r, scope);
-            } else if (r instanceof SetOperationRelation) {
-                visitSetOp((SetOperationRelation) r, scope);
-            }
-            return scope;
-        }
-
-        private void initializeFileTableIfAbsent(FileTableFunctionRelation relation) {
-            if (relation.getTable() instanceof TableFunctionTable) {
-                return;
-            }
-
-            Table table = resolveTableFunctionTable(relation.getProperties(), relation.getPushDownSchemaFunc());
-            relation.setTable(table);
-        }
-
-        public Scope visitSubqueryRelation(SubqueryRelation subquery, Scope scope) {
-            process(subquery.getQueryStatement(), scope);
-            return scope;
-        }
-
-        public Scope visitSetOp(SetOperationRelation set, Scope scope) {
-            for (QueryRelation qr : set.getRelations()) {
-                process(qr, scope);
-            }
-            return scope;
         }
     }
 
@@ -2889,12 +2834,15 @@ public class QueryAnalyzer {
                         Table mvTable = materializedIndex.first;
                         Preconditions.checkState(mvTable != null);
                         Preconditions.checkState(mvTable instanceof OlapTable);
-                        // Add read lock to avoid concurrent problems.
                         OlapTable mvOlapTable = new OlapTable(mvTable.getType());
-                        // Known: PlannerMetaLocker does not collect a [_SYNC_MV_] relation, so this copies the
-                        // base table without its lock. Tracked as 2-g in the FE lock todo, fixed on its own.
+                        // Known: when a statement is planned, PlannerMetaLocker collects the base table of a
+                        // [_SYNC_MV_] relation by its index name, so this copy is taken under its READ lock -- but not
+                        // yet for a read in GROUP BY, which that collection does not walk before analysis. Nor does
+                        // every analysis run under the planner lock: CREATE VIEW analyzes its query
+                        // holding none, and the copy is taken all the same. Tracked as 2-g in the FE lock todo: the
+                        // analyzer is to stop copying, leaving the copy to the planner.
                         try (SnapshotCopyValidator.KnownViolation known = SnapshotCopyValidator.exemptKnownViolation(
-                                "[_SYNC_MV_] relation is not in the planner lock set (2-g)")) {
+                                "[_SYNC_MV_] base table copied by analysis outside the planner lock (2-g)")) {
                             ((OlapTable) mvTable).copyOnlyForQuery(mvOlapTable);
                         }
                         // Copy the necessary olap table meta to avoid changing original meta;

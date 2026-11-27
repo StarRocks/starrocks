@@ -1322,6 +1322,52 @@ public class MvTransparentRewriteWithOlapTableTest extends MVTestBase {
     }
 
     @Test
+    public void testCompensationKeepsGroupingKeysWithoutRollup() {
+        MTable intTable = new MTable("m_int", "k1",
+                ImmutableList.of("k1 INT", "k2 INT", "v1 INT"),
+                "k1",
+                ImmutableList.of(
+                        "PARTITION `p1` VALUES LESS THAN ('3')",
+                        "PARTITION `p2` VALUES LESS THAN ('6')",
+                        "PARTITION `p3` VALUES LESS THAN ('9')"
+                )
+        );
+        starRocksAssert.withTable(intTable, () -> {
+            cluster.runSql("test", "insert into m_int values (1,1,1), (4,1,1), (4,2,1);");
+            starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv0 " +
+                            " PARTITION BY (k1) " +
+                            " DISTRIBUTED BY HASH(k1) " +
+                            " REFRESH DEFERRED MANUAL " +
+                            " AS SELECT k1, k2, sum(v1) as agg1, count(*) as cnt from m_int group by k1, k2;",
+                    () -> {
+                        starRocksAssert.refreshMvPartition(String.format("REFRESH MATERIALIZED VIEW mv0 \n" +
+                                "PARTITION START ('%s') END ('%s')", "1", "3"));
+                        MaterializedView mv1 = getMv("test", "mv0");
+                        Assertions.assertEquals("[p1]", mv1.getPartitionNames().toString());
+
+                        String[] mvGrainQueries = {
+                                "SELECT /*+ SET_VAR(enable_materialized_view_text_match_rewrite = false) */ " +
+                                        "count(*), avg(agg1) FROM " +
+                                        "(SELECT k1, k2, sum(v1) as agg1, count(*) as cnt from m_int group by k1, k2) t",
+                                "SELECT /*+ SET_VAR(enable_materialized_view_text_match_rewrite = false) */ " +
+                                        "count(*) FROM " +
+                                        "(SELECT k1, k2, sum(v1) as agg1, count(*) as cnt from m_int group by k1, k2) t",
+                        };
+                        for (String query : mvGrainQueries) {
+                            String plan = getFragmentPlan(query);
+                            PlanTestBase.assertContains(plan, "UNION", "mv0", "m_int");
+                            PlanTestBase.assertMatches(plan, "group by: \\d+: k1, \\d+: k2");
+                        }
+
+                        String rollupQuery = "SELECT k1, sum(v1) from m_int group by k1";
+                        String plan = getFragmentPlan(rollupQuery);
+                        PlanTestBase.assertContains(plan, "UNION", "mv0", "m_int");
+                        PlanTestBase.assertNotMatches(plan, "group by: \\d+: k1, \\d+: k2");
+                    });
+        });
+    }
+
+    @Test
     public void testTransparentRewriteWithAggregateFilterColumnsPrune() {
         starRocksAssert.withTable(m1, () -> {
             cluster.runSql("test", "insert into m1 values (1,1,1,1,1), (4,2,1,1,1);");

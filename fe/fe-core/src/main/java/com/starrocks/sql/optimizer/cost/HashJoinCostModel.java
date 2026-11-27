@@ -90,8 +90,7 @@ public class HashJoinCostModel {
         double leftOutput = leftStatistics.getOutputSize(context.getChildOutputColumns(0));
         double rightOutput = rightStatistics.getOutputSize(context.getChildOutputColumns(1));
         ConnectContext connectContext = ConnectContext.get();
-        SystemInfoService clusterInfo = connectContext.getGlobalStateMgr().getNodeMgr().getClusterInfo();
-        int parallelFactor = Math.max(connectContext.getAliveBackendNumber() + clusterInfo.getAliveComputeNodeNumber(),
+        int parallelFactor = Math.max(getExecNodeNumber(connectContext),
                 connectContext.getSessionVariable().getDegreeOfParallelism(connectContext.getCurrentWarehouseId()));
         switch (execMode) {
             case BROADCAST:
@@ -117,11 +116,17 @@ public class HashJoinCostModel {
         double rightOutput = rightStatistics.getOutputSize(context.getChildOutputColumns(1));
         double memCost;
 
-        // TODO: It may not be accurate in shared-data cluster using all alive compute nodes to
-        //  estimate the cost, ideally it should be warehouse awareness.
-        int beNum = Math.max(1, ConnectContext.get().getAliveBackendNumber() +
-                (RunMode.isSharedDataMode() ?
-                ConnectContext.get().getGlobalStateMgr().getNodeMgr().getClusterInfo().getAliveComputeNodeNumber() : 0));
+        // The number of nodes that each build a copy of the hash table in a broadcast join.
+        ConnectContext connectContext = ConnectContext.get();
+        int beNum;
+        if (connectContext.isUseWarehouseExecNodes()) {
+            beNum = connectContext.getQueryExecNodeNumber();
+        } else {
+            // Legacy count: alive backends, plus all alive compute nodes of the cluster in shared-data mode.
+            beNum = Math.max(1, connectContext.getAliveBackendNumber() +
+                    (RunMode.isSharedDataMode() ?
+                    connectContext.getGlobalStateMgr().getNodeMgr().getClusterInfo().getAliveComputeNodeNumber() : 0));
+        }
 
         if (JoinExecMode.BROADCAST == execMode) {
             memCost = rightOutput * beNum;
@@ -131,13 +136,24 @@ public class HashJoinCostModel {
         return memCost;
     }
 
+    /**
+     * The number of nodes a shuffle join spreads its work over: the alive execution nodes of the query's warehouse in
+     * shared-data mode, otherwise (or with enable_cbo_warehouse_exec_nodes off) every alive backend and compute node.
+     */
+    private static int getExecNodeNumber(ConnectContext connectContext) {
+        if (connectContext.isUseWarehouseExecNodes()) {
+            return connectContext.getQueryExecNodeNumber();
+        }
+        SystemInfoService clusterInfo = connectContext.getGlobalStateMgr().getNodeMgr().getClusterInfo();
+        return connectContext.getAliveBackendNumber() + clusterInfo.getAliveComputeNodeNumber();
+    }
+
     private double getAvgProbeCost() {
         JoinExecMode execMode = deriveJoinExecMode();
         double keySize = calculateKeySize();
 
         ConnectContext connectContext = ConnectContext.get();
-        SystemInfoService clusterInfo = connectContext.getGlobalStateMgr().getNodeMgr().getClusterInfo();
-        int parallelFactor = Math.max(connectContext.getAliveBackendNumber() + clusterInfo.getAliveComputeNodeNumber(),
+        int parallelFactor = Math.max(getExecNodeNumber(connectContext),
                 connectContext.getSessionVariable().getDegreeOfParallelism(connectContext.getCurrentWarehouseId())) * 2;
         double mapSize = Math.min(1, keySize) * rightStatistics.getOutputRowCount();
 

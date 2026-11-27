@@ -19,6 +19,7 @@ import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.RemovalCause;
 import com.github.benmanes.caffeine.cache.Scheduler;
 import com.github.benmanes.caffeine.cache.Ticker;
+import com.starrocks.connector.share.iceberg.IcebergTablePayload;
 import com.starrocks.utils.loader.ThreadContextClassLoader;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.io.FileIO;
@@ -99,7 +100,7 @@ final class SharedTableCache {
      */
     static Lease acquire(String serializedTable, long capacity) {
         if (capacity <= 0) {
-            return new PrivateLease(deserializeFromBase64(serializedTable));
+            return new PrivateLease(load(serializedTable));
         }
         return getInstance(capacity).acquire(serializedTable);
     }
@@ -113,7 +114,7 @@ final class SharedTableCache {
                     // Removal closes a FileIO under the reader's class loader. ForkJoinPool.commonPool() (Caffeine's
                     // default) may run innocuous workers that refuse setContextClassLoader, so run maintenance on
                     // the thread that triggers it: a scanner thread or the scheduler's delay thread.
-                    cache = new SharedTableCache(capacity, payload -> deserializeFromBase64(payload),
+                    cache = new SharedTableCache(capacity, SharedTableCache::load,
                             Ticker.systemTicker(), Runnable::run, Scheduler.systemScheduler());
                     instance = cache;
                 }
@@ -123,6 +124,19 @@ final class SharedTableCache {
         return cache;
     }
 
+    // A payload is either the Java-serialized table (base64) or its JSON form (IcebergTablePayload), which
+    // the scanner picks when the FE is of another build. Base64 never starts with '{'.
+    static Table load(String payload) {
+        if (isJsonPayload(payload)) {
+            return IcebergTablePayload.fromJson(payload);
+        }
+        return deserializeFromBase64(payload);
+    }
+
+    static boolean isJsonPayload(String payload) {
+        return !payload.isEmpty() && payload.charAt(0) == '{';
+    }
+
     Lease acquire(String serializedTable) {
         String key = sha256(serializedTable);
         while (true) {
@@ -130,8 +144,9 @@ final class SharedTableCache {
                 loads.incrementAndGet();
                 long start = System.nanoTime();
                 Table table = loader.apply(serializedTable);
-                LOG.info("Deserialized the shared iceberg table {} for metadata scans, payload {} chars, {} ms, key {}",
-                        table.name(), serializedTable.length(), (System.nanoTime() - start) / 1_000_000, k);
+                LOG.info("Deserialized the shared iceberg table {} for metadata scans, {} payload {} chars, {} ms, key {}",
+                        table.name(), isJsonPayload(serializedTable) ? "JSON" : "Java", serializedTable.length(),
+                        (System.nanoTime() - start) / 1_000_000, k);
                 return new Entry(table);
             });
             // The entry may have been evicted and its io closed between the lookup and here; look up again.
@@ -177,14 +192,38 @@ final class SharedTableCache {
         } catch (NoSuchAlgorithmException e) {
             throw new IllegalStateException("SHA-256 is not available", e);
         }
-        // The payload is base64 (ASCII) and can be tens of MB: digest it in chunks instead of copying it whole.
+        // The Java form is base64 (ASCII) and can be tens of MB: digest it in chunks instead of copying it whole,
+        // one byte per char. The JSON form may hold any char (names, locations, properties): once a non-ASCII
+        // char shows up, digest every UTF-16 code unit as two bytes instead, which is lossless even for unpaired
+        // surrogates (a charset encoder would replace them all with the same byte). The leading 0xFF, which no
+        // ASCII payload starts with, keeps the two encodings apart, so equal digests still mean equal payloads.
         byte[] buffer = new byte[Math.min(DIGEST_CHUNK_CHARS, payload.length())];
         for (int start = 0; start < payload.length(); start += buffer.length) {
             int end = Math.min(start + buffer.length, payload.length());
             for (int i = start; i < end; i++) {
-                buffer[i - start] = (byte) payload.charAt(i);
+                char c = payload.charAt(i);
+                if (c >= 0x80) {
+                    digest.reset();
+                    return digestUtf16(digest, payload);
+                }
+                buffer[i - start] = (byte) c;
             }
             digest.update(buffer, 0, end - start);
+        }
+        return HexFormat.of().formatHex(digest.digest());
+    }
+
+    private static String digestUtf16(MessageDigest digest, String payload) {
+        digest.update((byte) 0xFF);
+        byte[] buffer = new byte[2 * Math.min(DIGEST_CHUNK_CHARS, payload.length())];
+        for (int start = 0; start < payload.length(); start += buffer.length / 2) {
+            int end = Math.min(start + buffer.length / 2, payload.length());
+            for (int i = start; i < end; i++) {
+                char c = payload.charAt(i);
+                buffer[2 * (i - start)] = (byte) (c >> 8);
+                buffer[2 * (i - start) + 1] = (byte) c;
+            }
+            digest.update(buffer, 0, 2 * (end - start));
         }
         return HexFormat.of().formatHex(digest.digest());
     }

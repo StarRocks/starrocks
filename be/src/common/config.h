@@ -88,6 +88,11 @@ CONF_mBool(enable_resolve_hostname_to_ip_in_load_error_url, "false");
 // If no ip match this rule, will choose one randomly.
 CONF_String(priority_networks, "");
 CONF_Bool(net_use_ipv6_when_priority_networks_empty, "false");
+// How long BE/CN startup waits for a non-loopback address to appear when the host only has
+// loopback addresses, e.g. the process was started before DHCP assigned an address. Without
+// the wait, the process picks a loopback address and keeps it until it is restarted.
+// Once the wait times out, the address is chosen as before. 0 disables the wait.
+CONF_Int32(net_wait_for_local_ip_timeout_s, "300");
 
 // Memory urged water level, if the memory usage exceeds this level,
 // be will free up some memory immediately to ensure the system runs smoothly.
@@ -887,11 +892,13 @@ CONF_Int32(load_segment_thread_pool_queue_size, "10240");
 CONF_mBool(enable_lake_segment_metadata_filter, "true");
 
 // Once a query scan of a lake tablet has opened its segments, split or not, start filling the local cache with the
-// index pages its reads need next -- the short key index of every segment, the zone map and bloom filter roots of the
-// predicate columns and the ordinal index roots of the read columns -- asynchronously, without waiting for them. The
-// reads then join those fills instead of fetching one page after another. Takes effect only for queries and only
-// while the remote I/O scheduler is enabled and initialized (remote_io_scheduler_enable); otherwise, and when a file
-// cannot be warmed, the scan reads its index pages as before. Independent of lake_scan_parallel_segment_open.
+// index pages its reads need next -- the short key index of every segment, the zone map, bloom filter and bitmap
+// index roots of the predicate columns and the ordinal index roots of the read columns -- asynchronously, without
+// waiting for them. The reads then join those fills instead of fetching one page after another. The bitmap index
+// lookups of EQ and IN predicates likewise ask for the dictionary pages of all their values at once, and then for the
+// pages of all the bitmaps they selected, before reading them. Takes effect only for queries and only while the remote
+// I/O scheduler is enabled and initialized (remote_io_scheduler_enable); otherwise, and when a file cannot be warmed,
+// the scan reads its index pages as before. Independent of lake_scan_parallel_segment_open.
 CONF_mBool(lake_scan_warm_index, "true");
 
 // When a prepared-split scan's main morsel queue is momentarily empty (its seed page-pruning is still
@@ -914,6 +921,15 @@ CONF_mBool(lake_scan_parallel_segment_open, "true");
 // remote_prefetch_window_blocks blocks not read yet, so the segment started last can take that to about twice the
 // window. 0 starts each segment's read-ahead only when its turn comes.
 CONF_mInt32(lake_scan_read_ahead_segments, "16");
+
+// The cache blocks the query scans of a node may have asked for ahead of their reads and not read yet, all scans
+// together: the blocks remote_prefetch_window_blocks lets each segment reader keep ahead, and those of the segments
+// lake_scan_read_ahead_segments starts early. The windows reading ahead share it equally: each keeps at most the limit
+// divided by their number (at least one block), so a scan that starts later still gets its share. While the node holds
+// this many, a window asks for no more blocks and a tablet scan starts no next segment early; their reads fetch what
+// they need as they reach it. The blocks a read is about to consume are always fetched. Blocks are reserved atomically,
+// so concurrent scans never take the total past the limit. 0 means no limit.
+CONF_mInt64(lake_scan_read_ahead_max_blocks, "2048");
 
 // Fragment thread pool
 CONF_Int32(fragment_pool_thread_num_min, "64");
@@ -1579,6 +1595,40 @@ CONF_Bool(aws_sdk_enable_compliant_rfc3986_encoding, "false");
 // use poco client to replace default curl client
 CONF_Bool(enable_poco_client_for_aws_sdk, "false");
 
+// Fast retry for small requests to shared-data storage.
+// Object storage now and then answers a small request one or two seconds late, while the same request sent
+// again is answered at once. With fast retry, the SDK's first attempt of a small PutObject or a HeadObject that
+// starlet sends carries a short whole-request timeout. When a send with the short timeout times out, it is aborted
+// and the same signed request is sent again at once, without the SDK's retry back-off. Once the sends that may
+// carry the short timeout are used up or the budget has no token, the next send uses the usual timeouts. The SDK's
+// own retries and the object storage clients that BE creates for external tables, unload and backup are not
+// affected.
+// Can be changed at runtime and applies to the requests sent after the change. The BE process installs the HTTP
+// client that does it at startup whenever the AWS SDK uses its curl client; while this is false, that client sends
+// every request as the SDK's own client does. It has no effect when enable_poco_client_for_aws_sdk is true.
+CONF_mBool(enable_object_storage_fast_retry, "false");
+// Short timeout of a PutObject whose body is at most object_storage_fast_retry_put_max_bytes. It covers the
+// whole request: connection setup, TLS, waiting for 100 Continue, sending the body and waiting for the response.
+// 0 turns fast retry off for PutObject.
+CONF_mInt64(object_storage_fast_retry_put_timeout_ms, "300");
+// Largest number of sends of such a PutObject that carry the short timeout, 1 to 3. Once these sends are used up or
+// the budget has no token, the next send uses the usual timeouts. Each timeout adds at most one short timeout to
+// the time of the request; the time of the next send and any wait for a free connection come on top.
+CONF_mInt32(object_storage_fast_retry_put_short_attempts, "1");
+// Largest PutObject body that fast retry covers.
+CONF_mInt64(object_storage_fast_retry_put_max_bytes, "1048576");
+// Short timeout of a HeadObject. 0 turns fast retry off for HeadObject.
+CONF_mInt64(object_storage_fast_retry_head_timeout_ms, "300");
+// Largest number of sends of a HeadObject that carry the short timeout, 1 to 3. They work as for PutObject.
+CONF_mInt32(object_storage_fast_retry_head_short_attempts, "1");
+// Upper bound of the extra requests that fast retry sends, in percent of the requests of each class on each
+// client. When sends that time out use up this budget, requests go without the short timeout until enough
+// requests complete normally. Each client starts with 100 tokens per class and holds at most 100. A request takes a
+// token before it is sent with the short timeout and gives it back unless that send times out, so concurrent
+// requests cannot exceed the budget; a request that finds no token goes without the short timeout. 0 turns fast
+// retry off.
+CONF_mInt32(object_storage_fast_retry_budget_percent, "2");
+
 // default: 16MB
 CONF_mInt64(experimental_s3_max_single_part_size, "16777216");
 // default: 16MB
@@ -1721,9 +1771,13 @@ CONF_Int32(remote_read_compaction_weight, "1");
 CONF_Int32(remote_read_background_weight, "1");
 // Cache blocks a query's segment reader keeps asked for ahead of what it is consuming -- queued, in flight, or filled
 // and not read yet -- while the remote I/O scheduler is enabled. It bounds how far a reader runs ahead of itself;
-// when the blocks are fetched is the scheduler's decision. Loads, compaction and other background reads do not read
-// ahead. 0 turns the read-ahead off. Applies to the segment readers opened afterwards.
+// when the blocks are fetched is the scheduler's decision. Loads and other background reads do not read ahead;
+// compaction reads ahead under lake_compaction_prefetch_window_blocks. 0 turns the read-ahead off. Applies to the
+// segment readers opened afterwards.
 CONF_mInt32(remote_prefetch_window_blocks, "128");
+// Target cache blocks a lake compaction task requests ahead across its input segments; zero disables it.
+// Every input segment keeps at least one block ahead, so an input with more segments than this exceeds it.
+CONF_mInt32(lake_compaction_prefetch_window_blocks, "32");
 // With late materialization, the columns read only for the rows that pass the predicates are fetched per chunk once
 // those rows are known. From the fourth chunk of a segment reader on, once those rows have touched at least this
 // share of the pages they span, these columns are read ahead like the predicate columns. Above 1, never. Applies to

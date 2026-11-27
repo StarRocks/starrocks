@@ -1196,6 +1196,10 @@ int64_t HiveDataSource::num_bytes_read() const {
     if (_scanner == nullptr) return 0;
     return _scanner->num_bytes_read();
 }
+ScanAuditCounters HiveDataSource::scan_audit_counters() const {
+    if (_scanner == nullptr) return {};
+    return _scanner->scan_audit_counters();
+}
 int64_t HiveDataSource::cpu_time_spent() const {
     if (_scanner == nullptr) return 0;
     return _scanner->cpu_time_spent();

@@ -1,7 +1,4 @@
 -- name: test_lake_lightweight_add_index @cloud
-ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
--- result:
--- !result
 set low_cardinality_optimize_v2 = false;
 -- result:
 -- !result

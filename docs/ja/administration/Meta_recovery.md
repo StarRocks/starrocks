@@ -722,4 +722,5 @@ com.sleepycat.je.rep.UnknownMasterException: (JE 18.3.16) Could not determine ma
 
 - [bdbje_reset_election_group](./configuration/FE_parameters/FE_parameters.md#bdbje_reset_election_group)
 - [metadata_enable_recovery_mode](./configuration/FE_parameters/FE_parameters.md#metadata_enable_recovery_mode)
+- [metadata_ignore_image_checksum_error](./configuration/FE_parameters/FE_parameters.md#metadata_ignore_image_checksum_error)
 - [metadata_ignore_unknown_operation_type](./configuration/FE_parameters/FE_parameters.md#metadata_ignore_unknown_operation_type)

@@ -889,6 +889,8 @@ void ConnectorChunkSource::_reset_reuse_state(RuntimeState* state, MorselPtr&& m
     _cpu_time_spent_ns = 0;
     _scan_rows_num = 0;
     _scan_bytes = 0;
+    _scan_audit_counters = ScanAuditCounters{};
+    _reported_scan_audit_counters = ScanAuditCounters{};
     _io_time_spent_ns = 0;
     _status = Status::OK();
     _reach_limit.store(false);
@@ -910,6 +912,7 @@ void ConnectorChunkSource::release_for_reuse(RuntimeState* state) {
     }
 
     _data_source->release_for_reuse(state);
+    _scan_audit_counters = _data_source->scan_audit_counters();
     _opened = false;
     _closed = true;
     _status = Status::EndOfFile("");
@@ -1032,6 +1035,7 @@ void ConnectorChunkSource::close(RuntimeState* state) {
     }
     _closed = true;
     _data_source->close(state);
+    _scan_audit_counters = _data_source->scan_audit_counters();
 }
 
 Status ConnectorChunkSource::_open_data_source(RuntimeState* state, bool* mem_alloc_failed) {
@@ -1158,6 +1162,7 @@ Status ConnectorChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
             DCHECK(_status.ok() || _status.is_end_of_file());
             _scan_rows_num = _data_source->raw_rows_read();
             _scan_bytes = _data_source->num_bytes_read();
+            _scan_audit_counters = _data_source->scan_audit_counters();
             _cpu_time_spent_ns = _data_source->cpu_time_spent();
             _io_time_spent_ns = _data_source->io_time_spent();
             delta_io_time_ns = _io_time_spent_ns - prev_io_time_ns;

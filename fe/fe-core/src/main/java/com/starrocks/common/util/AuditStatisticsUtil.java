@@ -17,12 +17,16 @@ import com.google.common.collect.Lists;
 import com.starrocks.proto.AIExecutionStatisticsPB;
 import com.starrocks.proto.NodeExecStatsItemPB;
 import com.starrocks.proto.PQueryStatistics;
+import com.starrocks.proto.PerScanStatsItemPB;
 import com.starrocks.proto.QueryStatisticsItemPB;
 import com.starrocks.thrift.TAIExecutionStatistics;
+import com.starrocks.thrift.TAuditPerScanStatsItem;
 import com.starrocks.thrift.TAuditStatistics;
 import com.starrocks.thrift.TAuditStatisticsItem;
 import org.apache.commons.collections.CollectionUtils;
 
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -64,6 +68,12 @@ public class AuditStatisticsUtil {
                 copiedItem.rfFilterRows = item.rfFilterRows;
                 copiedItem.nodeId = item.nodeId;
                 copy.nodeExecStatsItems.add(copiedItem);
+            }
+        }
+        if (source.perScanStatsItems != null) {
+            copy.perScanStatsItems = Lists.newArrayListWithCapacity(source.perScanStatsItems.size());
+            for (PerScanStatsItemPB item : source.perScanStatsItems) {
+                copy.perScanStatsItems.add(copyPerScanItem(item));
             }
         }
         if (source.aiStatistics != null) {
@@ -112,6 +122,31 @@ public class AuditStatisticsUtil {
         pb.readRemoteCnt = tb.getRead_remote_cnt();
         if (tb.isSetAi_statistics()) {
             pb.aiStatistics = toAIProtobuf(tb.getAi_statistics());
+        }
+        if (tb.isSetPer_scan_stats_items()) {
+            pb.perScanStatsItems = Lists.newArrayList();
+            for (TAuditPerScanStatsItem tItem : tb.getPer_scan_stats_items()) {
+                PerScanStatsItemPB pItem = new PerScanStatsItemPB();
+                if (tItem.isSetPlan_node_id()) {
+                    pItem.planNodeId = tItem.getPlan_node_id();
+                }
+                if (tItem.isSetPhysical_rows_read()) {
+                    pItem.physicalRowsRead = tItem.getPhysical_rows_read();
+                }
+                if (tItem.isSetLogical_rows_read()) {
+                    pItem.logicalRowsRead = tItem.getLogical_rows_read();
+                }
+                if (tItem.isSetOutput_rows()) {
+                    pItem.outputRows = tItem.getOutput_rows();
+                }
+                if (tItem.isSetRemote_bytes()) {
+                    pItem.remoteBytes = tItem.getRemote_bytes();
+                }
+                if (tItem.isSetCache_bytes()) {
+                    pItem.cacheBytes = tItem.getCache_bytes();
+                }
+                pb.perScanStatsItems.add(pItem);
+            }
         }
         return pb;
     }
@@ -210,6 +245,59 @@ public class AuditStatisticsUtil {
             }
             mergeAIStatistics(from.aiStatistics, to.aiStatistics);
         }
+        mergePerScanStatsItems(from.perScanStatsItems, to);
+    }
+
+    // The same plan node sums up, different plan nodes stay apart; a counter no report set stays unset.
+    private static void mergePerScanStatsItems(List<PerScanStatsItemPB> fromItems, PQueryStatistics to) {
+        if (CollectionUtils.isEmpty(fromItems)) {
+            return;
+        }
+        if (to.perScanStatsItems == null) {
+            to.perScanStatsItems = Lists.newArrayList();
+        }
+        Map<Integer, PerScanStatsItemPB> itemMap = new HashMap<>();
+        for (PerScanStatsItemPB item : to.perScanStatsItems) {
+            itemMap.put(item.planNodeId, item);
+        }
+        for (PerScanStatsItemPB fromItem : fromItems) {
+            if (fromItem.planNodeId == null) {
+                continue;
+            }
+            PerScanStatsItemPB toItem = itemMap.get(fromItem.planNodeId);
+            if (toItem == null) {
+                toItem = copyPerScanItem(fromItem);
+                to.perScanStatsItems.add(toItem);
+                itemMap.put(toItem.planNodeId, toItem);
+                continue;
+            }
+            toItem.physicalRowsRead = addCounter(toItem.physicalRowsRead, fromItem.physicalRowsRead);
+            toItem.logicalRowsRead = addCounter(toItem.logicalRowsRead, fromItem.logicalRowsRead);
+            toItem.outputRows = addCounter(toItem.outputRows, fromItem.outputRows);
+            toItem.remoteBytes = addCounter(toItem.remoteBytes, fromItem.remoteBytes);
+            toItem.cacheBytes = addCounter(toItem.cacheBytes, fromItem.cacheBytes);
+        }
+    }
+
+    private static PerScanStatsItemPB copyPerScanItem(PerScanStatsItemPB item) {
+        PerScanStatsItemPB copied = new PerScanStatsItemPB();
+        copied.planNodeId = item.planNodeId;
+        copied.physicalRowsRead = item.physicalRowsRead;
+        copied.logicalRowsRead = item.logicalRowsRead;
+        copied.outputRows = item.outputRows;
+        copied.remoteBytes = item.remoteBytes;
+        copied.cacheBytes = item.cacheBytes;
+        return copied;
+    }
+
+    private static Long addCounter(Long left, Long right) {
+        if (left == null) {
+            return right;
+        }
+        if (right == null) {
+            return left;
+        }
+        return left + right;
     }
 
     public static TAuditStatistics toThrift(PQueryStatistics pb) {
@@ -261,6 +349,30 @@ public class AuditStatisticsUtil {
         }
         if (pb.aiStatistics != null) {
             tb.setAi_statistics(toAIThrift(pb.aiStatistics));
+        }
+        if (CollectionUtils.isNotEmpty(pb.perScanStatsItems)) {
+            for (PerScanStatsItemPB pItem : pb.perScanStatsItems) {
+                TAuditPerScanStatsItem tItem = new TAuditPerScanStatsItem();
+                if (pItem.planNodeId != null) {
+                    tItem.setPlan_node_id(pItem.planNodeId);
+                }
+                if (pItem.physicalRowsRead != null) {
+                    tItem.setPhysical_rows_read(pItem.physicalRowsRead);
+                }
+                if (pItem.logicalRowsRead != null) {
+                    tItem.setLogical_rows_read(pItem.logicalRowsRead);
+                }
+                if (pItem.outputRows != null) {
+                    tItem.setOutput_rows(pItem.outputRows);
+                }
+                if (pItem.remoteBytes != null) {
+                    tItem.setRemote_bytes(pItem.remoteBytes);
+                }
+                if (pItem.cacheBytes != null) {
+                    tItem.setCache_bytes(pItem.cacheBytes);
+                }
+                tb.addToPer_scan_stats_items(tItem);
+            }
         }
         return tb;
     }

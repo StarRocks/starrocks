@@ -158,7 +158,7 @@ StatusOr<pipeline::OpFactories> DistinctBlockingNode::decompose_to_pipeline(pipe
                                         SortedAggregateStreamingSinkOperatorFactory>(ops_with_sink, context, false)));
     } else {
         if (runtime_state()->enable_spill() && runtime_state()->enable_agg_distint_spill()) {
-            if (runtime_state()->enable_spill_partitionwise_agg()) {
+            if (runtime_state()->spill_partitionwise_agg() || !_group_by_keys_support_orderby()) {
                 ASSIGN_OR_RETURN(
                         ops_with_source,
                         (_decompose_to_pipeline<AggregatorFactory, SpillablePartitionWiseDistinctSourceOperatorFactory,

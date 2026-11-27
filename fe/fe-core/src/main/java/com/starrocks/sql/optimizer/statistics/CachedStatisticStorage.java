@@ -64,6 +64,10 @@ import static com.starrocks.metric.MetricRepo.SYNC_STATS_LOAD_BUDGET_EXHAUSTED_T
 public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable {
     private static final Logger LOG = LogManager.getLogger(CachedStatisticStorage.class);
 
+    // Target partition/column rows per explicit refresh query. A single column can exceed this target.
+    private static final int PARTITION_STATS_REFRESH_BATCH_ROWS = 100_000;
+    private static final int PARTITION_STATS_REFRESH_BATCH_COLUMNS = 32;
+
     private final Executor statsCacheRefresherExecutor =
             ThreadPoolManager.newDaemonFixedThreadPoolWithUnboundedQueue(Config.statistic_cache_thread_pool_size,
                     "stats-cache-refresher", true);
@@ -107,6 +111,8 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
                 return keys.stream().collect(Collectors.toMap(TableStatsCacheKey::getPartitionId,
                         k -> data.getOrDefault(k, Optional.empty())));
             }
+            // Some partitions are still loading. Keep the ones already loaded instead of discarding them all.
+            return getLoadedTableStatistics(keys);
         } catch (InterruptedException e) {
             LOG.warn("Failed to execute tableStatsCache.getAll", e);
             Thread.currentThread().interrupt();
@@ -114,6 +120,27 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
             LOG.warn("Faied to execute tableStatsCache.getAll", e);
         }
         return partitions.stream().collect(Collectors.toMap(Partition::getId, p -> Optional.empty()));
+    }
+
+    /**
+     * The row counts of the partitions whose load has completed. A partition that is still loading, is not cached,
+     * or failed to load is left out: absent means not loaded yet, while Optional.empty() means loaded but without
+     * statistics. Reads through asMap() so that it neither counts as a cache hit or miss nor loads again.
+     */
+    private Map<Long, Optional<Long>> getLoadedTableStatistics(List<TableStatsCacheKey> keys) {
+        Map<TableStatsCacheKey, CompletableFuture<Optional<Long>>> cached = tableStatsCache.asMap();
+        Map<Long, Optional<Long>> loaded = new HashMap<>();
+        for (TableStatsCacheKey key : keys) {
+            CompletableFuture<Optional<Long>> future = cached.get(key);
+            if (future == null || !future.isDone() || future.isCompletedExceptionally()) {
+                continue;
+            }
+            Optional<Long> rowCount = future.getNow(null);
+            if (rowCount != null) {
+                loaded.put(key.getPartitionId(), rowCount);
+            }
+        }
+        return loaded;
     }
 
     /**
@@ -187,6 +214,58 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
         } catch (Exception e) {
             LOG.warn("Failed to refresh getColumnStatistics", e);
         }
+        refreshCachedPartitionStatistics(table, cacheKeys, isSync);
+    }
+
+    private void refreshCachedPartitionStatistics(Table table, List<ColumnStatsCacheKey> cacheKeys, boolean isSync) {
+        // Recollecting a column also changes its partition NDV and null fraction. Include in-flight loads,
+        // which the synchronous view hides, so they cannot later cache pre-collection statistics.
+        // Inspect the async map without recording hits/misses or loading cold, analyzed columns.
+        List<ColumnStatsCacheKey> cachedKeys = cacheKeys.stream().filter(partitionStatistics.asMap()::containsKey)
+                .collect(Collectors.toList());
+        if (cachedKeys.isEmpty()) {
+            return;
+        }
+        try {
+            PartitionStatsCacheLoader loader = new PartitionStatsCacheLoader();
+            long partitionCount = Math.max(1L, table.getPartitions().size());
+            int batchSize = (int) Math.max(1L, Math.min(PARTITION_STATS_REFRESH_BATCH_COLUMNS,
+                    PARTITION_STATS_REFRESH_BATCH_ROWS / partitionCount));
+            LOG.debug("Refresh cached partition statistics, tableId: {}, cachedColumns: {}, partitions: {}, batchColumns: {}",
+                    table.getId(), cachedKeys.size(), partitionCount, batchSize);
+            CompletableFuture<Void> applied = CompletableFuture.completedFuture(null);
+            for (List<ColumnStatsCacheKey> batch : Lists.partition(cachedKeys, batchSize)) {
+                // Publish each batch before loading the next. Carry only completion, not all replacement maps.
+                applied = applied.thenCompose(ignored -> refreshPartitionStatisticsBatch(loader, batch));
+            }
+            if (isSync) {
+                applied.get();
+            }
+        } catch (InterruptedException e) {
+            LOG.warn("Failed to refresh partition statistics", e);
+            Thread.currentThread().interrupt();
+        } catch (Exception e) {
+            LOG.warn("Failed to refresh partition statistics", e);
+        }
+    }
+
+    private CompletableFuture<Void> refreshPartitionStatisticsBatch(PartitionStatsCacheLoader loader,
+                                                                     List<ColumnStatsCacheKey> batch) {
+        // A queued batch may have been invalidated or evicted while the preceding batch was loading.
+        List<ColumnStatsCacheKey> cachedKeys = batch.stream().filter(partitionStatistics.asMap()::containsKey)
+                .collect(Collectors.toList());
+        if (cachedKeys.isEmpty()) {
+            return CompletableFuture.completedFuture(null);
+        }
+        CompletableFuture<Map<ColumnStatsCacheKey, Optional<PartitionStats>>> future;
+        try {
+            future = loader.asyncLoadAll(cachedKeys, statsCacheRefresherExecutor);
+        } catch (Exception e) {
+            LOG.warn("Failed to refresh partition statistics, tableId: {}, columns: {}",
+                    cachedKeys.get(0).tableId, cachedKeys.size(), e);
+            future = CompletableFuture.failedFuture(e);
+        }
+        return applyRefresh(partitionStatistics, cachedKeys, future);
     }
 
     @Override
@@ -572,6 +651,7 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
             allKeys.add(key);
         }
         columnStatistics.synchronous().invalidateAll(allKeys);
+        partitionStatistics.synchronous().invalidateAll(allKeys);
     }
 
     @Override

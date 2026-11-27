@@ -400,6 +400,18 @@ public class MergeTabletJobTest {
         mergeJob.run();
         Assertions.assertEquals(TabletReshardJob.JobState.RUNNING, mergeJob.getJobState());
 
+        // The plan invalidation has to be in place when the merged index is installed, not only once the job
+        // is done: a lock-free plan reads the visible version its table copy recorded and the layout later.
+        long beforeInstall = table.lastSchemaUpdateTime.get();
+        List<Long> invalidationAtInstall = new ArrayList<>();
+        new MockUp<PhysicalPartition>() {
+            @Mock
+            public void addMaterializedIndex(Invocation invocation, MaterializedIndex index, boolean isBaseIndex) {
+                invalidationAtInstall.add(table.lastSchemaUpdateTime.get());
+                invocation.proceed(index, isBaseIndex);
+            }
+        };
+
         // runRunningJob() -> addNewMaterializedIndexes() installs the merged index and changes the
         // partition tablet layout. It must bump lastSchemaUpdateTime so a query planned concurrently
         // is re-planned by StatementPlanner's retry loop against the new layout, instead of failing with
@@ -410,6 +422,10 @@ public class MergeTabletJobTest {
         long afterMerge = table.lastSchemaUpdateTime.get();
         Assertions.assertTrue(afterMerge > beforeMerge,
                 "merge must bump lastSchemaUpdateTime (before=" + beforeMerge + ", after=" + afterMerge + ")");
+        Assertions.assertFalse(invalidationAtInstall.isEmpty(), "the merge installed no index");
+        Assertions.assertTrue(invalidationAtInstall.stream().allMatch(time -> time > beforeInstall),
+                "plans must be invalidated before the merged index is installed (before=" + beforeInstall
+                        + ", at install=" + invalidationAtInstall + ")");
     }
 
     @Test

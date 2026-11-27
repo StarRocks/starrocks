@@ -32,7 +32,8 @@ class IcebergChunkSink : public PartitionedConnectorChunkSink {
 public:
     IcebergChunkSink(std::vector<std::string> partition_columns, std::vector<std::string> transform_exprs,
                      std::vector<std::unique_ptr<ColumnEvaluator>>&& partition_column_evaluators,
-                     std::unique_ptr<PartitionChunkWriterFactory> partition_chunk_writer_factory, RuntimeState* state);
+                     std::unique_ptr<PartitionChunkWriterFactory> partition_chunk_writer_factory, RuntimeState* state,
+                     bool count_loaded_rows = true);
 
     ~IcebergChunkSink() override = default;
 
@@ -44,6 +45,7 @@ public:
 
 private:
     std::vector<std::string> _transform_exprs;
+    bool _count_loaded_rows;
 };
 
 struct IcebergChunkSinkContext : public ConnectorSinkContext {
@@ -84,6 +86,10 @@ struct IcebergChunkSinkContext : public ConnectorSinkContext {
     // Bytes: 16, 24 or 32. 0 means FE supplied no length, which is rejected rather than defaulted;
     // see ParquetWriterOptions::encryption_dek_length.
     int encryption_dek_length = 0;
+
+    // Whether committed data rows are added to the loaded-row count. RowDelta composite sinks set it
+    // to false because the composite sink counts each statement row once.
+    bool count_loaded_rows = true;
 };
 
 class IcebergChunkSinkProvider : public ConnectorSinkProvider {

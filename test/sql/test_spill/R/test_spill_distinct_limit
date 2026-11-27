@@ -1,0 +1,103 @@
+-- name: test_spill_distinct_limit
+create table t (k int NOT NULL, a int NOT NULL, b int NULL) DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 16 PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+insert into t values (1,0,0),(2,0,0),(3,0,0),(4,1,NULL),(5,1,-2147483648),(6,1,10),(7,2,20),(8,2,20),(9,2,2147483647),(10,3,30),(11,3,30),(12,3,30),(13,4,NULL),(14,4,40),(15,4,40),(16,5,0),(17,5,0),(18,5,0),(19,6,10),(20,6,10),(21,6,10),(22,7,NULL),(23,7,20),(24,7,20),(25,8,NULL),(26,8,30),(27,8,30),(28,9,40),(29,9,40),(30,9,40);
+-- result:
+-- !result
+select count(*) from (select a from t union distinct select b from t) g;
+-- result:
+17
+-- !result
+set enable_spill=true;
+-- result:
+-- !result
+set spill_mode="force";
+-- result:
+-- !result
+set spill_partitionwise_agg=false;
+-- result:
+-- !result
+select count(*) from (select a from t union distinct ((select b from t tr2 union all select b from t tr3) union all select b from t tr4) limit 18) x;
+-- result:
+17
+-- !result
+select count(*) from (select a from t union distinct ((select b from t tr2 union all select b from t tr3) union all select b from t tr4) limit 18) x;
+-- result:
+17
+-- !result
+select count(*) from (select a from t union distinct ((select b from t tr2 union all select b from t tr3) union all select b from t tr4) limit 18) x;
+-- result:
+17
+-- !result
+select count(*) from (select a from t union distinct ((select b from t tr2 union all select b from t tr3) union all select b from t tr4) limit 17) x;
+-- result:
+17
+-- !result
+select count(*) from (select a from t union distinct ((select b from t tr2 union all select b from t tr3) union all select b from t tr4) limit 17) x;
+-- result:
+17
+-- !result
+select a from t union distinct ((select b from t tr2 union all select b from t tr3) union all select b from t tr4) order by a limit 18;
+-- result:
+None
+-2147483648
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+20
+30
+40
+2147483647
+-- !result
+set spill_partitionwise_agg=true;
+-- result:
+-- !result
+select count(*) from (select a from t union distinct ((select b from t tr2 union all select b from t tr3) union all select b from t tr4) limit 18) x;
+-- result:
+17
+-- !result
+select count(*) from (select a from t union distinct ((select b from t tr2 union all select b from t tr3) union all select b from t tr4) limit 18) x;
+-- result:
+17
+-- !result
+select count(*) from (select a from t union distinct ((select b from t tr2 union all select b from t tr3) union all select b from t tr4) limit 18) x;
+-- result:
+17
+-- !result
+select count(*) from (select a from t union distinct ((select b from t tr2 union all select b from t tr3) union all select b from t tr4) limit 17) x;
+-- result:
+17
+-- !result
+select count(*) from (select a from t union distinct ((select b from t tr2 union all select b from t tr3) union all select b from t tr4) limit 17) x;
+-- result:
+17
+-- !result
+select a from t union distinct ((select b from t tr2 union all select b from t tr3) union all select b from t tr4) order by a limit 18;
+-- result:
+None
+-2147483648
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+20
+30
+40
+2147483647
+-- !result

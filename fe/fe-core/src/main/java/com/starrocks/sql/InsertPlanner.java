@@ -66,6 +66,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzeState;
 import com.starrocks.sql.analyzer.ExpressionAnalyzer;
 import com.starrocks.sql.analyzer.Field;
+import com.starrocks.sql.analyzer.IndexAnalyzer;
 import com.starrocks.sql.analyzer.PlannerMetaLocker;
 import com.starrocks.sql.analyzer.RelationFields;
 import com.starrocks.sql.analyzer.RelationId;
@@ -121,6 +122,7 @@ import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanFragmentBuilder;
+import com.starrocks.sql.plan.PlanningVersionRecheck;
 import com.starrocks.thrift.TPaimonOverwriteMode;
 import com.starrocks.thrift.TPartialUpdateMode;
 import com.starrocks.thrift.TResultSinkType;
@@ -431,7 +433,9 @@ public class InsertPlanner {
             plannerMetaLocker.unlock();
             ExecPlan plan;
             Throwable planFailure = null;
-            try {
+            // A re-read of the planning versions takes table locks too, within the bound of the re-acquire below.
+            try (PlanningVersionRecheck.LockWaitBound ignored =
+                    PlanningVersionRecheck.boundLockWaits(plannerMetaLocker.getAcquireTimeoutMs())) {
                 plan = doPlan(insertStmt, session);
             } catch (Throwable t) {
                 planFailure = t;
@@ -475,6 +479,12 @@ public class InsertPlanner {
 
         if (partialUpdate) {
             inferOutputSchemaForPartialUpdate(insertStmt);
+            // Checked against the sink schema, so columns the sink fills itself (DEFAULT expressions) count as written.
+            IndexAnalyzer.findPartialUpdateVectorIndexError((OlapTable) targetTable,
+                            outputFullSchema.stream().map(Column::getName).collect(Collectors.toList()))
+                    .ifPresent(error -> {
+                        throw new SemanticException(error);
+                    });
         } else {
             outputBaseSchema = targetTable.getBaseSchema();
             // Online OPTIMIZE rewrites a temporary partition and does not perform a schema change.
@@ -558,6 +568,14 @@ public class InsertPlanner {
             // Non-query must use the strategy assign scan ranges per driver sequence, which local shuffle agg cannot use.
             session.getSessionVariable().setEnableLocalShuffleAgg(false);
             session.getSessionVariable().setEnableMaterializedViewRewrite(enableMVRewrite);
+            // Enable spill for connector sinks before planning, so the optimizer and the fragments see spill on.
+            if (currentVariable.isEnableConnectorSinkSpill() && (targetTable instanceof IcebergTable
+                    || targetTable instanceof HiveTable || targetTable instanceof TableFunctionTable)) {
+                currentVariable.setEnableSpill(true);
+                if (currentVariable.getConnectorSinkSpillMemLimitThreshold() < currentVariable.getSpillMemLimitThreshold()) {
+                    currentVariable.setSpillMemLimitThreshold(currentVariable.getConnectorSinkSpillMemLimitThreshold());
+                }
+            }
 
             ExecPlan execPlan = buildExecPlan(insertStmt, session, outputColumns, logicalPlan, columnRefFactory,
                     queryRelation, targetTable);
@@ -725,15 +743,6 @@ public class InsertPlanner {
                 dataSink = new BlackHoleTableSink();
             } else {
                 throw new SemanticException("Unknown table type " + insertStmt.getTargetTable().getType());
-            }
-
-            // enable spill for connector sink
-            if (session.getSessionVariable().isEnableConnectorSinkSpill() && (targetTable instanceof IcebergTable
-                    || targetTable instanceof HiveTable || targetTable instanceof TableFunctionTable)) {
-                session.getSessionVariable().setEnableSpill(true);
-                if (currentVariable.getConnectorSinkSpillMemLimitThreshold() < currentVariable.getSpillMemLimitThreshold()) {
-                    currentVariable.setSpillMemLimitThreshold(currentVariable.getConnectorSinkSpillMemLimitThreshold());
-                }
             }
 
             ConnectorSinkShuffleSpec.forTable(targetTable).ifPresent(spec -> spec.applyToExecPlan(execPlan, dataSink));

@@ -76,6 +76,14 @@ Status DeletionVector::fill_row_indexes(const SkipRowsContextPtr& skip_rows_ctx)
 
         update_dv_file_io_counter(_options.runtime_profile, app_stats, fs_stats, cache_input_stream,
                                   shared_buffered_input_stream);
+        if (_options.scan_stats != nullptr) {
+            _options.scan_stats->delete_file_remote_bytes += fs_stats.bytes_read;
+            if (cache_input_stream != nullptr) {
+                const CacheInputStream::Stats& cache_stats = cache_input_stream->stats();
+                _options.scan_stats->delete_file_cache_bytes +=
+                        cache_stats.read_block_cache_bytes + cache_stats.read_peer_cache_bytes;
+            }
+        }
         return deserialized_deletion_vector(magic_number_from_deletion_vector_file, deletion_vector,
                                             serialized_bitmap_length, skip_rows_ctx);
     }

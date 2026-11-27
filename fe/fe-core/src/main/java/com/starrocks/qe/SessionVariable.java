@@ -630,6 +630,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CBO_PUSH_DOWN_GROUPINGSET_CASCADE_LEVEL =
             "cbo_push_down_groupingset_cascade_level";
     public static final String CBO_DEBUG_ALIVE_BACKEND_NUMBER = "cbo_debug_alive_backend_number";
+    public static final String ENABLE_CBO_WAREHOUSE_EXEC_NODES = "enable_cbo_warehouse_exec_nodes";
     public static final String CBO_PRUNE_SUBFIELD = "cbo_prune_subfield";
     public static final String CBO_PRUNE_JSON_SUBFIELD = "cbo_prune_json_subfield";
     public static final String CBO_PRUNE_JSON_SUBFIELD_DEPTH = "cbo_prune_json_subfield_depth";
@@ -2051,6 +2052,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = CBO_DEBUG_ALIVE_BACKEND_NUMBER, flag = VariableMgr.INVISIBLE)
     private int cboDebugAliveBackendNumber = 0;
 
+    // In shared-data mode, the planner counts the alive execution nodes of the query's warehouse when it costs
+    // broadcast and hash joins and decides runtime filters. Turn it off to go back to the previous counts: the alive
+    // backends for the broadcast cost, the broadcast_row_limit check and runtime filters, and the alive backends plus
+    // every alive compute node of the cluster for the hash join cost. Shared-nothing mode is not affected either way.
+    @VariableMgr.VarAttr(name = ENABLE_CBO_WAREHOUSE_EXEC_NODES, flag = VariableMgr.INVISIBLE)
+    private boolean enableCboWarehouseExecNodes = true;
+
     @VariableMgr.VarAttr(name = TRANSACTION_VISIBLE_WAIT_TIMEOUT)
     private long transactionVisibleWaitTimeout = 10;
 
@@ -3117,7 +3125,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean paimonForceJNIReader = false;
 
     @VariableMgr.VarAttr(name = PAIMON_GLOBAL_INDEX_MODE)
-    private String paimonGlobalIndexMode = PaimonGlobalIndexMode.LOCAL.modeName();
+    private String paimonGlobalIndexMode = PaimonGlobalIndexMode.AUTO.modeName();
 
     @VariableMgr.VarAttr(name = PAIMON_READER_MODE)
     private String paimonReaderMode = PaimonReaderMode.AUTO.name();
@@ -3435,6 +3443,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // see more details: https://github.com/StarRocks/starrocks/pull/29678
     @VarAttr(name = ENABLE_COLLECT_TABLE_LEVEL_SCAN_STATS)
     private boolean enableCollectTableLevelScanStats = true;
+
+    public boolean isEnableCollectTableLevelScanStats() {
+        return enableCollectTableLevelScanStats;
+    }
 
     @VarAttr(name = HIVE_TEMP_STAGING_DIR)
     private String hiveTempStagingDir = "/tmp/starrocks";
@@ -5022,6 +5034,18 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return cboDebugAliveBackendNumber;
     }
 
+    public void setCboDebugAliveBackendNumber(int cboDebugAliveBackendNumber) {
+        this.cboDebugAliveBackendNumber = cboDebugAliveBackendNumber;
+    }
+
+    public boolean isEnableCboWarehouseExecNodes() {
+        return enableCboWarehouseExecNodes;
+    }
+
+    public void setEnableCboWarehouseExecNodes(boolean enableCboWarehouseExecNodes) {
+        this.enableCboWarehouseExecNodes = enableCboWarehouseExecNodes;
+    }
+
     public long getTransactionVisibleWaitTimeout() {
         return transactionVisibleWaitTimeout;
     }
@@ -5278,7 +5302,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     }
 
     public boolean isEnableRuntimeAdaptiveDop() {
-        return enablePipelineEngine && enableRuntimeAdaptiveDop;
+        // Runtime adaptive DOP is not used together with spill: a spill-process pipeline is its own adaptive
+        // group, instantiated and prepared before the spilling operators it serves, and the BE crashes when the
+        // two disagree on the lifetime of the shared aggregator (#84323).
+        return enablePipelineEngine && enableRuntimeAdaptiveDop && !enableSpill;
     }
 
     public long getAdaptiveDopMaxBlockRowsPerDriverSeq() {

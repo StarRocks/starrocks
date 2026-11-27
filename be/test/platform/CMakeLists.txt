@@ -29,6 +29,7 @@ set(PLATFORM_TEST_FILES
     llm/openai_compatible_provider_test.cpp
     llm/ai_rate_limiter_test.cpp
     llm/ai_runtime_test.cpp
+    object_storage_fast_retry_test.cpp
     path_rw_test.cpp
     platform_env_test.cpp
     platform_http_test.cpp

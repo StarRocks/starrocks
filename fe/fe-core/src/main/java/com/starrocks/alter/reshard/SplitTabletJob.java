@@ -1157,6 +1157,14 @@ public class SplitTabletJob extends TabletReshardJob {
 
     // The caller holds the table WRITE lock and has run checkNewLayoutInstallable under it.
     private void addNewMaterializedIndexes(OlapTable olapTable) {
+        // Installing the new materialized indexes changes the writable layout immediately. For an
+        // ordinary split the queryable layout changes too; ORDER BY != PK instead keeps it pinned
+        // until UNSHARE finishes. Bump the table's optimistic version so any plan racing either
+        // catalog transition is retried against a self-consistent layout. Mirrors
+        // MergePartitionJob's bump at its partition-replace commit point. This runs on both the
+        // leader (runRunningJob) and replay path (replayCleaningJob), so followers re-plan too.
+        // Before the install: a lock-free plan resolves the layout after it recorded the versions.
+        olapTable.lastSchemaUpdateTime.set(System.nanoTime());
         for (ReshardingPhysicalPartition reshardingPhysicalPartition : reshardingPhysicalPartitions.values()) {
             PhysicalPartition physicalPartition = olapTable
                     .getPhysicalPartition(reshardingPhysicalPartition.getPhysicalPartitionId());
@@ -1179,14 +1187,6 @@ public class SplitTabletJob extends TabletReshardJob {
                         newIndex.getMetaId() == olapTable.getBaseIndexMetaId());
             }
         }
-
-        // Installing the new materialized indexes changes the writable layout immediately. For an
-        // ordinary split the queryable layout changes too; ORDER BY != PK instead keeps it pinned
-        // until UNSHARE finishes. Bump the table's optimistic version so any plan racing either
-        // catalog transition is retried against a self-consistent layout. Mirrors
-        // MergePartitionJob's bump at its partition-replace commit point. This runs on both the
-        // leader (runRunningJob) and replay path (replayCleaningJob), so followers re-plan too.
-        olapTable.lastSchemaUpdateTime.set(System.nanoTime());
     }
 
     // The caller holds the table WRITE lock. What addNewMaterializedIndexes(OlapTable) requires: on top of what every

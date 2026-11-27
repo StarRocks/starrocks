@@ -1374,6 +1374,53 @@ TEST_F(SegmentIteratorTest, BitmapIndexKeepsPartiallyErasedOr) {
     ASSERT_EQ((std::vector<int32_t>{3000, 3001}), ids);
 }
 
+// The bitmap index roots a ColumnReader keeps from the footer are the pages loading the bitmap index reads, and stay
+// set after the index is loaded (which releases its meta). A column without a bitmap index has none.
+TEST_F(SegmentIteratorTest, ColumnReaderKeepsBitmapIndexRootPages) {
+    using namespace starrocks::test;
+
+    std::shared_ptr<TabletSchema> tablet_schema = TabletSchemaBuilder()
+                                                          .create(0, false, TYPE_INT, true)
+                                                          .create(1, false, TYPE_INT, false)
+                                                          .set_bitmap_index()
+                                                          .build();
+    auto chunk = ChunkFactory::new_chunk(ChunkHelper::convert_schema(tablet_schema), 4096);
+    for (int32_t i = 0; i < 100000; i++) {
+        chunk->get_column_by_index(0)->as_mutable_ptr()->append_datum(Datum(i));
+        chunk->get_column_by_index(1)->as_mutable_ptr()->append_datum(Datum(i * 7));
+    }
+    auto segment = write_and_open_segment(_fs, kSegmentDir + "/bitmap_index_root_pages", tablet_schema, *chunk, 4096);
+
+    const ColumnReader* plain = segment->column(0);
+    EXPECT_EQ(0, plain->index_root_pages().bitmap_dict_value.size);
+    EXPECT_EQ(0, plain->index_root_pages().bitmap_ordinal.size);
+    EXPECT_FALSE(plain->has_loaded_bitmap_index());
+
+    const ColumnReader* indexed = segment->column(1);
+    const auto roots = indexed->index_root_pages();
+    EXPECT_GT(roots.bitmap_dict_value.size, 0);
+    EXPECT_GT(roots.bitmap_ordinal.size, 0);
+    EXPECT_NE(roots.bitmap_dict_value.offset, roots.bitmap_ordinal.offset);
+    EXPECT_FALSE(indexed->has_loaded_bitmap_index());
+
+    // Loading the index reads both roots.
+    ASSIGN_OR_ABORT(auto file, _fs->new_random_access_file(segment->file_name()));
+    OlapReaderStatistics stats;
+    IndexReadOptions opts;
+    opts.read_file = file.get();
+    opts.stats = &stats;
+    opts.use_page_cache = false;
+    BitmapIndexIterator* raw = nullptr;
+    ASSERT_OK(const_cast<ColumnReader*>(indexed)->new_bitmap_index_iterator(opts, &raw));
+    std::unique_ptr<BitmapIndexIterator> iter(raw);
+    ASSERT_NE(nullptr, iter);
+    EXPECT_TRUE(indexed->has_loaded_bitmap_index());
+    EXPECT_EQ(roots.bitmap_dict_value.offset, indexed->index_root_pages().bitmap_dict_value.offset);
+    EXPECT_EQ(roots.bitmap_dict_value.size, indexed->index_root_pages().bitmap_dict_value.size);
+    EXPECT_EQ(roots.bitmap_ordinal.offset, indexed->index_root_pages().bitmap_ordinal.offset);
+    EXPECT_EQ(roots.bitmap_ordinal.size, indexed->index_root_pages().bitmap_ordinal.size);
+}
+
 // Tests for dict_lookup_batch optimization: large IN predicate on dict-encoded VARCHAR column.
 // The hash-based batch lookup (kDictLookupHashThreshold=100) is exercised when either
 // dict_size >= 100 or the IN list has >= 100 values.
@@ -2716,28 +2763,6 @@ TEST_F(SegmentIteratorTest, GroupedTaskIntersectsQueryUnionAndPhysicalRange) {
     opts.task_range.reset();
     ASSIGN_OR_ABORT(iter, segment->new_iterator(read_schema, opts));
     EXPECT_EQ((std::vector<int64_t>{2, 2, 6, 6, 7, 7}), grouped_read_keys(iter));
-}
-
-TEST_F(SegmentIteratorTest, GroupedTaskConversionRetainsBothIndependentRanges) {
-    auto schema =
-            std::shared_ptr<TabletSchema>(test::TabletSchemaBuilder().create(0, false, TYPE_BIGINT, true).build());
-    auto read_schema = ChunkHelper::convert_schema(schema);
-    SegmentReadOptions original, converted;
-    original.task_range = grouped_test_range(read_schema, -3, 7);
-    original.tablet_range = grouped_test_range(read_schema, 2, 9);
-    ObjectPool pool;
-    ASSERT_OK(original.convert_to(&converted, {TYPE_BIGINT}, &pool));
-    ASSERT_TRUE(converted.task_range);
-    ASSERT_TRUE(converted.tablet_range);
-    EXPECT_EQ(-3, converted.task_range->lower().get(0).get_int64());
-    EXPECT_EQ(7, converted.task_range->upper().get(0).get_int64());
-    EXPECT_TRUE(converted.task_range->inclusive_lower());
-    EXPECT_FALSE(converted.task_range->inclusive_upper());
-    EXPECT_EQ(2, converted.tablet_range->lower().get(0).get_int64());
-    EXPECT_EQ(9, converted.tablet_range->upper().get(0).get_int64());
-    original.task_range.reset();
-    ASSERT_OK(original.convert_to(&converted, {TYPE_BIGINT}, &pool));
-    EXPECT_FALSE(converted.task_range);
 }
 
 TEST_F(SegmentIteratorTest, GroupedTaskRejectsPreparedCacheAndReuse) {

@@ -34,7 +34,9 @@ import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.RuntimeProfile;
+import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
+import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.metric.IMaterializedViewMetricsEntity;
 import com.starrocks.metric.MaterializedViewMetricsRegistry;
 import com.starrocks.qe.ConnectContext;
@@ -61,9 +63,11 @@ import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TUniqueId;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.Map;
+import java.util.OptionalLong;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
@@ -73,6 +77,7 @@ import static com.starrocks.catalog.system.SystemTable.MAX_FIELD_VARCHAR_LENGTH;
 import static com.starrocks.scheduler.TaskRun.MV_ID;
 
 public class MVTaskRunProcessor extends BaseTaskRunProcessor implements MVRefreshExecutor {
+    private static final Logger LOG = LogManager.getLogger(MVTaskRunProcessor.class);
     // used to generate unique statement IDs for the MV refresh task
     private static final AtomicLong STMT_ID_GENERATOR = new AtomicLong(0);
 
@@ -95,6 +100,8 @@ public class MVTaskRunProcessor extends BaseTaskRunProcessor implements MVRefres
     private RuntimeProfile runtimeProfile;
     private String inactiveReasonBeforeRebuild;
     private Map<BaseTableInfo, TvrVersionRange> baselineBeforeRebuild;
+    // The status epoch this run last saw, or took itself; its failure is handled only while that is still current.
+    private OptionalLong observedStatusEpoch = OptionalLong.empty();
 
     public MVTaskRunProcessor() {
     }
@@ -125,6 +132,7 @@ public class MVTaskRunProcessor extends BaseTaskRunProcessor implements MVRefres
         this.mv = (MaterializedView) table;
         // refresh mv until mv is reloaded.
         mv.waitForReloaded();
+        observedStatusEpoch = OptionalLong.of(mv.getStatusSnapshot().epoch());
         // Before the run reads the MV's definition or any base table: a reset after this point means the data
         // this run writes may come from a definition that no longer holds. A later batch of a refresh job takes the
         // epoch its first run read instead, so that a reset since the job started fences it too: the job's partition
@@ -143,6 +151,8 @@ public class MVTaskRunProcessor extends BaseTaskRunProcessor implements MVRefres
                 MVActiveChecker.tryToActivate(mv);
                 logger.info("Activated the MV before refreshing: {}", mv.getName());
             }
+            // An activation attempt may change the epoch even when it fails; that change is this run's own.
+            observedStatusEpoch = OptionalLong.of(mv.getStatusSnapshot().epoch());
         }
 
         // metrics entity
@@ -186,6 +196,74 @@ public class MVTaskRunProcessor extends BaseTaskRunProcessor implements MVRefres
         return mvTaskRunContext;
     }
 
+    @Override
+    public Exception onFailure(Task task, Exception e) {
+        if (mv == null || observedStatusEpoch.isEmpty()) {
+            MaterializedView view = TaskBuilder.getMvFromTask(task);
+            if (view == null) {
+                return onConsecutiveFailures(task, null, e);
+            }
+            try (AutoCloseableLock ignored = new AutoCloseableLock(view.getDbId(), view.getId(), LockType.WRITE)) {
+                return isStillInCatalog(view) ? onConsecutiveFailures(task, view, e) : e;
+            }
+        }
+        try (AutoCloseableLock ignored = new AutoCloseableLock(mv.getDbId(), mv.getId(), LockType.WRITE)) {
+            // A drop leaves the epoch as it is, and anything journaled for the view now would follow the drop.
+            if (!isStillInCatalog(mv)) {
+                LOG.warn("mv {} was dropped while this refresh ran, skipping the failure handling of this run",
+                        mv.getName());
+                return e;
+            }
+            MaterializedView.StatusSnapshot status = mv.getStatusSnapshot();
+            if (status.epoch() != observedStatusEpoch.getAsLong()) {
+                LOG.warn("status of mv {} changed since this refresh observed it, skipping the failure handling of "
+                        + "this run", mv.getName());
+                return e;
+            }
+            // Permanent breakage: inactivate for its own reason, not through the consecutive-failure path.
+            if (status.active() && MaterializedViewExceptions.isIncrementalBreakingFailure(e)) {
+                AlterMVJobExecutor.inactiveMvAndSuspendTaskLocked(mv,
+                        MaterializedViewExceptions.inactiveReasonForBreakingFailure(e, mv.getName()));
+                return e;
+            }
+            if (status.active()) {
+                restoreInactiveIfNotRebuilt();
+            }
+            return onConsecutiveFailures(task, mv, e);
+        }
+    }
+
+    private static boolean isStillInCatalog(MaterializedView view) {
+        return GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(view.getDbId(), view.getId()) == view;
+    }
+
+    /** The caller holds the write lock of {@code view} when it is not null. */
+    private Exception onConsecutiveFailures(Task task, MaterializedView view, Exception e) {
+        if (Config.max_task_consecutive_fail_count <= 0
+                || task.getConsecutiveFailCount() < Config.max_task_consecutive_fail_count) {
+            return e;
+        }
+        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+        // A task dropped with its view: no replay could apply a pause journaled for it.
+        if (taskManager.getTask(task.getName()) == null) {
+            return e;
+        }
+        LOG.warn("Task {} has failed {} times continuously, so we disable it",
+                task.getName(), task.getConsecutiveFailCount());
+        taskManager.suspendTask(task, false);
+        String mvName = "";
+        if (view != null) {
+            // An inactive view keeps the reason it has: that one may still recover on its own.
+            if (view.isActive()) {
+                AlterMVJobExecutor.inactiveForConsecutiveFailures(view);
+            }
+            mvName = view.getName();
+        }
+        return new StarRocksException(String.format("Task %s has continuously failed %d times " +
+                        "and has been suspended. If you want active it again, try `ALTER MATERIALIZED VIEW %s ACTIVE`.",
+                task.getName(), task.getConsecutiveFailCount(), mvName), e);
+    }
+
     // The rebuild never reads the baseline the view broke on, so it may activate a view the background check leaves.
     private void activateToRebuild() {
         String inactiveReason = mv.getInactiveReason();
@@ -203,15 +281,15 @@ public class MVTaskRunProcessor extends BaseTaskRunProcessor implements MVRefres
      * Inactivates the view again, for the reason it had, and suspends its task, when the rebuild that activated it
      * failed while the baseline was still in place: nothing was rewritten, and a plain refresh would break on that
      * baseline again. Once the rebuild dropped the baseline the view stays active, and the next refresh finishes the
-     * rebuild.
+     * rebuild. The caller holds the MV's write lock and has checked the view is still in the status the rebuild left.
      */
-    public void restoreInactiveIfNotRebuilt() {
-        if (inactiveReasonBeforeRebuild == null || !mv.isActive() || !baselineBeforeRebuild.equals(
+    private void restoreInactiveIfNotRebuilt() {
+        if (inactiveReasonBeforeRebuild == null || !baselineBeforeRebuild.equals(
                 mv.getRefreshScheme().getAsyncRefreshContext().getBaseTableInfoTvrVersionRangeMap())) {
             return;
         }
         logger.info("Rebuild of materialized view {} failed before it wrote, inactivate it again", mv.getName());
-        AlterMVJobExecutor.inactiveMvAndSuspendTask(mv, inactiveReasonBeforeRebuild);
+        AlterMVJobExecutor.inactiveMvAndSuspendTaskLocked(mv, inactiveReasonBeforeRebuild);
     }
 
     /**

@@ -205,6 +205,9 @@ public class Config extends ConfigBase {
     public static int audit_log_delete_count = -1;
     @ConfField(mutable = true)
     public static boolean audit_log_json_format = false;
+    @ConfField(mutable = true, comment = "Max number of scan entries an execution attempt records in the " +
+            "ScanStats column of the audit log. An attempt with more scan nodes is marked scansTruncated.")
+    public static int audit_scan_stats_max_scans = 1000;
     @ConfField(mutable = true, comment = "Max length of the error message recorded in the audit log, truncate " +
             "messages longer than this specified limit. Set to 0 to stop recording error messages. Default: 1024")
     public static int audit_log_error_message_max_length = 1024;
@@ -2872,7 +2875,15 @@ public class Config extends ConfigBase {
      *   - Else if targetRows > statistic_sample_collect_rows: Use SAMPLE statistics
      *   - Else: Use FULL statistics
      *
-     * - For First Load:
+     * - For First Load by INSERT (physical partition commit version == 2):
+     *   totalRows = sum of FE row counts of the candidate first-load logical partitions
+     *   deltaRatio = loadRows / (totalRows + 1)
+     *   - If deltaRatio < statistic_sample_collect_ratio_threshold_of_first_load: No collection
+     *   - Else if loadRows > statistic_sample_collect_rows: Use SAMPLE statistics
+     *   - Else: Use FULL statistics
+     *
+     * - For UPDATE (when enable_statistic_collect_on_update is enabled):
+     *   totalRows = positive table row count from statistics metadata, otherwise affected partitions' FE row counts
      *   deltaRatio = loadRows / (totalRows + 1)
      *   - If deltaRatio < statistic_sample_collect_ratio_threshold_of_first_load: No collection
      *   - Else if loadRows > statistic_sample_collect_rows: Use SAMPLE statistics
@@ -3073,6 +3084,14 @@ public class Config extends ConfigBase {
             "rather than re-collected (a stale value is never served). Set to 0 to disable throttling.")
     public static int min_max_stats_collect_interval_sec = 60;
 
+    @ConfField(mutable = true, comment = "Do not collect min/max statistics for a table with more tablets than " +
+            "this. Min/max stats are collected via a [_META_] MetaScan over the whole table, whose planning " +
+            "(tablet locations, scan ranges) and execution cost grow with the tablet count. Such a table gets no " +
+            "min/max optimization (compressed group-by key, min()/max() folding), but a value already cached for " +
+            "the current data version is still used. A skip is not cached, so a raised limit applies within " +
+            "min_max_stats_collect_interval_sec. Set to 0 or a negative value to disable the limit.")
+    public static int min_max_stats_collect_max_tablets = 100000;
+
     /**
      * The column statistic cache update interval
      */
@@ -3185,7 +3204,10 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true, comment = "The change ratio threshold for triggering statistics collection. " +
             "For INSERT OVERWRITE: deltaRatio = |targetRows - sourceRows| / (sourceRows + 1). " +
-            "For first load: deltaRatio = loadRows / (totalRows + 1). " +
+            "For first load by INSERT: deltaRatio = loadRows / (totalRows + 1), where totalRows is the sum of FE " +
+            "row counts of the candidate first-load logical partitions. " +
+            "For UPDATE: deltaRatio = loadRows / (totalRows + 1). " +
+            "totalRows uses a positive table statistics row count, otherwise affected partitions' FE row counts. " +
             "If deltaRatio < this threshold (default 0.1 or 10%), statistics collection is skipped. " +
             "Used in conjunction with enable_statistic_collect_on_first_load.")
     public static double statistic_sample_collect_ratio_threshold_of_first_load = 0.1;
@@ -3563,11 +3585,20 @@ public class Config extends ConfigBase {
     public static int refresh_other_fe_rpc_executor_thread_num = 4;
 
     /**
-     * Max time a commit to an Iceberg table waits for the other FEs to drop their cached copy of the table,
-     * so that a query on any FE sees the commit once the statement returns. 0 or less disables the wait.
+     * Max time a commit to an Iceberg table, or a TRUNCATE, ALTER TABLE or DROP TABLE of one, waits for the other
+     * FEs to drop their cached copy of the table, so that a query on any FE sees the change once the statement
+     * returns. 0 or less disables the wait.
      */
     @ConfField(mutable = true)
     public static int iceberg_commit_invalidate_other_fe_timeout_ms = 3000;
+
+    /**
+     * Max time an INSERT, INSERT OVERWRITE, TRUNCATE, DROP TABLE or ADD PARTITION on a Hive table waits for the other
+     * FEs to drop their cached copy of the table, so that a query on any FE sees the change once the statement returns.
+     * 0 or less disables the wait.
+     */
+    @ConfField(mutable = true)
+    public static int hive_commit_invalidate_other_fe_timeout_ms = 3000;
 
     /**
      * Background refresh external table metadata interval in milliseconds.
@@ -3617,6 +3648,15 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static int iceberg_table_refresh_expire_sec = 86400;
+
+    /**
+     * How the FE ships an Iceberg table to the BE metadata table scanners. 0: the Java-serialized table only,
+     * as before. 1: also a JSON form FE and BE of different versions can both read, while some alive BE or CN
+     * runs another build than this FE (a rolling upgrade); such a BE reads the JSON one. 2: always the JSON form
+     * too, and every BE reads it; for tests only (a BE without JSON support still reads the Java one).
+     */
+    @ConfField(mutable = true)
+    public static int iceberg_metadata_table_payload_mode = 1;
 
     /**
      * iceberg metadata cache dir
@@ -3780,6 +3820,14 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static boolean enable_paimon_refresh_manifest_files = false;
+
+    /**
+     * Max time an INSERT, INSERT OVERWRITE, TRUNCATE or DROP TABLE on a Paimon table waits for the other FEs to drop
+     * their cached copy of the table, so that a query on any FE sees the change once the statement returns.
+     * 0 or less disables the wait.
+     */
+    @ConfField(mutable = true)
+    public static int paimon_commit_invalidate_other_fe_timeout_ms = 3000;
 
     /**
      * fe will call es api to get es index shard info every es_state_sync_interval_secs
@@ -4135,9 +4183,6 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static boolean enable_experimental_rowstore = false;
-
-    @ConfField(mutable = true)
-    public static boolean enable_experimental_gin = false;
 
     @ConfField(mutable = true)
     public static boolean enable_experimental_mv = true;
@@ -4528,6 +4573,15 @@ public class Config extends ConfigBase {
      */
     @ConfField
     public static boolean metadata_ignore_unknown_subtype = false;
+
+    /**
+     * Whether to accept a checkpoint image that fails its checksum check (the bytes do not match the checksum,
+     * or a v2 image has none): when it is downloaded from another FE, and when it is loaded at startup.
+     * Each such image is then logged as a warning instead of being refused. Only for recovery, when the check
+     * itself is wrong: while it is true, an image damaged on one FE's disk can reach and be loaded by others.
+     */
+    @ConfField(mutable = true)
+    public static boolean metadata_ignore_image_checksum_error = false;
 
     /**
      * Number of profile infos reserved by `ProfileManager` for recently executed query.

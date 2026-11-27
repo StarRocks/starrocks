@@ -909,6 +909,16 @@ struct TAuditStatisticsItem {
     3: optional i64 table_id
 }
 
+// Read counters of one scan node. A counter is set only when the scan tracks it.
+struct TAuditPerScanStatsItem {
+    1: optional i32 plan_node_id
+    2: optional i64 physical_rows_read
+    3: optional i64 logical_rows_read
+    4: optional i64 output_rows
+    5: optional i64 remote_bytes
+    6: optional i64 cache_bytes
+}
+
 // Additive observed AI task statistics; token usage counts distinguish unknown from reported zero.
 struct TAIExecutionStatistics {
     1: optional i64 task_count
@@ -937,6 +947,7 @@ struct TAuditStatistics {
     11: optional i64 read_local_cnt
     12: optional i64 read_remote_cnt
     13: optional TAIExecutionStatistics ai_statistics
+    14: optional list<TAuditPerScanStatsItem> per_scan_stats_items
 }
 
 struct TReportAuditStatisticsParams {
@@ -1043,6 +1054,8 @@ struct TMasterOpResult {
     // Followers that forward the statement never analyze it locally, so they cannot resolve
     // CTE aliases or qualify names; they reuse this list for the audit log instead.
     12:optional list<string> queried_relations;
+    // ScanStats audit JSON built by the executing FE; a follower that forwarded the statement has no plan of its own.
+    14:optional string audit_scan_stats;
 }
 
 struct TIsMethodSupportedRequest {
