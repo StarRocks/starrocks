@@ -17,6 +17,7 @@ package com.starrocks.qe.scheduler.slot;
 import com.google.common.base.Preconditions;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.extension.Inject;
+import com.starrocks.ha.LeaderInfo;
 import com.starrocks.metric.MetricVisitor;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -37,10 +38,55 @@ public class SlotManager extends BaseSlotManager {
     private final RequestWorker requestWorker = new RequestWorker();
     private final SlotTracker slotTracker;
 
+    /**
+     * The rpc endpoint of the leader FE, which is used to detect whether the leader FE is changed.
+     * It is null if this FE has not been notified of any leader FE yet.
+     */
+    private volatile String lastLeaderEndpoint;
+
     @Inject
     public SlotManager(ResourceUsageMonitor resourceUsageMonitor) {
         super(resourceUsageMonitor);
         this.slotTracker = new SlotTracker(this, resourceUsageMonitor);
+    }
+
+    /**
+     * Release the slots which are allocated by the previous leader FE when the leader FE is changed.
+     *
+     * <p> The requesters release their slots to the current leader FE, so the slots allocated before the leader change
+     * can never be released by their requesters, and they would keep occupying the query queue as the ghost RUNNING
+     * queries until they expire. See {@link BaseSlotTracker#peakSlotsOfPreviousLeader()}.
+     *
+     * <p> The pending requirements, which are not allocated yet, are kept, because the new leader FE can still allocate
+     * and notify them.
+     */
+    @Override
+    public void onLeaderChange(LeaderInfo leaderInfo) {
+        final String leaderEndpoint = leaderInfo.getIp() + ":" + leaderInfo.getRpcPort();
+        if (leaderEndpoint.equals(lastLeaderEndpoint)) {
+            return;
+        }
+
+        final String prevLeaderEndpoint = lastLeaderEndpoint;
+        lastLeaderEndpoint = leaderEndpoint;
+        if (prevLeaderEndpoint == null) {
+            // The first known leader FE after this FE starts up, and no slot is allocated before it.
+            return;
+        }
+
+        LOG.warn("[Slot] the leader FE is changed [{} -> {}], and the slots allocated by the previous leader FE " +
+                "will be released", prevLeaderEndpoint, leaderEndpoint);
+        requests.add(this::releaseSlotsOfPreviousLeader);
+    }
+
+    private void releaseSlotsOfPreviousLeader() {
+        List<LogicalSlot> slots = slotTracker.peakSlotsOfPreviousLeader();
+        if (slots.isEmpty()) {
+            return;
+        }
+
+        LOG.warn("[Slot] release the [{}] slots allocated by the previous leader FE [slots={}]", slots.size(), slots);
+        slots.forEach(this::handleReleaseSlotTask);
     }
 
     @Override
