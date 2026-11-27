@@ -1811,6 +1811,14 @@ Status TabletManager::create_tablet_from_meta_snapshot(DataDir* store, TTabletId
 
     WriteBatch wb;
     auto meta_store = store->get_meta();
+    // The store may still hold primary key meta under this tablet id, e.g. from a replica that failed to
+    // load at startup with ignore_load_tablet_failure=true. Tablet init replays every meta log and loads
+    // every rowset meta of the tablet id, so stale entries would be mixed into the new tablet. Clear them
+    // in the same batch, before the snapshot meta is written.
+    RETURN_IF_ERROR(TabletMetaManager::remove_primary_key_meta(store, &wb, tablet_id));
+    // remove_primary_key_meta() deletes each existing entry, plus one unconditional delete of the persistent
+    // index meta, so a stale persistent index meta is not counted here.
+    const int num_stale_entries = wb.Count() - 1;
     for (const RowsetMetaPB& rowset_meta_pb : snapshot_meta->rowset_metas()) {
         RETURN_IF_ERROR(TabletMetaManager::put_rowset_meta(store, &wb, tablet_id, rowset_meta_pb));
     }
@@ -1848,15 +1856,22 @@ Status TabletManager::create_tablet_from_meta_snapshot(DataDir* store, TTabletId
     Status add_tablet_st;
     {
         std::unique_lock l(_get_tablets_shard_lock(tablet_id));
+        // The batch clears all primary key meta of this tablet id, never apply it under a live tablet.
+        auto existing = _get_tablet_unlocked(tablet_id);
+        if (existing != nullptr && existing->data_dir() == store) {
+            return Status::AlreadyExist(strings::Substitute(
+                    "tablet $0 already exists in $1, refuse to create it from snapshot", tablet_id, store->path()));
+        }
+        LOG_IF(WARNING, num_stale_entries > 0)
+                << "Clear " << num_stale_entries
+                << " stale primary key meta entries before creating tablet from snapshot, tablet:" << tablet_id
+                << " path:" << store->path();
         RETURN_IF_ERROR(meta_store->write_batch(&wb));
 
         if (!tablet->init().ok()) {
             LOG(WARNING) << "Fail to init cloned tablet " << tablet_id << ", try to clear meta store";
             wb.Clear();
-            RETURN_IF_ERROR(TabletMetaManager::clear_del_vector(store, &wb, tablet_id));
-            RETURN_IF_ERROR(TabletMetaManager::clear_delta_column_group(store, &wb, tablet_id));
-            RETURN_IF_ERROR(TabletMetaManager::clear_rowset(store, &wb, tablet_id));
-            RETURN_IF_ERROR(TabletMetaManager::clear_log(store, &wb, tablet_id));
+            RETURN_IF_ERROR(TabletMetaManager::remove_primary_key_meta(store, &wb, tablet_id));
             RETURN_IF_ERROR(TabletMetaManager::remove_tablet_meta(store, &wb, tablet_id, schema_hash));
             auto st = meta_store->write_batch(&wb);
             LOG_IF(WARNING, !st.ok()) << "Fail to clear meta store: " << st;
