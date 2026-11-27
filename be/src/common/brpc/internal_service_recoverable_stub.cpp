@@ -16,6 +16,7 @@
 
 #include <memory>
 
+#include "common/brpc/presend_backoff_retry_policy.h"
 #include "common/config_rpc_client_fwd.h"
 
 namespace starrocks {
@@ -73,6 +74,7 @@ Status PInternalService_RecoverableStub::reset_channel(int64_t next_connection_g
         options.connection_group = std::to_string(_connection_group_seed) + "_" + std::to_string(next_connection_group);
     }
     options.max_retry = 3;
+    options.retry_policy = pre_send_backoff_retry_policy();
     std::unique_ptr<brpc::Channel> channel(new brpc::Channel());
     if (channel->Init(_endpoint, &options)) {
         LOG(WARNING) << "Fail to init channel " << _endpoint;
