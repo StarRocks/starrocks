@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include <algorithm>
+#include <cstring>
 
 #include "base/string/utf8.h"
 #include "base/string/volnitsky.h"
@@ -41,43 +42,45 @@ struct LocateCaseSensitiveUTF8 {
 // locate haystack is a vector and needle is a constant
 ColumnPtr haystack_vector_and_needle_const(const ColumnPtr& haystack_ptr, const ColumnPtr& needle_ptr,
                                            const ColumnPtr& start_pos_ptr) {
+    DCHECK(!haystack_ptr->only_null() && !needle_ptr->only_null() && !start_pos_ptr->only_null());
     const BinaryColumn* haystack = nullptr;
     const FixedLengthColumn<int32_t>* start_pos = nullptr;
     NullColumnPtr res_null = nullptr;
-    ColumnPtr start_pos_expansion = nullptr;
-    if (start_pos_ptr->is_constant()) {
-        // expand vector in start_pos_ptr to specfied size
-        auto start_pos_mut = RunTimeColumnType<TYPE_INT>::create();
-        int32_t value = ColumnHelper::get_const_value<TYPE_INT>(start_pos_ptr);
-        start_pos_mut->append_value_multiple_times(&value, haystack_ptr->size());
-        start_pos_expansion = std::move(start_pos_mut);
-    } else {
-        start_pos_expansion = start_pos_ptr;
-    }
-    if (haystack_ptr->is_nullable() && start_pos_expansion->is_nullable()) {
+    const bool is_const_start = start_pos_ptr->is_constant();
+    const int32_t const_start =
+            is_const_start ? ColumnHelper::get_data_column_by_type<TYPE_INT>(start_pos_ptr)->immutable_data()[0] : 0;
+    if (is_const_start) {
+        if (haystack_ptr->is_nullable()) {
+            auto haystack_null = ColumnHelper::as_column<NullableColumn>(haystack_ptr);
+            haystack = ColumnHelper::as_raw_column<BinaryColumn>(haystack_null->data_column());
+            res_null = NullColumn::static_pointer_cast(haystack_null->null_column()->clone());
+        } else {
+            haystack = ColumnHelper::as_raw_column<BinaryColumn>(haystack_ptr);
+        }
+    } else if (haystack_ptr->is_nullable() && start_pos_ptr->is_nullable()) {
         auto haystack_null = ColumnHelper::as_column<NullableColumn>(haystack_ptr);
         haystack = ColumnHelper::as_raw_column<BinaryColumn>(haystack_null->data_column());
 
-        auto start_pos_null = ColumnHelper::as_column<NullableColumn>(start_pos_expansion);
+        auto start_pos_null = ColumnHelper::as_column<NullableColumn>(start_pos_ptr);
         start_pos = ColumnHelper::as_raw_column<FixedLengthColumn<int32_t>>(start_pos_null->data_column());
 
-        res_null = FunctionHelper::union_nullable_column(haystack_ptr, start_pos_expansion);
-    } else if (!haystack_ptr->is_nullable() && start_pos_expansion->is_nullable()) {
+        res_null = FunctionHelper::union_nullable_column(haystack_ptr, start_pos_ptr);
+    } else if (!haystack_ptr->is_nullable() && start_pos_ptr->is_nullable()) {
         haystack = ColumnHelper::as_raw_column<BinaryColumn>(haystack_ptr);
 
-        auto start_pos_null = ColumnHelper::as_column<NullableColumn>(start_pos_expansion);
+        auto start_pos_null = ColumnHelper::as_column<NullableColumn>(start_pos_ptr);
         start_pos = ColumnHelper::as_raw_column<FixedLengthColumn<int32_t>>(start_pos_null->data_column());
 
         res_null = NullColumn::static_pointer_cast(start_pos_null->null_column()->clone());
-    } else if (haystack_ptr->is_nullable() && !start_pos_expansion->is_nullable()) {
+    } else if (haystack_ptr->is_nullable() && !start_pos_ptr->is_nullable()) {
         auto haystack_null = ColumnHelper::as_column<NullableColumn>(haystack_ptr);
         haystack = ColumnHelper::as_raw_column<BinaryColumn>(haystack_null->data_column());
 
-        start_pos = ColumnHelper::as_raw_column<FixedLengthColumn<int32_t>>(start_pos_expansion);
+        start_pos = ColumnHelper::as_raw_column<FixedLengthColumn<int32_t>>(start_pos_ptr);
         res_null = NullColumn::static_pointer_cast(haystack_null->null_column()->clone());
     } else {
         haystack = ColumnHelper::as_raw_column<BinaryColumn>(haystack_ptr);
-        start_pos = ColumnHelper::as_raw_column<FixedLengthColumn<int32_t>>(start_pos_expansion);
+        start_pos = ColumnHelper::as_raw_column<FixedLengthColumn<int32_t>>(start_pos_ptr);
     }
 
     const auto& offsets = haystack->get_offset();
@@ -85,13 +88,26 @@ ColumnPtr haystack_vector_and_needle_const(const ColumnPtr& haystack_ptr, const 
     auto res = RunTimeColumnType<TYPE_INT>::create();
     res->resize(haystack->size());
     auto* __restrict result_data = res->get_data().data();
+    const char* begin = haystack->get_string_begin();
+    const char* end = haystack->get_string_end();
+
+    if ((is_const_start && const_start <= 0) || static_cast<size_t>(end - begin) < needle.size) {
+        if (haystack->size() > 0) {
+            std::memset(result_data, 0, haystack->size() * sizeof(int32_t));
+        }
+        if (res_null != nullptr) {
+            return NullableColumn::create(std::move(res), std::move(res_null));
+        } else {
+            return res;
+        }
+    }
 
     if (needle.size == 0) {
         // if needle is empty string, at legal start position in haystack
         offsets.visit_storage([&](const auto& offsets_buf) {
             const auto* __restrict offset_data = offsets_buf.data();
             for (size_t i = 0; i < haystack->size(); ++i) {
-                int32_t start = start_pos->get_data()[i];
+                const int32_t start = is_const_start ? const_start : start_pos->get_data()[i];
                 if (start <= 0) {
                     // start is zero or negative, the result is zero
                     result_data[i] = 0;
@@ -113,9 +129,6 @@ ColumnPtr haystack_vector_and_needle_const(const ColumnPtr& haystack_ptr, const 
         }
     }
 
-    const char* begin = haystack->get_string_begin();
-    const char* end = haystack->get_string_end();
-
     offsets.visit_storage([&](const auto& offsets_buf) {
         const auto* __restrict offset_data = offsets_buf.data();
         const char* pos = begin;
@@ -132,7 +145,7 @@ ColumnPtr haystack_vector_and_needle_const(const ColumnPtr& haystack_ptr, const 
                 result_data[i] = 0;
                 ++i;
             }
-            int32_t start = start_pos->get_data()[i];
+            const int32_t start = is_const_start ? const_start : start_pos->get_data()[i];
             const char* row_begin = begin + offset_data[i];
             const char* row_end = begin + offset_data[i + 1];
 
