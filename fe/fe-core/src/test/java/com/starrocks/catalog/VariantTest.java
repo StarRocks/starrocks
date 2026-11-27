@@ -14,6 +14,15 @@
 
 package com.starrocks.catalog;
 
+import com.baidu.bjf.remoting.protobuf.Codec;
+import com.baidu.bjf.remoting.protobuf.ProtobufProxy;
+import com.google.gson.Gson;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParseException;
+import com.google.gson.JsonParser;
+import com.google.gson.JsonSyntaxException;
+import com.google.gson.annotations.SerializedName;
+import com.google.protobuf.CodedOutputStream;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.proto.PScalarType;
 import com.starrocks.proto.PTypeDesc;
@@ -28,6 +37,7 @@ import com.starrocks.type.BooleanType;
 import com.starrocks.type.CharType;
 import com.starrocks.type.DateType;
 import com.starrocks.type.FloatType;
+import com.starrocks.type.HLLType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.ScalarType;
@@ -35,18 +45,35 @@ import com.starrocks.type.Type;
 import com.starrocks.type.TypeDeserializer;
 import com.starrocks.type.TypeFactory;
 import com.starrocks.type.TypeSerializer;
+import com.starrocks.type.VarbinaryType;
 import com.starrocks.type.VarcharType;
+import org.apache.thrift.TDeserializer;
+import org.apache.thrift.TSerializer;
+import org.apache.thrift.protocol.TBinaryProtocol;
+import org.apache.thrift.protocol.TCompactProtocol;
+import org.apache.thrift.protocol.TField;
+import org.apache.thrift.protocol.TProtocol;
+import org.apache.thrift.protocol.TProtocolFactory;
+import org.apache.thrift.protocol.TStruct;
+import org.apache.thrift.protocol.TType;
+import org.apache.thrift.transport.TMemoryBuffer;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.io.ByteArrayOutputStream;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Base64;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
+import java.util.TreeSet;
 
 public class VariantTest {
 
@@ -317,7 +344,7 @@ public class VariantTest {
         Assertions.assertEquals(TypeSerializer.toThrift(IntegerType.INT), tInt.getType());
         // Numeric variants are encoded via the `value` field.
         Assertions.assertTrue(tInt.isSetValue());
-        Assertions.assertEquals("123", tInt.getValue());
+        Assertions.assertEquals("123", new String(tInt.getValue(), StandardCharsets.UTF_8));
     }
 
     @Test
@@ -329,7 +356,7 @@ public class VariantTest {
         Assertions.assertEquals(TypeSerializer.toThrift(BooleanType.BOOLEAN), tBool.getType());
         // Boolean variants are also encoded via the `value` field.
         Assertions.assertTrue(tBool.isSetValue());
-        Assertions.assertEquals("TRUE", tBool.getValue());
+        Assertions.assertEquals("TRUE", new String(tBool.getValue(), StandardCharsets.UTF_8));
     }
 
     @Test
@@ -340,7 +367,7 @@ public class VariantTest {
         Assertions.assertTrue(tStr.isSetType());
         Assertions.assertEquals(TypeSerializer.toThrift(VarcharType.VARCHAR), tStr.getType());
         Assertions.assertTrue(tStr.isSetValue());
-        Assertions.assertEquals("hello", tStr.getValue());
+        Assertions.assertEquals("hello", new String(tStr.getValue(), StandardCharsets.UTF_8));
     }
 
     @Test
@@ -353,7 +380,7 @@ public class VariantTest {
         Variant charVariant = Variant.of(TypeFactory.createCharType(16), nulValue);
         Assertions.assertEquals("a", charVariant.getStringValue());
         // The truncation flows into serialization too (the BE receives "a", not "a\0z").
-        Assertions.assertEquals("a", charVariant.toThrift().getValue());
+        Assertions.assertEquals("a", new String(charVariant.toThrift().getValue(), StandardCharsets.UTF_8));
 
         // VARCHAR keeps the raw NUL-bearing value (the BE does not strnlen a VARCHAR value).
         Assertions.assertEquals(nulValue, Variant.of(VarcharType.VARCHAR, nulValue).getStringValue());
@@ -371,7 +398,7 @@ public class VariantTest {
         Assertions.assertEquals(TypeSerializer.toThrift(DateType.DATETIME), tDt.getType());
         // Date/time are encoded via the `value` field in TVariant.
         Assertions.assertTrue(tDt.isSetValue());
-        Assertions.assertFalse(tDt.getValue().isEmpty());
+        Assertions.assertTrue(tDt.getValue().length > 0);
     }
 
     @Test
@@ -387,7 +414,7 @@ public class VariantTest {
         TVariant t2 = tTuple.getValues().get(1);
 
         Assertions.assertTrue(t2.isSetValue());
-        Assertions.assertEquals("world", t2.getValue());
+        Assertions.assertEquals("world", new String(t2.getValue(), StandardCharsets.UTF_8));
 
         // Verify that the embedded type descriptors are aligned with original Types.
         Type type1 = v1.getType();
@@ -447,16 +474,16 @@ public class VariantTest {
     public void testDateTimeStringValueIsBackendCanonical() {
         Variant v = new DateVariant(DateType.DATETIME, "2024-01-15T10:30:00");
         Assertions.assertEquals("2024-01-15 10:30:00", v.getStringValue());
-        Assertions.assertEquals("2024-01-15 10:30:00", v.toProto().value);
-        Assertions.assertEquals("2024-01-15 10:30:00", v.toThrift().getValue());
+        Assertions.assertEquals("2024-01-15 10:30:00", new String(v.toProto().value, StandardCharsets.UTF_8));
+        Assertions.assertEquals("2024-01-15 10:30:00", new String(v.toThrift().getValue(), StandardCharsets.UTF_8));
     }
 
     @Test
     public void testDateStringValueIsBackendCanonical() {
         Variant v = new DateVariant(DateType.DATE, "2024-01-15");
         Assertions.assertEquals("2024-01-15", v.getStringValue());
-        Assertions.assertEquals("2024-01-15", v.toProto().value);
-        Assertions.assertEquals("2024-01-15", v.toThrift().getValue());
+        Assertions.assertEquals("2024-01-15", new String(v.toProto().value, StandardCharsets.UTF_8));
+        Assertions.assertEquals("2024-01-15", new String(v.toThrift().getValue(), StandardCharsets.UTF_8));
     }
 
     @Test
@@ -1146,7 +1173,7 @@ public class VariantTest {
         Variant variant = Variant.of(IntegerType.INT, "123");
         VariantPB pb = variant.toProto();
         Assertions.assertEquals(VariantTypePB.NORMAL_VALUE, pb.variantType);
-        Assertions.assertEquals("123", pb.value);
+        Assertions.assertEquals("123", new String(pb.value, StandardCharsets.UTF_8));
         Assertions.assertEquals(IntegerType.INT, TypeDeserializer.fromProtobuf(pb.type));
     }
 
@@ -1394,7 +1421,7 @@ public class VariantTest {
         ScalarType type = TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 4);
         Variant v = Variant.of(type, "12345.6789");
         TVariant t = v.toThrift();
-        Assertions.assertEquals("12345.6789", t.getValue());
+        Assertions.assertEquals("12345.6789", new String(t.getValue(), StandardCharsets.UTF_8));
 
         Variant back = Variant.fromThrift(t);
         Assertions.assertTrue(back instanceof DecimalVariant);
@@ -1410,7 +1437,7 @@ public class VariantTest {
         ScalarType type = TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 10);
         Variant v = Variant.of(type, "-0.0000000001");
         VariantPB pb = v.toProto();
-        Assertions.assertEquals("-0.0000000001", pb.value);
+        Assertions.assertEquals("-0.0000000001", new String(pb.value, StandardCharsets.UTF_8));
 
         Variant back = Variant.fromProto(pb);
         Assertions.assertTrue(back instanceof DecimalVariant);
@@ -1434,5 +1461,497 @@ public class VariantTest {
         Assertions.assertEquals(PrimitiveType.DECIMALV2, backType.getPrimitiveType());
         Assertions.assertEquals(27, backType.getScalarPrecision());
         Assertions.assertEquals(9, backType.getScalarScale());
+    }
+
+    // ==================== StringVariant raw bytes Tests ====================
+
+    private static byte[] bytes(int... values) {
+        byte[] result = new byte[values.length];
+        for (int i = 0; i < values.length; i++) {
+            result[i] = (byte) values[i];
+        }
+        return result;
+    }
+
+    private static final Type CHAR_TYPE = TypeFactory.createCharType(16);
+    private static final Type VARBINARY_TYPE = TypeFactory.createVarbinary(16);
+
+    // The two variants are the same value: equal both ways, compare as 0 and hash alike.
+    private static void assertSameValue(Variant expected, Variant actual) {
+        Assertions.assertEquals(expected, actual);
+        Assertions.assertEquals(actual, expected);
+        Assertions.assertEquals(0, expected.compareTo(actual));
+        Assertions.assertEquals(0, actual.compareTo(expected));
+        Assertions.assertEquals(expected.hashCode(), actual.hashCode());
+    }
+
+    @Test
+    public void testStringVariantFromValidBytes() {
+        byte[] raw = bytes(0xC3, 0xA9);
+        Variant fromBytes = new StringVariant(VarcharType.VARCHAR, raw);
+        Variant fromString = Variant.of(VarcharType.VARCHAR, "é");
+        Assertions.assertEquals("é", fromBytes.getStringValue());
+        Assertions.assertArrayEquals(raw, fromBytes.getBytesValue());
+        assertSameValue(fromString, fromBytes);
+        String json = GsonUtils.GSON.toJson(fromBytes, Variant.class);
+        Assertions.assertEquals(GsonUtils.GSON.toJson(fromString, Variant.class), json);
+    }
+
+    @Test
+    public void testStringVariantFromInvalidBytes() {
+        for (Type type : new Type[] {VarcharType.VARCHAR, VARBINARY_TYPE}) {
+            byte[] c3 = bytes('a', 0xC3);
+            byte[] ff = bytes('a', 0xFF);
+            Variant v1 = new StringVariant(type, c3);
+            Variant v2 = new StringVariant(type, ff);
+            Assertions.assertEquals("a�", v1.getStringValue());
+            Assertions.assertEquals("a�", v2.getStringValue());
+            Assertions.assertArrayEquals(c3, v1.getBytesValue());
+            Assertions.assertArrayEquals(ff, v2.getBytesValue());
+            Assertions.assertNotEquals(v1, v2);
+            Assertions.assertTrue(v1.compareTo(v2) < 0);
+            Assertions.assertTrue(v2.compareTo(v1) > 0);
+            Assertions.assertNotEquals(v1.hashCode(), v2.hashCode());
+            Variant replacement = new StringVariant(type, bytes('a', 0xEF, 0xBF, 0xBD));
+            Assertions.assertNotEquals(replacement, v1);
+            Assertions.assertNotEquals(v1, replacement);
+        }
+    }
+
+    @Test
+    public void testStringVariantCharCutsAtNulInBytes() {
+        Variant fromBytes = new StringVariant(CHAR_TYPE, bytes('a', 'b', 0, 0xFF));
+        Variant fromString = Variant.of(CHAR_TYPE, "ab\0x");
+        assertSameValue(fromString, fromBytes);
+        Assertions.assertArrayEquals("ab".getBytes(StandardCharsets.UTF_8), fromBytes.getBytesValue());
+    }
+
+    @Test
+    public void testStringVariantOrderMatchesUnsignedBytes() {
+        byte[][] raws = {
+                bytes('a'),
+                bytes('a', 0x7F),
+                bytes('a', 0xC3, 0xA9),
+                bytes('a', 0xEF, 0xBF, 0xBD),
+                bytes('a', 0xF0, 0x9F, 0x98, 0x80),
+                bytes('a', 0xFF),
+                bytes('a', 0xC3),
+        };
+        List<Variant> variants = new ArrayList<>();
+        for (byte[] raw : raws) {
+            variants.add(new StringVariant(VarcharType.VARCHAR, raw));
+        }
+        List<Variant> shuffled = new ArrayList<>(variants);
+        Collections.reverse(shuffled);
+        Collections.sort(shuffled);
+        List<byte[]> expected = new ArrayList<>(Arrays.asList(raws));
+        expected.sort(Arrays::compareUnsigned);
+        for (int i = 0; i < raws.length; i++) {
+            Assertions.assertArrayEquals(expected.get(i), shuffled.get(i).getBytesValue(), "position " + i);
+        }
+    }
+
+    @Test
+    public void testStringVariantBytesAreOwned() {
+        byte[] input = bytes('a', 0xC3);
+        StringVariant variant = new StringVariant(VarcharType.VARCHAR, input);
+        StringVariant other = new StringVariant(VarcharType.VARCHAR, bytes('a', 0xFF));
+        Tuple tuple = new Tuple(Arrays.asList(variant));
+        Tuple otherTuple = new Tuple(Arrays.asList(other));
+        TreeSet<Tuple> tree = new TreeSet<>();
+        tree.add(tuple);
+        tree.add(otherTuple);
+        Set<Tuple> hash = new HashSet<>();
+        hash.add(tuple);
+        hash.add(otherTuple);
+
+        input[1] = (byte) 0xFF;
+        byte[] returned = variant.getBytesValue();
+        returned[1] = (byte) 0xFF;
+
+        Assertions.assertArrayEquals(bytes('a', 0xC3), variant.getBytesValue());
+        Assertions.assertEquals(tuple, tree.first());
+        Assertions.assertTrue(tree.contains(tuple));
+        Assertions.assertTrue(hash.contains(tuple));
+        Assertions.assertEquals(2, hash.size());
+    }
+
+    // Records as the released writer persisted them for valid UTF-8 values, pinned verbatim.
+    static final String LEGACY_VARCHAR =
+            "{\"clazz\":\"StringVariant\",\"value\":\"café\","
+                    + "\"type\":{\"type\":\"VARCHAR\",\"len\":-1,\"precision\":0,\"scale\":0}}";
+    static final String LEGACY_VARBINARY =
+            "{\"clazz\":\"StringVariant\",\"value\":\"abc\","
+                    + "\"type\":{\"clazz\":\"ScalarType\",\"type\":\"VARBINARY\",\"len\":16,"
+                    + "\"precision\":0,\"scale\":0}}";
+    static final String LEGACY_CHAR =
+            "{\"clazz\":\"StringVariant\",\"value\":\"ab\","
+                    + "\"type\":{\"clazz\":\"ScalarType\",\"type\":\"CHAR\",\"len\":16,"
+                    + "\"precision\":0,\"scale\":0}}";
+    static final String LEGACY_HLL =
+            "{\"clazz\":\"StringVariant\",\"value\":\"x\","
+                    + "\"type\":{\"type\":\"HLL\",\"len\":16385,\"precision\":0,\"scale\":0}}";
+    static final String LEGACY_BINARY =
+            "{\"clazz\":\"StringVariant\",\"value\":\"ab\","
+                    + "\"type\":{\"clazz\":\"ScalarType\",\"type\":\"BINARY\",\"len\":8,"
+                    + "\"precision\":0,\"scale\":0}}";
+    static final String LEGACY_NULL_TYPE_EMPTY = "{\"clazz\":\"StringVariant\",\"value\":\"\"}";
+
+    private static Type binaryType() {
+        ScalarType type = new ScalarType(PrimitiveType.BINARY);
+        type.setLength(8);
+        return type;
+    }
+
+    private static Variant legacyCharRecord(String text) {
+        Assertions.assertTrue(LEGACY_CHAR.contains("\"value\":\"ab\""));
+        return GsonUtils.GSON.fromJson(LEGACY_CHAR.replace("\"value\":\"ab\"", "\"value\":\"" + text + "\""),
+                Variant.class);
+    }
+
+    private static void assertSameType(Type expected, Type actual) {
+        Assertions.assertEquals(expected.getPrimitiveType(), actual.getPrimitiveType());
+        Assertions.assertEquals(((ScalarType) expected).getLength(), ((ScalarType) actual).getLength());
+    }
+
+    // Valid UTF-8 values are written exactly as the released writer wrote them.
+    @Test
+    public void testValidValuesKeepReleasedJson() {
+        Object[][] cases = {
+                {VarcharType.VARCHAR, "café", LEGACY_VARCHAR},
+                {VARBINARY_TYPE, "abc", LEGACY_VARBINARY},
+                {CHAR_TYPE, "ab", LEGACY_CHAR},
+                {HLLType.HLL, "x", LEGACY_HLL},
+                {binaryType(), "ab", LEGACY_BINARY},
+        };
+        for (Object[] c : cases) {
+            Type type = (Type) c[0];
+            String text = (String) c[1];
+            String expected = (String) c[2];
+            Assertions.assertEquals(expected, GsonUtils.GSON.toJson(Variant.of(type, text), Variant.class));
+            Assertions.assertEquals(expected,
+                    GsonUtils.GSON.toJson(Variant.of(type, text.getBytes(StandardCharsets.UTF_8)), Variant.class));
+        }
+    }
+
+    @Test
+    public void testNullTypeValueOmitsType() {
+        Assertions.assertEquals(LEGACY_NULL_TYPE_EMPTY, GsonUtils.GSON.toJson(new StringVariant(null, ""), Variant.class));
+    }
+
+    @Test
+    public void testInvalidValueUsesBytesObject() {
+        Object[][] cases = {
+                {VarcharType.VARCHAR, bytes('a', 0xFF)},
+                {VARBINARY_TYPE, bytes('a', 0, 0xFF)},
+                {VarbinaryType.VARBINARY, bytes('a', 0, 0xFF)},
+        };
+        for (Object[] c : cases) {
+            Type type = (Type) c[0];
+            byte[] raw = (byte[]) c[1];
+            Variant original = Variant.of(type, raw);
+            String json = GsonUtils.GSON.toJson(original, Variant.class);
+            JsonObject object = JsonParser.parseString(json).getAsJsonObject();
+            Assertions.assertEquals("StringVariant", object.get("clazz").getAsString(), json);
+            Assertions.assertTrue(object.get("value").isJsonObject(), json);
+            Assertions.assertEquals(Base64.getEncoder().encodeToString(raw),
+                    object.getAsJsonObject("value").get("bytes").getAsString(), json);
+            Assertions.assertTrue(object.has("type"), json);
+
+            Variant loaded = GsonUtils.GSON.fromJson(json, Variant.class);
+            Assertions.assertArrayEquals(raw, loaded.getBytesValue());
+            assertSameType(type, loaded.getType());
+            assertSameValue(original, loaded);
+        }
+    }
+
+    // The two shapes are told apart by JSON type only: text that looks like base64 is still text.
+    @Test
+    public void testBase64LookingTextStaysText() {
+        Variant original = Variant.of(VarcharType.VARCHAR, "YcM=");
+        String json = GsonUtils.GSON.toJson(original, Variant.class);
+        JsonObject object = JsonParser.parseString(json).getAsJsonObject();
+        Assertions.assertTrue(object.get("value").isJsonPrimitive(), json);
+        Assertions.assertEquals("YcM=", object.get("value").getAsString(), json);
+        Variant loaded = GsonUtils.GSON.fromJson(json, Variant.class);
+        Assertions.assertArrayEquals(bytes('Y', 'c', 'M', '='), loaded.getBytesValue());
+    }
+
+    @Test
+    public void testReplacementCharacterIsText() {
+        String valid = GsonUtils.GSON.toJson(
+                Variant.of(VarcharType.VARCHAR, bytes('a', 0xEF, 0xBF, 0xBD)), Variant.class);
+        Assertions.assertTrue(JsonParser.parseString(valid).getAsJsonObject().get("value").isJsonPrimitive(), valid);
+        String invalid = GsonUtils.GSON.toJson(Variant.of(VarcharType.VARCHAR, bytes('a', 0xFF)), Variant.class);
+        Assertions.assertTrue(JsonParser.parseString(invalid).getAsJsonObject().get("value").isJsonObject(), invalid);
+    }
+
+    private static class OlderReaderRecord {
+        @SerializedName("value")
+        String value;
+    }
+
+    // A reader that expects "value" to be a string (the released one) must fail on the bytes object.
+    @Test
+    public void testOlderReaderRejectsInvalidShape() {
+        String invalid = GsonUtils.GSON.toJson(Variant.of(VarcharType.VARCHAR, bytes('a', 0xFF)), Variant.class);
+        Assertions.assertThrows(JsonSyntaxException.class, () -> new Gson().fromJson(invalid, OlderReaderRecord.class));
+        String valid = GsonUtils.GSON.toJson(Variant.of(VarcharType.VARCHAR, "café"), Variant.class);
+        Assertions.assertEquals("café", new Gson().fromJson(valid, OlderReaderRecord.class).value);
+    }
+
+    @Test
+    public void testEmptyBytesObjectReadsEmptyValue() {
+        Variant loaded = GsonUtils.GSON.fromJson("{\"clazz\":\"StringVariant\",\"value\":{\"bytes\":\"\"},"
+                + "\"type\":{\"type\":\"VARCHAR\",\"len\":-1,\"precision\":0,\"scale\":0}}", Variant.class);
+        Assertions.assertEquals(0, loaded.getBytesValue().length);
+        Assertions.assertEquals(PrimitiveType.VARCHAR, loaded.getType().getPrimitiveType());
+    }
+
+    @Test
+    public void testCharBytesObjectCutsAtNul() {
+        String encoded = Base64.getEncoder().encodeToString(bytes('a', 'b', 0, 0xFF));
+        Variant loaded = GsonUtils.GSON.fromJson("{\"clazz\":\"StringVariant\",\"value\":{\"bytes\":\""
+                + encoded + "\"},\"type\":{\"clazz\":\"ScalarType\",\"type\":\"CHAR\",\"len\":16,"
+                + "\"precision\":0,\"scale\":0}}", Variant.class);
+        Assertions.assertArrayEquals(bytes('a', 'b'), loaded.getBytesValue());
+        Assertions.assertEquals(PrimitiveType.CHAR, loaded.getType().getPrimitiveType());
+    }
+
+    @Test
+    public void testUnreadableValueRejected() {
+        String type = "\"type\":{\"type\":\"VARCHAR\",\"len\":-1,\"precision\":0,\"scale\":0}";
+        String[] values = {
+                null, "null", "12", "true", "[\"a\"]", "{}", "{\"other\":\"YQ==\"}",
+                "{\"bytes\":1234}", "{\"bytes\":true}", "{\"bytes\":null}", "{\"bytes\":[\"YQ==\"]}",
+                "{\"bytes\":\"!\"}",
+        };
+        for (String value : values) {
+            String json = "{\"clazz\":\"StringVariant\","
+                    + (value == null ? "" : "\"value\":" + value + ",") + type + "}";
+            Assertions.assertThrows(JsonParseException.class,
+                    () -> GsonUtils.GSON.fromJson(json, Variant.class), json);
+        }
+    }
+
+    @Test
+    public void testLegacyStringVariantRecordsLoad() {
+        Object[][] cases = {
+                {LEGACY_VARCHAR, VarcharType.VARCHAR, "café"},
+                {LEGACY_VARBINARY, VARBINARY_TYPE, "abc"},
+                {LEGACY_CHAR, CHAR_TYPE, "ab"},
+                {LEGACY_HLL, HLLType.HLL, "x"},
+                {LEGACY_BINARY, binaryType(), "ab"},
+        };
+        for (Object[] c : cases) {
+            String json = (String) c[0];
+            Type type = (Type) c[1];
+            Variant loaded = GsonUtils.GSON.fromJson(json, Variant.class);
+            Assertions.assertInstanceOf(StringVariant.class, loaded, json);
+            assertSameValue(Variant.of(type, (String) c[2]), loaded);
+            assertSameType(type, loaded.getType());
+            // A loaded type is a plain ScalarType, so only the label and the text are compared here.
+            JsonObject rewritten = JsonParser.parseString(GsonUtils.GSON.toJson(loaded, Variant.class))
+                    .getAsJsonObject();
+            Assertions.assertEquals("StringVariant", rewritten.get("clazz").getAsString());
+            Assertions.assertEquals(c[2], rewritten.get("value").getAsString());
+        }
+
+        // A CHAR value ends at its first NUL; the type comes after the value in the legacy field order.
+        Variant legacyChar = legacyCharRecord("ab\\u0000z");
+        assertSameValue(Variant.of(CHAR_TYPE, "ab"), legacyChar);
+        Assertions.assertArrayEquals(bytes('a', 'b'), legacyChar.getBytesValue());
+
+        // VARCHAR keeps every byte.
+        Variant varchar = GsonUtils.GSON.fromJson(
+                LEGACY_VARCHAR.replace("\"value\":\"café\"", "\"value\":\"ab\\u0000z\""), Variant.class);
+        Assertions.assertArrayEquals(bytes('a', 'b', 0, 'z'), varchar.getBytesValue());
+        Assertions.assertNotEquals(Variant.of(VarcharType.VARCHAR, "ab"), varchar);
+
+        // The legacy record without a type loads with a null type and an empty value.
+        Variant empty = GsonUtils.GSON.fromJson(LEGACY_NULL_TYPE_EMPTY, Variant.class);
+        Assertions.assertInstanceOf(StringVariant.class, empty);
+        Assertions.assertNull(empty.getType());
+        Assertions.assertEquals(0, empty.getBytesValue().length);
+        Assertions.assertEquals(LEGACY_NULL_TYPE_EMPTY, GsonUtils.GSON.toJson(empty, Variant.class));
+    }
+
+    @Test
+    public void testHllAndBinaryKeepNulBytes() {
+        Type[] types = {HLLType.HLL, binaryType()};
+        for (Type type : types) {
+            byte[] raw = bytes('a', 0, 'z');
+            Assertions.assertArrayEquals(raw, Variant.of(type, raw).getBytesValue());
+            Assertions.assertArrayEquals(raw, Variant.of(type, "a\0z").getBytesValue());
+            Assertions.assertInstanceOf(StringVariant.class, Variant.of(type, raw));
+            Assertions.assertInstanceOf(StringVariant.class, Variant.of(type, "a\0z"));
+        }
+    }
+
+    @Test
+    public void testCompareToOtherVariantIsLexical() {
+        Assertions.assertTrue(Variant.of(VarcharType.VARCHAR, "10").compareTo(new IntVariant(IntegerType.INT, 2)) < 0);
+    }
+
+    @Test
+    public void testCompatibleCompareRebuildsFromBytes() {
+        Variant legacyChar = legacyCharRecord("12\\u0000z");
+        Variant twelve = new IntVariant(IntegerType.INT, 12);
+        Assertions.assertEquals(0, Variant.compatibleCompare(legacyChar, twelve));
+        Assertions.assertEquals(0, Variant.compatibleCompare(twelve, legacyChar));
+    }
+
+    // ==================== Wire bytes Tests ====================
+
+    private static byte[] repeated(int ch, int count, int... tail) {
+        byte[] result = new byte[count + tail.length];
+        Arrays.fill(result, 0, count, (byte) ch);
+        for (int i = 0; i < tail.length; i++) {
+            result[count + i] = (byte) tail[i];
+        }
+        return result;
+    }
+
+    private static VariantPB protoRoundTrip(Variant variant) throws Exception {
+        Codec<VariantPB> codec = ProtobufProxy.create(VariantPB.class);
+        return codec.decode(codec.encode(variant.toProto()));
+    }
+
+    private static TVariant thriftRoundTrip(Variant variant) throws Exception {
+        return thriftRoundTrip(variant, new TBinaryProtocol.Factory());
+    }
+
+    private static TVariant thriftRoundTrip(Variant variant, TProtocolFactory protocol) throws Exception {
+        byte[] encoded = new TSerializer(protocol).serialize(variant.toThrift());
+        TVariant decoded = new TVariant();
+        new TDeserializer(protocol).deserialize(decoded, encoded);
+        return decoded;
+    }
+
+    @Test
+    public void testWireRoundTripKeepsInvalidBytes() throws Exception {
+        List<Type> types = Arrays.asList(CHAR_TYPE, VarcharType.VARCHAR, VarbinaryType.VARBINARY);
+        List<byte[]> values = Arrays.asList(
+                repeated('p', 10, 0xC3, 0xA9, 0xFF),
+                repeated('p', 35, 0xC3),
+                bytes('a', 'b', 'c'));
+        for (Type type : types) {
+            for (byte[] raw : values) {
+                Variant variant = Variant.of(type, raw);
+                Variant fromProto = Variant.fromProto(protoRoundTrip(variant));
+                Variant fromThrift = Variant.fromThrift(thriftRoundTrip(variant));
+                Variant fromCompact = Variant.fromThrift(thriftRoundTrip(variant, new TCompactProtocol.Factory()));
+                Assertions.assertArrayEquals(raw, fromProto.getBytesValue(), type.toString());
+                Assertions.assertArrayEquals(raw, fromThrift.getBytesValue(), type.toString());
+                Assertions.assertArrayEquals(raw, fromCompact.getBytesValue(), type.toString());
+                Assertions.assertEquals(variant, fromProto);
+                Assertions.assertEquals(variant, fromThrift);
+                Assertions.assertEquals(variant, fromCompact);
+            }
+        }
+    }
+
+    @Test
+    public void testWireOutputIsOwnedAndNormalized() {
+        byte[] raw = repeated('p', 10, 0xC3, 0xA9, 0xFF);
+        Variant variant = Variant.of(VarcharType.VARCHAR, raw);
+        Tuple tuple = new Tuple(Collections.singletonList(variant));
+        Set<Tuple> hashSet = new HashSet<>(Collections.singletonList(tuple));
+        Set<Tuple> treeSet = new TreeSet<>(Collections.singletonList(tuple));
+
+        VariantPB pb = variant.toProto();
+        Arrays.fill(pb.value, (byte) 'x');
+
+        Assertions.assertArrayEquals(raw, variant.getBytesValue());
+        Assertions.assertTrue(hashSet.contains(tuple));
+        Assertions.assertTrue(treeSet.contains(tuple));
+        Assertions.assertEquals(variant, Variant.of(VarcharType.VARCHAR, raw));
+
+        Variant legacy = legacyCharRecord("ab\\u0000z");
+        Assertions.assertArrayEquals(bytes('a', 'b'), legacy.toProto().value);
+        Assertions.assertArrayEquals(bytes('a', 'b'), legacy.toThrift().getValue());
+    }
+
+    // The binary field is written exactly as the old string field was, so peers on either side of the change read
+    // each other's values.
+    @Test
+    public void testThriftBinaryValueMatchesLegacyString() throws Exception {
+        String text = "pé😀";
+        for (TProtocolFactory protocol : Arrays.asList(new TBinaryProtocol.Factory(), new TCompactProtocol.Factory())) {
+            TVariant variant = new TVariant();
+            variant.setValue(text.getBytes(StandardCharsets.UTF_8));
+            byte[] generated = new TSerializer(protocol).serialize(variant);
+
+            TMemoryBuffer buffer = new TMemoryBuffer(64);
+            TProtocol legacy = protocol.getProtocol(buffer);
+            legacy.writeStructBegin(new TStruct("TVariant"));
+            legacy.writeFieldBegin(new TField("value", TType.STRING, (short) 2));
+            legacy.writeString(text);
+            legacy.writeFieldEnd();
+            legacy.writeFieldStop();
+            legacy.writeStructEnd();
+            Assertions.assertArrayEquals(Arrays.copyOf(buffer.getArray(), buffer.length()), generated);
+        }
+    }
+
+    @Test
+    public void testWireBytesMatchWhatBeWrites() throws Exception {
+        byte[] raw = repeated('p', 10, 0xC3, 0xA9, 0xFF);
+        Variant variant = Variant.of(VarcharType.VARCHAR, raw);
+
+        VariantPB pb = variant.toProto();
+        Codec<VariantPB> codec = ProtobufProxy.create(VariantPB.class);
+        byte[] encoded = codec.encode(pb);
+
+        // protobuf-java writes the same three fields in field-number order, as the BE's
+        // generated writer does.
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        CodedOutputStream cos = CodedOutputStream.newInstance(out);
+        Codec<PTypeDesc> typeCodec = ProtobufProxy.create(PTypeDesc.class);
+        cos.writeByteArray(1, typeCodec.encode(pb.type));
+        cos.writeByteArray(2, raw);
+        cos.writeEnum(3, VariantTypePB.NORMAL_VALUE.value());
+        cos.flush();
+        Assertions.assertArrayEquals(out.toByteArray(), encoded);
+    }
+
+    @Test
+    public void testWireRoundTripEmptyValue() throws Exception {
+        Variant emptyVarchar = Variant.of(VarcharType.VARCHAR, "");
+        Variant nulChar = Variant.of(CHAR_TYPE, bytes(0, 'a'));
+        for (Variant variant : Arrays.asList(emptyVarchar, nulChar)) {
+            Variant expected = Variant.of(variant.getType(), "");
+            Assertions.assertEquals(0, variant.toProto().value.length);
+            Assertions.assertEquals(0, variant.toThrift().getValue().length);
+            Variant fromProto = Variant.fromProto(protoRoundTrip(variant));
+            Variant fromThrift = Variant.fromThrift(thriftRoundTrip(variant));
+            Assertions.assertEquals(0, fromProto.getBytesValue().length);
+            Assertions.assertEquals(0, fromThrift.getBytesValue().length);
+            Assertions.assertEquals(expected, fromProto);
+            Assertions.assertEquals(expected, fromThrift);
+        }
+    }
+
+    @Test
+    public void testWireRoundTripNonStringUnchanged() throws Exception {
+        List<Variant> variants = Arrays.asList(
+                Variant.of(IntegerType.INT, "123"),
+                Variant.of(IntegerType.BIGINT, "-9876543210"),
+                Variant.of(IntegerType.LARGEINT, "12345678901234567890"),
+                Variant.of(DateType.DATE, "2024-01-15"),
+                Variant.of(DateType.DATETIME, "2024-01-15 10:30:00"),
+                Variant.of(TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 4), "12345.6789"),
+                Variant.of(BooleanType.BOOLEAN, "true"),
+                Variant.nullVariant(IntegerType.INT),
+                Variant.minVariant(DateType.DATE),
+                Variant.maxVariant(DateType.DATE));
+        for (Variant variant : variants) {
+            Variant fromProto = Variant.fromProto(protoRoundTrip(variant));
+            Variant fromThrift = Variant.fromThrift(thriftRoundTrip(variant));
+            Assertions.assertEquals(variant, fromProto, variant.toString());
+            Assertions.assertEquals(variant, fromThrift, variant.toString());
+            Assertions.assertEquals(0, variant.compareTo(fromProto));
+            Assertions.assertEquals(0, variant.compareTo(fromThrift));
+        }
     }
 }

@@ -771,7 +771,8 @@ enum TVariantType {
 
 struct TVariant {
     1: optional TTypeDesc type
-    2: optional string value
+    // Raw bytes of the value; need not be valid UTF-8.
+    2: optional binary value
     3: optional TVariantType variant_type
 }
 
