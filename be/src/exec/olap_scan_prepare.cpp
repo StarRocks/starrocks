@@ -132,14 +132,14 @@ static bool get_predicate_value(ObjectPool* obj_pool, const SlotDescriptor& slot
         return false;
     }
 
-    // check column type, as not all exprs return a const column.
+    // check column type, as not all exprs return a const column. A constant expression may also come back as a
+    // plain one-row column: get_query_profile(), for one, builds its result without folding constant input.
     ColumnPtr data = column_ptr;
     if (column_ptr->is_nullable()) {
         data = down_cast<const NullableColumn*>(column_ptr.get())->data_column();
     } else if (column_ptr->is_constant()) {
         data = down_cast<const ConstColumn*>(column_ptr.get())->data_column();
-    } else { // defensive check.
-        DCHECK(false) << "unreachable path: unknown column type of expr evaluate result";
+    } else if (column_ptr->size() != 1) {
         return false;
     }
 

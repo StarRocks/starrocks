@@ -16,12 +16,14 @@ package com.starrocks.sql.plan;
 
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
+import com.starrocks.common.util.RuntimeProfile;
 import org.apache.commons.lang3.StringUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -253,6 +255,45 @@ public class TracerTest extends PlanTestBase {
             Assertions.assertTrue(output.contains("BASE.processSplit.table" + i),
                     "Expected per-table scope table" + i + " in output but got: " + output);
         }
+        Tracers.close();
+    }
+
+    @Test
+    public void testReadProfileWhileMergingFromAnotherThread() throws Exception {
+        // A background thread (like DeployScanRangesTask) merges forks into the owner while the
+        // query thread builds the profile; the read side must not race with mergeFrom().
+        Tracers.register(connectContext);
+        Tracers.init(Tracers.Mode.TIMER, Tracers.Module.BASE, true, false);
+        Tracers owner = Tracers.get();
+
+        int numMerges = 2000;
+        CountDownLatch readerStarted = new CountDownLatch(1);
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        try {
+            Future<?> merger = executor.submit(() -> {
+                readerStarted.await();
+                for (int i = 0; i < numMerges; i++) {
+                    Tracers forked = owner.fork(true);
+                    // a new scope name per merge so that mergeFrom() inserts a new cell
+                    try (Timer ignored = Tracers.watchScope(forked, Tracers.Module.BASE, "BASE.deploy" + i)) {
+                        // simulate deploy work
+                    }
+                    owner.mergeFrom(forked);
+                }
+                return null;
+            });
+            readerStarted.countDown();
+            do {
+                Tracers.toRuntimeProfile(new RuntimeProfile("Planner"));
+                Tracers.getSpecifiedTimer("BASE.deploy0");
+            } while (!merger.isDone());
+            merger.get();
+        } finally {
+            executor.shutdown();
+        }
+
+        String output = Tracers.printScopeTimer();
+        Assertions.assertTrue(output.contains("BASE.deploy" + (numMerges - 1)), output);
         Tracers.close();
     }
 }

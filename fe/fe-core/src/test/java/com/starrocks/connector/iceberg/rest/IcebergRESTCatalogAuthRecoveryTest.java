@@ -361,4 +361,15 @@ public class IcebergRESTCatalogAuthRecoveryTest {
             }
         };
     }
+
+    @Test
+    public void testForwardsSessionTokenOnlyForJwtSecurity() {
+        connectContext.setAuthToken("token");
+        Assertions.assertFalse(newOAuth2CredentialCatalog().forwardsSessionToken(connectContext));
+        Assertions.assertFalse(newCatalog(ImmutableMap.of()).forwardsSessionToken(connectContext));
+
+        IcebergRESTCatalog jwtCatalog = newCatalog(ImmutableMap.of("iceberg.catalog.security", "jwt"));
+        Assertions.assertTrue(jwtCatalog.forwardsSessionToken(connectContext));
+        Assertions.assertFalse(jwtCatalog.forwardsSessionToken(new ConnectContext()));
+    }
 }

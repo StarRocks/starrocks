@@ -16,6 +16,7 @@ package com.starrocks.alter.reshard;
 
 import com.google.common.base.Preconditions;
 import com.google.gson.annotations.SerializedName;
+import com.staros.proto.FileCacheInfo;
 import com.starrocks.alter.reshard.ReshardingPhysicalPartition.PublishResult;
 import com.starrocks.alter.reshard.ReshardingPhysicalPartition.PublishState;
 import com.starrocks.catalog.ColocateRange;
@@ -131,8 +132,8 @@ public class MergeTabletJob extends TabletReshardJob {
 
     /*
      * The table was already moved to TABLET_RESHARD by init() at admission time.
-     * 1. Begin transaction (allocate transaction id)
-     * 2. Create new shards on StarOS
+     * 1. Create new shards on StarOS
+     * 2. Begin transaction (allocate transaction id)
      * 3. Commit transaction (update next version)
      * 4. Add new tablets to inverted index
      * 5. Register resharding tablets
@@ -141,18 +142,23 @@ public class MergeTabletJob extends TabletReshardJob {
      */
     @Override
     protected void runPendingJob() {
-        // 1. Begin transaction (allocate transaction id)
+        // 1. Create new shards on StarOS — the last "abortable" step before the no-abort
+        //    boundary below. The request runs on the lake alter publish pool, so the job stays
+        //    PENDING and comes back here on the next rounds until the shards exist. The worker
+        //    reads the table and the job's partitions under the table READ lock, as DROP PARTITION
+        //    and TRUNCATE are still permitted while the table is in TABLET_RESHARD; the StarOS RPCs
+        //    then run without it. If the creation fails, the round that finds it throws, run()
+        //    catches, abort() fires (state still PENDING), runAbortingJob unwinds the FE-side
+        //    mutations, and any orphan staros shards from a partial RPC are reaped by
+        //    StarMgrMetaSyncer's diff-and-purge cycle.
+        if (!pollShardCreation(this::createShardsOnStarOS)) {
+            return;
+        }
+
+        // 2. Begin transaction (allocate transaction id)
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         transactionId = globalStateMgr.getGlobalTransactionMgr().getTransactionIDGenerator().getNextTransactionId();
         gtid = globalStateMgr.getGtidGenerator().nextGtid();
-
-        // 2. Create new shards on StarOS — the last "abortable" step before the no-abort
-        //    boundary below. No table lock needed: init() already moved the
-        //    table to TABLET_RESHARD, which blocks concurrent DDL. If this throws, run()
-        //    catches, abort() fires (state still PENDING), runAbortingJob unwinds the
-        //    FE-side mutations, and any orphan staros shards from a partial RPC are reaped
-        //    by StarMgrMetaSyncer's diff-and-purge cycle.
-        createShardsOnStarOS();
 
         // 3. Commit transaction (update next version)
         // NOTE: After updateNextVersions(), the table's next version is advanced.
@@ -855,17 +861,29 @@ public class MergeTabletJob extends TabletReshardJob {
     }
 
     /**
-     * Create StarOS shards for this merge job.
+     * Create StarOS shards for this merge job and return the number of shards sent to StarOS.
      *
-     * <p>Called from {@link #runPendingJob} as the last "abortable" step, immediately
-     * before {@code updateNextVersions} (the no-abort boundary). A failure surfaces as
-     * a {@link TabletReshardException} that {@code run()} catches and abort()s on;
+     * <p>Runs on the lake alter publish pool: {@link #runPendingJob} submits it through
+     * {@link #pollShardCreation} as the last "abortable" step, before {@code updateNextVersions}
+     * (the no-abort boundary), and polls it on later rounds while the job stays PENDING. A
+     * failure surfaces as a {@link TabletReshardException} that the poll finding it rethrows on
+     * the scheduler thread, where {@code run()} catches it and abort()s;
      * {@link #runAbortingJob} unwinds the FE-side mutations and any orphan staros
      * shards from a partial RPC are reaped by {@code StarMgrMetaSyncer}'s
      * diff-and-purge cycle.
      */
-    void createShardsOnStarOS() {
-        OlapTable table = getOlapTable();
+    int createShardsOnStarOS() {
+        OlapTable table;
+        Map<Long, FileCacheInfo> cacheInfos = new HashMap<>();
+        // This runs on a pool thread and may still be running after the job left PENDING, so a missing table
+        // must not take getOlapTable()'s path that journals ABORTING.
+        try (LockedObject<OlapTable> lockedTable =
+                new LockedObject<>(dbId, List.of(tableId), LockType.READ, findOlapTable(dbId))) {
+            table = lockedTable.get();
+            for (long physicalPartitionId : reshardingPhysicalPartitions.keySet()) {
+                cacheInfos.put(physicalPartitionId, table.getPartitionFileCacheInfo(physicalPartitionId));
+            }
+        }
         // Snapshot the colocate ranges once: the createShard RPCs in the inner loop cannot change
         // them, and every shard of this job must be placed against the same topology.
         ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
@@ -879,6 +897,7 @@ public class MergeTabletJob extends TabletReshardJob {
                 : colocateTableIndex.getColocateRanges(colocateGroupId.grpId);
         int colocateColumnCount = colocateRanges == null ? 0
                 : colocateTableIndex.getGroupSchema(colocateGroupId).getColocateColumnCount();
+        int shardCount = 0;
         try {
             for (ReshardingPhysicalPartition reshardingPhysicalPartition : reshardingPhysicalPartitions.values()) {
                 long physicalPartitionId = reshardingPhysicalPartition.getPhysicalPartitionId();
@@ -908,14 +927,16 @@ public class MergeTabletJob extends TabletReshardJob {
                             newToOldTabletIds,
                             newTabletIdToGroupIds,
                             table.getPartitionFilePathInfo(physicalPartitionId),
-                            table.getPartitionFileCacheInfo(physicalPartitionId),
+                            cacheInfos.get(physicalPartitionId),
                             properties, resolveComputeResource(tableId));
+                    shardCount += newToOldTabletIds.size();
                 }
             }
         } catch (StarRocksException e) {
             throw new TabletReshardException(
                     "Failed to create new shards on StarOS: " + e.getMessage(), e);
         }
+        return shardCount;
     }
 
     /**

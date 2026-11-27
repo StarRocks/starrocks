@@ -53,7 +53,6 @@ import org.apache.iceberg.exceptions.NoSuchTableException;
 import org.apache.iceberg.view.View;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.apache.parquet.Strings;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -272,9 +271,9 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     public Table getTable(ConnectContext connectContext, String dbName, String tableName) throws StarRocksConnectorException {
         IcebergTableName icebergTableName = new IcebergTableName(dbName, tableName);
 
-        // do not cache if jwt or oauth2 is used AND it is a REST Catalog.
+        // do not cache if it is a REST Catalog that forwards the session's JWT, as the loaded table is per user.
         boolean cacheAllowed = icebergProperties.isEnableIcebergTableCache() &&
-                (Strings.isNullOrEmpty(connectContext.getAuthToken()) || !(delegate instanceof IcebergRESTCatalog));
+                !(delegate instanceof IcebergRESTCatalog restCatalog && restCatalog.forwardsSessionToken(connectContext));
         if (!cacheAllowed) {
             return delegate.getTable(connectContext, dbName, tableName);
         }

@@ -2547,7 +2547,15 @@ public class Config extends ConfigBase {
      *   - Else if targetRows > statistic_sample_collect_rows: Use SAMPLE statistics
      *   - Else: Use FULL statistics
      *
-     * - For First Load:
+     * - For First Load by INSERT (physical partition commit version == 2):
+     *   totalRows = sum of FE row counts of the candidate first-load logical partitions
+     *   deltaRatio = loadRows / (totalRows + 1)
+     *   - If deltaRatio < statistic_sample_collect_ratio_threshold_of_first_load: No collection
+     *   - Else if loadRows > statistic_sample_collect_rows: Use SAMPLE statistics
+     *   - Else: Use FULL statistics
+     *
+     * - For UPDATE (when enable_statistic_collect_on_update is enabled):
+     *   totalRows = positive table row count from statistics metadata, otherwise affected partitions' FE row counts
      *   deltaRatio = loadRows / (totalRows + 1)
      *   - If deltaRatio < statistic_sample_collect_ratio_threshold_of_first_load: No collection
      *   - Else if loadRows > statistic_sample_collect_rows: Use SAMPLE statistics
@@ -2744,6 +2752,14 @@ public class Config extends ConfigBase {
             "rather than re-collected (a stale value is never served). Set to 0 to disable throttling.")
     public static int min_max_stats_collect_interval_sec = 60;
 
+    @ConfField(mutable = true, comment = "Do not collect min/max statistics for a table with more tablets than " +
+            "this. Min/max stats are collected via a [_META_] MetaScan over the whole table, whose planning " +
+            "(tablet locations, scan ranges) and execution cost grow with the tablet count. Such a table gets no " +
+            "min/max optimization (compressed group-by key, min()/max() folding), but a value already cached for " +
+            "the current data version is still used. A skip is not cached, so a raised limit applies within " +
+            "min_max_stats_collect_interval_sec. Set to 0 or a negative value to disable the limit.")
+    public static int min_max_stats_collect_max_tablets = 100000;
+
     /**
      * The column statistic cache update interval
      */
@@ -2853,7 +2869,10 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true, comment = "The change ratio threshold for triggering statistics collection. " +
             "For INSERT OVERWRITE: deltaRatio = |targetRows - sourceRows| / (sourceRows + 1). " +
-            "For first load: deltaRatio = loadRows / (totalRows + 1). " +
+            "For first load by INSERT: deltaRatio = loadRows / (totalRows + 1), where totalRows is the sum of FE " +
+            "row counts of the candidate first-load logical partitions. " +
+            "For UPDATE: deltaRatio = loadRows / (totalRows + 1). " +
+            "totalRows uses a positive table statistics row count, otherwise affected partitions' FE row counts. " +
             "If deltaRatio < this threshold (default 0.1 or 10%), statistics collection is skipped. " +
             "Used in conjunction with enable_statistic_collect_on_first_load.")
     public static double statistic_sample_collect_ratio_threshold_of_first_load = 0.1;

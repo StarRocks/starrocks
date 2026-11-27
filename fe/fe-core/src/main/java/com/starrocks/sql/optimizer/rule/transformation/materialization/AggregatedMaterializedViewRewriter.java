@@ -55,6 +55,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import static com.starrocks.sql.optimizer.operator.OpRuleBit.OP_MV_ROLLUP_AGG;
 import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils.addExtraPredicate;
 import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils.deriveLogicalProperty;
 import static com.starrocks.sql.optimizer.rule.transformation.materialization.common.AggregateFunctionRollupUtils.genRollupProject;
@@ -523,6 +524,13 @@ public final class AggregatedMaterializedViewRewriter extends MaterializedViewRe
     private boolean isRollupAggregate(List<ScalarOperator> mvGroupingKeys,
                                       List<ScalarOperator> queryGroupingKeys,
                                       ScalarOperator queryRangePredicate) {
+        // A query without GROUP BY returns one row even when no MV row matches its filter. A non-rollup rewrite
+        // drops the aggregation and returns the matching MV rows, which is no row at all when the filter pins the
+        // MV grouping keys to a value that the MV does not have (WHERE k = <missing value>), so keep the
+        // aggregation over the MV scan.
+        if (queryGroupingKeys.isEmpty() && !mvGroupingKeys.isEmpty()) {
+            return true;
+        }
         MaterializedView mv = mvRewriteContext.getMaterializationContext().getMv();
         if (mv.getRefreshScheme().isSync() && mv.getDefaultDistributionInfo() instanceof RandomDistributionInfo) {
             return true;
@@ -858,6 +866,7 @@ public final class AggregatedMaterializedViewRewriter extends MaterializedViewRe
         Projection projection = new Projection(newProjection);
         aggBuilder.setProjection(projection);
         LogicalAggregationOperator newAggOp = aggBuilder.build();
+        newAggOp.setOpRuleBit(OP_MV_ROLLUP_AGG);
         OptExpression rewriteOp = OptExpression.create(newAggOp, mvOptExpr);
         deriveLogicalProperty(rewriteOp);
         return rewriteOp;

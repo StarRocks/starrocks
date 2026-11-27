@@ -153,7 +153,7 @@ public class PipeManagerEditLogTest {
         Assertions.assertFalse(pipeOpt.isPresent());
 
         // 3. Execute createPipe operation (master side)
-        masterPipeManager.createPipe(stmt);
+        masterPipeManager.createPipe(ctx, stmt);
 
         // 4. Verify master state
         pipeOpt = masterPipeManager.mayGetPipe(pipeNameObj);
@@ -206,7 +206,7 @@ public class PipeManagerEditLogTest {
 
         // 4. Execute createPipe operation and expect exception
         RuntimeException exception = Assertions.assertThrows(RuntimeException.class, () -> {
-            exceptionPipeManager.createPipe(stmt);
+            exceptionPipeManager.createPipe(ctx, stmt);
         });
         Assertions.assertEquals("EditLog write failed", exception.getMessage());
 
@@ -220,7 +220,7 @@ public class PipeManagerEditLogTest {
         // 1. Prepare test data - first create a pipe
         String pipeName = "test_drop_pipe";
         CreatePipeStmt createStmt = createPipeStmt(pipeName);
-        masterPipeManager.createPipe(createStmt);
+        masterPipeManager.createPipe(ctx, createStmt);
 
         PipeName pipeNameObj = new PipeName(PIPE_TEST_DB, pipeName);
         // Verify pipe exists
@@ -264,7 +264,7 @@ public class PipeManagerEditLogTest {
         String pipeName = "exception_drop_pipe";
         CreatePipeStmt createStmt = createPipeStmt(pipeName);
         PipeManager exceptionPipeManager = GlobalStateMgr.getCurrentState().getPipeManager();
-        exceptionPipeManager.createPipe(createStmt);
+        exceptionPipeManager.createPipe(ctx, createStmt);
 
         PipeName pipeNameObj = new PipeName(PIPE_TEST_DB, pipeName);
         // Verify pipe exists
@@ -301,8 +301,8 @@ public class PipeManagerEditLogTest {
         String pipeName2 = "test_drop_db_pipe2";
         CreatePipeStmt createStmt1 = createPipeStmt(pipeName1);
         CreatePipeStmt createStmt2 = createPipeStmt(pipeName2);
-        masterPipeManager.createPipe(createStmt1);
-        masterPipeManager.createPipe(createStmt2);
+        masterPipeManager.createPipe(ctx, createStmt1);
+        masterPipeManager.createPipe(ctx, createStmt2);
 
         // Verify pipes exist
         Optional<Pipe> pipeOpt1 = masterPipeManager.mayGetPipe(new PipeName(PIPE_TEST_DB, pipeName1));
@@ -354,8 +354,8 @@ public class PipeManagerEditLogTest {
         CreatePipeStmt createStmt1 = createPipeStmt(pipeName1);
         CreatePipeStmt createStmt2 = createPipeStmt(pipeName2);
         PipeManager exceptionPipeManager = GlobalStateMgr.getCurrentState().getPipeManager();
-        exceptionPipeManager.createPipe(createStmt1);
-        exceptionPipeManager.createPipe(createStmt2);
+        exceptionPipeManager.createPipe(ctx, createStmt1);
+        exceptionPipeManager.createPipe(ctx, createStmt2);
 
         // Verify pipes exist
         Optional<Pipe> pipeOpt1 = exceptionPipeManager.mayGetPipe(new PipeName(PIPE_TEST_DB, pipeName1));
@@ -389,7 +389,7 @@ public class PipeManagerEditLogTest {
         // 1. Prepare test data - first create a pipe
         String pipeName = "test_alter_suspend_pipe";
         CreatePipeStmt createStmt = createPipeStmt(pipeName);
-        masterPipeManager.createPipe(createStmt);
+        masterPipeManager.createPipe(ctx, createStmt);
 
         PipeName pipeNameObj = new PipeName(PIPE_TEST_DB, pipeName);
         Pipe pipe = masterPipeManager.mayGetPipe(pipeNameObj).get();
@@ -433,7 +433,7 @@ public class PipeManagerEditLogTest {
         String pipeName = "exception_alter_suspend_pipe";
         CreatePipeStmt createStmt = createPipeStmt(pipeName);
         PipeManager exceptionPipeManager = GlobalStateMgr.getCurrentState().getPipeManager();
-        exceptionPipeManager.createPipe(createStmt);
+        exceptionPipeManager.createPipe(ctx, createStmt);
 
         PipeName pipeNameObj = new PipeName(PIPE_TEST_DB, pipeName);
         Pipe pipe = exceptionPipeManager.mayGetPipe(pipeNameObj).get();
@@ -469,7 +469,7 @@ public class PipeManagerEditLogTest {
         // 1. Prepare test data - first create and suspend a pipe
         String pipeName = "test_alter_resume_pipe";
         CreatePipeStmt createStmt = createPipeStmt(pipeName);
-        masterPipeManager.createPipe(createStmt);
+        masterPipeManager.createPipe(ctx, createStmt);
 
         PipeName pipeNameObj = new PipeName(PIPE_TEST_DB, pipeName);
         // Suspend first
@@ -522,7 +522,7 @@ public class PipeManagerEditLogTest {
         String pipeName = "exception_alter_resume_pipe";
         CreatePipeStmt createStmt = createPipeStmt(pipeName);
         PipeManager exceptionPipeManager = GlobalStateMgr.getCurrentState().getPipeManager();
-        exceptionPipeManager.createPipe(createStmt);
+        exceptionPipeManager.createPipe(ctx, createStmt);
 
         PipeName pipeNameObj = new PipeName(PIPE_TEST_DB, pipeName);
         // Suspend first
@@ -561,7 +561,7 @@ public class PipeManagerEditLogTest {
         // 1. Prepare test data - first create a pipe
         String pipeName = "test_alter_set_property_pipe";
         CreatePipeStmt createStmt = createPipeStmt(pipeName);
-        masterPipeManager.createPipe(createStmt);
+        masterPipeManager.createPipe(ctx, createStmt);
 
         PipeName pipeNameObj = new PipeName(PIPE_TEST_DB, pipeName);
         // 2. Prepare AlterPipeStmt with SetProperty - test all alterable properties
@@ -632,7 +632,7 @@ public class PipeManagerEditLogTest {
         String pipeName = "exception_alter_set_property_pipe";
         CreatePipeStmt createStmt = createPipeStmt(pipeName);
         PipeManager exceptionPipeManager = GlobalStateMgr.getCurrentState().getPipeManager();
-        exceptionPipeManager.createPipe(createStmt);
+        exceptionPipeManager.createPipe(ctx, createStmt);
 
         PipeName pipeNameObj = new PipeName(PIPE_TEST_DB, pipeName);
         Pipe pipe = exceptionPipeManager.mayGetPipe(pipeNameObj).get();
