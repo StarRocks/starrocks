@@ -12,8 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <algorithm>
+#include <atomic>
 #include <optional>
+#include <random>
 #include <stdexcept>
+#include <thread>
 #include <vector>
 
 #include "base/testutil/assert.h"
@@ -21,6 +25,7 @@
 #include "gtest/gtest.h"
 #include "runtime/runtime_filter.h"
 #include "storage_primitive/column_predicate_factory.h"
+#include "storage_primitive/zone_map_detail.h"
 #include "types/geo_type_info.h"
 #include "types/type_descriptor.h"
 
@@ -1681,6 +1686,111 @@ TEST(ColumnPredicateTest, test_in) {
 
         p->evaluate_or(c.get(), buff.data(), 2, 4);
         ASSERT_EQ("1,1,1,1,1", to_string(buff));
+    }
+}
+
+// The zone-map check of a long IN list starts with the per-value loop and switches to a binary search of a sorted copy
+// once the loop has examined about N * log2(N) values; both must answer alike: a page can hold a value iff some value v
+// has min <= v <= max, where the min of a page with nulls is null and below every value. Each case below checks a
+// predicate against enough pages to run both.
+// NOLINTNEXTLINE
+TEST(ColumnPredicateTest, test_in_zone_map_filter) {
+    std::mt19937 rng(20261124);
+
+    // INT, list sizes on both sides of the sorted path's threshold (16), ranges that fall between values, hit one
+    // value, cover both ends or lie beyond them.
+    for (int n : {4, 15, 16, 17, 100, 1000}) {
+        std::vector<int32_t> values;
+        std::vector<std::string> strs;
+        for (int i = 0; i < n; i++) {
+            values.push_back(i * 10 - 500);
+            strs.push_back(std::to_string(values.back()));
+        }
+        std::shuffle(strs.begin(), strs.end(), rng);
+        std::unique_ptr<ColumnPredicate> p(new_column_in_predicate(get_type_info(TYPE_INT), 0, strs));
+        std::uniform_int_distribution<int32_t> dist(-600, n * 10 - 400);
+        for (int i = 0; i < 2000; i++) {
+            int32_t lo = dist(rng);
+            int32_t hi = dist(rng);
+            if (lo > hi) std::swap(lo, hi);
+            const bool has_null = i % 5 == 0;
+            const bool expected = std::any_of(values.begin(), values.end(),
+                                              [&](int32_t v) { return (has_null || v >= lo) && v <= hi; });
+            ASSERT_EQ(expected, p->zone_map_filter(ZoneMapDetail(Datum(lo), Datum(hi), has_null)))
+                    << "n=" << n << " [" << lo << ", " << hi << "] has_null=" << has_null;
+        }
+        // a page of nulls only holds no value
+        ASSERT_FALSE(p->zone_map_filter(ZoneMapDetail(Datum(), Datum(), true))) << "n=" << n;
+    }
+
+    // VARCHAR, random strings over an alphabet with a byte above 0x7f: the order is byte-wise (unsigned).
+    {
+        auto random_string = [&] {
+            static const char kAlphabet[] = {'a', 'b', '\xff'};
+            std::string s(rng() % 6, 'a');
+            for (char& c : s) c = kAlphabet[rng() % 3];
+            return s;
+        };
+        std::vector<std::string> strs;
+        for (int i = 0; i < 200; i++) strs.push_back(random_string());
+        std::unique_ptr<ColumnPredicate> p(new_column_in_predicate(get_type_info(TYPE_VARCHAR), 0, strs));
+        for (int i = 0; i < 2000; i++) {
+            std::string lo = random_string();
+            std::string hi = random_string();
+            if (lo > hi) std::swap(lo, hi);
+            const bool has_null = i % 5 == 0;
+            const bool expected = std::any_of(strs.begin(), strs.end(),
+                                              [&](const std::string& v) { return (has_null || v >= lo) && v <= hi; });
+            ASSERT_EQ(expected, p->zone_map_filter(ZoneMapDetail(Datum(Slice(lo)), Datum(Slice(hi)), has_null)))
+                    << "[" << lo << ", " << hi << "] has_null=" << has_null;
+        }
+    }
+
+    // CHAR: padding_zeros() rebuilds the slices over the padded strings after the sorted copy was built.
+    {
+        std::vector<std::string> strs;
+        for (int i = 0; i < 40; i++) {
+            std::string n = std::to_string(i * 2);
+            strs.push_back("k" + std::string(3 - n.size(), '0') + n); // k000, k002, ..., k078
+        }
+        std::unique_ptr<ColumnPredicate> p(new_column_in_predicate(get_type_info(TYPE_CHAR), 0, strs));
+        const std::string hit_lo = "k010", hit_hi = "k011", miss_lo = "k011", miss_hi = "k011z";
+        // pages between two values make the loop examine all 40 values, so the sorted copy is built well before 100
+        for (int i = 0; i < 100; i++) {
+            ASSERT_FALSE(p->zone_map_filter(ZoneMapDetail(Datum(Slice(miss_lo)), Datum(Slice(miss_hi)), false)));
+        }
+        ASSERT_TRUE(p->zone_map_filter(ZoneMapDetail(Datum(Slice(hit_lo)), Datum(Slice(hit_hi)), false)));
+        ASSERT_TRUE(p->padding_zeros(64));
+        ASSERT_TRUE(p->zone_map_filter(ZoneMapDetail(Datum(Slice(hit_lo)), Datum(Slice(hit_hi)), false)));
+        ASSERT_FALSE(p->zone_map_filter(ZoneMapDetail(Datum(Slice(miss_lo)), Datum(Slice(miss_hi)), false)));
+    }
+
+    // DOUBLE keeps the per-value loop (NaN has no place in a sort order); a long list still answers right.
+    {
+        std::vector<std::string> strs;
+        for (int i = 0; i < 50; i++) strs.push_back(std::to_string(i * 1.5));
+        std::unique_ptr<ColumnPredicate> p(new_column_in_predicate(get_type_info(TYPE_DOUBLE), 0, strs));
+        ASSERT_TRUE(p->zone_map_filter(ZoneMapDetail(Datum(2.9), Datum(3.1), false)));  // holds 3.0
+        ASSERT_FALSE(p->zone_map_filter(ZoneMapDetail(Datum(3.1), Datum(4.4), false))); // between 3.0 and 4.5
+    }
+
+    // The first checks of a predicate may come from several scan threads at once.
+    {
+        std::vector<std::string> strs;
+        for (int i = 0; i < 1000; i++) strs.push_back(std::to_string(i * 2)); // 0, 2, ..., 1998
+        std::unique_ptr<ColumnPredicate> p(new_column_in_predicate(get_type_info(TYPE_BIGINT), 0, strs));
+        std::atomic<int> wrong{0};
+        std::vector<std::thread> threads;
+        for (int t = 0; t < 8; t++) {
+            threads.emplace_back([&, t] {
+                for (int64_t v = t; v < 2100; v += 8) {
+                    const bool expected = v % 2 == 0 && v < 2000;
+                    if (p->zone_map_filter(ZoneMapDetail(Datum(v), Datum(v), false)) != expected) wrong++;
+                }
+            });
+        }
+        for (auto& th : threads) th.join();
+        ASSERT_EQ(0, wrong.load());
     }
 }
 

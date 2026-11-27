@@ -12,7 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <algorithm>
+#include <atomic>
+#include <bit>
+#include <mutex>
 #include <type_traits>
+#include <vector>
 
 #include "column/column.h"
 #include "column/column_helper.h"
@@ -31,6 +36,91 @@
 #include "types/olap_type_infra.h"
 
 namespace starrocks {
+
+// Zone-map check of an IN list: whether a page whose values lie in [min, max] can hold one of the list's values.
+//
+// The per-value loop costs one or two comparisons per value it examines, and it stops at the first value inside the
+// page: a page that spans most of the list costs a few comparisons, a page between two values costs N. A sorted copy
+// answers any page with a binary search of about log2(N) comparisons (the page can hold a value exactly when it holds
+// the smallest value >= min), but sorting costs about N * log2(N) comparisons once per predicate instance, i.e. per
+// tablet scan and, for a pending DELETE ... WHERE c IN (...), per tablet scan and delete. So a list of
+// kMinSortedSize values or more keeps the loop and counts what it costs beyond a binary search; once that excess
+// reaches the cost of the sort, it sorts. A predicate that sees few pages, or pages the loop leaves early, never pays
+// for a sort; one that keeps paying N per page (the pending delete checked against every page of a large tablet)
+// switches after about log2(N) pages. Either way it costs at most about twice the cheaper of the two.
+//
+// The order is TypeInfo::cmp's (nulls first), the comparison the loop uses, so both give the same answer. kSortable
+// is false for FLOAT and DOUBLE, whose NaN has no place in that order; they keep the loop.
+template <typename T, bool kSortable>
+class InListZoneMapFilter {
+public:
+    static constexpr size_t kMinSortedSize = 16;
+
+    template <typename Values>
+    bool filter(const TypeInfo* type_info, const Values& values, const ZoneMapDetail& detail) const {
+        const Datum& min = detail.min_or_null_value();
+        const Datum& max = detail.max_value();
+        if constexpr (kSortable) {
+            if (values.size() >= kMinSortedSize && _sort_paid_off(values.size())) {
+                const std::vector<T>& sorted = _sorted_values(type_info, values);
+                auto it = std::lower_bound(sorted.begin(), sorted.end(), min,
+                                           [&](const T& v, const Datum& m) { return type_info->cmp(Datum(v), m) < 0; });
+                return it != sorted.end() && type_info->cmp(Datum(*it), max) <= 0;
+            }
+        }
+        size_t examined = 0;
+        bool hit = false;
+        for (const T& v : values) {
+            ++examined;
+            if (type_info->cmp(Datum(v), min) >= 0 && type_info->cmp(Datum(v), max) <= 0) {
+                hit = true;
+                break;
+            }
+        }
+        if constexpr (kSortable) {
+            const size_t search = std::bit_width(values.size()); // what a binary search would have examined
+            if (values.size() >= kMinSortedSize && examined > search) {
+                _excess.fetch_add(examined - search, std::memory_order_relaxed);
+            }
+        }
+        return hit;
+    }
+
+    // Drops the sorted copy. For an owner that changes its values, which happens only before the predicate is used.
+    void reset() {
+        _sorted.clear();
+        _excess.store(0, std::memory_order_relaxed);
+        _sorted_ready.store(false, std::memory_order_release);
+    }
+
+private:
+    // Whether the list is sorted, or the loop has examined N * log2(N) values beyond what binary searches would have
+    // (the cost of the sort) over all checks so far.
+    bool _sort_paid_off(size_t n) const {
+        return _sorted_ready.load(std::memory_order_acquire) ||
+               _excess.load(std::memory_order_relaxed) >= n * std::bit_width(n);
+    }
+
+    // Built once the loop has cost as much as the sort. The scan threads share predicates, hence the lock.
+    template <typename Values>
+    const std::vector<T>& _sorted_values(const TypeInfo* type_info, const Values& values) const {
+        if (!_sorted_ready.load(std::memory_order_acquire)) {
+            std::lock_guard<std::mutex> l(_mutex);
+            if (!_sorted_ready.load(std::memory_order_relaxed)) {
+                _sorted.assign(values.begin(), values.end());
+                std::sort(_sorted.begin(), _sorted.end(),
+                          [&](const T& a, const T& b) { return type_info->cmp(Datum(a), Datum(b)) < 0; });
+                _sorted_ready.store(true, std::memory_order_release);
+            }
+        }
+        return _sorted;
+    }
+
+    mutable std::mutex _mutex;
+    mutable std::atomic<bool> _sorted_ready{false};
+    mutable std::atomic<size_t> _excess{0};
+    mutable std::vector<T> _sorted;
+};
 
 template <LogicalType field_type, typename ItemSet>
 class ColumnInPredicate final : public ColumnPredicate {
@@ -99,15 +189,7 @@ public:
     }
 
     bool zone_map_filter(const ZoneMapDetail& detail) const override {
-        const auto& min = detail.min_or_null_value();
-        const auto& max = detail.max_value();
-        const auto type_info = this->type_info();
-        for (const ValueType& v : _values) {
-            if (type_info->cmp(Datum(v), min) >= 0 && type_info->cmp(Datum(v), max) <= 0) {
-                return true;
-            }
-        }
-        return false;
+        return _zone_map_filter.filter(this->type_info(), _values, detail);
     }
 
     bool support_bitmap_filter() const override { return true; }
@@ -209,6 +291,7 @@ public:
 
 private:
     ItemSet _values;
+    InListZoneMapFilter<ValueType, !lt_is_float<field_type>> _zone_map_filter;
 };
 
 // Template specialization for binary column
@@ -294,15 +377,7 @@ public:
     }
 
     bool zone_map_filter(const ZoneMapDetail& detail) const override {
-        const auto& min = detail.min_or_null_value();
-        const auto& max = detail.max_value();
-        const auto type_info = this->type_info();
-        for (const Slice& v : _slices) {
-            if (type_info->cmp(Datum(v), min) >= 0 && type_info->cmp(Datum(v), max) <= 0) {
-                return true;
-            }
-        }
-        return false;
+        return _zone_map_filter.filter(this->type_info(), _slices, detail);
     }
 
     bool support_bitmap_filter() const override { return true; }
@@ -390,6 +465,8 @@ public:
             str.append(len > old_sz ? len - old_sz : 0, '\0');
             _slices.emplace(str.data(), old_sz);
         }
+        // the sorted copy holds slices of the old strings, which append() may have moved
+        _zone_map_filter.reset();
         return true;
     }
 
@@ -410,6 +487,7 @@ public:
 private:
     std::vector<std::string> _zero_padded_strs;
     ItemHashSet<Slice> _slices;
+    InListZoneMapFilter<Slice, true> _zone_map_filter;
 };
 
 class DictionaryCodeInPredicate final : public ColumnPredicate {
