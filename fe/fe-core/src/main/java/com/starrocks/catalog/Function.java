@@ -45,29 +45,18 @@ import com.starrocks.analysis.FunctionName;
 import com.starrocks.catalog.combinator.AggStateDesc;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.Writable;
-<<<<<<< HEAD
-import com.starrocks.credential.CloudConfiguration;
-=======
-import com.starrocks.common.util.CredentialMask;
-import com.starrocks.common.util.PrintableMap;
 import com.starrocks.connector.hadoop.HadoopExt;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
 import com.starrocks.credential.CloudType;
 import com.starrocks.persist.gson.GsonPostProcessable;
-import com.starrocks.sql.ast.CreateFunctionStmt;
->>>>>>> 2937771 ([BugFix] Persist UDF cloud configuration across FE replay (#82920))
 import com.starrocks.sql.ast.HdfsURI;
 import com.starrocks.thrift.TCloudConfiguration;
 import com.starrocks.thrift.TFunction;
 import com.starrocks.thrift.TFunctionBinaryType;
 import org.apache.commons.lang.ArrayUtils;
 
-<<<<<<< HEAD
-=======
 import java.io.IOException;
-import java.util.ArrayList;
->>>>>>> 2937771 ([BugFix] Persist UDF cloud configuration across FE replay (#82920))
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
@@ -80,13 +69,7 @@ import java.util.stream.Collectors;
 /**
  * Base class for all functions.
  */
-<<<<<<< HEAD
-public class Function implements Writable {
-=======
 public class Function implements Writable, GsonPostProcessable {
-    private static final String MASKED_LOCATION = "***";
-
->>>>>>> 2937771 ([BugFix] Persist UDF cloud configuration across FE replay (#82920))
     // Enum for how to compare function signatures.
     // For decimal types, the type in the function can be a wildcard, i.e. decimal(*,*).
     // The wildcard can *only* exist as function type, the caller will always be a
@@ -266,22 +249,10 @@ public class Function implements Writable, GsonPostProcessable {
         isNullable = other.isNullable;
         isMetaFunction = other.isMetaFunction;
         aggStateDesc = other.aggStateDesc;
-<<<<<<< HEAD
-=======
-        inputType = other.inputType;
         legacyCloudConfiguration = other.legacyCloudConfiguration;
         cloudConfigurationProperties = other.cloudConfigurationProperties == null ? null
                 : new HashMap<>(other.cloudConfigurationProperties);
         cloudConfiguration = other.cloudConfiguration;
-    }
-
-    public void setInputType(String inputType) {
-        this.inputType = inputType;
-    }
-
-    public String getInputType() {
-        return inputType;
->>>>>>> 2937771 ([BugFix] Persist UDF cloud configuration across FE replay (#82920))
     }
 
     public FunctionName getFunctionName() {

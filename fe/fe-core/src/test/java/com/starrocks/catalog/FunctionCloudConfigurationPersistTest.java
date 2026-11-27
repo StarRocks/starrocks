@@ -22,8 +22,6 @@ import com.starrocks.credential.CloudType;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.thrift.TFunction;
 import com.starrocks.thrift.TFunctionBinaryType;
-import com.starrocks.type.Type;
-import com.starrocks.type.TypeFactory;
 import org.apache.thrift.TSerializer;
 import org.apache.thrift.protocol.TBinaryProtocol;
 import org.junit.jupiter.api.Assertions;
@@ -41,7 +39,7 @@ import static com.starrocks.connector.share.credential.CloudConfigurationConstan
 public class FunctionCloudConfigurationPersistTest {
     private ScalarFunction newUdf(Map<String, String> properties) {
         CloudConfiguration configuration = CloudConfigurationFactory.buildCloudConfigurationForStorage(properties);
-        Type varchar = TypeFactory.createVarcharType(65533);
+        Type varchar = ScalarType.createVarcharType(65533);
         return ScalarFunction.createUdf(new FunctionName("", "cloudcfg_repro"), new Type[] {varchar}, varchar,
                 false, TFunctionBinaryType.SRJAR, "s3://bucket/reverse.jar", "test.ReverseString", "", "",
                 configuration);
