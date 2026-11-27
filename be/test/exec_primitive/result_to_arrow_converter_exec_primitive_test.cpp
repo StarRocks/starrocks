@@ -24,9 +24,11 @@
 #include "exec_primitive/arrow/result_to_arrow_converter.h"
 #include "exprs/column_ref.h"
 #include "exprs/expr_context.h"
+#include "gen_cpp/InternalService_types.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
 #include "testutil/column_test_helper.h"
+#include "types/timestamp_value.h"
 #include "types/type_descriptor.h"
 
 namespace starrocks {
@@ -61,6 +63,41 @@ TEST(ResultToArrowConverterExecPrimitiveTest, BuildsSchemaAndConvertsChunkThroug
     auto array = std::static_pointer_cast<arrow::Int32Array>(batch->column(0));
     EXPECT_EQ(42, array->Value(0));
     EXPECT_EQ(43, array->Value(1));
+}
+
+TEST(ResultToArrowConverterExecPrimitiveTest, FlightSqlDatetimeKeepsWallClockValue) {
+    constexpr TupleId kTupleId = 1;
+    constexpr SlotId kSlotId = 3;
+
+    ColumnRef ref(TYPE_DATETIME_DESC, kSlotId);
+    ref.set_tuple_id(kTupleId);
+    ExprContext expr_context(&ref);
+    RuntimeState runtime_state{TQueryGlobals()};
+    ASSERT_OK(expr_context.prepare(&runtime_state));
+    ASSERT_OK(expr_context.open(&runtime_state));
+    std::vector<ExprContext*> output_expr_ctxs{&expr_context};
+    std::unordered_map<int64_t, std::string> id_to_col_name{{(int64_t{kTupleId} << 32) | kSlotId, "dt"}};
+
+    auto column = TimestampColumn::create();
+    column->append(TimestampValue::create(2026, 10, 28, 9, 0, 0, 0));
+    Chunk chunk;
+    chunk.append_column(std::move(column), kSlotId);
+
+    // V1 labels the wall clock as UTC; V2 sends it without a time zone. The epoch value is the same.
+    for (auto [version, timezone] :
+         {std::pair{TArrowFlightSQLVersion::V1, "UTC"}, std::pair{TArrowFlightSQLVersion::V2, ""}}) {
+        std::shared_ptr<arrow::Schema> schema;
+        ASSERT_OK(convert_to_arrow_schema(id_to_col_name, &schema, output_expr_ctxs, nullptr, version));
+        ASSERT_EQ(arrow::Type::TIMESTAMP, schema->field(0)->type()->id());
+        auto timestamp_type = std::static_pointer_cast<arrow::TimestampType>(schema->field(0)->type());
+        EXPECT_EQ(arrow::TimeUnit::MICRO, timestamp_type->unit());
+        EXPECT_EQ(timezone, timestamp_type->timezone());
+
+        std::shared_ptr<arrow::RecordBatch> batch;
+        ASSERT_OK(convert_chunk_to_arrow_batch(&chunk, output_expr_ctxs, schema, arrow::default_memory_pool(), &batch));
+        auto array = std::static_pointer_cast<arrow::TimestampArray>(batch->column(0));
+        EXPECT_EQ(1793178000000000L, array->Value(0));
+    }
 }
 
 TEST(ResultToArrowConverterExecPrimitiveTest, ConvertsChunkBySlotIds) {
