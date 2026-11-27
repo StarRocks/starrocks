@@ -3005,10 +3005,11 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
     }
 
     /**
-     * Get Table descriptor and materialized index for the materialized index named `dbName`.`indexName`
+     * Get Table descriptor and materialized index for the rollup or synchronous materialized view named
+     * `dbName`.`indexName`. The base index of a table is left out.
      *
      * @param dbName    - the string represents the database name
-     * @param indexName - the string represents the materialized index name
+     * @param indexName - the string represents the rollup or synchronous materialized view name
      * @param sessionId - the session reading it: the temporary tables of other sessions are left out
      * @return the index with its table, or null
      */
