@@ -94,7 +94,14 @@ StatusOr<std::map<std::string, DirEntry>> find_orphan_data_files(FileSystem* fs,
 
 Status do_delete_files(FileSystem* fs, const std::vector<std::string>& paths);
 
-// drop tablet data cache, starts from `version`
-Status drop_tablet_cache(TabletManager* tablet_mgr, int64_t tablet_id, int64_t version);
+// The number of metadata versions of one tablet that drop_tablet_cache() walks at most.
+inline constexpr int64_t kDropTabletCacheMaxWalkVersions = 16;
+
+// Drops the local cache of the data files referenced by the metadata of |tablet_id|. The walk starts at |version| and
+// follows prev_garbage_version through at most kDropTabletCacheMaxWalkVersions versions. Dropping the cache is best
+// effort and reads nothing from storage: the walk uses only the metadata already in the metadata cache and stops at the
+// first version that is not there, and only the files whose size is recorded are dropped. The cache of the other files
+// is left to the cache's own eviction.
+void drop_tablet_cache(TabletManager* tablet_mgr, int64_t tablet_id, int64_t version);
 
 } // namespace starrocks::lake

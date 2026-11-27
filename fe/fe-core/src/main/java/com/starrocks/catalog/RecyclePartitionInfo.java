@@ -17,6 +17,7 @@ package com.starrocks.catalog;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Range;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.io.JsonWriter;
 import com.starrocks.lake.DataCacheInfo;
@@ -61,6 +62,12 @@ public abstract class RecyclePartitionInfo extends JsonWriter {
      */
     @SerializedName(value = "fromTableDeletion")
     protected volatile boolean fromTableDeletion = false;
+
+    /**
+     * Whether an attempt to erase this partition has already asked the compute nodes to drop the data cache of its
+     * tablets. Not persisted: after an FE restart or a leader change the next attempt asks once more.
+     */
+    private transient volatile boolean cacheDropRequested = false;
 
     public RecyclePartitionInfo() {
         recoverable = true;
@@ -129,6 +136,21 @@ public abstract class RecyclePartitionInfo extends JsonWriter {
 
     public void setFromTableDeletion(boolean fromTableDeletion) {
         this.fromTableDeletion = fromTableDeletion;
+    }
+
+    /**
+     * Whether this attempt to erase a lake partition should drop the data cache of its tablets first. Dropping the
+     * cache is best effort, so only the first attempt does it: a retry of a failed erase only has the directory left
+     * to remove, and resending the request would make the compute nodes read the partition's metadata all over again.
+     */
+    protected boolean shouldDropCacheOnErase() {
+        DataCacheInfo dataCacheInfo = getDataCacheInfo();
+        if (cacheDropRequested || !Config.lake_enable_drop_tablet_cache || dataCacheInfo == null ||
+                !dataCacheInfo.isEnabled()) {
+            return false;
+        }
+        cacheDropRequested = true;
+        return true;
     }
 
     public boolean delete() {

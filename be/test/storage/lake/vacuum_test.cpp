@@ -14,6 +14,11 @@
 
 #include "storage/lake/vacuum.h"
 
+<<<<<<< HEAD
+=======
+#include <bvar/bvar.h>
+#include <fmt/format.h>
+>>>>>>> 81c75313d00... [BugFix][RB-444] Keep drop_tablet_cache from starving drop_table and stalling the recycle bin (#65436)
 #include <gtest/gtest.h>
 #include <unistd.h>
 
@@ -3603,6 +3608,9 @@ TEST_P(LakeVacuumTest, test_drop_tablet_cache) {
                         {
                             "filename": "700_seg_c.dat",
                             "size": 300
+                        },
+                        {
+                            "filename": "700_seg_d.dat"
                         }
                     ]
                 }
@@ -3634,7 +3642,8 @@ TEST_P(LakeVacuumTest, test_drop_tablet_cache) {
                             "column_files": [
                                 "700_col_a.cols",
                                 "700_col_b.cols"
-                            ]
+                            ],
+                            "column_file_sizes": [44, 0]
                         }
                     }
                 ]
@@ -3679,16 +3688,120 @@ TEST_P(LakeVacuumTest, test_drop_tablet_cache) {
         SyncPoint::GetInstance()->DisableProcessing();
     });
 
-    ASSERT_OK(drop_tablet_cache(_tablet_mgr.get(), kTabletId, 3));
+    drop_tablet_cache(_tablet_mgr.get(), kTabletId, 3);
 
+    // 700_seg_d.dat has no recorded size, and the size 0 of 700_col_b.cols means unknown: neither is dropped, because
+    // the file system would look their sizes up.
     std::vector<std::string> expected{
-            "700_seg_a.dat", "700_seg_b.dat",  "700_seg_c.dat",  "700_delvec.delvec",
-            "700_sst.sst",   "700_col_a.cols", "700_col_b.cols",
+            "700_seg_a.dat", "700_seg_b.dat", "700_seg_c.dat", "700_delvec.delvec", "700_sst.sst", "700_col_a.cols",
     };
 
     std::sort(dropped.begin(), dropped.end());
     std::sort(expected.begin(), expected.end());
     ASSERT_EQ(expected, dropped);
+}
+
+// The walk follows prev_garbage_version through at most kDropTabletCacheMaxWalkVersions versions and reads nothing
+// from storage; the files referenced only by older versions are left to the cache's own eviction.
+// NOLINTNEXTLINE
+TEST_P(LakeVacuumTest, test_drop_tablet_cache_walks_at_most_max_versions) {
+    constexpr int64_t kTabletId = 710;
+    constexpr int64_t kLatestVersion = kDropTabletCacheMaxWalkVersions + 10;
+    // put_tablet_metadata() also puts each version into the metadata cache.
+    for (int64_t version = 2; version <= kLatestVersion; version++) {
+        auto metadata = std::make_shared<TabletMetadataPB>();
+        metadata->set_id(kTabletId);
+        metadata->set_version(version);
+        metadata->set_prev_garbage_version(version - 1);
+        auto* segment = metadata->add_rowsets()->add_segment_metas();
+        segment->set_filename(fmt::format("710_{}.dat", version));
+        segment->set_size(100);
+        ASSERT_OK(_tablet_mgr->put_tablet_metadata(metadata));
+    }
+
+    std::vector<std::string> dropped;
+    int metadata_reads = 0;
+    SyncPoint::GetInstance()->SetCallBack("drop_tablet_cache:drop_local_cache", [&](void* arg) {
+        dropped.emplace_back(::starrocks::path_util::base_name(*reinterpret_cast<const std::string*>(arg)));
+    });
+    SyncPoint::GetInstance()->SetCallBack("TabletManager::load_tablet_metadata:path",
+                                          [&](void* arg) { metadata_reads++; });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([&] {
+        SyncPoint::GetInstance()->ClearCallBack("drop_tablet_cache:drop_local_cache");
+        SyncPoint::GetInstance()->ClearCallBack("TabletManager::load_tablet_metadata:path");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    drop_tablet_cache(_tablet_mgr.get(), kTabletId, kLatestVersion);
+
+    // The file of each of the newest kDropTabletCacheMaxWalkVersions versions.
+    std::vector<std::string> expected;
+    for (int64_t version = kLatestVersion; version > kLatestVersion - kDropTabletCacheMaxWalkVersions; version--) {
+        expected.emplace_back(fmt::format("710_{}.dat", version));
+    }
+    std::sort(dropped.begin(), dropped.end());
+    std::sort(expected.begin(), expected.end());
+    EXPECT_EQ(expected, dropped);
+    EXPECT_EQ(0, metadata_reads);
+}
+
+// Only the metadata already in the metadata cache is used: the walk stops at the first version that is not in the
+// cache, and nothing is read from storage, also for a file-bundled partition, whose metadata is in one object.
+// NOLINTNEXTLINE
+TEST_P(LakeVacuumTest, test_drop_tablet_cache_stops_at_version_not_in_metacache) {
+    constexpr int64_t kTabletId = 720;
+    constexpr int64_t kLatestVersion = 5;
+    for (int64_t version = 2; version <= kLatestVersion; version++) {
+        auto metadata = std::make_shared<TabletMetadataPB>();
+        metadata->set_id(kTabletId);
+        metadata->set_version(version);
+        metadata->set_prev_garbage_version(version - 1);
+        auto* segment = metadata->add_rowsets()->add_segment_metas();
+        segment->set_filename(fmt::format("720_{}.dat", version));
+        segment->set_size(100);
+        ASSERT_OK(_tablet_mgr->put_tablet_metadata(metadata));
+    }
+    // Version 3 has left the cache, so the walk ends there and versions 3 and 2 are not dropped.
+    _tablet_mgr->metacache()->erase(MetacacheKey::tablet_metadata(_tablet_mgr->tablet_metadata_location(kTabletId, 3)));
+
+    // put_bundle_tablet_metadata() does not put the metadata into the cache, so nothing of this partition is dropped.
+    const std::vector<int64_t> bundled_tablet_ids{721, 722};
+    std::map<int64_t, TabletMetadataPB> tablet_metas;
+    for (auto tablet_id : bundled_tablet_ids) {
+        auto& metadata = tablet_metas[tablet_id];
+        metadata.set_id(tablet_id);
+        metadata.set_version(2);
+        auto* segment = metadata.add_rowsets()->add_segment_metas();
+        segment->set_filename(fmt::format("{}_2.dat", tablet_id));
+        segment->set_size(100);
+    }
+    ASSERT_OK(_tablet_mgr->put_bundle_tablet_metadata(tablet_metas));
+
+    std::vector<std::string> dropped;
+    int metadata_reads = 0;
+    SyncPoint::GetInstance()->SetCallBack("drop_tablet_cache:drop_local_cache", [&](void* arg) {
+        dropped.emplace_back(::starrocks::path_util::base_name(*reinterpret_cast<const std::string*>(arg)));
+    });
+    SyncPoint::GetInstance()->SetCallBack("TabletManager::load_tablet_metadata:path", [&](void*) { metadata_reads++; });
+    SyncPoint::GetInstance()->SetCallBack("TabletManager::get_single_tablet_metadata",
+                                          [&](void*) { metadata_reads++; });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([&] {
+        SyncPoint::GetInstance()->ClearCallBack("drop_tablet_cache:drop_local_cache");
+        SyncPoint::GetInstance()->ClearCallBack("TabletManager::load_tablet_metadata:path");
+        SyncPoint::GetInstance()->ClearCallBack("TabletManager::get_single_tablet_metadata");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    drop_tablet_cache(_tablet_mgr.get(), kTabletId, kLatestVersion);
+    for (auto tablet_id : bundled_tablet_ids) {
+        drop_tablet_cache(_tablet_mgr.get(), tablet_id, 2);
+    }
+
+    std::sort(dropped.begin(), dropped.end());
+    EXPECT_EQ((std::vector<std::string>{"720_4.dat", "720_5.dat"}), dropped);
+    EXPECT_EQ(0, metadata_reads);
 }
 
 TEST_P(LakeVacuumTest, test_vacuumed_version) {
@@ -5294,7 +5407,7 @@ TEST_P(LakeVacuumTest, full_vacuum_drops_local_cache_for_active_idx) {
         SyncPoint::GetInstance()->DisableProcessing();
     });
 
-    ASSERT_OK(drop_tablet_cache(_tablet_mgr.get(), kTabletId, 2));
+    drop_tablet_cache(_tablet_mgr.get(), kTabletId, 2);
     EXPECT_NE(std::find(dropped.begin(), dropped.end(), std::string("8003_active.idx")), dropped.end());
 }
 
