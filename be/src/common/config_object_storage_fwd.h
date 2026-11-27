@@ -118,8 +118,9 @@ CONF_Bool(enable_poco_client_for_aws_sdk, "false");
 // Fast retry for small requests to shared-data storage.
 // Object storage now and then answers a small request one or two seconds late, while the same request sent
 // again is answered at once. With fast retry, the SDK's first attempt of a small PutObject or a HeadObject that
-// starlet sends carries a short whole-request timeout. When a send with the short timeout times out, it is aborted
-// and the same signed request is sent again at once, without the SDK's retry back-off. Once the sends that may
+// starlet sends carries a short whole-request timeout, and that of a GetObject of a small byte range carries a limit
+// on the time it may go without receiving a byte (object_storage_fast_retry_get_idle_ms). When such a send times
+// out, it is aborted and the same signed request is sent again at once, without the SDK's retry back-off. Once the sends that may
 // carry the short timeout are used up or the budget has no token, the next send uses the usual timeouts. The SDK's
 // own retries and the object storage clients that BE creates for external tables, unload and backup are not
 // affected.
@@ -147,11 +148,26 @@ CONF_mInt64(object_storage_fast_retry_head_timeout_ms, "300");
 // Largest number of sends of a HeadObject that carry the short timeout, 1 to 3. They work as for PutObject.
 CONF_mInt32(object_storage_fast_retry_head_short_attempts, "1");
 
+// Longest time a ranged GetObject of at most object_storage_fast_retry_get_max_bytes may go without receiving a
+// byte, from the start of the send. A send that goes longer is aborted on the spot and the same signed request is
+// sent again at once. A transfer that keeps receiving bytes is never aborted, however long it takes. libcurl checks
+// an idle transfer about once per second, so the abort comes up to a second later. 0 turns fast retry off for
+// GetObject.
+CONF_mInt64(object_storage_fast_retry_get_idle_ms, "2000");
+
+// Largest number of sends of such a GetObject that carry the idle limit, 1 to 3. They work as for PutObject.
+CONF_mInt32(object_storage_fast_retry_get_short_attempts, "1");
+
+// Largest byte range of a GetObject that fast retry covers. A resend reads the whole range again, so a larger range
+// costs more to resend. A GetObject without a closed byte range (bytes=first-last) is never covered.
+CONF_mInt64(object_storage_fast_retry_get_max_bytes, "1048576");
+
 // Upper bound of the extra requests that fast retry sends, in percent of the requests of each class on each
 // client. When sends that time out use up this budget, requests go without the short timeout until enough
 // requests complete normally. Each client starts with 100 tokens per class and holds at most 100. A request takes a
 // token before it is sent with the short timeout and gives it back unless that send times out, so concurrent
-// requests cannot exceed the budget; a request that finds no token goes without the short timeout. 0 turns fast
+// requests cannot exceed the budget; a request that finds no token goes without the short timeout. A GetObject takes
+// its token only when its idle limit runs out, to abort the send, and without one it is not aborted. 0 turns fast
 // retry off.
 CONF_mInt32(object_storage_fast_retry_budget_percent, "2");
 
