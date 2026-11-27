@@ -199,6 +199,8 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
         batchTask = null;
         // The next leader dispatches again and pins the version it dispatches at; keep no stale pin here.
         releaseRetainPins();
+        // A cancel that did not get into the journal leaves the job running here.
+        cancelStarted = false;
     }
 
     protected LakeTableIndexFastPathJobBase(long jobId, JobType jobType, long dbId, long tableId, String tableName,
@@ -676,44 +678,50 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
         // From here on a report that finds its task removed waits for this cancel to finish
         // (handleFinishReportOfRemovedTask).
         cancelStarted = true;
-        if (batchTask != null) {
-            for (AgentTask task : batchTask.getAllTasks()) {
-                AgentTaskQueue.removeTask(task.getBackendId(), TTaskType.ALTER, task.getSignature());
+        try {
+            if (batchTask != null) {
+                for (AgentTask task : batchTask.getAllTasks()) {
+                    AgentTaskQueue.removeTask(task.getBackendId(), TTaskType.ALTER, task.getSignature());
+                }
             }
-        }
-        this.errMsg = errMsg == null ? "" : errMsg;
-        this.finishedTimeMs = System.currentTimeMillis();
-        // Reset table state so subsequent alters are not blocked, and — for a
-        // force-cancel out of FINISHED_REWRITING — advance VisibleVersion to
-        // match the no-op publish. Both mutations are journaled atomically with
-        // the CANCELLED state (inside persistStateChange) so a replayed FE
-        // reproduces them identically via the CANCELLED replay branch.
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
-        if (db != null) {
-            Locker locker = new Locker();
-            locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tableId), LockType.WRITE);
-            try {
-                OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                        .getTable(db.getId(), tableId);
-                // Release before the table goes back to NORMAL: from then on compaction may pin these partitions.
+            this.errMsg = errMsg == null ? "" : errMsg;
+            this.finishedTimeMs = System.currentTimeMillis();
+            // Reset table state so subsequent alters are not blocked, and — for a
+            // force-cancel out of FINISHED_REWRITING — advance VisibleVersion to
+            // match the no-op publish. Both mutations are journaled atomically with
+            // the CANCELLED state (inside persistStateChange) so a replayed FE
+            // reproduces them identically via the CANCELLED replay branch.
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+            if (db != null) {
+                Locker locker = new Locker();
+                locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tableId), LockType.WRITE);
+                try {
+                    OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                            .getTable(db.getId(), tableId);
+                    // Release before the table goes back to NORMAL: from then on compaction may pin these partitions.
+                    releaseRetainPins();
+                    persistStateChange(this, JobState.CANCELLED, () -> {
+                        if (table != null) {
+                            if (advanceVersionForForce) {
+                                advanceVisibleVersionForForceSkip(table, commitVersionMap);
+                            }
+                            if (table.getState() == OlapTable.OlapTableState.SCHEMA_CHANGE) {
+                                table.setState(OlapTable.OlapTableState.NORMAL);
+                                GlobalStateMgr.getCurrentState().getCompactionMgr().resumeCompactionAfterAlter(dbId, table);
+                            }
+                        }
+                    });
+                } finally {
+                    locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tableId), LockType.WRITE);
+                }
+            } else {
                 releaseRetainPins();
-                persistStateChange(this, JobState.CANCELLED, () -> {
-                    if (table != null) {
-                        if (advanceVersionForForce) {
-                            advanceVisibleVersionForForceSkip(table, commitVersionMap);
-                        }
-                        if (table.getState() == OlapTable.OlapTableState.SCHEMA_CHANGE) {
-                            table.setState(OlapTable.OlapTableState.NORMAL);
-                            GlobalStateMgr.getCurrentState().getCompactionMgr().resumeCompactionAfterAlter(dbId, table);
-                        }
-                    }
-                });
-            } finally {
-                locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tableId), LockType.WRITE);
+                persistStateChange(this, JobState.CANCELLED);
             }
-        } else {
-            releaseRetainPins();
-            persistStateChange(this, JobState.CANCELLED);
+        } catch (RuntimeException | Error e) {
+            // The cancel did not happen and the job goes on: reports of its tasks need not wait for its monitor.
+            cancelStarted = false;
+            throw e;
         }
         // CANCELLED is in the journal now, so no leader will publish this txn. A task still running or queued on a
         // node writes its txn log after this abort looked for it; its finish report aborts that tablet again

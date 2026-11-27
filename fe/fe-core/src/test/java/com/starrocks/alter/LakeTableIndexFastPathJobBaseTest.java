@@ -638,45 +638,67 @@ public class LakeTableIndexFastPathJobBaseTest {
     }
 
     @Test
-    public void testHandleFinishReportOfRemovedTask_WaitsForACancelInProgress() throws Exception {
-        // A cancel marks itself before it removes the tasks from AgentTaskQueue. A report of a task it removed can
-        // arrive while the cancel still holds the job's monitor to journal CANCELLED; it must wait for the outcome
-        // instead of returning on the state from before the cancel.
+    public void testCancelImpl_MarksItselfBeforeRemovingTasks() throws Exception {
+        // A report of a task the cancel removed must see the cancel's outcome: the cancel marks itself before it
+        // removes any task from AgentTaskQueue, so such a report passes the lock-free check and waits for the
+        // monitor the cancel holds (handleFinishReportOfRemovedTask).
         LakeTableAddIndexJob job = newJob();
         setField(job, "jobState", AlterJobV2.JobState.RUNNING);
         setField(job, "watershedTxnId", 1000L);
-        CountDownLatch locked = new CountDownLatch(1);
-        CountDownLatch release = new CountDownLatch(1);
-        Thread cancel = new Thread(() -> {
-            synchronized (job) {
-                try {
-                    setField(job, "cancelStarted", true);
-                    locked.countDown();
-                    release.await();
-                } catch (Exception e) {
-                    throw new IllegalStateException(e);
-                }
-            }
-        });
-        cancel.start();
-        Thread report = null;
-        try {
-            assertTrue(locked.await(10, TimeUnit.SECONDS));
-            report = new Thread(() -> job.handleFinishReportOfRemovedTask(11L, 5L));
-            report.start();
-            long deadline = System.currentTimeMillis() + 10_000;
-            while (report.getState() != Thread.State.BLOCKED && report.isAlive()
-                    && System.currentTimeMillis() < deadline) {
-                Thread.sleep(10);
-            }
-            assertEquals(Thread.State.BLOCKED, report.getState());
-        } finally {
-            release.countDown();
-            cancel.join();
-            if (report != null) {
-                report.join(10_000);
-            }
+        setField(job, "partitionToTablets", twoPartitionsThreeTablets());
+        AgentBatchTask batch = new AgentBatchTask();
+        AgentTask task = mock(AgentTask.class);
+        when(task.getTabletId()).thenReturn(11L);
+        when(task.getSignature()).thenReturn(11L);
+        when(task.getBackendId()).thenReturn(1L);
+        batch.addTask(task);
+        setField(job, "batchTask", batch);
+
+        Database db = new Database(2L, "db");
+        OlapTable table = mock(OlapTable.class);
+        when(table.getState()).thenReturn(OlapTable.OlapTableState.SCHEMA_CHANGE);
+        GlobalStateMgr gsm = buildLockableGsm(db, table);
+        List<Object> markedAtRemoval = new ArrayList<>();
+        try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class);
+                MockedStatic<AgentTaskQueue> queueStatic = Mockito.mockStatic(AgentTaskQueue.class);
+                MockedStatic<Utils> utilsStatic = Mockito.mockStatic(Utils.class)) {
+            gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
+            queueStatic.when(() -> AgentTaskQueue.removeTask(1L, TTaskType.ALTER, 11L))
+                    .thenAnswer(inv -> markedAtRemoval.add(getField(job, "cancelStarted")));
+            assertTrue(job.cancelImpl("err"));
         }
+        assertEquals(List.of(true), markedAtRemoval);
+    }
+
+    @Test
+    public void testCancelImpl_RejectedJournalLeavesTheJobUnmarked() throws Exception {
+        // A cancel the journal rejects (e.g. the leader is being demoted) did not happen: the job runs on, possibly
+        // under this FE again, and reports of its tasks must not wait for its monitor any more.
+        LakeTableAddIndexJob job = newJob();
+        setField(job, "jobState", AlterJobV2.JobState.RUNNING);
+        setField(job, "watershedTxnId", 1000L);
+
+        Database db = new Database(2L, "db");
+        OlapTable table = mock(OlapTable.class);
+        when(table.getState()).thenReturn(OlapTable.OlapTableState.SCHEMA_CHANGE);
+        GlobalStateMgr gsm = buildLockableGsm(db, table);
+        EditLog rejecting = mock(EditLog.class);
+        Mockito.doThrow(new IllegalStateException("journal write rejected"))
+                .when(rejecting).logAlterJob(any(), any(WALApplier.class));
+        when(gsm.getEditLog()).thenReturn(rejecting);
+        try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class);
+                MockedStatic<Utils> utilsStatic = Mockito.mockStatic(Utils.class)) {
+            gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
+            assertThrows(IllegalStateException.class, () -> job.cancelImpl("err"));
+            utilsStatic.verify(() -> Utils.abortTxnWithCleanup(any(), any(), any(), any()), never());
+        }
+        assertEquals(AlterJobV2.JobState.RUNNING, job.getJobState());
+        assertEquals(false, getField(job, "cancelStarted"));
+
+        // A leader change resets the mark too, like the rest of the leader-session state.
+        setField(job, "cancelStarted", true);
+        job.resetTransientState();
+        assertEquals(false, getField(job, "cancelStarted"));
     }
 
     @Test
