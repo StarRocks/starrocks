@@ -21,6 +21,77 @@ import org.junit.jupiter.api.Timeout;
 public class SqlCredentialRedactorTest {
 
     @Test
+    public void testRedactPasswordInsideUriUserInfo() {
+        // No credential key name anywhere, so this also covers the fast path.
+        String sql = "CREATE EXTERNAL CATALOG c PROPERTIES (\"type\"=\"iceberg\"," +
+                "\"iceberg.catalog.uri\"=\"http://user:uripw1@host:8181/api\")";
+        Assertions.assertTrue(SqlCredentialRedactor.mayNeedCredentialRedaction(sql));
+        String redacted = SqlCredentialRedactor.redact(sql);
+        Assertions.assertFalse(redacted.contains("uripw1"), redacted);
+        Assertions.assertTrue(redacted.contains("http://user:***@host:8181/api"), redacted);
+    }
+
+    @Test
+    public void testRedactPasswordInsideUriParameters() {
+        String sql = "CREATE EXTERNAL CATALOG c PROPERTIES (\"type\"=\"jdbc\"," +
+                "\"jdbc_uri\"=\"jdbc:mysql://host:3306/db?user=u&password=uripw2&useSSL=false\")";
+        String redacted = SqlCredentialRedactor.redact(sql);
+        Assertions.assertFalse(redacted.contains("uripw2"), redacted);
+        Assertions.assertTrue(redacted.contains("jdbc:mysql://host:3306/db?user=u&password=***&useSSL=false"), redacted);
+
+        String sqlServer = "CREATE EXTERNAL CATALOG c PROPERTIES (" +
+                "\"jdbc_uri\"=\"jdbc:sqlserver://host:1433;databaseName=db;PWD=uripw3;encrypt=true\")";
+        String redactedSqlServer = SqlCredentialRedactor.redact(sqlServer);
+        Assertions.assertFalse(redactedSqlServer.contains("uripw3"), redactedSqlServer);
+        Assertions.assertTrue(redactedSqlServer.contains(";databaseName=db;PWD=***;encrypt=true"), redactedSqlServer);
+    }
+
+    @Test
+    public void testRedactUriCredentialsKeepsUrisWithoutPasswords() {
+        Assertions.assertEquals("abfss://container@account.dfs.core.windows.net/path",
+                SqlCredentialRedactor.redactUriCredentials("abfss://container@account.dfs.core.windows.net/path"));
+        Assertions.assertEquals("thrift://host:9083,thrift://host2:9083",
+                SqlCredentialRedactor.redactUriCredentials("thrift://host:9083,thrift://host2:9083"));
+        Assertions.assertEquals("jdbc:mysql://host:3306/db?user=u&useSSL=false",
+                SqlCredentialRedactor.redactUriCredentials("jdbc:mysql://host:3306/db?user=u&useSSL=false"));
+        Assertions.assertEquals("jdbc:mysql://u:***@host:3306/db",
+                SqlCredentialRedactor.redactUriCredentials("jdbc:mysql://u:uripw4@host:3306/db"));
+    }
+
+    @Test
+    public void testRedactPasswordSuffixedUriParameters() {
+        Assertions.assertEquals("jdbc:mysql://host:3306/db?trustStorePassword=***&sslpassword=***&user=u",
+                SqlCredentialRedactor.redactUriCredentials(
+                        "jdbc:mysql://host:3306/db?trustStorePassword=uripw6&sslpassword=uripw7&user=u"));
+    }
+
+    @Test
+    public void testRedactBracedSqlServerPassword() {
+        Assertions.assertEquals("jdbc:sqlserver://host:1433;password=***;encrypt=true",
+                SqlCredentialRedactor.redactUriCredentials(
+                        "jdbc:sqlserver://host:1433;password={uri;pw}}8};encrypt=true"));
+    }
+
+    @Test
+    public void testRedactUserInfoPasswordWithPunctuation() {
+        Assertions.assertEquals("http://u:***@host:8181",
+                SqlCredentialRedactor.redactUriCredentials("http://u:uri'pw,9@host:8181"));
+        // In a list of URIs, only the one with a password changes.
+        Assertions.assertEquals("thrift://h1:9083,thrift://u:***@h2:9083",
+                SqlCredentialRedactor.redactUriCredentials("thrift://h1:9083,thrift://u:uripw10@h2:9083"));
+        String sql = "CREATE EXTERNAL CATALOG c PROPERTIES (\"iceberg.catalog.uri\"=\"http://u:uri'pw,11@host\")";
+        Assertions.assertFalse(SqlCredentialRedactor.redact(sql).contains("uri'pw,11"));
+    }
+
+    @Test
+    public void testPrintableMapMasksPasswordInsideUri() {
+        String printed = new PrintableMap<>(java.util.Map.of("iceberg.catalog.uri", "http://user:uripw5@host:8181"),
+                "=", true, false, true).toString();
+        Assertions.assertFalse(printed.contains("uripw5"), printed);
+        Assertions.assertTrue(printed.contains("http://user:***@host:8181"), printed);
+    }
+
+    @Test
     public void testRedactAIProviderApiKey() {
         String sql = "CREATE AI PROVIDER p PROPERTIES ('API_KEY'='secret-ai-key')";
         Assertions.assertTrue(SqlCredentialRedactor.mayNeedCredentialRedaction(sql));

@@ -43,6 +43,7 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.common.proc.BaseProcResult;
 import com.starrocks.common.proc.ProcNodeInterface;
 import com.starrocks.common.proc.ProcResult;
+import com.starrocks.common.util.SqlCredentialRedactor;
 import com.starrocks.persist.AlterResourceInfo;
 import com.starrocks.persist.DropResourceOperationLog;
 import com.starrocks.persist.ImageWriter;
@@ -130,7 +131,8 @@ public class ResourceMgr implements Writable {
                     GlobalStateMgr.getCurrentState().getCatalogMgr().createCatalog(
                             typeName, catalogName, "mapping " + typeName + " catalog", stmt.getProperties());
                 } catch (Exception e) {
-                    LOG.error("Failed to create mapping {} catalog {} failed", typeName, resource, e);
+                    // Log the name only: the resource's JSON carries its properties, passwords included.
+                    LOG.error("Failed to create mapping {} catalog for resource {}", typeName, resourceName, e);
                     throw new DdlException("Failed to create mapping catalog " + resourceName + " failed, msg: " +
                             e.getMessage());
                 }
@@ -139,7 +141,7 @@ public class ResourceMgr implements Writable {
             // log add
             GlobalStateMgr.getCurrentState().getEditLog()
                     .logCreateResource(resource, wal -> nameToResource.put(resourceName, resource));
-            LOG.info("create resource success. resource: {}", resource);
+            LOG.info("create resource success. resource name: {}", resourceName);
         } finally {
             this.writeUnLock();
         }
@@ -357,6 +359,11 @@ public class ResourceMgr implements Writable {
                     continue;
                 }
                 resource.getProcNodeData(result);
+            }
+            // Values such as hive.metastore.uris and jdbc_uri can carry a password inside the URI.
+            int valueIndex = RESOURCE_PROC_NODE_TITLE_NAMES.indexOf("Value");
+            for (List<String> row : result.getRows()) {
+                row.set(valueIndex, SqlCredentialRedactor.redactUriCredentials(row.get(valueIndex)));
             }
             return result;
         }

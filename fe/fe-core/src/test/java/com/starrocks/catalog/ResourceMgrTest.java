@@ -151,6 +151,20 @@ public class ResourceMgrTest {
     }
 
     @Test
+    public void testShowResourcesMasksPasswordInsideUri() throws Exception {
+        ResourceMgr mgr = new ResourceMgr();
+        name = "hive0";
+        type = "hive";
+        hiveMetastoreUris = "thrift://user:uripw1@10.10.44.98:9083";
+        addHiveResource(mgr);
+
+        connectContext.setThreadLocalInfo();
+        String rows = mgr.getProcNode().fetchResult().getRows().toString();
+        Assertions.assertFalse(rows.contains("uripw1"), rows);
+        Assertions.assertTrue(rows.contains("thrift://user:***@10.10.44.98:9083"), rows);
+    }
+
+    @Test
     public void testAlterResource() throws DdlException {
         ResourceMgr mgr = new ResourceMgr();
 

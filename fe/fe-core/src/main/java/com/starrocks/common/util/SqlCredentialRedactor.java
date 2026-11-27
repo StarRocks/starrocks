@@ -158,6 +158,17 @@ public class SqlCredentialRedactor {
             Pattern.CASE_INSENSITIVE | Pattern.DOTALL | Pattern.MULTILINE
     );
 
+    // //user:password@host - the password is group 2. Like the JDBC bridge's URL redactor
+    // (DataSourceCache), it takes any user-info character, since ' and , are legal in a password.
+    private static final Pattern URI_USER_INFO_PASSWORD_PATTERN = Pattern.compile(
+            "(//[^/?#@:\\s\"]*:)([^/?#@\\s\"]*)@");
+
+    // ?password=..., &trustStorePassword=..., ;PWD=... (JDBC URLs use ; as well as & between parameters).
+    // SQL Server wraps a value containing ; in braces, escaping } as }}, so a braced value is taken whole.
+    private static final Pattern URI_PASSWORD_PARAMETER_PATTERN = Pattern.compile(
+            "([?&;][^&#;=\\s\"']*(?:password|passwd|pwd)=)(\\{(?:[^}]|\\}\\})*\\}|[^&;\\s\"'#]*)",
+            Pattern.CASE_INSENSITIVE);
+
     private static final String LDAP_SIMPLE_AUTH_PLUGIN = "AUTHENTICATION_LDAP_SIMPLE";
 
     /**
@@ -178,6 +189,13 @@ public class SqlCredentialRedactor {
             if (lower.indexOf(prefix) >= 0) {
                 return true;
             }
+        }
+        // A URI property such as iceberg.catalog.uri has no credential key name, but can carry
+        // user:password@ in its value. Password URL parameters are caught by the "password",
+        // "passwd" and "pwd" keys above.
+        int schemeSeparator = lower.indexOf("://");
+        if (schemeSeparator >= 0 && lower.indexOf('@', schemeSeparator) >= 0) {
+            return true;
         }
         // "password" is already in CREDENTIAL_KEYS_LOWERCASE, so "set password"
         // (with any whitespace) is caught by the loop above. Only "identified"
@@ -239,8 +257,9 @@ public class SqlCredentialRedactor {
                 }
                 result.append(replacement);
             } else {
-                // Not a credential key, append original match
-                result.append(sql, lastEnd, matcher.end());
+                // Not a credential key, but its value can still be a URI that carries a password.
+                result.append(sql, lastEnd, matcher.start());
+                result.append(redactUriCredentials(sql.substring(matcher.start(), matcher.end())));
             }
             lastEnd = matcher.end();
         }
@@ -248,6 +267,19 @@ public class SqlCredentialRedactor {
         // Append remaining text
         result.append(sql, lastEnd, sql.length());
         return result.toString();
+    }
+
+    /**
+     * Masks the passwords a URI carries in its user info or its password parameters, keeping the rest of the URI
+     * readable. Applies to any property value, since URI properties (iceberg.catalog.uri, hive.metastore.uris,
+     * jdbc_uri, ...) are not credential keys.
+     */
+    public static String redactUriCredentials(String value) {
+        if (value == null || (value.indexOf('@') < 0 && value.indexOf('=') < 0)) {
+            return value;
+        }
+        String redacted = URI_USER_INFO_PASSWORD_PATTERN.matcher(value).replaceAll("$1" + CredentialMask.SHORT + "@");
+        return URI_PASSWORD_PARAMETER_PATTERN.matcher(redacted).replaceAll("$1" + CredentialMask.SHORT);
     }
 
     private static boolean isCredentialKey(String key) {
