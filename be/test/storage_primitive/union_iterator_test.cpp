@@ -178,12 +178,14 @@ public:
     }
     size_t read_ahead_blocks() const override { return (_start_calls > 0 || _read) ? _blocks : 0; }
     bool read_ahead_done() const override { return _done; }
+    bool read_ahead_cached() const override { return _cached; }
 
     void close() override { _close_calls++; }
 
     int start_calls() const { return _start_calls; }
     int close_calls() const { return _close_calls; }
     void set_read_ahead_done(bool done) { _done = done; }
+    void set_read_ahead_cached(bool cached) { _cached = cached; }
     // start_read_ahead() fails with |st|, and so does the first read.
     void fail_with(Status st) {
         _start_status = st;
@@ -221,6 +223,7 @@ private:
     const size_t _blocks;
     const bool _has_read_ahead;
     bool _done = true;
+    bool _cached = false;
     Status _start_status;
     Status _read_status;
     int _start_calls = 0;
@@ -476,6 +479,68 @@ TEST_F(UnionIteratorTest, read_ahead_through_wrappers) {
     EXPECT_EQ(1, children[1]->start_calls());
     EXPECT_EQ(0, children[2]->start_calls());
     EXPECT_EQ((std::vector<int32_t>{1, 2}), read_all(iter));
+}
+
+// NOLINTNEXTLINE
+TEST_F(UnionIteratorTest, read_ahead_cached_through_wrappers) {
+    RuntimeProfile::Counter timer(TUnit::TIME_NS);
+    std::vector<std::shared_ptr<ReadAheadIntIterator>> children;
+    std::vector<ChunkIteratorPtr> iters;
+    for (int i = 0; i < 3; i++) {
+        children.push_back(std::make_shared<ReadAheadIntIterator>(std::vector<int32_t>{i}, 1, true));
+        iters.push_back(
+                timed_chunk_iterator(new_projection_iterator(ReadAheadIntIterator::schema(), children.back()), &timer));
+    }
+    children[1]->set_read_ahead_cached(true);
+    auto iter = new_union_iterator(std::move(iters), 8, 100);
+    ASSERT_TRUE(iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
+    ChunkPtr chunk = ChunkFactory::new_chunk(iter->schema(), 1024);
+    ASSERT_TRUE(iter->get_next(chunk.get()).ok());
+    EXPECT_EQ(1, children[1]->start_calls());
+    EXPECT_EQ(0, children[2]->start_calls());
+}
+
+// NOLINTNEXTLINE
+TEST_F(UnionIteratorTest, read_ahead_stops_at_a_cached_child) {
+    std::vector<std::shared_ptr<ReadAheadIntIterator>> children;
+    std::vector<ChunkIteratorPtr> iters;
+    for (int i = 0; i < 5; i++) {
+        children.push_back(std::make_shared<ReadAheadIntIterator>(std::vector<int32_t>{i}, 1, true));
+        iters.push_back(children.back());
+    }
+    // Child 2 finds everything it asks for cached.
+    children[2]->set_read_ahead_cached(true);
+    auto iter = new_union_iterator(std::move(iters), 8, 100);
+    ASSERT_TRUE(iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
+    ChunkPtr chunk = ChunkFactory::new_chunk(iter->schema(), 1024);
+    ASSERT_TRUE(iter->get_next(chunk.get()).ok());
+    EXPECT_EQ(1, children[1]->start_calls());
+    EXPECT_EQ(1, children[2]->start_calls());
+    EXPECT_EQ(0, children[3]->start_calls());
+
+    // Child 3 is not started ahead, while children 1 and 2 are read; once it is read and needs a fetch, child 4 is.
+    EXPECT_EQ((std::vector<int32_t>{1, 2, 3, 4}), read_all(iter));
+    EXPECT_EQ(0, children[3]->start_calls());
+    EXPECT_EQ(1, children[4]->start_calls());
+}
+
+// NOLINTNEXTLINE
+TEST_F(UnionIteratorTest, read_ahead_stops_at_a_cached_current_child) {
+    std::vector<std::shared_ptr<ReadAheadIntIterator>> children;
+    std::vector<ChunkIteratorPtr> iters;
+    for (int i = 0; i < 3; i++) {
+        children.push_back(std::make_shared<ReadAheadIntIterator>(std::vector<int32_t>{i}, 1, true));
+        iters.push_back(children.back());
+        children.back()->set_read_ahead_cached(true);
+    }
+    // Nested as the child of another union, a union reports the child it reads.
+    auto inner = new_union_iterator(std::vector<ChunkIteratorPtr>(iters.begin(), iters.begin() + 2), 8, 100);
+    auto iter = new_union_iterator(std::vector<ChunkIteratorPtr>{inner, iters[2]}, 8, 100);
+    ASSERT_TRUE(iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
+    EXPECT_EQ((std::vector<int32_t>{0, 1, 2}), read_all(iter));
+    for (auto& c : children) {
+        EXPECT_EQ(0, c->start_calls());
+    }
 }
 
 // NOLINTNEXTLINE

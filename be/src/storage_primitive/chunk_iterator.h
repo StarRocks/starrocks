@@ -103,6 +103,9 @@ public:
     virtual size_t read_ahead_blocks() const { return 0; }
     // Whether this iterator has asked for every block it will read, so that the next one may start.
     virtual bool read_ahead_done() const { return true; }
+    // Whether everything this iterator has asked to have fetched was cached already. The iterators read after it were
+    // most likely read about as recently, so that preparing them early would gain nothing.
+    virtual bool read_ahead_cached() const { return false; }
 
     const Schema& schema() const { return _schema; }
 

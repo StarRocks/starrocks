@@ -377,7 +377,7 @@ Enable this option only after **all target CNs** support it. A normalized replic
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: With the remote I/O scheduler active, a lake query scan that reads a tablet's segments one after another (the tablet is not split across scan tasks) starts fetching the first blocks of the next segments while it is still reading the current one, once the current segment has asked for all of its own blocks. At most this many segments are read ahead. A next segment starts only while the blocks that all of them have asked for and not yet read are fewer than `remote_prefetch_window_blocks` cache blocks, so the segment started last can take that total to about twice the window. `0` disables it: each segment starts its read-ahead only when its turn comes. Split scans, loads, and compaction are not affected. The query profile reports SegmentReadAheadStarted.
+- Description: With the remote I/O scheduler active, a lake query scan that reads a tablet's segments one after another (the tablet is not split across scan tasks) starts fetching the first blocks of the next segments while it is still reading the current one, once the current segment has asked for all of its own blocks. At most this many segments are read ahead. A next segment starts only while the blocks that all of them have asked for and not yet read are fewer than `remote_prefetch_window_blocks` cache blocks, so the segment started last can take that total to about twice the window. `0` disables it: each segment starts its read-ahead only when its turn comes. Once the segment started last finds every page it asks for already cached, no further segment starts early until a segment read later needs a fetch again. Split scans, loads, and compaction are not affected. The query profile reports SegmentReadAheadStarted.
 - Introduced in: -
 
 ### lake_segment_metadata_cache_limit_percent
@@ -528,7 +528,7 @@ Enable this option only after **all target CNs** support it. A normalized replic
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: The maximum number of Data Cache blocks that a query's segment reader requests ahead of what it is consuming, including blocks that are queued, being fetched, or fetched but not read yet. It limits how far a reader runs ahead of itself; when the blocks are fetched is decided by the scheduler. Loads and other background reads do not read ahead; compaction reads ahead under `lake_compaction_prefetch_window_blocks`. `0` disables the read-ahead. A change applies to segment readers opened afterwards. Takes effect only when `remote_io_scheduler_enable` is `true`.
+- Description: The maximum number of Data Cache blocks that a query's segment reader requests ahead of what it is consuming, including blocks that are queued, being fetched, or fetched but not read yet. It limits how far a reader runs ahead of itself; when the blocks are fetched is decided by the scheduler. Loads and other background reads do not read ahead; compaction reads ahead under `lake_compaction_prefetch_window_blocks`. A query's segment reader whose first page needs no fetch (the page is already cached, or the remote I/O scheduler refuses to read it ahead because its queue is full) takes the whole segment as cached and does not read ahead; the query profile reports these readers in RemotePrefetchIdleWindows. `0` disables the read-ahead. A change applies to segment readers opened afterwards. Takes effect only when `remote_io_scheduler_enable` is `true`.
 - Introduced in: -
 
 ### remote_read_adaptive_limit
