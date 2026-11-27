@@ -1531,4 +1531,139 @@ public class IcebergApiConverterTest {
         assertEquals("5", IcebergApiConverter.toInitialDefaultValueString(schema.findField("c_initial_only")));
     }
 
+    @Test
+    public void testGetTIcebergSchemaPreservesIsAdjustedToUtc() {
+        Schema schema = new Schema(
+                Types.NestedField.optional(1, "ts_tz", Types.TimestampType.withZone()),
+                Types.NestedField.optional(2, "ts_ntz", Types.TimestampType.withoutZone()),
+                Types.NestedField.optional(3, "s", Types.StructType.of(
+                        Types.NestedField.optional(4, "nested_tz", Types.TimestampType.withZone()),
+                        Types.NestedField.optional(5, "nested_ntz", Types.TimestampType.withoutZone()))),
+                Types.NestedField.optional(6, "arr_tz", Types.ListType.ofOptional(7, Types.TimestampType.withZone()))
+        );
+
+        TIcebergSchema tSchema = IcebergApiConverter.getTIcebergSchema(schema);
+        List<TIcebergSchemaField> fields = tSchema.getFields();
+        assertTrue(fields.get(0).isSetIs_adjusted_to_utc() && fields.get(0).isIs_adjusted_to_utc());
+        assertFalse(fields.get(1).isSetIs_adjusted_to_utc() && fields.get(1).isIs_adjusted_to_utc());
+
+        List<TIcebergSchemaField> structChildren = fields.get(2).getChildren();
+        assertTrue(structChildren.get(0).isSetIs_adjusted_to_utc() && structChildren.get(0).isIs_adjusted_to_utc());
+        assertFalse(structChildren.get(1).isSetIs_adjusted_to_utc() && structChildren.get(1).isIs_adjusted_to_utc());
+
+        TIcebergSchemaField elemField = fields.get(3).getChildren().get(0);
+        assertTrue(elemField.isSetIs_adjusted_to_utc() && elemField.isIs_adjusted_to_utc());
+    }
+
+    @Test
+    public void testToPartitionFieldTimestamptz() {
+        Schema schema = new Schema(
+                Types.NestedField.optional(1, "ts_tz", Types.TimestampType.withZone()),
+                Types.NestedField.optional(2, "ts_ntz", Types.TimestampType.withoutZone())
+        );
+        List<PartitionSpec> tzSpecs = List.of(
+                PartitionSpec.builderFor(schema).identity("ts_tz").build(),
+                PartitionSpec.builderFor(schema).year("ts_tz").build(),
+                PartitionSpec.builderFor(schema).month("ts_tz").build(),
+                PartitionSpec.builderFor(schema).day("ts_tz").build(),
+                PartitionSpec.builderFor(schema).hour("ts_tz").build(),
+                PartitionSpec.builderFor(schema).bucket("ts_tz", 8).build());
+        List<String> expectedTzSinkExprs = List.of(
+                "__iceberg_transform_timestamptz_identity(`ts_tz`)",
+                "__iceberg_transform_timestamptz_year(`ts_tz`)",
+                "__iceberg_transform_timestamptz_month(`ts_tz`)",
+                "__iceberg_transform_timestamptz_day(`ts_tz`)",
+                "__iceberg_transform_timestamptz_hour(`ts_tz`)",
+                "__iceberg_transform_timestamptz_bucket(`ts_tz`, 8)");
+        List<String> expectedTzDisplayExprs = List.of(
+                "`ts_tz`",
+                "year(`ts_tz`)",
+                "month(`ts_tz`)",
+                "day(`ts_tz`)",
+                "hour(`ts_tz`)",
+                "bucket(`ts_tz`, 8)");
+        for (int i = 0; i < tzSpecs.size(); i++) {
+            assertEquals(List.of(expectedTzSinkExprs.get(i)),
+                    IcebergApiConverter.toPartitionFields(tzSpecs.get(i), schema, true));
+            // Display mode (withTransfomPrefix=false, used by SHOW CREATE TABLE) must stay unchanged.
+            assertEquals(List.of(expectedTzDisplayExprs.get(i)),
+                    IcebergApiConverter.toPartitionFields(tzSpecs.get(i), schema, false));
+        }
+
+        List<PartitionSpec> ntzSpecs = List.of(
+                PartitionSpec.builderFor(schema).identity("ts_ntz").build(),
+                PartitionSpec.builderFor(schema).month("ts_ntz").build(),
+                PartitionSpec.builderFor(schema).bucket("ts_ntz", 8).build());
+        List<String> expectedNtzSinkExprs = List.of(
+                "`ts_ntz`",
+                "__iceberg_transform_month(`ts_ntz`)",
+                "__iceberg_transform_bucket(`ts_ntz`, 8)");
+        for (int i = 0; i < ntzSpecs.size(); i++) {
+            assertEquals(List.of(expectedNtzSinkExprs.get(i)),
+                    IcebergApiConverter.toPartitionFields(ntzSpecs.get(i), schema, true));
+        }
+    }
+
+    @Test
+    public void testGetSessionTimestamptzWriteDefaultValue() {
+        long utcMicros = ((Number) org.apache.iceberg.expressions.Literal.of("2026-01-01T10:00:00Z")
+                .to(Types.TimestampType.withZone()).value()).longValue();
+        long ntzMicros = ((Number) org.apache.iceberg.expressions.Literal.of("2026-01-01T10:00:00")
+                .to(Types.TimestampType.withoutZone()).value()).longValue();
+        Schema schema = new Schema(
+                Types.NestedField.optional("ts_tz")
+                        .withId(1)
+                        .ofType(Types.TimestampType.withZone())
+                        .withWriteDefault(org.apache.iceberg.expressions.Literal.of(utcMicros))
+                        .build(),
+                Types.NestedField.optional("ts_ntz")
+                        .withId(2)
+                        .ofType(Types.TimestampType.withoutZone())
+                        .withWriteDefault(org.apache.iceberg.expressions.Literal.of(ntzMicros))
+                        .build(),
+                Types.NestedField.optional(3, "ts_no_default", Types.TimestampType.withZone()));
+
+        assertEquals("2026-01-01 18:00:00.000000",
+                IcebergApiConverter.getSessionTimestamptzWriteDefaultValue(
+                        schema, "ts_tz", java.time.ZoneId.of("Asia/Shanghai")));
+        assertEquals("2026-01-01 05:00:00.000000",
+                IcebergApiConverter.getSessionTimestamptzWriteDefaultValue(
+                        schema, "ts_tz", java.time.ZoneId.of("-05:00")));
+        assertEquals("2026-01-01 10:00:00.000000",
+                IcebergApiConverter.getSessionTimestamptzWriteDefaultValue(
+                        schema, "ts_tz", java.time.ZoneId.of("UTC")));
+        assertNull(IcebergApiConverter.getSessionTimestamptzWriteDefaultValue(
+                schema, "ts_ntz", java.time.ZoneId.of("Asia/Shanghai")));
+        assertNull(IcebergApiConverter.getSessionTimestamptzWriteDefaultValue(
+                schema, "ts_no_default", java.time.ZoneId.of("Asia/Shanghai")));
+
+        // DST fall-back overlap in America/New_York on 2026-11-01: 05:30Z (-04:00, earlier occurrence)
+        // round-trips accurately, whereas 06:30Z (-05:00, second occurrence) cannot be distinguished from
+        // 05:30Z in offset-less DATETIME and must be rejected rather than silently shifted.
+        long earlierOverlapMicros = ((Number) org.apache.iceberg.expressions.Literal.of("2026-11-01T05:30:00Z")
+                .to(Types.TimestampType.withZone()).value()).longValue();
+        long laterOverlapMicros = ((Number) org.apache.iceberg.expressions.Literal.of("2026-11-01T06:30:00Z")
+                .to(Types.TimestampType.withZone()).value()).longValue();
+        Schema overlapSchema = new Schema(
+                Types.NestedField.optional("ts_earlier")
+                        .withId(10)
+                        .ofType(Types.TimestampType.withZone())
+                        .withWriteDefault(org.apache.iceberg.expressions.Literal.of(earlierOverlapMicros))
+                        .build(),
+                Types.NestedField.optional("ts_later")
+                        .withId(11)
+                        .ofType(Types.TimestampType.withZone())
+                        .withWriteDefault(org.apache.iceberg.expressions.Literal.of(laterOverlapMicros))
+                        .build());
+        assertEquals("2026-11-01 01:30:00.000000",
+                IcebergApiConverter.getSessionTimestamptzWriteDefaultValue(
+                        overlapSchema, "ts_earlier", java.time.ZoneId.of("America/New_York")));
+        assertEquals("2026-11-01 06:30:00.000000",
+                IcebergApiConverter.getSessionTimestamptzWriteDefaultValue(
+                        overlapSchema, "ts_later", java.time.ZoneId.of("UTC")));
+        Assertions.assertThrows(com.starrocks.sql.analyzer.SemanticException.class,
+                () -> IcebergApiConverter.getSessionTimestamptzWriteDefaultValue(
+                        overlapSchema, "ts_later", java.time.ZoneId.of("America/New_York")));
+    }
+
 }

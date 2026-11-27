@@ -25,6 +25,12 @@ products: [oss, enterprise, cloud, anywhere]
 
 对于 Parquet 数据文件，可以通过 Iceberg 表属性 `write.parquet.compression-level` 设置整数压缩级别。ZSTD 支持 -131072 至 22，GZIP 支持 -1 至 9，Brotli 支持 0 至 11。其他压缩算法不支持显式设置级别。无效值会导致写入失败。未设置该属性时，Parquet 写入器使用所选压缩算法的默认级别。此级别不适用于位置删除文件。
 
+:::caution
+
+StarRocks 会依据会话时区将 Iceberg `timestamptz`（`TIMESTAMP WITH TIME ZONE`）列及其分区转换统一以 UTC 编码写入。滚动升级至包含该修复的版本时，请先升级 BE 节点再升级 FE 节点，否则已升级的 FE 可能会将 `__iceberg_transform_timestamptz_identity` 下发至旧版本 BE，导致写入按 `timestamptz` 分区的 Iceberg 表失败。如果此前写入作业中存在通过 `CONVERT_TZ(..., 'UTC')` 手动转换时区的临时规避写法，请在升级完成后移除，以免发生重复时区转换。
+
+:::
+
 ### 语法
 
 ```SQL

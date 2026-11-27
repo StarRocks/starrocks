@@ -304,7 +304,8 @@ arrow::Result<::parquet::schema::NodePtr> ParquetBuildHelper::make_schema_node(c
         }
         return ::parquet::schema::PrimitiveNode::Make(
                 name, rep_type,
-                ::parquet::LogicalType::Timestamp(false, ::parquet::LogicalType::TimeUnit::unit::MICROS),
+                ::parquet::LogicalType::Timestamp(file_column_id.is_adjusted_to_utc,
+                                                  ::parquet::LogicalType::TimeUnit::unit::MICROS),
                 ::parquet::Type::INT64, -1, file_column_id.field_id);
     }
     case TYPE_DECIMAL32:

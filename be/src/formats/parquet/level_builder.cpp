@@ -446,10 +446,18 @@ Status LevelBuilder::_write_datetime_column_chunk(const LevelBuilderContext& ctx
     auto values = new cpp_type[col->size()];
     DeferOp defer([&] { delete[] values; });
 
-    // INT96 stores UTC: a value is shifted by the offset in force at 00:00 of its day read as UTC. The INT64
-    // encoding stores the wall clock and needs no offset.
+    const auto& logical_type = node->logical_type();
+    const bool is_adjusted_to_utc =
+            !use_int96_timestamp_encoding && logical_type != nullptr && logical_type->is_timestamp() &&
+            std::static_pointer_cast<const ::parquet::TimestampLogicalType>(logical_type)->is_adjusted_to_utc();
+    const bool convert_int64_to_utc = is_adjusted_to_utc && (_ctz != cctz::utc_time_zone());
+
+    // INT96 stores UTC: a value is shifted by the offset in force at 00:00 of its day read as UTC.
+    // INT64 with isAdjustedToUTC=true stores UTC epoch microseconds converted from session local time;
+    // INT64 with isAdjustedToUTC=false stores the wall clock as-is.
     int64_t fixed_offset = 0;
     std::vector<int64_t> offsets;
+    TzOffsetCache offset_cache;
     if constexpr (use_int96_timestamp_encoding) {
         std::vector<int64_t> day_seconds(col->size());
         int64_t lo = std::numeric_limits<int64_t>::max();
@@ -463,7 +471,6 @@ Status LevelBuilder::_write_datetime_column_chunk(const LevelBuilderContext& ctx
                 hi = std::max(hi, day_seconds[i]);
             }
         }
-        TzOffsetCache offset_cache;
         if (lo <= hi && !offset_cache.uniform_offset_for_unix(lo, hi, _ctz, &fixed_offset)) {
             offsets.resize(col->size());
             offset_cache.offsets_for_unix(day_seconds.data(), null_col, col->size(), _ctz, offsets.data());
@@ -481,6 +488,16 @@ Status LevelBuilder::_write_datetime_column_chunk(const LevelBuilderContext& ctx
             auto nanosecond = reinterpret_cast<int64_t*>(&values[i].value[0]);
             *date = timestamp::to_julian(timestamp);
             *nanosecond = timestamp::to_time(timestamp) * 1000;
+        } else if (convert_int64_to_utc) {
+            if (null_col != nullptr && null_col[i]) {
+                values[i] = 0;
+                continue;
+            }
+            int year, month, day, hour, minute, second, usec;
+            data_col[i].to_timestamp(&year, &month, &day, &hour, &minute, &second, &usec);
+            int64_t unix_second = offset_cache.unix_for_civil(data_col[i].to_unix_second(), year, month, day, hour,
+                                                              minute, second, _ctz);
+            values[i] = unix_second * USECS_PER_SEC + usec;
         } else {
             int64_t value = timestamp::to_julian(timestamp);
             value *= USECS_PER_DAY;

@@ -432,44 +432,45 @@ Status IcebergTableSinkPipelineBuilder::create_data_sink_context(
 
     if (iceberg_table_desc->is_unpartitioned_table()) {
         //do nothing
-    } else if (t_iceberg_sink.is_static_partition_sink) {
-        for (const auto& index : iceberg_table_desc->partition_source_index_in_schema()) {
-            if (index < 0 || index >= _sink.get_output_expr().size()) {
-                return Status::InternalError(fmt::format("Invalid partition index: {}", index));
-            }
-            partition_expr.push_back(_sink.get_output_expr()[index]);
-        }
-        data_sink_ctx->partition_evaluators = ColumnExprEvaluator::from_exprs(partition_expr, runtime_state);
     } else {
         auto source_column_index = iceberg_table_desc->partition_source_index_in_schema();
         partition_expr = iceberg_table_desc->get_partition_exprs();
 
-        //for 3.5 fe -> 4.0 be compact, try to set this.
+        // Both dynamic and static partition sinks must evaluate FE's partition_exprs (e.g.
+        // __iceberg_transform_timestamptz_identity on timestamptz identity partitions) rather than raw
+        // output columns. Fall back to raw output_exprs only when an older FE did not send partition_exprs.
         if (partition_expr.empty()) {
-            auto output_expr = _sink.get_output_expr();
+            const auto& output_expr = _sink.get_output_expr();
             for (const auto& index : source_column_index) {
-                if (index < 0 || index >= _sink.get_output_expr().size()) {
+                if (index < 0 || index >= output_expr.size()) {
                     return Status::InternalError(fmt::format("Invalid partition index: {}", index));
                 }
                 partition_expr.push_back(output_expr[index]);
             }
-        }
-
-        int idx = 0;
-        for (auto& part_expr : partition_expr) {
-            int index = source_column_index[idx];
-            //check index is valid for output_expr
-            if (index < 0 || index >= _sink.get_output_expr().size()) {
-                return Status::InternalError(fmt::format("Invalid partition index: {}", index));
+        } else {
+            if (partition_expr.size() != source_column_index.size()) {
+                return Status::InternalError(
+                        fmt::format("Mismatched partition expression and source index counts: {} vs {}",
+                                    partition_expr.size(), source_column_index.size()));
             }
-            auto slot_ref = _sink.get_output_expr()[index];
-            for (auto& node : part_expr.nodes) {
-                if (node.node_type == TExprNodeType::SLOT_REF) {
-                    node = slot_ref.nodes[0];
-                    break;
+            for (size_t idx = 0; idx < partition_expr.size(); ++idx) {
+                int index = source_column_index[idx];
+                if (index < 0 || index >= _sink.get_output_expr().size()) {
+                    return Status::InternalError(fmt::format("Invalid partition index: {}", index));
+                }
+                const auto& replacement = _sink.get_output_expr()[index];
+                if (replacement.nodes.empty()) {
+                    return Status::InternalError(fmt::format("Empty output expression at partition index: {}", index));
+                }
+                auto& nodes = partition_expr[idx].nodes;
+                for (auto it = nodes.begin(); it != nodes.end(); ++it) {
+                    if (it->node_type == TExprNodeType::SLOT_REF) {
+                        it = nodes.erase(it);
+                        nodes.insert(it, replacement.nodes.begin(), replacement.nodes.end());
+                        break;
+                    }
                 }
             }
-            idx++;
         }
         data_sink_ctx->partition_evaluators = ColumnExprEvaluator::from_exprs(partition_expr, runtime_state);
     }

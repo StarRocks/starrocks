@@ -724,6 +724,8 @@ vectorized_functions = [
     [50650, '__iceberg_transform_hour', True, False, 'BIGINT', ['DATETIME'], 'TimeFunctions::iceberg_hours_since_epoch_datetime'],
     [50651, '__iceberg_transform_timestamptz_hour', True, False, 'BIGINT', ['DATETIME'],
      'TimeFunctions::iceberg_timestamptz_hours_since_epoch_datetime'],
+    [50652, '__iceberg_transform_timestamptz_identity', True, False, 'DATETIME', ['DATETIME'],
+     'TimeFunctions::iceberg_timestamptz_identity_datetime'],
 
     # 60xxx: like predicate
     # important ref: LikePredicate.java, must keep name equals LikePredicate.Operator

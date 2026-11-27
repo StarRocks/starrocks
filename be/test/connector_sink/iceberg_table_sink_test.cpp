@@ -22,6 +22,7 @@
 #include <thread>
 
 #include "base/testutil/assert.h"
+#include "column/column_viewer.h"
 #include "common/config_exec_fwd.h"
 #include "connector/iceberg/iceberg_row_delta_sink.h"
 #include "connector_primitive/sink_memory_manager.h"
@@ -1327,6 +1328,254 @@ TEST_F(IcebergTableSinkTest, row_delta_routing_column_must_be_tinyint) {
     auto status = decompose_iceberg_table_sink_to_pipeline(sink, prev_operators, data_sink, context.get());
     EXPECT_FALSE(status.ok());
     EXPECT_THAT(std::string(status.message()), testing::HasSubstr("row delta op column must be TINYINT"));
+}
+
+TEST_F(IcebergTableSinkTest, static_partition_sink_uses_partition_exprs) {
+    TDescriptorTableBuilder table_desc_builder;
+    TSlotDescriptorBuilder slot_desc_builder;
+    auto ts_slot = slot_desc_builder.type(LogicalType::TYPE_DATETIME)
+                           .column_name("ts_tz")
+                           .column_pos(0)
+                           .nullable(true)
+                           .build();
+    TTupleDescriptorBuilder tuple_desc_builder;
+    tuple_desc_builder.add_slot(ts_slot);
+    tuple_desc_builder.build(&table_desc_builder);
+    DescriptorTbl* tbl = nullptr;
+    EXPECT_OK(DescriptorTbl::create(_runtime_state, &_pool, table_desc_builder.desc_tbl(), &tbl,
+                                    config::vector_chunk_size));
+    _runtime_state->set_desc_tbl(tbl);
+    ASSERT_TRUE(_runtime_state->set_timezone("Asia/Shanghai"));
+
+    TIcebergTable t_iceberg_table;
+    TColumn t_column;
+    t_column.__set_column_name("ts_tz");
+    t_iceberg_table.__set_columns({t_column});
+
+    TIcebergSchemaField field;
+    field.__set_field_id(1);
+    field.__set_name("ts_tz");
+    field.__set_is_adjusted_to_utc(true);
+    TIcebergSchema iceberg_schema;
+    iceberg_schema.__set_fields({field});
+    t_iceberg_table.__set_iceberg_schema(iceberg_schema);
+    t_iceberg_table.__set_partition_column_names({"ts_tz"});
+
+    // Partition expression: __iceberg_transform_timestamptz_identity(slot_ref(0))
+    TExpr part_expr;
+    TExprNode fn_node;
+    fn_node.__set_node_type(TExprNodeType::FUNCTION_CALL);
+    fn_node.__set_type(TypeDescriptor::from_logical_type(TYPE_DATETIME).to_thrift());
+    fn_node.__set_num_children(1);
+    fn_node.__set_is_nullable(true);
+    fn_node.__set_output_scale(0);
+    TFunction fn;
+    fn.__set_fid(50652);
+    TFunctionName fn_name;
+    fn_name.__set_function_name("__iceberg_transform_timestamptz_identity");
+    fn.__set_name(fn_name);
+    fn.__set_binary_type(TFunctionBinaryType::BUILTIN);
+    fn.__set_arg_types({TypeDescriptor::from_logical_type(TYPE_DATETIME).to_thrift()});
+    fn.__set_ret_type(TypeDescriptor::from_logical_type(TYPE_DATETIME).to_thrift());
+    fn.__set_has_var_args(false);
+    fn_node.__set_fn(fn);
+    part_expr.nodes.push_back(fn_node);
+    part_expr.nodes.push_back(make_slot_ref_expr(0, TypeDescriptor::from_logical_type(TYPE_DATETIME)).nodes[0]);
+
+    TIcebergPartitionInfo part_info;
+    part_info.__set_source_column_name("ts_tz");
+    part_info.__set_partition_column_name("ts_tz");
+    part_info.__set_transform_expr("identity");
+    part_info.__set_partition_expr(part_expr);
+    t_iceberg_table.__set_partition_info({part_info});
+
+    TTableDescriptor tdesc;
+    tdesc.__set_icebergTable(t_iceberg_table);
+    IcebergTableDescriptor* ice_table_desc = _pool.add(new IcebergTableDescriptor(tdesc, &_pool));
+    tbl->get_tuple_descriptor(0)->set_table_desc(ice_table_desc);
+    tbl->_tbl_desc_map[0] = ice_table_desc;
+
+    auto context = std::make_shared<pipeline::PipelineBuilderContext>(_fragment_context.get(), 1, 1);
+
+    TDataSink data_sink;
+    data_sink.__set_type(TDataSinkType::ICEBERG_TABLE_SINK);
+    TIcebergTableSink iceberg_table_sink;
+    iceberg_table_sink.__set_location("/path/to/table");
+    iceberg_table_sink.__set_tuple_id(0);
+    iceberg_table_sink.__set_file_format("parquet");
+    iceberg_table_sink.__set_is_static_partition_sink(true);
+    data_sink.__set_iceberg_table_sink(iceberg_table_sink);
+
+    std::vector<TExpr> output_exprs = {make_slot_ref_expr(0, TypeDescriptor::from_logical_type(TYPE_DATETIME))};
+    IcebergTableSink sink(&_pool, output_exprs);
+    pipeline::OpFactories prev_operators{std::make_shared<pipeline::EmptySetOperatorFactory>(15, 15)};
+
+    ASSERT_OK(decompose_iceberg_table_sink_to_pipeline(sink, prev_operators, data_sink, context.get()));
+
+    pipeline::Pipeline* pl = const_cast<pipeline::Pipeline*>(context->last_pipeline());
+    auto* connector_sink_factory = dynamic_cast<pipeline::ConnectorSinkOperatorFactory*>(pl->sink_operator_factory());
+    auto* sink_ctx = get_iceberg_chunk_sink_context(connector_sink_factory);
+    ASSERT_NE(sink_ctx, nullptr);
+    ASSERT_EQ(sink_ctx->partition_evaluators.size(), 1);
+    ASSERT_OK(sink_ctx->partition_evaluators[0]->init());
+
+    auto chunk = std::make_shared<Chunk>();
+    auto ts_col = TimestampColumn::create();
+    ts_col->append(TimestampValue::create(2026, 3, 1, 2, 0, 0, 0));
+    chunk->append_column(std::move(ts_col), 0);
+
+    ASSIGN_OR_ASSERT_FAIL(auto eval_col, sink_ctx->partition_evaluators[0]->evaluate(chunk.get()));
+    ColumnViewer<TYPE_DATETIME> viewer(eval_col);
+    ASSERT_FALSE(viewer.is_null(0));
+    EXPECT_EQ(TimestampValue::create(2026, 2, 28, 18, 0, 0, 0), viewer.value(0));
+}
+
+TEST_F(IcebergTableSinkTest, static_partition_sink_plain_identity_and_cast_const) {
+    auto int_type = TypeDescriptor::from_logical_type(TYPE_INT);
+    auto varchar_type = TypeDescriptor::create_varchar_type(16);
+    auto date_type = TypeDescriptor::from_logical_type(TYPE_DATE);
+
+    TDescriptorTableBuilder table_desc_builder;
+    TTupleDescriptorBuilder tuple_desc_builder;
+    tuple_desc_builder.add_slot(
+            TSlotDescriptorBuilder().type(int_type).column_name("p_int").column_pos(0).nullable(true).build());
+    tuple_desc_builder.add_slot(
+            TSlotDescriptorBuilder().type(varchar_type).column_name("p_str").column_pos(1).nullable(true).build());
+    tuple_desc_builder.add_slot(
+            TSlotDescriptorBuilder().type(date_type).column_name("p_date").column_pos(2).nullable(true).build());
+    tuple_desc_builder.add_slot(
+            TSlotDescriptorBuilder().type(int_type).column_name("p_cast_int").column_pos(3).nullable(true).build());
+    tuple_desc_builder.build(&table_desc_builder);
+    DescriptorTbl* tbl = nullptr;
+    EXPECT_OK(DescriptorTbl::create(_runtime_state, &_pool, table_desc_builder.desc_tbl(), &tbl,
+                                    config::vector_chunk_size));
+    _runtime_state->set_desc_tbl(tbl);
+
+    TIcebergTable t_iceberg_table;
+    std::vector<std::string> col_names = {"p_int", "p_str", "p_date", "p_cast_int"};
+    std::vector<TypeDescriptor> col_types = {int_type, varchar_type, date_type, int_type};
+    std::vector<TColumn> t_columns;
+    std::vector<TIcebergPartitionInfo> part_infos;
+    std::vector<TIcebergSchemaField> schema_fields;
+    for (int i = 0; i < 4; ++i) {
+        TColumn col;
+        col.__set_column_name(col_names[i]);
+        t_columns.push_back(col);
+
+        TIcebergSchemaField field;
+        field.__set_field_id(i + 1);
+        field.__set_name(col_names[i]);
+        field.__set_is_adjusted_to_utc(false);
+        schema_fields.push_back(field);
+
+        TIcebergPartitionInfo info;
+        info.__set_source_column_name(col_names[i]);
+        info.__set_partition_column_name(col_names[i]);
+        info.__set_transform_expr("identity");
+        info.__set_partition_expr(make_slot_ref_expr(i, col_types[i]));
+        part_infos.push_back(info);
+    }
+    TIcebergSchema iceberg_schema;
+    iceberg_schema.__set_fields(schema_fields);
+    t_iceberg_table.__set_columns(t_columns);
+    t_iceberg_table.__set_iceberg_schema(iceberg_schema);
+    t_iceberg_table.__set_partition_column_names(col_names);
+    t_iceberg_table.__set_partition_info(part_infos);
+
+    TTableDescriptor tdesc;
+    tdesc.__set_icebergTable(t_iceberg_table);
+    IcebergTableDescriptor* ice_table_desc = _pool.add(new IcebergTableDescriptor(tdesc, &_pool));
+    tbl->get_tuple_descriptor(0)->set_table_desc(ice_table_desc);
+    tbl->_tbl_desc_map[0] = ice_table_desc;
+
+    auto context = std::make_shared<pipeline::PipelineBuilderContext>(_fragment_context.get(), 1, 1);
+
+    TDataSink data_sink;
+    data_sink.__set_type(TDataSinkType::ICEBERG_TABLE_SINK);
+    TIcebergTableSink iceberg_table_sink;
+    iceberg_table_sink.__set_location("/path/to/table");
+    iceberg_table_sink.__set_tuple_id(0);
+    iceberg_table_sink.__set_file_format("parquet");
+    iceberg_table_sink.__set_is_static_partition_sink(true);
+    data_sink.__set_iceberg_table_sink(iceberg_table_sink);
+
+    TExpr cast_const_expr;
+    TExprNode cast_node;
+    cast_node.__set_node_type(TExprNodeType::CAST_EXPR);
+    cast_node.__set_opcode(TExprOpcode::CAST);
+    cast_node.__set_num_children(1);
+    cast_node.__set_is_nullable(true);
+    cast_node.__set_type(int_type.to_thrift());
+    cast_node.__set_child_type(TPrimitiveType::VARCHAR);
+    cast_node.__set_child_type_desc(varchar_type.to_thrift());
+    cast_const_expr.nodes.push_back(cast_node);
+
+    TExprNode lit_node;
+    lit_node.__set_node_type(TExprNodeType::STRING_LITERAL);
+    lit_node.__set_num_children(0);
+    lit_node.__set_is_nullable(false);
+    lit_node.__set_type(varchar_type.to_thrift());
+    TStringLiteral str_lit;
+    str_lit.__set_value("42");
+    lit_node.__set_string_literal(str_lit);
+    cast_const_expr.nodes.push_back(lit_node);
+
+    std::vector<TExpr> output_exprs = {
+            make_slot_ref_expr(0, int_type),
+            make_slot_ref_expr(1, varchar_type),
+            make_slot_ref_expr(2, date_type),
+            cast_const_expr,
+    };
+    IcebergTableSink sink(&_pool, output_exprs);
+    pipeline::OpFactories prev_operators{std::make_shared<pipeline::EmptySetOperatorFactory>(16, 16)};
+
+    ASSERT_OK(decompose_iceberg_table_sink_to_pipeline(sink, prev_operators, data_sink, context.get()));
+
+    pipeline::Pipeline* pl = const_cast<pipeline::Pipeline*>(context->last_pipeline());
+    auto* connector_sink_factory = dynamic_cast<pipeline::ConnectorSinkOperatorFactory*>(pl->sink_operator_factory());
+    auto* sink_ctx = get_iceberg_chunk_sink_context(connector_sink_factory);
+    ASSERT_NE(sink_ctx, nullptr);
+    ASSERT_EQ(sink_ctx->partition_evaluators.size(), 4);
+    for (const auto& evaluator : sink_ctx->partition_evaluators) {
+        ASSERT_OK(evaluator->init());
+    }
+
+    auto chunk = std::make_shared<Chunk>();
+    auto int_col = Int32Column::create();
+    int_col->append(123);
+    chunk->append_column(std::move(int_col), 0);
+
+    auto str_col = BinaryColumn::create();
+    str_col->append(Slice("us-east"));
+    chunk->append_column(std::move(str_col), 1);
+
+    auto date_col = DateColumn::create();
+    date_col->append(DateValue::create(2026, 3, 1));
+    chunk->append_column(std::move(date_col), 2);
+
+    auto placeholder_col = Int32Column::create();
+    placeholder_col->append(0);
+    chunk->append_column(std::move(placeholder_col), 3);
+
+    ASSIGN_OR_ASSERT_FAIL(auto eval_int, sink_ctx->partition_evaluators[0]->evaluate(chunk.get()));
+    ColumnViewer<TYPE_INT> int_viewer(eval_int);
+    ASSERT_FALSE(int_viewer.is_null(0));
+    EXPECT_EQ(123, int_viewer.value(0));
+
+    ASSIGN_OR_ASSERT_FAIL(auto eval_str, sink_ctx->partition_evaluators[1]->evaluate(chunk.get()));
+    ColumnViewer<TYPE_VARCHAR> str_viewer(eval_str);
+    ASSERT_FALSE(str_viewer.is_null(0));
+    EXPECT_EQ("us-east", str_viewer.value(0).to_string());
+
+    ASSIGN_OR_ASSERT_FAIL(auto eval_date, sink_ctx->partition_evaluators[2]->evaluate(chunk.get()));
+    ColumnViewer<TYPE_DATE> date_viewer(eval_date);
+    ASSERT_FALSE(date_viewer.is_null(0));
+    EXPECT_EQ(DateValue::create(2026, 3, 1), date_viewer.value(0));
+
+    ASSIGN_OR_ASSERT_FAIL(auto eval_cast_int, sink_ctx->partition_evaluators[3]->evaluate(chunk.get()));
+    ColumnViewer<TYPE_INT> cast_int_viewer(eval_cast_int);
+    ASSERT_FALSE(cast_int_viewer.is_null(0));
+    EXPECT_EQ(42, cast_int_viewer.value(0));
 }
 
 } // namespace starrocks
