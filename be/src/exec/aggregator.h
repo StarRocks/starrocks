@@ -656,7 +656,7 @@ protected:
     void _build_hash_variant(HashVariantType& hash_variant, typename HashVariantType::Type type,
                              CompressKeyContext&& context);
 
-    void _release_agg_memory();
+    virtual void _release_agg_memory();
 
     bool _is_agg_result_nullable(const TExpr& desc, const AggFunctionTypes& agg_func_type);
 
