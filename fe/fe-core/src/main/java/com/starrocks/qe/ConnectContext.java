@@ -79,6 +79,7 @@ import com.starrocks.service.arrow.flight.sql.ArrowFlightSqlConnectContext;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.PreResolvedState;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.CleanTemporaryTableStmt;
 import com.starrocks.sql.ast.ExecuteStmt;
 import com.starrocks.sql.ast.OriginStatement;
@@ -258,12 +259,13 @@ public class ConnectContext {
     // cycle routed through a subquery would otherwise reset the per-Visitor set on every hop.
     private final Set<String> viewExpansionPath = Sets.newHashSet();
 
-    // Names of the recursive CTEs whose recursive member is currently being analyzed. Like
+    // The recursive CTE definitions whose recursive member is currently being analyzed, matched by identity
+    // so a same-named CTE that shadows one is not taken for it. Like
     // viewExpansionPath it lives on the session (not on a single QueryAnalyzer.Visitor) so it is
     // shared across the fresh QueryAnalyzer instances spawned for scalar/IN/EXISTS subqueries; a
     // recursive reference routed through such a subquery would otherwise not see the enclosing
     // recursive CTE, fall through to the optimizer and expand without end (StackOverflowError).
-    private final Set<String> recursiveCteAnalysisPath = Sets.newHashSet();
+    private final Set<CTERelation> recursiveCteAnalysisPath = Sets.newIdentityHashSet();
 
     private final Map<String, PrepareStmtContext> preparedStmtCtxs = Maps.newHashMap();
 
@@ -1436,7 +1438,7 @@ public class ConnectContext {
         return viewExpansionPath;
     }
 
-    public Set<String> getRecursiveCteAnalysisPath() {
+    public Set<CTERelation> getRecursiveCteAnalysisPath() {
         return recursiveCteAnalysisPath;
     }
 

@@ -462,4 +462,33 @@ public class RecursiveCTETest extends PlanTestBase {
                 + ") select * from r";
         Assertions.assertFalse(hasRecursiveCte(sql));
     }
+
+    @Test
+    public void testSubqueryCteShadowingRecursiveCteNameIsNotRecursive() throws Exception {
+        // The q inside the subquery is an ordinary CTE that shadows the recursive candidate q. The analyzer used
+        // to match the recursive CTE by name and mark that inner q recursive, so planning failed with
+        // "Recursive CTE is not supported" instead of reading it.
+        String sql = "with recursive q(n) as ("
+                + " select 1"
+                + " union all"
+                + " select n from (with q(n) as (select 2) (select n from q)) x"
+                + ") select * from q";
+        connectContext.getSessionVariable().setEnableRecursiveCTE(false);
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "UNION");
+    }
+
+    @Test
+    public void testScalarSubqueryCteShadowingRecursiveCteNameIsNotRecursive() throws Exception {
+        // The scalar subquery is analyzed by a fresh QueryAnalyzer, which sees the recursive CTE only through
+        // the session-shared path. Its q is an ordinary CTE that shadows the recursive one, so it must not be
+        // rejected as a multi-level recursive reference; the FROM q of the member is still recursive.
+        String sql = "with recursive q(n) as ("
+                + " select 1"
+                + " union all"
+                + " select n + 1 from q where n < (select max(n) from (with q(n) as (select 3) (select n from q)) x)"
+                + ") select * from q";
+        String plan = explainRecursiveCte(sql);
+        assertContains(plan, "Recursive Statement:");
+    }
 }
