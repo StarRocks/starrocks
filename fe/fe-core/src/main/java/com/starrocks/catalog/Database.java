@@ -67,6 +67,7 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Objects;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicLong;
@@ -406,17 +407,27 @@ public class Database extends MetaObject implements Writable {
         return nameToTable.get(tableName);
     }
 
-    public Pair<Table, MaterializedIndexMeta> getMaterializedViewIndex(String mvName) {
+    /**
+     * A visible materialized index named {@code indexName} -- the base index, which is named after its table, a
+     * rollup or a synchronous materialized view -- with its table.
+     *
+     * <p>A temporary table is visible only in the session that created it, and {@link #idToTable} holds every
+     * session's: the ones of other sessions than {@code sessionId} are left out, as a name lookup leaves them out.
+     */
+    public Pair<Table, MaterializedIndexMeta> getMaterializedViewIndex(String indexName, UUID sessionId) {
         // TODO: add an index to speed it up.
         for (Table table : idToTable.values()) {
             if (table instanceof OlapTable) {
                 OlapTable olapTable = (OlapTable) table;
+                if (olapTable.isTemporaryTable() && !olapTable.getSessionId().equals(sessionId)) {
+                    continue;
+                }
                 for (MaterializedIndexMeta mvMeta : olapTable.getVisibleIndexMetas()) {
-                    String indexName = olapTable.getIndexNameByMetaId(mvMeta.getIndexMetaId());
-                    if (indexName == null) {
+                    String name = olapTable.getIndexNameByMetaId(mvMeta.getIndexMetaId());
+                    if (name == null) {
                         continue;
                     }
-                    if (indexName.equals(mvName)) {
+                    if (name.equals(indexName)) {
                         return Pair.create(table, mvMeta);
                     }
                 }
