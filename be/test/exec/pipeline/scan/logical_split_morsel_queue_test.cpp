@@ -308,4 +308,59 @@ TEST_F(LogicalSplitMorselQueueTest, version_overwrite_preserves_overlapping_segm
     EXPECT_EQ(sorted(expected), sorted(actual));
 }
 
+namespace {
+
+// A rowset whose segments fail to load, the way a lake Rowset behaves when a segment open fails
+// (e.g. a StarMgr GetShard timeout): get_segments() swallows the error and returns an empty list,
+// get_segments_checked() returns it. num_rows() comes from the rowset metadata, so it stays non-zero.
+class LoadFailingRowset : public BaseRowset {
+public:
+    LoadFailingRowset(bool overlapped, int64_t num_rows, Status load_error)
+            : _overlapped(overlapped), _num_rows(num_rows), _load_error(std::move(load_error)) {
+        _rowset_id.init(1);
+    }
+    RowsetId rowset_id() const override { return _rowset_id; }
+    int64_t num_rows() const override { return _num_rows; }
+    bool is_overlapped() const override { return _overlapped; }
+    std::vector<SegmentSharedPtr> get_segments() override { return {}; }
+    StatusOr<std::vector<SegmentSharedPtr>> get_segments_checked() override { return _load_error; }
+    bool has_data_files() const override { return true; }
+    int64_t start_version() const override { return 1; }
+    int64_t end_version() const override { return 1; }
+
+private:
+    bool _overlapped;
+    int64_t _num_rows;
+    Status _load_error;
+    RowsetId _rowset_id;
+};
+
+} // namespace
+
+// RB-2037: a segment-load failure of the largest rowset must fail the query with the load error. An
+// overlapped rowset used to turn the empty get_segments() result into a null largest segment and
+// crash the CN in Segment::load_index(); a non-overlapped one was split as if it had no segment.
+TEST_F(LogicalSplitMorselQueueTest, segment_load_failure_fails_query) {
+    auto schema = make_schema();
+    const std::string kLoadError = "starlet err grpc.GetShard(shardId=888596) error: Deadline Exceeded";
+    for (bool overlapped : {true, false}) {
+        SCOPED_TRACE(overlapped ? "overlapped" : "non-overlapped");
+        auto rowset = std::make_shared<LoadFailingRowset>(overlapped, 100, Status::InternalError(kLoadError));
+        std::vector<BaseTabletSharedPtr> tablets = {std::make_shared<FakeTablet>(10003, 100)};
+        std::vector<std::vector<BaseRowsetSharedPtr>> tablet_rowsets = {{rowset}};
+
+        Morsels morsels;
+        morsels.emplace_back(std::make_unique<ScanMorsel>(1, make_scan_range(10003)));
+        LogicalSplitMorselQueue queue(std::move(morsels), 1, 25);
+        queue.set_tablets(tablets);
+        queue.set_tablet_rowsets(tablet_rowsets);
+        queue.set_tablet_schema(schema);
+        queue.set_ticket_checker(std::make_shared<SplitMorselTicketChecker>());
+
+        auto morsel_or = queue.try_get();
+        ASSERT_FALSE(morsel_or.ok());
+        EXPECT_NE(morsel_or.status().to_string().find(kLoadError), std::string::npos) << morsel_or.status();
+    }
+}
+
 } // namespace starrocks::pipeline

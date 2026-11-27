@@ -146,7 +146,7 @@ private:
     bool _cur_tablet_finished() const;
 
     BaseRowset* _find_largest_rowset(const std::vector<BaseRowsetSharedPtr>& rowsets);
-    SegmentSharedPtr _find_largest_segment(BaseRowset* rowset) const;
+    StatusOr<SegmentSharedPtr> _find_largest_segment(BaseRowset* rowset) const;
     StatusOr<SegmentGroupPtr> _create_segment_group(BaseRowset* rowset);
     bool _next_tablet();
     Status _init_tablet();

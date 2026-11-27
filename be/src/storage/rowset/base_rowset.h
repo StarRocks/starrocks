@@ -57,6 +57,18 @@ public:
         return segments;
     }
 
+    // get_segments_checked() with the nullptr placeholders removed: the checked counterpart of
+    // get_non_null_segments() for consumers that must not mistake a failed load for an empty rowset.
+    StatusOr<std::vector<SegmentSharedPtr>> get_non_null_segments_checked() {
+        auto segments_or = get_segments_checked();
+        if (!segments_or.ok()) {
+            return segments_or.status();
+        }
+        std::vector<SegmentSharedPtr> segments = std::move(segments_or).value();
+        segments.erase(std::remove(segments.begin(), segments.end(), nullptr), segments.end());
+        return segments;
+    }
+
     virtual Status load() { return Status::OK(); };
 
     virtual bool has_data_files() const = 0;
