@@ -26,6 +26,7 @@
 #include "exprs/literal.h"
 #include "exprs/predicate.h"
 #include "gutil/strings/substitute.h"
+#include "runtime/current_thread.h"
 #include "types/type_descriptor.h"
 
 namespace starrocks {
@@ -142,6 +143,9 @@ public:
             }
 
             bool use_array = is_use_array();
+            // open() runs outside the operators' allocation-check scope, so the values (a value can be large, e.g.
+            // SPACE(n)) are evaluated and the set is built under the memory limit here
+            TRY_CATCH_ALLOC_SCOPE_START();
             for (int i = 1; i < _children.size(); ++i) {
                 if ((_children[0]->type().is_string_type() && _children[i]->type().is_string_type()) ||
                     (_children[0]->type().type == _children[i]->type().type) ||
@@ -186,6 +190,7 @@ public:
                     _hash_set.emplace(viewer.value(0));
                 }
             }
+            TRY_CATCH_ALLOC_SCOPE_END()
         }
         return Status::OK();
     }
@@ -454,8 +459,9 @@ public:
             _const_input.resize(_children.size());
             for (auto i = 0; i < _children.size(); ++i) {
                 if (_children[i]->is_constant()) {
-                    // _const_input[i] maybe not be of ConstColumn
-                    ASSIGN_OR_RETURN(_const_input[i], _children[i]->evaluate_checked(context, nullptr));
+                    // _const_input[i] maybe not be of ConstColumn; evaluated under the memory limit as above
+                    TRY_CATCH_BAD_ALLOC(
+                            ASSIGN_OR_RETURN(_const_input[i], _children[i]->evaluate_checked(context, nullptr)));
                 } else {
                     _const_input[i] = nullptr;
                 }
