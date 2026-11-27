@@ -875,9 +875,6 @@ public class MergeCommitTaskTest extends BatchWriteTestBase {
         }
     }
 
-<<<<<<< HEAD
-    private MergeCommitTask createTaskWithState(MergeCommitTask.TaskState targetState) {
-=======
     @Test
     public void testScanBytesAreReceivedBytes() throws Exception {
         MergeCommitTask task = new MergeCommitTask(
@@ -907,8 +904,7 @@ public class MergeCommitTaskTest extends BatchWriteTestBase {
         assertEquals(4096, task.toThrift().get(0).getNum_scan_bytes());
     }
 
-    private MergeCommitTask createTaskWithState(MergeCommitTask.TaskState targetState) throws Exception {
->>>>>>> 907ebdd8b07... [BugFix][RB-1881] Fill in Stream Load fields missing or wrong in information_schema.loads (#70869)
+    private MergeCommitTask createTaskWithState(MergeCommitTask.TaskState targetState) {
         String taskLabel = "test_pending_" + DebugUtil.printId(UUIDUtil.genTUniqueId());
         TUniqueId taskLoadId = UUIDUtil.genTUniqueId();
         MergeCommitTask task = new MergeCommitTask(
