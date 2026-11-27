@@ -139,9 +139,12 @@ import com.starrocks.thrift.TUpdateResourceUsageRequest;
 import com.starrocks.thrift.TUserIdentity;
 import com.starrocks.transaction.CommitRateExceededException;
 import com.starrocks.transaction.GlobalTransactionMgr;
+import com.starrocks.transaction.TabletCommitInfo;
+import com.starrocks.transaction.TabletFailInfo;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionState.TxnCoordinator;
 import com.starrocks.transaction.TransactionState.TxnSourceType;
+import com.starrocks.transaction.TxnCommitAttachment;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
@@ -1706,6 +1709,59 @@ public class FrontendServiceImplTest {
             Assertions.assertEquals(2, loadInfo.getNum_sink_rows());
             Assertions.assertEquals(1, loadInfo.getNum_filtered_rows());
         }
+    }
+
+    @Test
+    public void testLoadTxnCommitPublishTimeoutRecordsCounters() throws TException {
+        FrontendServiceImpl impl = spy(new FrontendServiceImpl(exeEnv));
+        TNetworkAddress address = new TNetworkAddress();
+        address.setHostname("127.0.0.1");
+        address.setPort(9030);
+        doReturn(address).when(impl).getClientAddr();
+
+        String db = "test";
+        String table = "test_load";
+        long txnId = testBeginAndPutTxn(impl, db, table);
+        TLoadTxnCommitRequest request = buildCommitRequest(txnId, db, table);
+        request.getTxnCommitAttachment().getManualLoadTxnCommitAttachment().setReceivedBytes(4096L);
+
+        // The transaction commits but does not become visible within the RPC timeout.
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public boolean commitAndPublishTransaction(Database database, long transactionId,
+                                                       List<TabletCommitInfo> tabletCommitInfos,
+                                                       List<TabletFailInfo> tabletFailInfos, long timeoutMillis,
+                                                       TxnCommitAttachment txnCommitAttachment) {
+                return false;
+            }
+        };
+        TLoadTxnCommitResult result = impl.loadTxnCommit(request);
+        assertEquals(TStatusCode.PUBLISH_TIMEOUT, result.getStatus().status_code);
+
+        // The load still reports the counters the backend sent with the commit.
+        StreamLoadTask streamLoadTask =
+                GlobalStateMgr.getCurrentState().getStreamLoadMgr().getSyncSteamLoadTaskByTxnId(txnId);
+        Assertions.assertNotNull(streamLoadTask);
+        TLoadInfo loadInfo = streamLoadTask.toThrift().get(0);
+        Assertions.assertEquals(2, loadInfo.getNum_sink_rows());
+        Assertions.assertEquals(1, loadInfo.getNum_filtered_rows());
+        Assertions.assertEquals(3, loadInfo.getNum_scan_rows());
+        Assertions.assertEquals(4096L, loadInfo.getNum_scan_bytes());
+    }
+
+    @Test
+    public void testStreamLoadPutMarksLoadStart() throws TException {
+        FrontendServiceImpl impl = spy(new FrontendServiceImpl(exeEnv));
+        TNetworkAddress address = new TNetworkAddress();
+        address.setHostname("127.0.0.1");
+        address.setPort(9030);
+        doReturn(address).when(impl).getClientAddr();
+
+        long txnId = testBeginAndPutTxn(impl, "test", "test_load");
+        StreamLoadTask streamLoadTask =
+                GlobalStateMgr.getCurrentState().getStreamLoadMgr().getSyncSteamLoadTaskByTxnId(txnId);
+        Assertions.assertNotNull(streamLoadTask);
+        Assertions.assertTrue(streamLoadTask.toThrift().get(0).isSetLoad_start_time_ms());
     }
 
     @Test

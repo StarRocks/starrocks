@@ -60,6 +60,7 @@ Status StreamLoadPipe::append(ByteBufferPtr&& buf) {
         }
         _num_append_buffers += 1;
         _append_buffer_bytes += buf->remaining();
+        _total_appended_bytes += buf->remaining();
         _buffered_bytes += buf->remaining();
         _buf_queue.emplace_back(std::move(buf));
         _get_cond.notify_one();
@@ -253,6 +254,7 @@ Status StreamLoadPipe::_append(const ByteBufferPtr& buf) {
             return _err_st;
         }
         _buf_queue.push_back(buf);
+        _total_appended_bytes += buf->remaining();
         _buffered_bytes += buf->remaining();
         _get_cond.notify_one();
     }

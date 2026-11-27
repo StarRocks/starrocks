@@ -1004,6 +1004,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
             Coordinator coord =
                     getCoordinatorFactory().createSyncStreamLoadScheduler(planner, planParams.getCoord());
             streamLoadTask.setCoordinator(coord);
+            streamLoadTask.markLoadingStarted();
 
             QeProcessorImpl.INSTANCE.registerQuery(loadId, coord);
 

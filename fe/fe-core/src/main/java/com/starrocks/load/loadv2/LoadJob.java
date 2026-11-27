@@ -111,6 +111,8 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback
     public static final String DPP_ABNORMAL_ALL = "dpp.abnorm.ALL";
     public static final String UNSELECTED_ROWS = "unselected.rows";
     public static final String LOADED_BYTES = "loaded.bytes";
+    // bytes a load received through stream load pipes; only reported by a load that reads them
+    public static final String RECEIVED_BYTES = "received.bytes";
 
     private static final int TASK_SUBMIT_RETRY_NUM = 2;
 

@@ -374,8 +374,15 @@ Status TransactionMgr::_commit_transaction(StreamLoadContext* ctx, bool prepare)
 
     ctx->last_active_ts = UnixSeconds();
     ctx->load_cost_nanos = MonotonicNanos() - ctx->start_nanos;
+<<<<<<< HEAD:be/src/runtime/stream_load/transaction_mgr.cpp
     transaction_streaming_load_duration_ms.increment(ctx->load_cost_nanos / 1000000);
     transaction_streaming_load_bytes.increment(ctx->receive_bytes);
+=======
+    auto* metrics = StreamLoadMetrics::instance();
+    metrics->transaction_streaming_load_duration_ms.increment(ctx->load_cost_nanos / 1000000);
+    // receive_bytes only covers the last load request of the transaction
+    metrics->transaction_streaming_load_bytes.increment(ctx->total_receive_bytes);
+>>>>>>> 3b9e3c6 ([BugFix] Fill in Stream Load fields missing or wrong in information_schema.loads (#84760)):be/src/data_workflows/load/stream_load/transaction_mgr.cpp
 
     return Status::OK();
 }

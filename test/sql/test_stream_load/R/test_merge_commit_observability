@@ -42,7 +42,7 @@ select * from t1 order by id;
 -- !result
 select STATE, TYPE, (DB_NAME = 'db_${uuid0}'), TABLE_NAME, starts_with(LABEL, 'merge_commit'), WAREHOUSE, SCAN_ROWS, SCAN_BYTES, SINK_ROWS, FILTERED_ROWS, UNSELECTED_ROWS, PROGRESS, ERROR_MSG, TRACKING_SQL, (PROFILE_ID IS NOT NULL) from information_schema.loads where DB_NAME='db_${uuid0}' and TABLE_NAME='t1';
 -- result:
-FINISHED	MERGE_COMMIT	1	t1	1	default_warehouse	1	70	1	0	0	Merge Window 100.00%		None	1
+FINISHED	MERGE_COMMIT	1	t1	1	default_warehouse	1	35	1	0	0	Merge Window 100.00%		None	1
 -- !result
 SELECT j.`key`, j.`value` FROM information_schema.loads, LATERAL json_each(PROPERTIES) AS j WHERE DB_NAME='db_${uuid0}' and TABLE_NAME='t1' ORDER BY j.`key`;
 -- result:
@@ -98,7 +98,7 @@ select count(*) from t2;
 -- !result
 select STATE, TYPE, (DB_NAME = 'db_${uuid1}'), TABLE_NAME, starts_with(LABEL, 'merge_commit'), WAREHOUSE, SCAN_ROWS, SCAN_BYTES, FILTERED_ROWS, SINK_ROWS, UNSELECTED_ROWS from information_schema.loads where DB_NAME='db_${uuid1}' and TABLE_NAME='t2';
 -- result:
-CANCELLED	MERGE_COMMIT	1	t2	1	default_warehouse	1	65	1	0	0
+CANCELLED	MERGE_COMMIT	1	t2	1	default_warehouse	1	32	1	0	0
 -- !result
 SELECT j.`key`, j.`value` FROM information_schema.loads, LATERAL json_each(PROPERTIES) AS j WHERE DB_NAME='db_${uuid1}' and TABLE_NAME='t2' ORDER BY j.`key`;
 -- result:
