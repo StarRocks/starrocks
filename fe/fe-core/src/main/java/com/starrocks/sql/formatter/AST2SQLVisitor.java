@@ -22,6 +22,7 @@ import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.NormalizedTableFunctionRelation;
+import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.QueryPeriod;
 import com.starrocks.sql.ast.SelectList;
@@ -75,6 +76,63 @@ public class AST2SQLVisitor extends AST2StringVisitor {
         return visitor;
     }
 
+<<<<<<< HEAD
+=======
+    /**
+     * Persisted SQL digest blacklists and SPM baselines depend on historical formatting. Keep that text policy
+     * independent of literal placeholders: SPM also uses it while serializing concrete plan bindings.
+     *
+     * <p>Only these methods read it: {@code renderIdentifier}, {@link #visitSlot}, {@code renderOutputAlias} and
+     * {@code legacyExprToSqlOr}. Literal placeholders and the other digest-only details read
+     * {@code options.isEnableDigest()} directly.
+     */
+    protected boolean useLegacyDigestText() {
+        return options.isEnableDigest();
+    }
+
+    /**
+     * Always writes the NULL ordering. Which ordering a bare ASC / DESC means depends on the sql_mode the text is
+     * parsed under (SORT_NULLS_LAST), and a view definition is parsed again under the sql_mode it was created with,
+     * so leaving out the "default" would change the ordering for a mode where it is not the default. The digest
+     * text keeps its historical form, which leaves the default out.
+     */
+    @Override
+    protected String renderOrderByElement(OrderByElement node, String renderedExpr) {
+        if (useLegacyDigestText() || node.getNullsFirstParam() == null) {
+            return super.renderOrderByElement(node, renderedExpr);
+        }
+        return renderedExpr + (node.getIsAsc() ? " ASC" : " DESC") +
+                (node.getNullsFirstParam() ? " NULLS FIRST" : " NULLS LAST");
+    }
+
+    /** Quotes every component of a resolved identifier path without interpreting dots inside a component. */
+    public static String formatIdentifierPath(List<String> parts) {
+        return parts.stream().map(AST2SQLVisitor::quote).collect(Collectors.joining("."));
+    }
+
+    /**
+     * Backquotes a name as the historical writer did: {@code ``} for an empty name and {@code `null`} for a null one,
+     * unlike {@link ParseUtil#backquote}, which leaves an empty name bare. An embedded backquote is left as it is, so
+     * the digest text keeps its historical form.
+     */
+    private static String quote(String name) {
+        return "`" + name + "`";
+    }
+
+    /** Formats resolved table coordinates; execution handoffs may require the explicit internal catalog component. */
+    public static String formatTableName(TableName name, boolean includeInternalCatalog) {
+        List<String> parts = new ArrayList<>();
+        if (name.getCatalog() != null && (includeInternalCatalog || !CatalogMgr.isInternalCatalog(name.getCatalog()))) {
+            parts.add(name.getCatalog());
+        }
+        if (name.getDb() != null) {
+            parts.add(name.getDb());
+        }
+        parts.add(name.getTbl());
+        return formatIdentifierPath(parts);
+    }
+
+>>>>>>> 3ac03b5f8d4... [BugFix][RB-1092] Write the NULL ordering of ORDER BY items into generated SQL (#70781)
     // --------------------------------------- Statement -------------------------------------------------
     private String buildColumnName(TableName tableName, String fieldName, String columnName) {
         String res = "";

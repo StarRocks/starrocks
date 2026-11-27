@@ -16,6 +16,11 @@
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.qe.SqlModeHelper;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.ast.OrderByElement;
+import com.starrocks.sql.ast.QueryStatement;
+>>>>>>> 3ac03b5f8d4... [BugFix][RB-1092] Write the NULL ordering of ORDER BY items into generated SQL (#70781)
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.formatter.AST2SQLVisitor;
 import com.starrocks.sql.formatter.FormatOptions;
@@ -23,6 +28,9 @@ import com.starrocks.sql.parser.SqlParser;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+
+import java.util.List;
+import java.util.stream.Collectors;
 
 public class AstToSQLBuilderTest {
     @BeforeAll
@@ -38,6 +46,36 @@ public class AstToSQLBuilderTest {
                         .setEnableDigest(false)
                         .setEnablePrettyFormat(true))
                 .visit(stmt);
+    }
+
+    private static List<Boolean> nullsFirstOf(String sql, long sqlMode) {
+        QueryStatement stmt = (QueryStatement) SqlParser.parseSingleStatement(sql, sqlMode);
+        return stmt.getQueryRelation().getOrderBy().stream()
+                .map(OrderByElement::getNullsFirstParam).collect(Collectors.toList());
+    }
+
+    @Test
+    public void testOrderByNullOrderingSurvivesSqlMode() {
+        // A view definition is generated from the AST and parsed again under the sql_mode it was created with. The
+        // NULL ordering a bare ASC / DESC means depends on SORT_NULLS_LAST, so the generated SQL must spell it out
+        // (RB-1092).
+        String sql = "select v1 from t0 order by v1 nulls first, v2 desc nulls last, v3, v1 desc";
+        for (long createMode : new long[] {SqlModeHelper.MODE_DEFAULT, SqlModeHelper.MODE_SORT_NULLS_LAST}) {
+            List<Boolean> expected = nullsFirstOf(sql, createMode);
+            String generated = AstToSQLBuilder.toSQL(SqlParser.parseSingleStatement(sql, createMode));
+            for (long parseMode : new long[] {SqlModeHelper.MODE_DEFAULT, SqlModeHelper.MODE_SORT_NULLS_LAST}) {
+                Assertions.assertEquals(expected, nullsFirstOf(generated, parseMode), generated);
+            }
+        }
+        String generated = AstToSQLBuilder.toSQL(SqlParser.parseSingleStatement(sql, SqlModeHelper.MODE_SORT_NULLS_LAST));
+        // under SORT_NULLS_LAST a bare ASC means NULLS LAST and a bare DESC means NULLS FIRST
+        Assertions.assertTrue(generated.contains("`v1` ASC NULLS FIRST, `v2` DESC NULLS LAST, `v3` ASC NULLS LAST, " +
+                "`v1` DESC NULLS FIRST"), generated);
+
+        // the digest text keeps its historical form, which leaves the default ordering out
+        String digest = AstToSQLBuilder.toDigest(SqlParser.parseSingleStatement("select v1 from t0 order by v1",
+                SqlModeHelper.MODE_DEFAULT));
+        Assertions.assertFalse(digest.contains("NULLS"), digest);
     }
 
     @Test
