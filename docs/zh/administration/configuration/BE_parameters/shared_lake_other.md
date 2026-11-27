@@ -374,7 +374,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 类型：Int
 - 单位：-
 - 是否动态：是
-- 描述：远端 IO 调度器启用时，如果 lake 查询扫描逐个读取一个 Tablet 的 Segment（即该 Tablet 没有切分给多个扫描任务），那么当前 Segment 的块全部发出读取后，扫描会一边读当前 Segment，一边提前读取后面几个 Segment 开头的块。提前预读的 Segment 最多为该值。只有当这些 Segment 已发出读取但还没读的块合计少于 `remote_prefetch_window_blocks` 个缓存块时，才会开始预读下一个 Segment，因此最后开始的那个 Segment 可能让合计达到窗口的两倍左右。设为 `0` 表示关闭，每个 Segment 轮到时才开始预读。切分扫描、导入和 Compaction 不受影响。查询 profile 中的 SegmentReadAheadStarted 记录提前开始预读的 Segment 数。
+- 描述：远端 IO 调度器启用时，如果 lake 查询扫描逐个读取一个 Tablet 的 Segment（即该 Tablet 没有切分给多个扫描任务），那么当前 Segment 的块全部发出读取后，扫描会一边读当前 Segment，一边提前读取后面几个 Segment 开头的块。提前预读的 Segment 最多为该值。只有当这些 Segment 已发出读取但还没读的块合计少于 `remote_prefetch_window_blocks` 个缓存块时，才会开始预读下一个 Segment，因此最后开始的那个 Segment 可能让合计达到窗口的两倍左右。设为 `0` 表示关闭，每个 Segment 轮到时才开始预读。如果最后开始预读的 Segment 所请求的页都已在缓存中，后面的 Segment 就不再提前预读，直到之后读到的某个 Segment 又需要从远端读取。切分扫描、导入和 Compaction 不受影响。查询 profile 中的 SegmentReadAheadStarted 记录提前开始预读的 Segment 数。
 - 引入版本：-
 
 ### lake_segment_metadata_cache_limit_percent
@@ -525,7 +525,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 类型：Int
 - 单位：-
 - 是否动态：是
-- 描述：查询的 Segment Reader 最多提前请求多少个 Data Cache 缓存块，包括排队中、读取中以及已读取但尚未消费的缓存块。该参数限制 Reader 超前的距离，缓存块何时读取由调度器决定。导入等其他后台读取不预读，compaction 的预读由 `lake_compaction_prefetch_window_blocks` 控制。设为 `0` 关闭预读。修改后对之后打开的 Segment Reader 生效。仅当 `remote_io_scheduler_enable` 为 `true` 时生效。
+- 描述：查询的 Segment Reader 最多提前请求多少个 Data Cache 缓存块，包括排队中、读取中以及已读取但尚未消费的缓存块。该参数限制 Reader 超前的距离，缓存块何时读取由调度器决定。导入等其他后台读取不预读，compaction 的预读由 `lake_compaction_prefetch_window_blocks` 控制。如果查询的 Segment Reader 读取的第一个页不需要从远端读取（该页已在缓存中，或远程 I/O 调度器因队列已满拒绝预读该页），就认为整个 Segment 都已缓存，不再预读，查询 profile 中的 RemotePrefetchIdleWindows 记录这类 Reader 的数量。设为 `0` 关闭预读。修改后对之后打开的 Segment Reader 生效。仅当 `remote_io_scheduler_enable` 为 `true` 时生效。
 - 引入版本：-
 
 ### remote_read_adaptive_limit

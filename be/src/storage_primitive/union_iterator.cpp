@@ -62,6 +62,9 @@ public:
         return _cur_idx >= _children.size() ||
                (_cur_idx + 1 == _children.size() && _children[_cur_idx]->read_ahead_done());
     }
+    bool read_ahead_cached() const override {
+        return _cur_idx < _children.size() && _children[_cur_idx]->read_ahead_cached();
+    }
 
     Status init_encoded_schema(ColumnIdToGlobalDictMap& dict_maps) override {
         RETURN_IF_ERROR(ChunkIterator::init_encoded_schema(dict_maps));
@@ -115,6 +118,11 @@ inline void UnionIterator::_read_ahead() {
         }
         held += _children[i]->read_ahead_blocks();
     }
+    // The child started last found everything it asked for cached: the next ones start when their turn comes, unless
+    // a child read later needs a fetch again.
+    if (_children[_read_ahead_end - 1]->read_ahead_cached()) {
+        return;
+    }
     while (_read_ahead_end < _children.size() && _read_ahead_end <= _cur_idx + _read_ahead_children &&
            held < _read_ahead_budget) {
         if (_may_read_ahead != nullptr && !_may_read_ahead()) {
@@ -130,7 +138,7 @@ inline void UnionIterator::_read_ahead() {
             return;
         }
         held += child->read_ahead_blocks();
-        if (!child->read_ahead_done()) {
+        if (!child->read_ahead_done() || child->read_ahead_cached()) {
             return;
         }
     }

@@ -28,8 +28,9 @@ ChunkIteratorPtr new_union_iterator(std::vector<ChunkIteratorPtr> children);
 // As above, and while a child is being read, the next ones start fetching the first data they will read (see
 // ChunkIterator::start_read_ahead) once the child has asked for everything it will read: up to
 // |read_ahead_children| children ahead, while all of them together hold fewer than |read_ahead_blocks| blocks
-// not read yet. 0 children reads ahead no further than the current child. While |may_read_ahead| (when given) returns
-// false, no child starts early; the union asks again after the next chunk.
+// not read yet, and not past a child that found everything it asked for cached (ChunkIterator::read_ahead_cached).
+// 0 children reads ahead no further than the current child. While |may_read_ahead| (when given) returns false, no
+// child starts early; the union asks again after the next chunk.
 ChunkIteratorPtr new_union_iterator(std::vector<ChunkIteratorPtr> children, size_t read_ahead_children,
                                     size_t read_ahead_blocks, std::function<bool()> may_read_ahead = nullptr);
 

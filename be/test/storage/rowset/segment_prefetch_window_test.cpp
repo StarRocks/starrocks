@@ -18,12 +18,16 @@
 
 #include <atomic>
 #include <memory>
+#include <numeric>
 #include <string>
 #include <thread>
 #include <vector>
 
 #include "base/testutil/assert.h"
 #include "base/utility/defer_op.h"
+#include "cache/datacache.h"
+#include "cache/mem_cache/lrucache_engine.h"
+#include "cache/mem_cache/page_cache.h"
 #include "column/chunk_factory.h"
 #include "common/config_lake_fwd.h"
 #include "fs/fs_memory.h"
@@ -64,19 +68,25 @@ public:
         if (!supported) {
             return Status::NotSupported("warm_cache_async");
         }
-        auto handle = std::make_shared<Handle>();
+        auto handle = std::make_shared<Handle>(submitted);
         warms.push_back(Warm{offset, length, urgent, handle});
         return handle;
     }
 
     bool supported = true;
+    // Blocks each warm-up reports it queued for a fetch: 0 when they are all cached.
+    size_t submitted = 0;
     std::vector<Warm> warms;
 
 private:
     class Handle final : public io::CacheWarmHandle {
     public:
-        size_t submitted_blocks() const override { return 0; }
-        size_t pending_blocks() const override { return 0; }
+        explicit Handle(size_t submitted) : _submitted(submitted) {}
+        size_t submitted_blocks() const override { return _submitted; }
+        size_t pending_blocks() const override { return _submitted; }
+
+    private:
+        const size_t _submitted;
     };
 };
 
@@ -155,12 +165,43 @@ protected:
         ASSERT_EQ(_reader->num_data_pages(), _pages.size());
     }
 
+    void TearDown() override {
+        if (_page_cache != nullptr) {
+            DataCache::GetInstance()->set_page_cache(_previous_page_cache);
+        }
+    }
+
     std::unique_ptr<SegmentPrefetchWindow> make_window(const SparseRange<>* range, rowid_t start_row,
                                                        size_t ahead_blocks, double late_ratio = 2.0,
-                                                       int64_t object_offset = 0, size_t block_size = kBlockSize) {
+                                                       int64_t object_offset = 0, size_t block_size = kBlockSize,
+                                                       bool use_page_cache = false, bool idle_when_cached = false) {
         return std::make_unique<SegmentPrefetchWindow>(
-                std::vector<SegmentPrefetchWindow::Column>{{_reader, &_stream, object_offset}}, range, start_row,
-                ahead_blocks, late_ratio, block_size, &_stats, ReadAheadBudget::instance());
+                std::vector<SegmentPrefetchWindow::Column>{{_reader, &_stream, object_offset, use_page_cache}}, range,
+                start_row, ahead_blocks, late_ratio, block_size, &_stats, ReadAheadBudget::instance(),
+                idle_when_cached);
+    }
+
+    // Puts the given pages of the column in a page cache of the test's own (standard UT initialization leaves the
+    // global one unavailable), under the keys the reads, and the window, look them up with.
+    void cache_pages(const std::vector<size_t>& pages) {
+        _previous_page_cache = DataCache::GetInstance()->page_cache_ptr();
+        _cache_engine = std::make_shared<LRUCacheEngine>();
+        ASSERT_OK(_cache_engine->init(MemCacheOptions{.mem_space_size = 64 * 1024 * 1024}));
+        _page_cache = std::make_shared<StoragePageCache>(_cache_engine.get());
+        DataCache::GetInstance()->set_page_cache(_page_cache);
+        for (size_t i : pages) {
+            auto data = std::make_unique<std::vector<uint8_t>>(16);
+            PageCacheHandle handle;
+            ASSERT_OK(_page_cache->insert(_stream.page_cache_key(static_cast<int64_t>(_pages[i].pointer.offset)),
+                                          data.get(), MemCacheWriteOptions{}, &handle));
+            data.release();
+        }
+    }
+
+    std::vector<size_t> all_pages() const {
+        std::vector<size_t> pages(_pages.size());
+        std::iota(pages.begin(), pages.end(), 0);
+        return pages;
     }
 
     std::shared_ptr<MemoryFileSystem> _fs;
@@ -173,6 +214,9 @@ protected:
     std::vector<Page> _pages;
     RecordingStream _stream;
     OlapReaderStatistics _stats;
+    std::shared_ptr<LRUCacheEngine> _cache_engine;
+    std::shared_ptr<StoragePageCache> _page_cache;
+    std::shared_ptr<StoragePageCache> _previous_page_cache;
 };
 
 // The window asks for the pages in row order and stops once the reader has enough blocks ahead of it.
@@ -638,6 +682,183 @@ TEST_F(SegmentPrefetchWindowTest, sparse_late_rows_stay_on_demand) {
     EXPECT_FALSE(repeated->reads_ahead_late_columns());
     EXPECT_FALSE(never->reads_ahead_late_columns());
     EXPECT_EQ(0, _stats.remote_prefetch_late_read_ahead);
+}
+
+// A page the reads take from the memory page cache is not warmed. It still takes its blocks in the window, so the
+// window looks no further ahead than when it warms them.
+TEST_F(SegmentPrefetchWindowTest, pages_in_the_page_cache_are_not_warmed) {
+    ASSERT_NO_FATAL_FAILURE(cache_pages(all_pages()));
+    SparseRange<> range(0, kRows);
+    auto window = make_window(&range, 0, 4, 2.0, 0, kBlockSize, true);
+    window->advance(0);
+    EXPECT_TRUE(_stream.warms.empty());
+    EXPECT_EQ(0, _stats.remote_prefetch_ranges);
+    EXPECT_GT(_stats.remote_prefetch_cached_pages, 0);
+    EXPECT_GE(window->ahead_blocks(), 4u);
+    EXPECT_FALSE(window->exhausted());
+    EXPECT_LT(_stats.remote_prefetch_cached_pages, static_cast<int64_t>(_pages.size()));
+}
+
+// Only the pages in the page cache are left out; the others are warmed as before.
+TEST_F(SegmentPrefetchWindowTest, pages_out_of_the_page_cache_are_still_warmed) {
+    SparseRange<> range(0, kRows);
+    size_t uncached_warms = 0;
+    {
+        // The window holds the whole column; pages 0 and 2 are larger than a block, so each is asked for on its own.
+        ASSERT_GT(_pages[0].pointer.size, kBlockSize);
+        ASSERT_GT(_pages[2].pointer.size, kBlockSize);
+        auto window = make_window(&range, 0, 1024);
+        window->advance(0);
+        uncached_warms = _stream.warms.size();
+    }
+    _stream.warms.clear();
+    ASSERT_NO_FATAL_FAILURE(cache_pages({0, 2}));
+    auto window = make_window(&range, 0, 1024, 2.0, 0, kBlockSize, true);
+    window->advance(0);
+    EXPECT_EQ(2, _stats.remote_prefetch_cached_pages);
+    EXPECT_EQ(uncached_warms - 2, _stream.warms.size());
+}
+
+// A column whose reads do not use the page cache warms its pages even when they are cached.
+TEST_F(SegmentPrefetchWindowTest, page_cache_is_ignored_when_the_reads_do_not_use_it) {
+    ASSERT_NO_FATAL_FAILURE(cache_pages(all_pages()));
+    SparseRange<> range(0, kRows);
+    auto window = make_window(&range, 0, 4);
+    window->advance(0);
+    EXPECT_FALSE(_stream.warms.empty());
+    EXPECT_EQ(0, _stats.remote_prefetch_cached_pages);
+}
+
+// The late-materialized rows of a chunk leave out the pages in the page cache too.
+TEST_F(SegmentPrefetchWindowTest, warm_rows_skips_pages_in_the_page_cache) {
+    ASSERT_NO_FATAL_FAILURE(cache_pages({1}));
+    SparseRange<> range(0, kRows);
+    auto window = make_window(&range, 0, 0, 2.0, 0, kBlockSize, true);
+    std::vector<rowid_t> rows{_pages[0].first, _pages[1].first, _pages[2].first};
+    window->warm_rows({{_reader, &_stream, 0, true}}, rows.data(), rows.size());
+    ASSERT_EQ(2u, _stream.warms.size());
+    EXPECT_EQ(static_cast<int64_t>(_pages[0].pointer.offset), _stream.warms[0].offset);
+    EXPECT_EQ(_pages[0].pointer.size, _stream.warms[0].length);
+    EXPECT_EQ(static_cast<int64_t>(_pages[2].pointer.offset), _stream.warms[1].offset);
+    EXPECT_EQ(1, _stats.remote_prefetch_cached_pages);
+}
+
+// A window built to idle when cached asks for its first page; when that page needs no fetch, it asks for nothing more,
+// neither ahead nor for the late-materialized rows, holds nothing, and leaves the node's budget.
+TEST_F(SegmentPrefetchWindowTest, window_idles_when_its_first_page_is_cached) {
+    auto* budget = ReadAheadBudget::instance();
+    const int64_t members = budget->members();
+    const int64_t held = budget->held_blocks();
+    SparseRange<> range(0, kRows);
+    auto window = make_window(&range, 0, 1024, 2.0, 0, kBlockSize, false, true);
+    EXPECT_EQ(members + 1, budget->members());
+    window->advance(0);
+    EXPECT_EQ(members, budget->members());
+    EXPECT_EQ(held, budget->held_blocks());
+    ASSERT_EQ(1u, _stream.warms.size());
+    EXPECT_FALSE(_stream.warms[0].urgent);
+    EXPECT_EQ(static_cast<int64_t>(_pages[0].pointer.offset), _stream.warms[0].offset);
+    EXPECT_TRUE(_stream.warms[0].handle.expired());
+    EXPECT_TRUE(window->idle());
+    EXPECT_TRUE(window->exhausted());
+    EXPECT_EQ(0u, window->ahead_blocks());
+    EXPECT_EQ(1, _stats.remote_prefetch_idle_windows);
+
+    window->advance(_pages[3].first);
+    std::vector<rowid_t> rows{_pages[4].first};
+    window->warm_rows({{_reader, &_stream}}, rows.data(), rows.size());
+    EXPECT_EQ(1u, _stream.warms.size());
+}
+
+// When the first page needs a fetch, the window reads ahead as one that does not idle.
+TEST_F(SegmentPrefetchWindowTest, window_reads_ahead_when_its_first_page_needs_a_fetch) {
+    _stream.submitted = 1;
+    SparseRange<> range(0, kRows);
+    size_t warms = 0;
+    {
+        auto window = make_window(&range, 0, 8);
+        window->advance(0);
+        warms = _stream.warms.size();
+    }
+    _stream.warms.clear();
+    auto window = make_window(&range, 0, 8, 2.0, 0, kBlockSize, false, true);
+    window->advance(0);
+    ASSERT_EQ(warms, _stream.warms.size());
+    ASSERT_GT(warms, 1u);
+    for (const auto& w : _stream.warms) {
+        EXPECT_FALSE(w.urgent);
+    }
+    EXPECT_FALSE(window->idle());
+    EXPECT_EQ(8u, window->ahead_blocks());
+    EXPECT_EQ(0, _stats.remote_prefetch_idle_windows);
+
+    // Later pages that turn out cached do not make it idle.
+    _stream.submitted = 0;
+    window->advance(_pages[_pages.size() / 2].first);
+    EXPECT_GT(_stream.warms.size(), warms);
+    EXPECT_FALSE(window->idle());
+}
+
+// A first page the reads take from the memory page cache makes the window idle without asking for anything.
+TEST_F(SegmentPrefetchWindowTest, window_idles_when_its_first_page_is_in_the_page_cache) {
+    ASSERT_NO_FATAL_FAILURE(cache_pages({0}));
+    SparseRange<> range(0, kRows);
+    auto window = make_window(&range, 0, 1024, 2.0, 0, kBlockSize, true, true);
+    window->advance(0);
+    EXPECT_TRUE(_stream.warms.empty());
+    EXPECT_TRUE(window->idle());
+    EXPECT_EQ(1, _stats.remote_prefetch_cached_pages);
+}
+
+// A window with no column to read ahead probes with the first late-materialized pages it asks for: when they need no
+// fetch, it goes idle and asks for nothing more.
+TEST_F(SegmentPrefetchWindowTest, late_only_window_idles_when_its_first_late_pages_are_cached) {
+    SparseRange<> range(0, kRows);
+    SegmentPrefetchWindow window({}, &range, 0, 1024, 2.0, kBlockSize, &_stats, ReadAheadBudget::instance(), true);
+    EXPECT_TRUE(window.exhausted());
+    std::vector<rowid_t> rows{_pages[0].first, _pages[1].first};
+    window.warm_rows({{_reader, &_stream}}, rows.data(), rows.size());
+    ASSERT_FALSE(_stream.warms.empty());
+    EXPECT_TRUE(window.idle());
+    EXPECT_EQ(1, _stats.remote_prefetch_idle_windows);
+
+    const size_t warms = _stream.warms.size();
+    std::vector<rowid_t> next{_pages[4].first};
+    window.warm_rows({{_reader, &_stream}}, next.data(), next.size());
+    EXPECT_EQ(warms, _stream.warms.size());
+}
+
+// When those pages need a fetch, the window goes on warming the late-materialized rows of each chunk.
+TEST_F(SegmentPrefetchWindowTest, late_only_window_reads_on_when_its_first_late_pages_need_a_fetch) {
+    _stream.submitted = 1;
+    SparseRange<> range(0, kRows);
+    SegmentPrefetchWindow window({}, &range, 0, 1024, 2.0, kBlockSize, &_stats, ReadAheadBudget::instance(), true);
+    std::vector<rowid_t> rows{_pages[0].first, _pages[1].first};
+    window.warm_rows({{_reader, &_stream}}, rows.data(), rows.size());
+    EXPECT_FALSE(window.idle());
+
+    // Later batches that turn out cached do not make it idle.
+    _stream.submitted = 0;
+    const size_t warms = _stream.warms.size();
+    std::vector<rowid_t> next{_pages[4].first};
+    window.warm_rows({{_reader, &_stream}}, next.data(), next.size());
+    EXPECT_GT(_stream.warms.size(), warms);
+    EXPECT_FALSE(window.idle());
+    EXPECT_EQ(0, _stats.remote_prefetch_idle_windows);
+}
+
+// A window not built to idle when cached (compaction) reads ahead even when its first page needs no fetch.
+TEST_F(SegmentPrefetchWindowTest, window_without_idle_when_cached_reads_ahead_cached_pages) {
+    SparseRange<> range(0, kRows);
+    // The window holds the whole column: the pages after the first are asked for as well.
+    auto window = make_window(&range, 0, 1024);
+    window->advance(0);
+    EXPECT_GT(_stream.warms.size(), 1u);
+    for (const auto& w : _stream.warms) {
+        EXPECT_FALSE(w.urgent);
+    }
+    EXPECT_FALSE(window->idle());
+    EXPECT_EQ(0, _stats.remote_prefetch_idle_windows);
 }
 
 } // namespace

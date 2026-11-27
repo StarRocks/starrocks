@@ -377,7 +377,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - タイプ: Int
 - 単位: -
 - 変更可能: はい
-- 説明: リモート IO スケジューラーが有効な場合、Tablet の Segment を順番に読む lake クエリスキャン（Tablet が複数のスキャンタスクに分割されていない場合）は、現在の Segment が自身のブロックをすべて要求し終えると、現在の Segment を読みながら後続の Segment の先頭ブロックの取得を開始します。先読みする Segment はこの値までです。それらが要求済みで未読のブロックの合計が `remote_prefetch_window_blocks` 個のキャッシュブロック未満のときにのみ次の Segment の先読みを開始するため、最後に開始した Segment によって合計がウィンドウの約 2 倍に達することがあります。`0` を指定すると無効になり、各 Segment は自分の順番が来たときに先読みを開始します。分割スキャン、取り込み、Compaction には影響しません。クエリプロファイルの SegmentReadAheadStarted に記録されます。
+- 説明: リモート IO スケジューラーが有効な場合、Tablet の Segment を順番に読む lake クエリスキャン（Tablet が複数のスキャンタスクに分割されていない場合）は、現在の Segment が自身のブロックをすべて要求し終えると、現在の Segment を読みながら後続の Segment の先頭ブロックの取得を開始します。先読みする Segment はこの値までです。それらが要求済みで未読のブロックの合計が `remote_prefetch_window_blocks` 個のキャッシュブロック未満のときにのみ次の Segment の先読みを開始するため、最後に開始した Segment によって合計がウィンドウの約 2 倍に達することがあります。`0` を指定すると無効になり、各 Segment は自分の順番が来たときに先読みを開始します。最後に開始した Segment が要求したページがすべてキャッシュ済みの場合、後で読む Segment が再びリモートからの取得を必要とするまで、後続の Segment の先読みは開始しません。分割スキャン、取り込み、Compaction には影響しません。クエリプロファイルの SegmentReadAheadStarted に記録されます。
 - 導入バージョン: -
 
 ### lake_segment_metadata_cache_limit_percent
@@ -519,7 +519,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - タイプ: Int
 - 単位: -
 - 変更可能: はい
-- 説明: クエリの Segment Reader が、消費中の位置より先に要求する Data Cache ブロックの最大数。キュー中、取得中、取得済みで未読のブロックを含みます。Reader がどこまで先行するかを制限するもので、ブロックをいつ取得するかはスケジューラが決めます。ロードなどのその他のバックグラウンド読み取りは先読みしません。Compaction の先読みは `lake_compaction_prefetch_window_blocks` で制御します。`0` で先読みを無効にします。変更は以降に開かれる Segment Reader に反映されます。`remote_io_scheduler_enable` が `true` の場合にのみ有効です。
+- 説明: クエリの Segment Reader が、消費中の位置より先に要求する Data Cache ブロックの最大数。キュー中、取得中、取得済みで未読のブロックを含みます。Reader がどこまで先行するかを制限するもので、ブロックをいつ取得するかはスケジューラが決めます。ロードなどのその他のバックグラウンド読み取りは先読みしません。Compaction の先読みは `lake_compaction_prefetch_window_blocks` で制御します。最初のページの取得が不要なクエリの Segment Reader（そのページがすでにキャッシュにある場合、またはキューが満杯のためリモート I/O スケジューラがそのページの先読みを拒否した場合）は、Segment 全体がキャッシュ済みとみなして先読みしません。このような Reader の数はクエリプロファイルの RemotePrefetchIdleWindows に記録されます。`0` で先読みを無効にします。変更は以降に開かれる Segment Reader に反映されます。`remote_io_scheduler_enable` が `true` の場合にのみ有効です。
 - 導入バージョン: -
 
 ### remote_read_adaptive_limit

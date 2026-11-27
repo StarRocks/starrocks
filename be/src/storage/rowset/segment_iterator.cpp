@@ -27,6 +27,7 @@
 #include "base/failpoint/fail_point.h"
 #include "base/format.h"
 #include "base/simd/simd.h"
+#include "base/testutil/sync_point.h"
 #include "base/time/time.h"
 #include "base/utility/defer_op.h"
 #include "cache/scan/shared_buffered_input_stream.h"
@@ -158,6 +159,7 @@ public:
         return _prefetch_window != nullptr ? _prefetch_window->ahead_blocks() : 0;
     }
     bool read_ahead_done() const override { return _prefetch_window == nullptr || _prefetch_window->exhausted(); }
+    bool read_ahead_cached() const override { return _prefetch_window != nullptr && _prefetch_window->idle(); }
 
     // Public entry point used by the segment_seek_range_to_rowid_range() /
     // segment_seek_ranges_to_rowid_ranges() free functions. The caller
@@ -469,6 +471,8 @@ private:
     FieldPtr _make_field(size_t i);
 
     Status _switch_context(ScanContext* to);
+    // The chunks `ctx` reads into, built for `_reserve_chunk_size` rows.
+    Status _alloc_context_chunks(ScanContext* ctx);
 
     // `_check_low_cardinality_optimization` and `_init_column_iterators` must have been called
     // before you calling this method, otherwise the result is incorrect.
@@ -660,6 +664,9 @@ private:
     // Set when start_read_ahead() failed to initialize the reader, which may have left it partly initialized: _init()
     // returns it instead of initializing again.
     Status _read_ahead_init_status;
+    // Set while start_read_ahead() initializes the reader: the context gets its chunks at the first read instead
+    // (see _switch_context()).
+    bool _defer_context_chunks = false;
     // Until the first get_next after the iterator was opened or reused returns.
     bool _first_chunk_pending = true;
     bool _one_time_setup_done = false;
@@ -1197,7 +1204,13 @@ Status SegmentIterator::_init_scan_range_and_context() {
 
 Status SegmentIterator::start_read_ahead(bool* started) {
     if (!_inited) {
+        _defer_context_chunks = true;
         Status st = _init();
+        _defer_context_chunks = false;
+#ifdef BE_TEST
+        bool holds_chunks = st.ok() && _context != nullptr && _context->_read_chunk != nullptr;
+        TEST_SYNC_POINT_CALLBACK("SegmentIterator::start_read_ahead::initialized", &holds_chunks);
+#endif
         if (!st.ok()) {
             // The read returns this status when the reader's turn comes. An end of file (e.g. every row deleted) only
             // means there is nothing to read, so the readers after it may still start.
@@ -1266,6 +1279,12 @@ bool SegmentIterator::_should_prefetch_bitmap_index_pages() const {
 }
 
 void SegmentIterator::_init_prefetch_window(rowid_t start_row) {
+    if (_prefetch_window != nullptr && _prefetch_window->idle()) {
+        // The segment is cached (see SegmentPrefetchWindow::idle()): on a context switch or a narrowed scan range, keep
+        // the idle window rather than build one that would ask for its first page again.
+        _prefetch_late_columns.clear();
+        return;
+    }
     _reset_prefetch_window();
 #ifdef USE_STAROS
     const int32_t blocks = _read_ahead_blocks();
@@ -1291,6 +1310,8 @@ void SegmentIterator::_init_prefetch_window(rowid_t start_row) {
         out->file = file->second.get();
         // A delta column group overlay reads a file of its own, so each column takes its own stream's offset.
         out->object_offset = out->file->bundle_offset();
+        // As the column's data page reads do (ColumnReader::read_page()).
+        out->use_page_cache = _opts.use_page_cache;
         return true;
     };
     const size_t num_fields = _schema.num_fields();
@@ -1319,12 +1340,13 @@ void SegmentIterator::_init_prefetch_window(rowid_t start_row) {
     if (columns.empty() && _prefetch_late_columns.empty()) {
         return;
     }
+    const bool query = _opts.lake_io_opts.remote_read.workload == RemoteReadContext::Workload::QUERY;
     _prefetch_window = std::make_unique<SegmentPrefetchWindow>(
             std::move(columns), &_scan_range, start_row, blocks, config::remote_prefetch_late_read_ahead_ratio,
             config::starlet_star_cache_block_size_bytes, _opts.stats,
-            // Only query scans share the node read-ahead budget; compaction keeps its own window bound.
-            _opts.lake_io_opts.remote_read.workload == RemoteReadContext::Workload::QUERY ? ReadAheadBudget::instance()
-                                                                                          : nullptr);
+            // Only query scans share the node read-ahead budget and stop reading ahead on a cached segment; compaction
+            // keeps its own window bound.
+            query ? ReadAheadBudget::instance() : nullptr, query /* idle_when_cached */);
 #else
     (void)start_row;
 #endif // USE_STAROS
@@ -3253,6 +3275,11 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
     MonotonicStopWatch sw;
     sw.start();
 
+    if (_context->_read_chunk == nullptr) {
+        // Initialized by start_read_ahead(), which leaves the chunks to the first read.
+        RETURN_IF_ERROR(_alloc_context_chunks(_context));
+    }
+
 #ifdef USE_STAROS
     // only used for CACHE SELECT, do not form any chunk to save CPU time,
     // just read file content in `_scan_range`
@@ -3923,6 +3950,22 @@ Status SegmentIterator::_switch_context(ScanContext* to) {
         _context->close();
     }
 
+    // A reader started ahead of its turn (start_read_ahead()) builds its chunks when it first reads: the readers a
+    // scan starts ahead would otherwise all hold chunks at once, instead of each reusing the memory the reader before
+    // it released.
+    if (!_defer_context_chunks) {
+        RETURN_IF_ERROR(_alloc_context_chunks(to));
+    }
+
+    _context = to;
+    if (rebuild_prefetch_window) {
+        // Early and late columns differ between the contexts.
+        _init_prefetch_window(_cur_rowid);
+    }
+    return Status::OK();
+}
+
+Status SegmentIterator::_alloc_context_chunks(ScanContext* to) {
     if (to->_read_chunk == nullptr) {
         ASSIGN_OR_RETURN(to->_read_chunk, RuntimeChunkHelper::new_chunk_checked(to->_read_schema, _reserve_chunk_size));
     }
@@ -3983,12 +4026,6 @@ Status SegmentIterator::_switch_context(ScanContext* to) {
                          RuntimeChunkHelper::new_chunk_checked(this->output_schema(), _reserve_chunk_size));
     } else {
         to->_adapt_global_dict_chunk = to->_final_chunk;
-    }
-
-    _context = to;
-    if (rebuild_prefetch_window) {
-        // Early and late columns differ between the contexts.
-        _init_prefetch_window(_cur_rowid);
     }
     return Status::OK();
 }

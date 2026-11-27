@@ -37,6 +37,7 @@ public:
     }
     size_t read_ahead_blocks() const override { return _iter->read_ahead_blocks(); }
     bool read_ahead_done() const override { return _iter->read_ahead_done(); }
+    bool read_ahead_cached() const override { return _iter->read_ahead_cached(); }
 
     Status init_encoded_schema(ColumnIdToGlobalDictMap& dict_maps) override {
         RETURN_IF_ERROR(ChunkIterator::init_encoded_schema(dict_maps));
