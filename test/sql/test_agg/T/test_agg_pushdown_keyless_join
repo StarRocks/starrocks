@@ -1,0 +1,18 @@
+-- name: test_agg_pushdown_keyless_join
+-- An aggregate pushed below a join without a grouping key, or into a UNION branch with a constant key, becomes a
+-- scalar aggregate that emits one row on empty input; it must keep that row only for a non-empty input (RB-1395).
+create table t_fact (fact_id int not null, dim_id int null, amount decimal(18, 6) null, ts datetime null)
+duplicate key(fact_id) distributed by hash(fact_id) buckets 3 properties ("replication_num" = "1");
+insert into t_fact values (1,1,2.25,'2024-02-02 00:00:00'),(2,1,3.25,'2024-03-03 00:00:00'),(3,1,4.25,'2024-04-04 00:00:00'),(20,1,1.25,'2024-03-21 00:00:00'),(21,2,2.25,'2024-04-22 00:00:00'),(24,3,5.25,'2024-01-25 00:00:00'),(27,4,3.25,'2024-04-28 00:00:00'),(28,4,4.25,'2024-05-01 00:00:00'),(29,4,5.25,'2024-06-02 00:00:00'),(30,5,1.25,'2024-01-03 00:00:00'),(36,900,2.25,'2024-06-01 00:00:00'),(41,NULL,2.25,NULL);
+select max(t_fact.amount) from t_fact join t_fact tr2 on t_fact.dim_id = 4 where t_fact.fact_id < 0 group by 'a';
+select count(*) from (select max(t_fact.amount) from t_fact join t_fact tr2 on t_fact.dim_id = 4 where t_fact.fact_id < 0 group by tr2.dim_id) s;
+select count(*) from (select max(t_fact.amount) from t_fact cross join t_fact tr2 where t_fact.fact_id < 0 group by tr2.fact_id) s;
+select count(*) from (select min(t_fact.amount) from t_fact join t_fact tr2 on 1 = 1 where t_fact.fact_id < 0 group by tr2.fact_id) s;
+select count(*) from (select sum(t_fact.amount) from t_fact cross join t_fact tr2 where t_fact.fact_id < 0 group by tr2.fact_id) s;
+select count(*), sum(m) from (select max(t_fact.amount) m from t_fact cross join t_fact tr2 where t_fact.fact_id < 3 group by tr2.fact_id) s;
+select count(*), sum(m) from (select max(t_fact.amount) m from t_fact join t_fact tr2 on t_fact.fact_id = tr2.dim_id group by tr2.fact_id) s;
+select 1 + 1, count(*), max(t_fact.amount) from t_fact cross join t_fact tr2 where t_fact.fact_id < 0 group by 1 + 1;
+select 1 + 1, count(*), max(t_fact.amount) from t_fact cross join t_fact tr2 where t_fact.fact_id < 3 group by 1 + 1;
+select k, count(*), sum(a) from (select 'a' as k, t_fact.amount as a from t_fact cross join t_fact tr2 where t_fact.fact_id < 0 union all select 'b', t_fact.amount from t_fact cross join t_fact tr2 where t_fact.fact_id < 3) u group by k order by k;
+select k, count(*) from (select 1 as k from t_fact where fact_id < 0 union all select 1 from t_fact tr2 where fact_id < 0) u group by k;
+select k, count(*), sum(a) from (select 1 as k, amount as a from t_fact where fact_id < 0 union all select 2, amount from t_fact where fact_id < 3) u group by k order by k;
