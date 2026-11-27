@@ -20,6 +20,7 @@
 
 #include "fs/fs_util.h"
 #include "fs/key_cache.h"
+#include "gutil/strings/join.h"
 #include "serde/column_array_serde.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/filenames.h"
@@ -675,7 +676,7 @@ void LakePersistentIndex::pick_sstables_for_merge(const PersistentIndexSstableMe
                                                   std::vector<PersistentIndexSstablePB>* sstables,
                                                   bool* merge_base_level) {
     // There are two levels in persistent index:
-    //  1) base level. It contains only one sst file.
+    //  1) base level. The sst files of the first fileset.
     //  2) cumulative level. Sst files that except base level.
     // And there are two kinds of merge:
     //  1) base merge. Merge all sst files.
@@ -684,13 +685,35 @@ void LakePersistentIndex::pick_sstables_for_merge(const PersistentIndexSstableMe
     // And we use this strategy to decide whether to use base merge or cumulative merge:
     // 1. When total size of cumulative level sst files reach 1/10 of base level, use base merge.
     // 2. Otherwise, use cumulative merge.
+    //
+    // `apply_opcompaction` removes whole filesets, so we pick whole filesets only. We also leave out
+    // the newest fileset: a flush or an ingested sstable can join it before this compaction
+    // publishes, and the publish would then remove that sstable too.
     DCHECK(sstable_meta.sstables_size() > 0);
+    auto same_fileset = [](const PersistentIndexSstablePB& a, const PersistentIndexSstablePB& b) {
+        return a.has_fileset_id() && b.has_fileset_id() && UniqueId(a.fileset_id()) == UniqueId(b.fileset_id());
+    };
+    int end = sstable_meta.sstables_size();
+    const auto& newest = sstable_meta.sstables(end - 1);
+    while (end > 0 && same_fileset(sstable_meta.sstables(end - 1), newest)) {
+        end--;
+    }
+    if (end == 0) {
+        *merge_base_level = false;
+        return;
+    }
+    int base_end = 1;
+    while (base_end < end && same_fileset(sstable_meta.sstables(base_end), sstable_meta.sstables(0))) {
+        base_end++;
+    }
+    std::vector<PersistentIndexSstablePB> base_sstables;
     int64_t base_level_bytes = 0;
     int64_t cumulative_level_bytes = 0;
     std::vector<PersistentIndexSstablePB> cumulative_sstables;
-    for (int i = 0; i < sstable_meta.sstables_size(); i++) {
-        if (i == 0) {
-            base_level_bytes = sstable_meta.sstables(i).filesize();
+    for (int i = 0; i < end; i++) {
+        if (i < base_end) {
+            base_level_bytes += sstable_meta.sstables(i).filesize();
+            base_sstables.push_back(sstable_meta.sstables(i));
         } else {
             cumulative_level_bytes += sstable_meta.sstables(i).filesize();
             cumulative_sstables.push_back(sstable_meta.sstables(i));
@@ -704,17 +727,34 @@ void LakePersistentIndex::pick_sstables_for_merge(const PersistentIndexSstableMe
         *merge_base_level = false;
     } else {
         // base merge
-        sstables->push_back(sstable_meta.sstables(0));
+        sstables->swap(base_sstables);
         sstables->insert(sstables->end(), cumulative_sstables.begin(), cumulative_sstables.end());
         *merge_base_level = true;
     }
     // Limit max sstable count that can do merge, to avoid cost too much memory.
-    const int32_t max_limit = config::lake_pk_index_sst_max_compaction_versions;
+    // Cut at a fileset edge, keeping at least two filesets: a cut that leaves only the first one
+    // merges nothing, and the next round would pick the same. A fileset over the limit is then taken
+    // whole, as the parallel picker does.
+    const size_t max_limit = std::max(config::lake_pk_index_sst_max_compaction_versions, 1);
     if (sstables->size() > max_limit) {
-        sstables->resize(max_limit);
+        auto fileset_end = [&](size_t from) {
+            while (from < sstables->size() && same_fileset((*sstables)[from - 1], (*sstables)[from])) {
+                from++;
+            }
+            return from;
+        };
+        const size_t first_fileset_end = fileset_end(1);
+        size_t cut = max_limit;
+        while (cut > 0 && same_fileset((*sstables)[cut - 1], (*sstables)[cut])) {
+            cut--;
+        }
+        if (cut <= first_fileset_end) {
+            cut = first_fileset_end < sstables->size() ? fileset_end(first_fileset_end + 1) : first_fileset_end;
+        }
+        sstables->resize(cut);
     }
     if (!*merge_base_level && sstables->size() > 0 &&
-        sstable_meta.sstables(0).max_rss_rowid() == sstables->back().max_rss_rowid()) {
+        base_sstables.back().max_rss_rowid() == sstables->back().max_rss_rowid()) {
         // If base sstable's max_rss_rowid is same as cumulative sstable's max_rss_rowid,
         // we should force to do base merge.
         // That's because in `LakePersistentIndex::apply_opcompaction`, we will sort sstable
@@ -727,7 +767,7 @@ void LakePersistentIndex::pick_sstables_for_merge(const PersistentIndexSstableMe
         //       which is wrong, because base sst should be before cumulative sst.
         // so we force to do base merge here.
         *merge_base_level = true;
-        sstables->insert(sstables->begin(), sstable_meta.sstables(0));
+        sstables->insert(sstables->begin(), base_sstables.begin(), base_sstables.end());
     }
 }
 
@@ -1059,6 +1099,23 @@ Status LakePersistentIndex::apply_opcompaction(const TabletMetadataPtr& metadata
                                [&](const std::unique_ptr<PersistentIndexSstableFileset>& fileset) {
                                    return !fileset_contains_func(fileset);
                                });
+
+    // An sstable in these filesets that is not an input is lost by the erase below. Log it, so
+    // that a later stale index entry can be traced back to this compaction.
+    std::vector<std::string> dropped_non_inputs;
+    for (auto it = start_it; it != end_it; ++it) {
+        PersistentIndexSstableMetaPB fileset_sstables;
+        (*it)->get_all_sstable_pbs(&fileset_sstables);
+        for (const auto& sstable_pb : fileset_sstables.sstables()) {
+            if (!input_sstable_filenames.contains(sstable_pb.filename())) {
+                dropped_non_inputs.push_back(sstable_pb.filename());
+            }
+        }
+    }
+    if (!dropped_non_inputs.empty()) {
+        LOG(WARNING) << "PK index compaction removes sstables that are not its inputs, tablet_id=" << _tablet_id
+                     << ", sstables=" << JoinStrings(dropped_non_inputs, ",");
+    }
 
     // 3. Erase the range [start_it, end_it).
     // The erase method returns an iterator pointing to the position immediately following
