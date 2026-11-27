@@ -25,6 +25,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.RelationFields;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.Scope;
+import com.starrocks.sql.analyzer.UserVariableAssignments;
 import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.SelectRelation;
@@ -105,6 +106,15 @@ public class QueryTransformer {
         builder.getExpressionMapping().addGeneratedColumnExprOpToColumnRef(generatedColumnExprOpToColumnRef);
 
         builder = filter(builder, queryBlock.getPredicate());
+
+        List<Expr> outputExpressions = queryBlock.getOutputExpression();
+        UserVariableAssignments userVariableAssignments = queryBlock.getUserVariableAssignments();
+        if (userVariableAssignments != null && userVariableAssignments.isPerRow()) {
+            UserVariableAssignPlanner planner = new UserVariableAssignPlanner(this, session, queryBlock);
+            outputExpressions = planner.plan(builder);
+            builder = planner.getBuilder();
+        }
+
         builder = aggregate(builder, queryBlock.getGroupBy(), queryBlock.getAggregate(),
                 queryBlock.getGroupingSetsList(), queryBlock.getGroupingFunctionCallExprs());
         builder = filter(builder, queryBlock.getHaving());
@@ -122,7 +132,7 @@ public class QueryTransformer {
                 }
 
                 builder = projectForOrder(builder,
-                        Iterables.concat(queryBlock.getOutputExpression(),
+                        Iterables.concat(outputExpressions,
                                 queryBlock.getOrderSourceExpressions(),
                                 queryBlock.getOrderByAnalytic()),
                         queryBlock,
@@ -135,7 +145,7 @@ public class QueryTransformer {
                 // if there is a distinct, we still no need to project the orderSourceExpressions because it must
                 // in the outputExpression.
                 builder = projectForOrder(builder,
-                        Iterables.concat(queryBlock.getOutputExpression(), queryBlock.getOrderByAnalytic()),
+                        Iterables.concat(outputExpressions, queryBlock.getOrderByAnalytic()),
                         queryBlock,
                         queryBlock.getColumnOutputNames(),
                         builder.getFieldMappings(),
@@ -143,19 +153,19 @@ public class QueryTransformer {
             }
         }
 
-        builder = distinct(builder, queryBlock, queryBlock.isDistinct(), queryBlock.getOutputExpression());
+        builder = distinct(builder, queryBlock, queryBlock.isDistinct(), outputExpressions);
         // add project to express order by expression
-        builder = project(builder, Iterables.concat(queryBlock.getOrderByExpressions(), queryBlock.getOutputExpression()));
+        builder = project(builder, Iterables.concat(queryBlock.getOrderByExpressions(), outputExpressions));
         List<ColumnRefOperator> orderByColumns = Lists.newArrayList();
         builder = sort(builder, queryBlock.getOrderBy(), orderByColumns);
         builder = limit(builder, queryBlock.getLimit());
 
-        List<ColumnRefOperator> outputColumns = computeOutputs(builder, queryBlock.getOutputExpression(), columnRefFactory);
+        List<ColumnRefOperator> outputColumns = computeOutputs(builder, outputExpressions, columnRefFactory);
 
         // Add project operator to prune order by columns
         if (!orderByColumns.isEmpty() && !outputColumns.containsAll(orderByColumns)) {
             long limit = queryBlock.hasLimit() ? queryBlock.getLimit().getLimit() : -1;
-            builder = project(builder, queryBlock.getOutputExpression(), limit);
+            builder = project(builder, outputExpressions, limit);
         }
 
         return new LogicalPlan(builder, outputColumns, correlation);
@@ -351,7 +361,7 @@ public class QueryTransformer {
         return subOpt.withNewRoot(filterOperator);
     }
 
-    private OptExprBuilder window(OptExprBuilder subOpt, List<AnalyticExpr> window) {
+    OptExprBuilder window(OptExprBuilder subOpt, List<AnalyticExpr> window) {
         if (window.isEmpty()) {
             return subOpt;
         }

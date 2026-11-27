@@ -74,3 +74,59 @@ SET @v1=1, @v2=2;
   SET @var = (select sum(c1) from tbl);
   SELECT @var, v1 from test;
   ```
+
+## クエリ内でのユーザー定義変数への代入
+
+SET ステートメントに加えて、StarRocks は MySQL の代入演算子 `:=` をサポートしています。`SET @var_name := expr` は `SET @var_name = expr` と同じです。クエリの SELECT リストでは、`@var_name := expr` は `expr` の値を変数に代入し、その値を返します。
+
+### FROM 句のないクエリ
+
+代入は SET ステートメントと同じ効果を持ちます。代入はクエリの実行後に有効になるため、EXPLAIN と PREPARE では変数に代入されません。`expr` は、リテラルや `@v1 + 1` のように、StarRocks がステートメントの解析時に定数に畳み込める式でなければなりません。サブクエリや畳み込まれない関数の結果を代入するには、SET を使用します。
+
+```SQL
+SELECT @v1 := 1, @v2 := @v1 + 1;
+SELECT @v1, @v2;
+```
+
+### FROM 句のあるクエリ
+
+SELECT リストは行ごとに左から右へ 1 回評価され、変数の値は次の行に引き継がれます。MySQL のクエリ（Looker などの BI ツールが生成するものを含む）は、これを利用して行に番号を付けたり、グループ内で順位を付けたり、累計を計算したり、行を前の行と比較したりします。変数は通常、FROM 句のサブクエリで初期化します。
+
+例 1: テーブルの行に番号を付けます。
+
+```SQL
+SELECT @rn := @rn + 1 AS rn, t.*
+FROM t, (SELECT @rn := 0) init
+ORDER BY t.c1;
+```
+
+例 2: 各グループの行に番号を付けます。
+
+```SQL
+SELECT IF(@dept = dept, @n := @n + 1, @n := 1) AS n, @dept := dept AS dept, salary
+FROM employees, (SELECT @n := 0, @dept := '') init
+ORDER BY dept, salary DESC;
+```
+
+例 3: 累計を計算します。
+
+```SQL
+SELECT @total := @total + amount AS running_total, orders.*
+FROM orders, (SELECT @total := 0) init
+ORDER BY order_time;
+```
+
+例 4: 前の行の値を返します。
+
+```SQL
+SELECT @prev AS prev_amount, @prev := amount AS amount
+FROM (SELECT order_time, amount FROM orders ORDER BY order_time) o, (SELECT @prev := NULL) init;
+```
+
+StarRocks はこのようなクエリを 1 行ずつ実行するのではなく、代入から同じ結果を返すウィンドウ関数を導出します。そのため、次のルールがあります。
+
+- 行はクエリの ORDER BY 句の順序で評価されます。クエリに ORDER BY 句がない場合、またはその句がこれらの変数を読み取るか代入する SELECT 項目でソートする場合は、例 4 のように、FROM 句のサブクエリの ORDER BY 句の順序で評価されます。このサブクエリは、ソートに使用する列を返す必要があります。どちらにも当てはまらない場合、評価の順序は不定です。テーブルを結合するクエリでは、MySQL は行をソートする前に変数へ代入することがあります。両方で同じ結果を得るには、例 4 のようにサブクエリでソートします。
+- 変数の新しい値は、古い値に依存しないか、古い値に何かを加算または減算したものでなければなりません。どちらも、その変数自体を読み取らない条件（CASE、IF、IFNULL、COALESCE）に依存できます。たとえば、`@v := @v + c1`、`@v := IF(c1 > 0, c2, @v)`、`@v := IFNULL(c1, @v)` はサポートされていますが、`@v := @v * 2` はエラーを返します。
+- `:=` は SELECT リストでのみ使用できます。行ごとに変数へ代入するクエリは、同じ SELECT で DISTINCT、GROUP BY、HAVING、集計関数、ウィンドウ関数、OFFSET を使用できず、WHERE 句と ORDER BY 句でこれらの変数を参照することもできません。このような SELECT 項目でフィルタリングまたはソートするには、エイリアスを付けてクエリをサブクエリに入れるか、エイリアスでソートします。
+- クエリ内では、各変数のデータ型は 1 つで、初期値と代入される値から導出されます。整数値は BIGINT として、日付値は文字列として格納されます。
+- 代入は、それを含む SELECT リストの中でのみ有効です。外側のクエリ、UNION の他のブランチ、および後続のステートメントからは、変数は以前の値のままに見えます。

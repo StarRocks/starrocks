@@ -1,0 +1,60 @@
+-- name: test_like_escape
+CREATE TABLE `t_like` (
+  `id` int(11) NULL COMMENT "",
+  `c` varchar(50) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`id`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1"
+);
+
+insert into t_like values (1, 'Eastern'), (2, 'North Eastern'), (3, 'eastern'), (4, '50%'), (5, '50% off'), (6, '500'), (7, 'a_b'), (8, 'axb'), (9, 'a^b'), (10, 'a\\b'), (11, 'a\\%'), (12, ''), (13, null), (14, '东部地区'), (15, '东%部'), (16, 'a%b');
+
+-- the text filters of Looker: contains, starts with, ends with, does not contain
+select id from t_like where c like concat('%', replace(replace(replace('Eastern', '^', '^^'), '%', '^%'), '_', '^_'), '%') escape '^' order by id;
+select id from t_like where c like concat('%', replace(replace(replace('50%', '^', '^^'), '%', '^%'), '_', '^_'), '%') escape '^' order by id;
+select id from t_like where c like concat('%', replace(replace(replace('_', '^', '^^'), '%', '^%'), '_', '^_'), '%') escape '^' order by id;
+select id from t_like where c like concat('%', replace(replace(replace('^', '^', '^^'), '%', '^%'), '_', '^_'), '%') escape '^' order by id;
+select id from t_like where c like concat('%', replace(replace(replace('a\\b', '^', '^^'), '%', '^%'), '_', '^_'), '%') escape '^' order by id;
+select id from t_like where c like concat('%', replace(replace(replace('\\%', '^', '^^'), '%', '^%'), '_', '^_'), '%') escape '^' order by id;
+select id from t_like where c like concat('%', replace(replace(replace('部', '^', '^^'), '%', '^%'), '_', '^_'), '%') escape '^' order by id;
+select id from t_like where c like concat('%', replace(replace(replace('', '^', '^^'), '%', '^%'), '_', '^_'), '%') escape '^' order by id;
+select id from t_like where c like concat('%', replace(replace(replace(null, '^', '^^'), '%', '^%'), '_', '^_'), '%') escape '^' order by id;
+select id from t_like where c like concat(replace(replace(replace('50%', '^', '^^'), '%', '^%'), '_', '^_'), '%') escape '^' order by id;
+select id from t_like where c like concat(replace(replace(replace('a_', '^', '^^'), '%', '^%'), '_', '^_'), '%') escape '^' order by id;
+select id from t_like where c like concat(replace(replace(replace('a\\', '^', '^^'), '%', '^%'), '_', '^_'), '%') escape '^' order by id;
+select id from t_like where c like concat(replace(replace(replace('东%', '^', '^^'), '%', '^%'), '_', '^_'), '%') escape '^' order by id;
+select id from t_like where c like concat('%', replace(replace(replace('%', '^', '^^'), '%', '^%'), '_', '^_')) escape '^' order by id;
+select id from t_like where c like concat('%', replace(replace(replace('_b', '^', '^^'), '%', '^%'), '_', '^_')) escape '^' order by id;
+select id from t_like where c like concat('%', replace(replace(replace('地区', '^', '^^'), '%', '^%'), '_', '^_')) escape '^' order by id;
+select id from t_like where c not like concat('%', replace(replace(replace('%', '^', '^^'), '%', '^%'), '_', '^_'), '%') escape '^' order by id;
+select id from t_like where c not like concat('%', replace(replace(replace('_', '^', '^^'), '%', '^%'), '_', '^_'), '%') escape '^' order by id;
+select id from t_like where c not like concat('%', replace(replace(replace('Eastern', '^', '^^'), '%', '^%'), '_', '^_'), '%') escape '^' order by id;
+select id from t_like where c not like concat('%', replace(replace(replace(null, '^', '^^'), '%', '^%'), '_', '^_'), '%') escape '^' order by id;
+
+-- other patterns and escape characters
+select id from t_like where c like 'a^_b' escape '^' order by id;
+select id from t_like where c like 'a^^b' escape '^' order by id;
+select id from t_like where c like 'a^xb' escape '^' order by id;
+select id from t_like where c like 'a_b' escape '^' order by id;
+select id from t_like where c like 'a\\b' escape '^' order by id;
+select id from t_like where c like 'a\\^%' escape '^' order by id;
+select id from t_like where c like 'a\\%' escape '^' order by id;
+select id from t_like where c like 'a|%b' escape '|' order by id;
+select id from t_like where c like '50!%%' escape '!' order by id;
+select id from t_like where c like 'a__b' escape '_' order by id;
+select id from t_like where c like 'a\\%' escape '' order by id;
+select id from t_like where c like '50\\%' escape '\\' order by id;
+select id from t_like where c like '东^%部' escape '^' order by id;
+select id from t_like where c not like '%^%%' escape '^' order by id;
+select c, count(*) from t_like group by c having c like '50^%%' escape '^' order by c;
+select id, case when c like concat('%', replace(replace(replace('Eastern', '^', '^^'), '%', '^%'), '_', '^_'), '%') escape '^' then 'Eastern' else c end from t_like order by id;
+select 'a%' like 'a^%' escape '^', 'ab' like 'a^%' escape '^', 'ab' not like 'a^%' escape '^';
+select 'a^' like 'a^' escape '^', 'a' like 'a^' escape '^', null like 'a' escape '^', 'a' like null escape '^';
+
+-- unsupported
+select id from t_like where c like c escape '^';
+select id from t_like where c like 'a' escape '^^';
+select id from t_like where c regexp 'a' escape '^';

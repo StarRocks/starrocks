@@ -125,6 +125,7 @@ import com.starrocks.sql.ast.expression.IsNullPredicate;
 import com.starrocks.sql.ast.expression.LambdaFunctionExpr;
 import com.starrocks.sql.ast.expression.LargeInPredicate;
 import com.starrocks.sql.ast.expression.LargeStringLiteral;
+import com.starrocks.sql.ast.expression.LikeEscapeExpr;
 import com.starrocks.sql.ast.expression.LikePredicate;
 import com.starrocks.sql.ast.expression.LimitElement;
 import com.starrocks.sql.ast.expression.LiteralExpr;
@@ -136,6 +137,7 @@ import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.expression.SubfieldExpr;
 import com.starrocks.sql.ast.expression.Subquery;
 import com.starrocks.sql.ast.expression.TimestampArithmeticExpr;
+import com.starrocks.sql.ast.expression.UserVariableAssignExpr;
 import com.starrocks.sql.ast.expression.UserVariableExpr;
 import com.starrocks.sql.ast.expression.VariableExpr;
 import com.starrocks.sql.ast.pipe.CreatePipeStmt;
@@ -1510,8 +1512,14 @@ public class AST2StringVisitor implements AstVisitorExtendInterface<String, Void
     }
 
     public String visitLikePredicate(LikePredicate node, Void context) {
-        return printWithParentheses(node.getChild(0))
-                + " " + node.getOp() + " " + printWithParentheses(node.getChild(1));
+        Expr pattern = node.getChild(1);
+        return printWithParentheses(node.getChild(0)) + " " + node.getOp() + " "
+                + (pattern instanceof LikeEscapeExpr ? visit(pattern) : printWithParentheses(pattern));
+    }
+
+    @Override
+    public String visitLikeEscapeExpr(LikeEscapeExpr node, Void context) {
+        return printWithParentheses(node.getChild(0)) + " ESCAPE " + visit(new StringLiteral(node.getEscape()));
     }
 
     public String visitMatchExpr(MatchExpr node, Void context) {
@@ -1579,6 +1587,11 @@ public class AST2StringVisitor implements AstVisitorExtendInterface<String, Void
         sb.append("@");
         sb.append(node.getName());
         return sb.toString();
+    }
+
+    @Override
+    public String visitUserVariableAssignExpr(UserVariableAssignExpr node, Void context) {
+        return "@" + node.getName() + " := " + visit(node.getValue());
     }
 
     @Override

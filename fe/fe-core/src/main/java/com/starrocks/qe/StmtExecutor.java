@@ -1272,6 +1272,12 @@ public class StmtExecutor {
                         }
                     }
                 }
+                // ':=' in a SELECT without FROM has worked on a copy of the user variables, see
+                // UserVariableAssignments. The query has run, so the assignments take effect.
+                if (!parsedStmt.isExplain() && !context.getState().isError()
+                        && context.getUserVariablesCopyInWrite() != null) {
+                    context.modifyUserVariables(context.getUserVariablesCopyInWrite());
+                }
             } else if (parsedStmt instanceof SetStmt) {
                 // set statement will ignore hint.
                 handleSetStmt();
@@ -1418,6 +1424,7 @@ public class StmtExecutor {
             context.getState().setError(LogUtil.getUnwoundExceptionMessage(e));
             context.getState().setErrType(QueryState.ErrType.INTERNAL_ERR);
         } finally {
+            context.resetUserVariableCopyInWrite();
             GlobalStateMgr.getCurrentState().getMetadataMgr().removeQueryMetadata();
             if (context.getState().isError()) {
                 // Surface the failing statement's error as a session diagnostic so SHOW ERRORS /

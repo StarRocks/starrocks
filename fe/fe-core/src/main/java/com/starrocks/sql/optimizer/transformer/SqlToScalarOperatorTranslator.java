@@ -62,6 +62,7 @@ import com.starrocks.sql.ast.expression.IsNullPredicate;
 import com.starrocks.sql.ast.expression.LambdaArgument;
 import com.starrocks.sql.ast.expression.LambdaFunctionExpr;
 import com.starrocks.sql.ast.expression.LargeInPredicate;
+import com.starrocks.sql.ast.expression.LikeEscapeExpr;
 import com.starrocks.sql.ast.expression.LikePredicate;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.MapExpr;
@@ -74,6 +75,7 @@ import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.SubfieldExpr;
 import com.starrocks.sql.ast.expression.Subquery;
 import com.starrocks.sql.ast.expression.TimestampArithmeticExpr;
+import com.starrocks.sql.ast.expression.UserVariableAssignExpr;
 import com.starrocks.sql.ast.expression.UserVariableExpr;
 import com.starrocks.sql.ast.expression.VariableExpr;
 import com.starrocks.sql.common.ErrorType;
@@ -792,6 +794,41 @@ public final class SqlToScalarOperatorTranslator {
         }
 
         @Override
+        public ScalarOperator visitLikeEscapeExpr(LikeEscapeExpr node, Context context) {
+            ScalarOperatorRewriter rewriter = new ScalarOperatorRewriter();
+            ScalarOperator pattern = visit(node.getChild(0), context.clone(node));
+            pattern = rewriter.rewrite(rewriter.rewrite(pattern, ScalarOperatorRewriter.DEFAULT_TYPE_CAST_RULE),
+                    ScalarOperatorRewriter.FOLD_CONSTANT_RULES);
+            if (!(pattern instanceof ConstantOperator constant)) {
+                throw new SemanticException("The pattern of LIKE ... ESCAPE must be a constant", node.getPos());
+            }
+            return constant.isNull() ? constant
+                    : ConstantOperator.createVarchar(escapeWithBackslash(constant.getVarchar(), node.getEscape()));
+        }
+
+        // Writes a LIKE pattern that has the given escape character, or none, with the backslash instead.
+        private static String escapeWithBackslash(String pattern, String escape) {
+            int[] chars = pattern.codePoints().toArray();
+            StringBuilder result = new StringBuilder();
+            for (int i = 0; i < chars.length; i++) {
+                int c = chars[i];
+                boolean isEscape = !escape.isEmpty() && c == escape.codePointAt(0);
+                if (isEscape && i + 1 < chars.length) {
+                    c = chars[++i];
+                } else if (!isEscape && (c == '%' || c == '_')) {
+                    result.appendCodePoint(c);
+                    continue;
+                }
+                // c stands for itself: it was escaped, is an escape character that ends the pattern, or is ordinary.
+                if (c == '%' || c == '_' || c == '\\') {
+                    result.append('\\');
+                }
+                result.appendCodePoint(c);
+            }
+            return result.toString();
+        }
+
+        @Override
         public ScalarOperator visitMatchExpr(MatchExpr node, Context context)
                 throws SemanticException {
             ScalarOperator[] children = node.getChildren()
@@ -923,6 +960,13 @@ public final class SqlToScalarOperatorTranslator {
 
         @Override
         public ScalarOperator visitUserVariableExpr(UserVariableExpr node, Context context) {
+            return visit(node.getValue(), context);
+        }
+
+        // Only reached for a SELECT without FROM, where the value was already computed during analysis.
+        // Assignments that run once per row are replaced by UserVariableAssignPlanner before translation.
+        @Override
+        public ScalarOperator visitUserVariableAssignExpr(UserVariableAssignExpr node, Context context) {
             return visit(node.getValue(), context);
         }
 

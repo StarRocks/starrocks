@@ -26,9 +26,18 @@ public class UserVariableExpr extends Expr {
 
     private Expr value;
 
+    // True for a variable that the select list of its query block also assigns with ':='. Such a variable changes
+    // from row to row and has no value that could be substituted while the statement is analyzed.
+    private final boolean assignedPerRow;
+
     public UserVariableExpr(String name, NodePosition pos) {
+        this(name, pos, false);
+    }
+
+    public UserVariableExpr(String name, NodePosition pos, boolean assignedPerRow) {
         super(pos);
         this.name = name;
+        this.assignedPerRow = assignedPerRow;
     }
 
 
@@ -36,6 +45,7 @@ public class UserVariableExpr extends Expr {
         super(other);
         name = other.name;
         value = other.value;
+        assignedPerRow = other.assignedPerRow;
     }
 
     public String getName() {
@@ -49,6 +59,10 @@ public class UserVariableExpr extends Expr {
     public void setValue(Expr value) {
         this.value = value;
         this.type = value.getType();
+    }
+
+    public boolean isAssignedPerRow() {
+        return assignedPerRow;
     }
 
     @Override
@@ -67,18 +81,27 @@ public class UserVariableExpr extends Expr {
             return false;
         }
         UserVariableExpr that = (UserVariableExpr) o;
-        return Objects.equals(name, that.name) && Objects.equals(value, that.value);
+        return Objects.equals(name, that.name) && Objects.equals(value, that.value)
+                && assignedPerRow == that.assignedPerRow;
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(super.hashCode(), name, value);
+        return Objects.hash(super.hashCode(), name, value, assignedPerRow);
     }
 
     @Override
     public boolean isNullable() {
+        if (assignedPerRow) {
+            return true;
+        }
         Preconditions.checkState(value != null, "should analyze UserVariableExpr first then invoke isNullable");
         return value.isNullable();
+    }
+
+    @Override
+    protected boolean isConstantImpl() {
+        return !assignedPerRow;
     }
 
 }

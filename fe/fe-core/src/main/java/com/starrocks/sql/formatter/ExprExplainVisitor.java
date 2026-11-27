@@ -52,6 +52,7 @@ import com.starrocks.sql.ast.expression.LambdaArgument;
 import com.starrocks.sql.ast.expression.LambdaFunctionExpr;
 import com.starrocks.sql.ast.expression.LargeInPredicate;
 import com.starrocks.sql.ast.expression.LargeStringLiteral;
+import com.starrocks.sql.ast.expression.LikeEscapeExpr;
 import com.starrocks.sql.ast.expression.LikePredicate;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.MapExpr;
@@ -67,6 +68,7 @@ import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.expression.SubfieldExpr;
 import com.starrocks.sql.ast.expression.Subquery;
 import com.starrocks.sql.ast.expression.TimestampArithmeticExpr;
+import com.starrocks.sql.ast.expression.UserVariableAssignExpr;
 import com.starrocks.sql.ast.expression.UserVariableExpr;
 import com.starrocks.sql.ast.expression.VarBinaryLiteral;
 import com.starrocks.sql.ast.expression.VariableExpr;
@@ -301,6 +303,12 @@ public class ExprExplainVisitor implements AstVisitorExtendInterface<String, Voi
     }
 
     @Override
+    public String visitLikeEscapeExpr(LikeEscapeExpr node, Void context) {
+        return node.getChild(0).accept(this, context) + " ESCAPE "
+                + new StringLiteral(node.getEscape()).accept(this, context);
+    }
+
+    @Override
     public String visitExistsPredicate(ExistsPredicate node, Void context) {
         String notStr = node.isNotExists() ? "NOT " : "";
         return notStr + "EXISTS " + node.getChild(0).accept(this, context);
@@ -504,6 +512,11 @@ public class ExprExplainVisitor implements AstVisitorExtendInterface<String, Voi
     @Override
     public String visitUserVariableExpr(UserVariableExpr node, Void context) {
         return "@" + node.getName();
+    }
+
+    @Override
+    public String visitUserVariableAssignExpr(UserVariableAssignExpr node, Void context) {
+        return "@" + node.getName() + " := " + node.getValue().accept(this, context);
     }
 
     @Override

@@ -91,6 +91,11 @@ public class AnalyzeState {
      */
     private final List<Expr> columnNotInGroupBy = new ArrayList<>();
 
+    /**
+     * Set when the select list assigns user variables with ':='.
+     */
+    private UserVariableAssignments userVariableAssignments;
+
     public AnalyzeState() {
     }
 
@@ -265,5 +270,13 @@ public class AnalyzeState {
 
     public List<Expr> getColumnNotInGroupBy() {
         return columnNotInGroupBy;
+    }
+
+    public UserVariableAssignments getUserVariableAssignments() {
+        return userVariableAssignments;
+    }
+
+    public void setUserVariableAssignments(UserVariableAssignments userVariableAssignments) {
+        this.userVariableAssignments = userVariableAssignments;
     }
 }

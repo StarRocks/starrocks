@@ -81,6 +81,7 @@ import com.starrocks.sql.ast.expression.LambdaArgument;
 import com.starrocks.sql.ast.expression.LambdaFunctionExpr;
 import com.starrocks.sql.ast.expression.LargeInPredicate;
 import com.starrocks.sql.ast.expression.LargeIntLiteral;
+import com.starrocks.sql.ast.expression.LikeEscapeExpr;
 import com.starrocks.sql.ast.expression.LikePredicate;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.MapExpr;
@@ -96,6 +97,7 @@ import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.expression.SubfieldExpr;
 import com.starrocks.sql.ast.expression.Subquery;
 import com.starrocks.sql.ast.expression.TimestampArithmeticExpr;
+import com.starrocks.sql.ast.expression.UserVariableAssignExpr;
 import com.starrocks.sql.ast.expression.UserVariableExpr;
 import com.starrocks.sql.ast.expression.VariableExpr;
 import com.starrocks.sql.common.LargeInPredicateException;
@@ -1003,6 +1005,17 @@ public class ExpressionAnalyzer {
         }
 
         @Override
+        public Void visitLikeEscapeExpr(LikeEscapeExpr node, Scope scope) {
+            Expr pattern = node.getChild(0);
+            // The pattern is rewritten when the statement is planned, which takes its value.
+            if (!pattern.isConstant()) {
+                throw new SemanticException("The pattern of LIKE ... ESCAPE must be a constant", node.getPos());
+            }
+            node.setType(pattern.getType());
+            return null;
+        }
+
+        @Override
         public Void visitMatchExpr(MatchExpr node, Scope scope) {
             Type type1 = node.getChild(0).getType();
             Type type2 = node.getChild(1).getType();
@@ -1810,6 +1823,12 @@ public class ExpressionAnalyzer {
 
         @Override
         public Void visitUserVariableExpr(UserVariableExpr node, Scope context) {
+            UserVariableAssignments assignments = analyzeState.getUserVariableAssignments();
+            if (node.isAssignedPerRow() && assignments != null) {
+                node.setType(assignments.getType(node.getName()));
+                return null;
+            }
+
             UserVariable userVariable;
             if (session.getUserVariablesCopyInWrite() == null) {
                 userVariable = session.getUserVariable(node.getName());
@@ -1822,6 +1841,17 @@ public class ExpressionAnalyzer {
             } else {
                 node.setValue(userVariable.getEvaluatedExpression());
             }
+            return null;
+        }
+
+        @Override
+        public Void visitUserVariableAssignExpr(UserVariableAssignExpr node, Scope context) {
+            UserVariableAssignments assignments = analyzeState.getUserVariableAssignments();
+            if (assignments == null) {
+                throw new SemanticException("User variable assignment with ':=' is only supported in the select list",
+                        node.getPos());
+            }
+            assignments.analyze(node);
             return null;
         }
 

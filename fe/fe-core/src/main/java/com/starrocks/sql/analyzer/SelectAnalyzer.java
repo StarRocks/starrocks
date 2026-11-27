@@ -86,6 +86,12 @@ public class SelectAnalyzer {
                         LimitElement limitElement) {
         analyzeWhere(whereClause, analyzeState, sourceScope);
 
+        UserVariableAssignments userVariableAssignments = UserVariableAssignments.of(selectList, fromRelation, session);
+        if (userVariableAssignments != null) {
+            analyzeState.setUserVariableAssignments(userVariableAssignments);
+            userVariableAssignments.inferTypes(selectList, analyzeState, sourceScope);
+        }
+
         List<Expr> outputExpressions =
                 analyzeSelect(selectList, fromRelation, analyzeState, sourceScope);
         Scope outputScope = analyzeState.getOutputScope();
@@ -224,6 +230,10 @@ public class SelectAnalyzer {
             Scope sourceScopeForOrder = new Scope(RelationId.anonymous(), new RelationFields(sourceForOrderFields));
             computeAndAssignOrderScope(analyzeState, sourceScopeForOrder, outputScope, selectList.isDistinct());
             analyzeState.setOrderSourceExpressions(orderSourceExpressions);
+        }
+
+        if (userVariableAssignments != null) {
+            userVariableAssignments.verify(analyzeState, whereClause, orderByElements, isAggregationQuery);
         }
 
         analyzeState.setLimit(analyzeLimit(limitElement, analyzeState, sourceScope));

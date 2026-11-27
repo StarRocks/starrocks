@@ -24,6 +24,23 @@ BOOLEAN like(VARCHAR expr, VARCHAR pattern);
 
 - `pattern`: the pattern to match. The supported data type is VARCHAR.
 
+## Escape character
+
+To match a literal `%` or `_`, put the escape character in front of it. The default escape character is the backslash, which is written as `\\` in a string literal.
+
+When LIKE is used as an operator, an ESCAPE clause can set a different escape character for the pattern:
+
+```SQL
+expr [NOT] LIKE pattern ESCAPE 'escape_char'
+```
+
+`escape_char` is a single character, or an empty string if the pattern has no escape character. With an ESCAPE clause, `pattern` must be a constant expression.
+
+```SQL
+-- Returns the rows in which c1 ends with "50%".
+SELECT * FROM t1 WHERE c1 LIKE '%50^%' ESCAPE '^';
+```
+
 ## Return value
 
 Returns a BOOLEAN value.

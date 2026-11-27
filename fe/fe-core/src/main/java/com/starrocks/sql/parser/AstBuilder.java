@@ -484,6 +484,7 @@ import com.starrocks.sql.ast.expression.LambdaArgument;
 import com.starrocks.sql.ast.expression.LambdaFunctionExpr;
 import com.starrocks.sql.ast.expression.LargeInPredicate;
 import com.starrocks.sql.ast.expression.LargeIntLiteral;
+import com.starrocks.sql.ast.expression.LikeEscapeExpr;
 import com.starrocks.sql.ast.expression.LikePredicate;
 import com.starrocks.sql.ast.expression.LimitElement;
 import com.starrocks.sql.ast.expression.LiteralExpr;
@@ -502,6 +503,7 @@ import com.starrocks.sql.ast.expression.SubfieldExpr;
 import com.starrocks.sql.ast.expression.Subquery;
 import com.starrocks.sql.ast.expression.TimestampArithmeticExpr;
 import com.starrocks.sql.ast.expression.TypeDef;
+import com.starrocks.sql.ast.expression.UserVariableAssignExpr;
 import com.starrocks.sql.ast.expression.UserVariableExpr;
 import com.starrocks.sql.ast.expression.VarBinaryLiteral;
 import com.starrocks.sql.ast.expression.VariableExpr;
@@ -8125,17 +8127,21 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     public ParseNode visitLike(com.starrocks.sql.parser.StarRocksParser.LikeContext context) {
         LikePredicate likePredicate;
         NodePosition pos = createPos(context);
+        Expr value = (Expr) visit(context.value);
+        Expr pattern = (Expr) visit(context.pattern);
+        if (context.escape != null) {
+            String escape = ((StringLiteral) visit(context.escape)).getStringValue();
+            if (context.LIKE() == null) {
+                throw new ParsingException("ESCAPE is only supported with LIKE", pos);
+            } else if (escape.codePointCount(0, escape.length()) > 1) {
+                throw new ParsingException("ESCAPE must be a single character or an empty string", pos);
+            }
+            pattern = new LikeEscapeExpr(pattern, escape, pos);
+        }
         if (context.REGEXP() != null || context.RLIKE() != null) {
-            likePredicate = new LikePredicate(LikePredicate.Operator.REGEXP,
-                    (Expr) visit(context.value),
-                    (Expr) visit(context.pattern),
-                    pos);
+            likePredicate = new LikePredicate(LikePredicate.Operator.REGEXP, value, pattern, pos);
         } else {
-            likePredicate = new LikePredicate(
-                    LikePredicate.Operator.LIKE,
-                    (Expr) visit(context.value),
-                    (Expr) visit(context.pattern),
-                    pos);
+            likePredicate = new LikePredicate(LikePredicate.Operator.LIKE, value, pattern, pos);
         }
         if (context.NOT() != null) {
             return new CompoundPredicate(CompoundPredicate.Operator.NOT, likePredicate, null, pos);
@@ -9275,6 +9281,12 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     public ParseNode visitUserVariable(com.starrocks.sql.parser.StarRocksParser.UserVariableContext context) {
         String variable = ((Identifier) visit(context.identifierOrString())).getValue();
         return new UserVariableExpr(variable, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitUserVariableAssign(com.starrocks.sql.parser.StarRocksParser.UserVariableAssignContext context) {
+        UserVariableExpr variable = (UserVariableExpr) visit(context.userVariable());
+        return new UserVariableAssignExpr(variable.getName(), (Expr) visit(context.expression()), createPos(context));
     }
 
     @Override
