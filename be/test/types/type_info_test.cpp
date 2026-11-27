@@ -36,6 +36,7 @@
 
 #include <cstring>
 #include <memory>
+#include <type_traits>
 #include <vector>
 
 #include "base/string/slice.h"
@@ -133,6 +134,12 @@ void common_test<TYPE_CHAR>(Slice src_val) {
 template <>
 void common_test<TYPE_VARCHAR>(Slice src_val) {
     test_char<TYPE_VARCHAR>(src_val);
+}
+
+TEST(TypeInfoTest, geo_storage_cpp_type_is_slice) {
+    static_assert(std::is_same_v<StorageCppType<TYPE_GEOGRAPHY>, Slice>);
+    static_assert(std::is_same_v<StorageCppType<TYPE_GEOMETRY>, Slice>);
+    static_assert(StorageCppTypeSize<TYPE_GEOGRAPHY> == sizeof(Slice));
 }
 
 TEST(TypeInfoTest, copy_and_equal) {
