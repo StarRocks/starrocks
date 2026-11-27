@@ -23,6 +23,7 @@
 #include "column/column_builder.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
+#include "column/const_column.h"
 #include "column/flat_json/flat_json_internal.h"
 #include "column/json_column.h"
 #include "column/json_converter.h"
@@ -1330,7 +1331,15 @@ StatusOr<ColumnPtr> JsonFunctions::is_json_scalar(FunctionContext* context, cons
 
 StatusOr<ColumnPtr> JsonFunctions::to_json(FunctionContext* context, const Columns& columns) {
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
-    return cast_nested_to_json(columns[0], context->allow_throw_exception());
+    const ColumnPtr& column = columns[0];
+    if (column->is_constant()) {
+        // A constant value, such as an ARRAY literal, is serialized once. The serializer does not accept a
+        // ConstColumn.
+        const auto* const_column = down_cast<const ConstColumn*>(column.get());
+        ASSIGN_OR_RETURN(auto json, cast_nested_to_json(const_column->data_column(), context->allow_throw_exception()));
+        return ConstColumn::create(std::move(json), column->size());
+    }
+    return cast_nested_to_json(column, context->allow_throw_exception());
 }
 
 bool JsonFunctions::json_value_contains(JsonValue* target, JsonValue* candidate) {

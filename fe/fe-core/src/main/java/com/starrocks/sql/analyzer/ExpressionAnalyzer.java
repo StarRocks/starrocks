@@ -96,6 +96,7 @@ import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.expression.SubfieldExpr;
 import com.starrocks.sql.ast.expression.Subquery;
 import com.starrocks.sql.ast.expression.TimestampArithmeticExpr;
+import com.starrocks.sql.ast.expression.TypeDef;
 import com.starrocks.sql.ast.expression.UserVariableExpr;
 import com.starrocks.sql.ast.expression.VariableExpr;
 import com.starrocks.sql.common.LargeInPredicateException;
@@ -1047,6 +1048,13 @@ public class ExpressionAnalyzer {
                 castType = cast.getTargetTypeDef().getType();
             }
             Type fromType = cast.getChild(0).getType();
+            if (!cast.isImplicit() && castType.isJsonType() && fromType.isComplexType()) {
+                Type sourceType = toJsonSourceType(fromType);
+                if (sourceType != null) {
+                    analyzeComplexTypeToJsonCast(cast, sourceType, context);
+                    return null;
+                }
+            }
             if (!TypeManager.canCastTo(fromType, castType)) {
                 throw new SemanticException("Invalid type cast from " + fromType.toSql() + " to "
                         + castType.toSql() + " in sql `" +
@@ -1055,6 +1063,62 @@ public class ExpressionAnalyzer {
             }
 
             cast.setType(castType);
+            return null;
+        }
+
+        // An explicit CAST(<ARRAY | MAP | STRUCT> AS JSON) is evaluated as CAST(to_json(<value>) AS JSON).
+        // BOOLEAN, LARGEINT and DECIMAL values inside it are cast to JSON first, so that they become a JSON boolean and
+        // JSON numbers as in CAST(<value> AS JSON), instead of the 0/1 and the JSON strings that to_json() writes.
+        private void analyzeComplexTypeToJsonCast(CastExpr cast, Type sourceType, Scope scope) {
+            Expr value = cast.getChild(0);
+            if (!sourceType.equals(value.getType())) {
+                // An explicit cast, which is kept when the analyzed statement is printed, for example as a view
+                // definition. An implicit cast would be dropped there.
+                CastExpr toSourceType = new CastExpr(new TypeDef(sourceType), value, cast.getPos());
+                visitCastExpr(toSourceType, scope);
+                value = toSourceType;
+            }
+            FunctionCallExpr toJson = new FunctionCallExpr(FunctionSet.TO_JSON, Lists.newArrayList(value),
+                    cast.getPos());
+            visitFunctionCall(toJson, scope);
+            cast.setChild(0, toJson);
+            cast.setType(JsonType.JSON);
+        }
+
+        // Returns the type to pass to to_json() for a CAST of the given type to JSON, or null when the cast is not
+        // supported. Map keys must be strings or integers, which to_json() writes as their text.
+        private static Type toJsonSourceType(Type type) {
+            if (type.isArrayType()) {
+                Type itemType = toJsonSourceType(((ArrayType) type).getItemType());
+                return itemType == null ? null : new ArrayType(itemType);
+            } else if (type.isMapType()) {
+                MapType mapType = (MapType) type;
+                Type keyType = mapType.getKeyType();
+                if (!keyType.isNull() && !keyType.isStringType() && !keyType.isIntegerType()) {
+                    return null;
+                }
+                Type valueType = toJsonSourceType(mapType.getValueType());
+                return valueType == null ? null : new MapType(keyType, valueType);
+            } else if (type.isStructType()) {
+                StructType structType = (StructType) type;
+                List<StructField> fields = new ArrayList<>();
+                for (StructField field : structType.getFields()) {
+                    Type fieldType = toJsonSourceType(field.getType());
+                    if (fieldType == null) {
+                        return null;
+                    }
+                    fields.add(new StructField(field.getName(), fieldType, field.getComment()));
+                }
+                return new StructType(fields, true);
+            } else if (type.isDecimal256() || type.isDecimalV2()) {
+                // The BE does not cast DECIMAL256 or DECIMALV2 to JSON.
+                return null;
+            } else if (type.isDecimalOfAnyVersion() || type.isBoolean() || type.isLargeint()) {
+                return JsonType.JSON;
+            } else if (type.isNull() || type.isIntegerType() || type.isFloatingPointType() || type.isStringType()
+                    || type.isJsonType() || type.isDateType()) {
+                return type;
+            }
             return null;
         }
 
