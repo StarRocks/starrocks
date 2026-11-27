@@ -41,9 +41,10 @@
 #include "base/hash/unaligned_access.h"
 #include "base/string/slice.h"
 #include "base/string/utf8.h"
+#include "base/utility/mem_util.hpp"
 #include "common/bloom_filter.h" // for BloomFilterOptions, BloomFilter
 #include "fs/fs.h"
-#include "runtime/type_info_allocator_adapter.h"
+#include "runtime/mem_pool.h"
 #include "storage/rowset/encoding_info.h"
 #include "storage/rowset/indexed_column_writer.h"
 #include "storage/types.h"
@@ -77,14 +78,17 @@ constexpr bool is_int128() {
     return type == TYPE_LARGEINT || type == TYPE_DECIMALV2;
 }
 
+// Returns a copy of `*v` that stays valid after the caller's buffer is released: the bytes of a
+// Slice value are copied into `pool`, fixed-length values are copied by value.
 template <LogicalType type>
-inline StorageCppType<type> get_value(const StorageCppType<type>* v, const TypeInfoPtr& type_info,
-                                      const TypeInfoAllocator* allocator) {
+inline StorageCppType<type> get_value(const StorageCppType<type>* v, MemPool* pool) {
     using CppType = StorageCppType<type>;
     if constexpr (is_slice_type<type>()) {
-        CppType new_value;
-        type_info->deep_copy(&new_value, v, allocator);
-        return new_value;
+        const auto src = unaligned_load<Slice>(v);
+        auto* data = reinterpret_cast<char*>(pool->allocate(src.size));
+        DCHECK(data != nullptr);
+        memory_copy(data, src.data, src.size);
+        return Slice(data, src.size);
     } else {
         return unaligned_load<CppType>(v);
     }
@@ -114,9 +118,7 @@ public:
     using ValueDict = typename BloomFilterTraits<CppType>::ValueDict;
 
     explicit OriginalBloomFilterIndexWriterImpl(const BloomFilterOptions& bf_options, TypeInfoPtr typeinfo)
-            : _bf_options(bf_options),
-              _typeinfo(std::move(typeinfo)),
-              _type_info_allocator(make_type_info_allocator(&_pool)) {}
+            : _bf_options(bf_options), _typeinfo(std::move(typeinfo)) {}
 
     ~OriginalBloomFilterIndexWriterImpl() override = default;
 
@@ -124,7 +126,7 @@ public:
         const auto* v = (const CppType*)values;
         for (int i = 0; i < count; ++i) {
             if (_values.find(unaligned_load<CppType>(v)) == _values.end()) {
-                _values.insert(get_value<field_type>(v, _typeinfo, &_type_info_allocator));
+                _values.insert(get_value<field_type>(v, &_pool));
             }
             ++v;
         }
@@ -182,7 +184,6 @@ protected:
     ValueDict _values;
     TypeInfoPtr _typeinfo;
     MemPool _pool;
-    TypeInfoAllocator _type_info_allocator;
 
 private:
     bool _has_null{false};
@@ -241,7 +242,7 @@ public:
 
                 // add this ngram into set
                 if (_values.find(unaligned_load<CppType>(&cur_ngram)) == _values.end()) {
-                    _values.insert(get_value<field_type>(&cur_ngram, this->_typeinfo, &this->_type_info_allocator));
+                    _values.insert(get_value<field_type>(&cur_ngram, &this->_pool));
                 }
             }
             // move to next row

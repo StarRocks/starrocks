@@ -46,9 +46,9 @@
 #include "base/string/faststring.h"
 #include "base/string/slice.h"
 #include "base/string/utf8.h"
+#include "base/utility/mem_util.hpp"
 #include "fs/fs.h"
 #include "runtime/mem_pool.h"
-#include "runtime/type_info_allocator_adapter.h"
 #include "storage/rowset/encoding_info.h"
 #include "storage/rowset/indexed_column_writer.h"
 #include "storage/types.h"
@@ -257,9 +257,7 @@ public:
     using UnorderedMemoryIndexType = typename BitmapIndexTraits<CppType>::UnorderedMemoryIndexType;
 
     explicit BitmapIndexWriterImpl(TypeInfoPtr type_info, int32_t gram_num)
-            : _gram_num(gram_num),
-              _typeinfo(std::move(type_info)),
-              _type_info_allocator(make_type_info_allocator(&_pool)) {}
+            : _gram_num(gram_num), _typeinfo(std::move(type_info)) {}
 
     ~BitmapIndexWriterImpl() override = default;
 
@@ -282,9 +280,7 @@ public:
             }
         } else {
             // new value, copy value and insert new key->bitmap pair
-            CppType new_value;
-            _typeinfo->deep_copy(&new_value, &value, &_type_info_allocator);
-            _mem_index.emplace(new_value, _rid);
+            _mem_index.emplace(_copy_value(value), _rid);
             BitmapUpdateContext::init_estimate_size(&_reverted_index_size);
         }
     }
@@ -367,6 +363,19 @@ public:
     inline void incre_rowid() override { _rid++; }
 
 private:
+    // `value` may point into a buffer owned by the caller, so the bytes of a Slice value are copied
+    // into `_pool` to keep the in-memory index key valid until `finish`.
+    CppType _copy_value(const CppType& value) {
+        if constexpr (std::is_same_v<CppType, Slice>) {
+            auto* data = reinterpret_cast<char*>(_pool.allocate(value.size));
+            DCHECK(data != nullptr);
+            memory_copy(data, value.data, value.size);
+            return Slice(data, value.size);
+        } else {
+            return value;
+        }
+    }
+
     Status _build_ngram(UnorderedMemoryIndexType& ngram_index, const Slice* cur_slice, const size_t offset,
                         std::vector<size_t>& index) {
         if (_gram_num <= 0) {
@@ -495,7 +504,6 @@ private:
     // use OrderedMemoryIndexType. Especially for the case of built-in inverted index workload.
     UnorderedMemoryIndexType _mem_index;
     MemPool _pool;
-    TypeInfoAllocator _type_info_allocator;
 
     // roaring bitmap size
     mutable uint64_t _reverted_index_size = 0;

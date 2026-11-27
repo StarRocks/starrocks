@@ -20,7 +20,6 @@
 
 #include "common/status.h"
 #include "types/logical_type.h"
-#include "types/type_info_allocator.h"
 
 namespace starrocks {
 
@@ -32,10 +31,6 @@ class Datum;
 class TypeInfo {
 public:
     virtual ~TypeInfo() = default;
-
-    virtual void shallow_copy(void* dest, const void* src) const = 0;
-
-    virtual void deep_copy(void* dest, const void* src, const TypeInfoAllocator* allocator) const = 0;
 
     // map/struct/array have not yet implemented this interface.
     virtual void direct_copy(void* dest, const void* src) const = 0;

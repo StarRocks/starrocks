@@ -37,7 +37,6 @@
 #include <cstring>
 #include <memory>
 #include <type_traits>
-#include <vector>
 
 #include "base/string/slice.h"
 #include "storage/types.h"
@@ -51,20 +50,6 @@ public:
     ~TypeInfoTest() override = default;
 };
 
-class LocalTypeInfoAllocator {
-public:
-    static uint8_t* allocate(void* ctx, size_t size) {
-        auto* self = static_cast<LocalTypeInfoAllocator*>(ctx);
-        self->_buffers.emplace_back(std::make_unique<uint8_t[]>(size));
-        return self->_buffers.back().get();
-    }
-
-    TypeInfoAllocator make_allocator() { return TypeInfoAllocator{this, &LocalTypeInfoAllocator::allocate}; }
-
-private:
-    std::vector<std::unique_ptr<uint8_t[]>> _buffers;
-};
-
 template <LogicalType field_type>
 void common_test(StorageCppType<field_type> src_val) {
     TypeInfoPtr type = get_type_info(field_type);
@@ -72,12 +57,6 @@ void common_test(StorageCppType<field_type> src_val) {
 
     ASSERT_EQ(field_type, type->type());
     ASSERT_EQ(sizeof(src_val), type->size());
-    {
-        CppType dst_val;
-        LocalTypeInfoAllocator local_allocator;
-        auto allocator = local_allocator.make_allocator();
-        type->deep_copy((char*)&dst_val, (char*)&src_val, &allocator);
-    }
     {
         CppType dst_val;
         type->direct_copy((char*)&dst_val, (char*)&src_val);
@@ -101,13 +80,6 @@ void test_char(Slice src_val) {
 
     ASSERT_EQ(type->type(), fieldType);
     ASSERT_EQ(sizeof(src_val), type->size());
-    {
-        char buf[64];
-        Slice dst_val(buf, sizeof(buf));
-        LocalTypeInfoAllocator local_allocator;
-        auto allocator = local_allocator.make_allocator();
-        type->deep_copy((char*)&dst_val, (char*)&src_val, &allocator);
-    }
     {
         char buf[64];
         Slice dst_val(buf, sizeof(buf));

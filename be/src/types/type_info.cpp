@@ -34,7 +34,6 @@
 
 #include "types/type_info.h"
 
-#include <cassert>
 #include <cinttypes>
 #include <cstdint>
 #include <cstdlib>
@@ -132,8 +131,6 @@ public:
         return Status::NotSupported("Native GEO does not support row string conversion");
     }
     size_t size() const override { unsupported(); }
-    void shallow_copy(void*, const void*) const override { unsupported(); }
-    void deep_copy(void*, const void*, const TypeInfoAllocator*) const override { unsupported(); }
     void direct_copy(void*, const void*) const override { unsupported(); }
     std::string to_string(const void*) const override { unsupported(); }
     void set_to_min(void*) const override { unsupported(); }
@@ -185,12 +182,6 @@ class ScalarTypeInfo final : public TypeInfo {
 public:
     ~ScalarTypeInfo() override = default;
 
-    void shallow_copy(void* dest, const void* src) const override { _shallow_copy(dest, src); }
-
-    void deep_copy(void* dest, const void* src, const TypeInfoAllocator* allocator) const override {
-        _deep_copy(dest, src, allocator);
-    }
-
     void direct_copy(void* dest, const void* src) const override { _direct_copy(dest, src); }
 
     Status from_string(void* buf, const std::string& scan_key) const override { return _from_string(buf, scan_key); }
@@ -208,8 +199,6 @@ protected:
     int _datum_cmp_impl(const Datum& left, const Datum& right) const override { return _datum_cmp(left, right); }
 
 private:
-    void (*_shallow_copy)(void* dest, const void* src);
-    void (*_deep_copy)(void* dest, const void* src, const TypeInfoAllocator* allocator);
     void (*_direct_copy)(void* dest, const void* src);
 
     Status (*_from_string)(void* buf, const std::string& scan_key);
@@ -254,14 +243,6 @@ struct ScalarTypeInfoImplBase {
         } else {
             return 0;
         }
-    }
-
-    static void shallow_copy(void* dest, const void* src) {
-        unaligned_store<CppType>(dest, unaligned_load<CppType>(src));
-    }
-
-    static void deep_copy(void* dest, const void* src, const TypeInfoAllocator* allocator __attribute__((unused))) {
-        unaligned_store<CppType>(dest, unaligned_load<CppType>(src));
     }
 
     static void direct_copy(void* dest, const void* src) {
@@ -339,9 +320,7 @@ private:
 
 template <typename TypeInfoImpl>
 ScalarTypeInfo::ScalarTypeInfo([[maybe_unused]] TypeInfoImpl t)
-        : _shallow_copy(TypeInfoImpl::shallow_copy),
-          _deep_copy(TypeInfoImpl::deep_copy),
-          _direct_copy(TypeInfoImpl::direct_copy),
+        : _direct_copy(TypeInfoImpl::direct_copy),
           _from_string(TypeInfoImpl::from_string),
           _to_string(TypeInfoImpl::to_string),
           _set_to_max(TypeInfoImpl::set_to_max),
@@ -539,13 +518,6 @@ struct ScalarTypeInfoImpl<TYPE_LARGEINT> : public ScalarTypeInfoImplBase<TYPE_LA
 
     // GCC7.3 will generate movaps instruction, which will lead to SEGV when buf is
     // not aligned to 16 byte
-    static void shallow_copy(void* dest, const void* src) {
-        unaligned_store<int128_t>(dest, unaligned_load<int128_t>(src));
-    }
-    static void deep_copy(void* dest, const void* src, const TypeInfoAllocator* allocator __attribute__((unused))) {
-        unaligned_store<int128_t>(dest, unaligned_load<int128_t>(src));
-    }
-
     static void direct_copy(void* dest, const void* src) {
         unaligned_store<int128_t>(dest, unaligned_load<int128_t>(src));
     }
@@ -576,14 +548,6 @@ struct ScalarTypeInfoImpl<TYPE_INT256> : public ScalarTypeInfoImplBase<TYPE_INT2
     static std::string to_string(const void* src) {
         auto value = unaligned_load<int256_t>(src);
         return value.to_string();
-    }
-
-    static void shallow_copy(void* dest, const void* src) {
-        unaligned_store<int256_t>(dest, unaligned_load<int256_t>(src));
-    }
-
-    static void deep_copy(void* dest, const void* src, const TypeInfoAllocator* allocator __attribute__((unused))) {
-        unaligned_store<int256_t>(dest, unaligned_load<int256_t>(src));
     }
 
     static void direct_copy(void* dest, const void* src) {
@@ -678,11 +642,6 @@ struct ScalarTypeInfoImpl<TYPE_DECIMALV2> : public ScalarTypeInfoImplBase<TYPE_D
     }
     // GCC7.3 will generate movaps instruction, which will lead to SEGV when buf is
     // not aligned to 16 byte
-    static void shallow_copy(void* dest, const void* src) { memcpy(dest, src, sizeof(CppType)); }
-    static void deep_copy(void* dest, const void* src, const TypeInfoAllocator* allocator __attribute__((unused))) {
-        memcpy(dest, src, sizeof(CppType));
-    }
-
     static void direct_copy(void* dest, const void* src) { memcpy(dest, src, sizeof(CppType)); }
 
     static void set_to_max(void* buf) {
@@ -848,17 +807,6 @@ struct ScalarTypeInfoImpl<TYPE_CHAR> : public ScalarTypeInfoImplBase<TYPE_CHAR> 
         auto slice = unaligned_load<Slice>(src);
         return slice.to_string();
     }
-    static void deep_copy(void* dest, const void* src, const TypeInfoAllocator* allocator) {
-        auto l_slice = unaligned_load<Slice>(dest);
-        auto r_slice = unaligned_load<Slice>(src);
-        DCHECK_NE(allocator, nullptr);
-        l_slice.data = reinterpret_cast<char*>(allocator->allocate(r_slice.size));
-        assert(l_slice.data != nullptr);
-        memory_copy(l_slice.data, r_slice.data, r_slice.size);
-        l_slice.size = r_slice.size;
-        unaligned_store<Slice>(dest, l_slice);
-    }
-
     static void direct_copy(void* dest, const void* src) {
         auto l_slice = unaligned_load<Slice>(dest);
         auto r_slice = unaligned_load<Slice>(src);

@@ -13,7 +13,6 @@
 // limitations under the License.
 
 #include "base/hash/unaligned_access.h"
-#include "base/utility/mem_util.hpp"
 #include "common/logging.h"
 #include "gutil/casts.h"
 #include "types/collection.h"
@@ -27,44 +26,6 @@ public:
             : _item_type_info(item_type_info), _item_size(item_type_info->size()) {}
 
     ~ArrayTypeInfo() override = default;
-
-    void shallow_copy(void* dest, const void* src) const override {
-        unaligned_store<Collection>(dest, unaligned_load<Collection>(src));
-    }
-
-    void deep_copy(void* dest, const void* src, const TypeInfoAllocator* allocator) const override {
-        DCHECK_NE(allocator, nullptr);
-        Collection dest_value;
-        auto src_value = unaligned_load<Collection>(src);
-        dest_value.length = src_value.length;
-
-        size_t item_size = src_value.length * _item_size;
-        size_t nulls_size = src_value.has_null ? src_value.length : 0;
-        dest_value.data = allocator->allocate(item_size + nulls_size);
-        DCHECK_NE(dest_value.data, nullptr);
-
-        dest_value.has_null = src_value.has_null;
-        dest_value.null_signs = src_value.has_null ? reinterpret_cast<uint8_t*>(dest_value.data) + item_size : nullptr;
-
-        if (src_value.has_null) {
-            memory_copy(dest_value.null_signs, src_value.null_signs, sizeof(uint8_t) * src_value.length);
-        }
-
-        for (uint32_t i = 0; i < src_value.length; ++i) {
-            if (dest_value.is_null_at(i)) {
-                auto* item =
-                        reinterpret_cast<Collection*>(reinterpret_cast<uint8_t*>(dest_value.data) + i * _item_size);
-                item->data = nullptr;
-                item->length = 0;
-                item->has_null = false;
-                item->null_signs = nullptr;
-            } else {
-                _item_type_info->deep_copy(reinterpret_cast<uint8_t*>(dest_value.data) + i * _item_size,
-                                           reinterpret_cast<uint8_t*>(src_value.data) + i * _item_size, allocator);
-            }
-        }
-        unaligned_store<Collection>(dest, dest_value);
-    }
 
     void direct_copy(void* dest, const void* src) const override { CHECK(false); }
 

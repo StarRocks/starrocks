@@ -41,6 +41,7 @@
 #include <set>
 #include <string>
 #include <thread>
+#include <vector>
 
 #include "base/string/utf8.h"
 #include "base/testutil/assert.h"
@@ -499,6 +500,58 @@ TEST_F(BitmapIndexTest, test_multi_pages) {
         delete iter;
     }
     delete[] val;
+}
+
+// The writer keeps every distinct value until finish(), so it must copy the bytes of Slice values instead of
+// pointing into the caller's buffer, which a column writer reuses for the next batch. The dictionary spans several
+// data pages, so seeking also goes through the value index built from each page's first value.
+TEST_F(BitmapIndexTest, test_varchar_values_outlive_input_multi_pages) {
+    const size_t num = 40000;
+    std::vector<std::string> expected(num);
+    std::vector<std::string> buffer(num);
+    std::vector<Slice> slices(num);
+    for (size_t i = 0; i < num; ++i) {
+        char prefix[16];
+        snprintf(prefix, sizeof(prefix), "%08zu_", i);
+        expected[i] = std::string(prefix) + std::string(64, static_cast<char>('a' + i % 26));
+        buffer[i] = expected[i];
+        slices[i] = Slice(buffer[i].data(), buffer[i].size());
+    }
+
+    std::string file_name = kTestDir + "/varchar_outlive";
+    ColumnIndexMetaPB meta;
+    {
+        ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(file_name));
+        std::unique_ptr<BitmapIndexWriter> writer;
+        ASSERT_OK(BitmapIndexWriter::create(get_type_info(TYPE_VARCHAR), &writer));
+        writer->add_values(slices.data(), num);
+        // Overwrite the input before the dictionary is written.
+        for (auto& s : buffer) {
+            std::fill(s.begin(), s.end(), 'z');
+        }
+        ASSERT_OK(writer->finish(wfile.get(), &meta));
+        ASSERT_OK(wfile->close());
+    }
+    ASSERT_FALSE(meta.bitmap_index().dict_column().value_index_meta().is_root_data_page());
+
+    BitmapIndexReader* reader = nullptr;
+    SegmentBitmapIndexIterator* iter = nullptr;
+    ASSIGN_OR_ABORT(auto rfile, _fs->new_random_access_file(file_name));
+    get_bitmap_reader_iter(rfile.get(), meta, &reader, &iter);
+    ASSERT_EQ(num, iter->bitmap_nums());
+    for (size_t i = 0; i < num; i += 997) {
+        Slice value(expected[i]);
+        bool exact_match = false;
+        ASSERT_OK(iter->seek_dictionary(&value, &exact_match));
+        ASSERT_TRUE(exact_match) << expected[i];
+        ASSERT_EQ(i, iter->current_ordinal());
+
+        Roaring bitmap;
+        ASSERT_OK(iter->read_bitmap(iter->current_ordinal(), &bitmap));
+        ASSERT_TRUE(Roaring::bitmapOf(1, static_cast<uint32_t>(i)) == bitmap);
+    }
+    delete reader;
+    delete iter;
 }
 
 TEST_F(BitmapIndexTest, test_null) {

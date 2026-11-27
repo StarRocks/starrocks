@@ -34,6 +34,10 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
+#include <string>
+#include <vector>
+
 #include "base/testutil/assert.h"
 #include "common/bloom_filter.h"
 #include "common/logging.h"
@@ -158,6 +162,48 @@ protected:
 
             delete reader;
         }
+    }
+
+    // The writer keeps distinct values until flush(), so it must copy the bytes of Slice values instead of
+    // pointing into the caller's buffer, which a column writer reuses for the next batch.
+    template <LogicalType Type>
+    void test_slice_values_outlive_input(const std::string& file_name) {
+        const size_t num = 1024;
+        std::vector<std::string> expected(num);
+        std::vector<std::string> buffer(num);
+        std::vector<Slice> slices(num);
+        for (size_t i = 0; i < num; ++i) {
+            expected[i] = "outlive_" + std::to_string(i);
+            buffer[i] = expected[i];
+            slices[i] = Slice(buffer[i].data(), buffer[i].size());
+        }
+
+        ColumnIndexMetaPB meta;
+        {
+            ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(kTestDir + "/" + file_name));
+            std::unique_ptr<BloomFilterIndexWriter> writer;
+            BloomFilterOptions bf_options;
+            ASSERT_OK(BloomFilterIndexWriter::create(bf_options, get_type_info(Type), &writer));
+            writer->add_values(slices.data(), num);
+            // Overwrite the input before the bloom filter is built from the buffered values.
+            for (auto& s : buffer) {
+                std::fill(s.begin(), s.end(), 'x');
+            }
+            ASSERT_OK(writer->flush());
+            ASSERT_OK(writer->finish(wfile.get(), &meta));
+            ASSERT_OK(wfile->close());
+        }
+
+        std::unique_ptr<RandomAccessFile> rfile;
+        BloomFilterIndexReader* reader = nullptr;
+        std::unique_ptr<BloomFilterIndexIterator> iter;
+        get_bloom_filter_reader_iter(file_name, meta, &rfile, &reader, &iter);
+        std::unique_ptr<BloomFilter> bf;
+        ASSERT_OK(iter->read_bloom_filter(0, &bf));
+        for (const auto& v : expected) {
+            ASSERT_TRUE(bf->test_bytes(v.data(), v.size())) << v;
+        }
+        delete reader;
     }
 
     std::shared_ptr<MemoryFileSystem> _fs = nullptr;
@@ -294,6 +340,14 @@ TEST_F(BloomFilterIndexReaderWriterTest, test_char) {
     test_bloom_filter_index_reader_writer_template<TYPE_CHAR>(file_name, slices, num, 1, &not_exist_value, true);
     delete[] val;
     delete[] slices;
+}
+
+TEST_F(BloomFilterIndexReaderWriterTest, test_varchar_values_outlive_input) {
+    test_slice_values_outlive_input<TYPE_VARCHAR>("bloom_filter_varchar_outlive");
+}
+
+TEST_F(BloomFilterIndexReaderWriterTest, test_char_values_outlive_input) {
+    test_slice_values_outlive_input<TYPE_CHAR>("bloom_filter_char_outlive");
 }
 
 TEST_F(BloomFilterIndexReaderWriterTest, test_date) {

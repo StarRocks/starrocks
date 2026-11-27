@@ -33,12 +33,6 @@ public:
     DecimalTypeInfo(int precision, int scale)
             : _delegate(get_scalar_type_info(DelegateType<TYPE>)), _precision(precision), _scale(scale) {}
 
-    void shallow_copy(void* dest, const void* src) const override { return _delegate->shallow_copy(dest, src); }
-
-    void deep_copy(void* dest, const void* src, const TypeInfoAllocator* allocator) const override {
-        return _delegate->deep_copy(dest, src, allocator);
-    }
-
     void direct_copy(void* dest, const void* src) const override { _delegate->direct_copy(dest, src); }
 
     template <typename From, typename To>

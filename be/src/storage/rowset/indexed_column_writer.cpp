@@ -34,16 +34,18 @@
 
 #include "storage/rowset/indexed_column_writer.h"
 
+#include <cstring>
 #include <memory>
 #include <string>
 #include <utility>
 
 #include "base/coding.h"
 #include "base/compression/block_compression.h"
+#include "base/hash/unaligned_access.h"
+#include "base/utility/mem_util.hpp"
 #include "common/config_rowset_fwd.h"
 #include "common/logging.h"
 #include "fs/fs.h"
-#include "runtime/type_info_allocator_adapter.h"
 #include "storage/rowset/encoding_info.h"
 #include "storage/rowset/index_page.h"
 #include "storage/rowset/options.h"
@@ -54,6 +56,38 @@
 #include "storage_primitive/key_coder.h"
 
 namespace starrocks {
+
+namespace {
+
+// Copies one storage value of `type` from `src` into `dest`. The value index keeps the first value of
+// every data page until the page is finished, but `src` may point into a buffer owned by the caller,
+// so the bytes of a Slice-backed value are copied into `mem_pool`. Fixed-length values are copied
+// as their `size` raw bytes.
+void copy_value(LogicalType type, size_t size, void* dest, const void* src, MemPool* mem_pool) {
+    switch (type) {
+    case TYPE_CHAR:
+    case TYPE_VARCHAR:
+    case TYPE_HLL:
+    case TYPE_OBJECT:
+    case TYPE_PERCENTILE:
+    case TYPE_JSON:
+    case TYPE_VARBINARY: {
+        const auto src_slice = unaligned_load<Slice>(src);
+        auto* data = reinterpret_cast<char*>(mem_pool->allocate(src_slice.size));
+        DCHECK(data != nullptr);
+        memory_copy(data, src_slice.data, src_slice.size);
+        unaligned_store<Slice>(dest, Slice(data, src_slice.size));
+        break;
+    }
+    default:
+        // Complex types have no key coder, so they never build a value index.
+        DCHECK(type != TYPE_ARRAY && type != TYPE_MAP && type != TYPE_STRUCT) << type;
+        memcpy(dest, src, size);
+        break;
+    }
+}
+
+} // namespace
 
 IndexedColumnWriterOptions::IndexedColumnWriterOptions() : index_page_size(config::data_page_size) {}
 
@@ -94,8 +128,7 @@ Status IndexedColumnWriter::init() {
 Status IndexedColumnWriter::add(const void* value) {
     if (_options.write_value_index && _data_page_builder->count() == 0) {
         // remember page's first value because it's used to build value index
-        const auto allocator = make_type_info_allocator(&_mem_pool);
-        _typeinfo->deep_copy(_first_value.data(), value, &allocator);
+        copy_value(_typeinfo->type(), _first_value.size(), _first_value.data(), value, &_mem_pool);
     }
     (void)_data_page_builder->add(reinterpret_cast<const uint8_t*>(value), 1);
     _num_values++;
