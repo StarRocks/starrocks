@@ -48,6 +48,12 @@ public:
 
     Status fetch_values_by_rowid(const rowid_t* rowids, size_t size, Column* values) override;
 
+    // A flat JSON sub-column keeps its zone map in the stored type. Unless the cast keeps the order of the stored
+    // values, that zone map cannot prune predicates of the target type, so every row is kept.
+    Status get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
+                                      const ColumnPredicate* del_predicate, SparseRange<>* row_ranges,
+                                      CompoundNodeType pred_relation, const Range<>* src_range = nullptr) override;
+
     // Disable bloom filter in CastColumnIterator
     bool has_original_bloom_filter_index() const override { return false; }
     bool has_ngram_bloom_filter_index() const override { return false; }
@@ -79,6 +85,12 @@ private:
     // Rebuild the flat JSON sub-column values as JSON (flat_json::flat_column_to_json) instead of casting.
     bool _flat_json_to_json{false};
     LogicalType _source_type{TYPE_UNKNOWN};
+    // Whether the zone map of |_parent| can prune predicates of the target type, which the reader parses it as
+    // (ColumnReader::_get_zone_map_parse_type). The FE allows a fast schema evolution cast only when that keeps the
+    // order. Of the types a flat JSON sub-column is read as (BIGINT, DOUBLE, VARCHAR, BOOLEAN), only BIGINT read as
+    // DOUBLE keeps it: numbers and strings compare in other orders, and the DOUBLE zone map "1.5e-05" reads as
+    // BIGINT 1.
+    bool _zone_map_prunes{true};
 };
 
 } // namespace starrocks

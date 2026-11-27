@@ -100,6 +100,71 @@ TEST_F(CastColumnIteratorWithDefaultValueColumnIteratorTest, flat_json_varchar_s
     }
 }
 
+// A source whose zone map prunes every page, to tell whether CastColumnIterator lets that zone map prune.
+class PruneAllZoneMapColumnIterator final : public ColumnIterator {
+public:
+    explicit PruneAllZoneMapColumnIterator(ordinal_t num_rows) : _num_rows(num_rows) {}
+    Status seek_to_first() override { return Status::OK(); }
+    Status seek_to_ordinal(ordinal_t ord) override { return Status::OK(); }
+    ordinal_t num_rows() const override { return _num_rows; }
+    Status next_batch(size_t* n, Column* dst) override {
+        *n = 0;
+        return Status::OK();
+    }
+    ordinal_t get_current_ordinal() const override { return 0; }
+    Status get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
+                                      const ColumnPredicate* del_predicate, SparseRange<>* row_ranges,
+                                      CompoundNodeType pred_relation, const Range<>* src_range) override {
+        return Status::OK();
+    }
+
+private:
+    ordinal_t _num_rows;
+};
+
+class CastColumnIteratorZoneMapTest : public CastColumnIteratorTestBase {};
+
+// A flat JSON sub-column keeps its zone map in the stored type, and the reader parses it as the type the query reads.
+// Only a BIGINT read as DOUBLE keeps the order, so only that zone map may prune.
+TEST_F(CastColumnIteratorZoneMapTest, flat_json_zone_map_prunes_only_for_order_keeping_casts) {
+    struct Case {
+        LogicalType source;
+        LogicalType target;
+        bool flat_json_source;
+        bool prunes;
+    };
+    const std::vector<Case> cases = {
+            {TYPE_BIGINT, TYPE_VARCHAR, true, false},
+            {TYPE_DOUBLE, TYPE_VARCHAR, true, false},
+            {TYPE_VARCHAR, TYPE_BIGINT, true, false},
+            {TYPE_DOUBLE, TYPE_BIGINT, true, false},
+            {TYPE_BIGINT, TYPE_DOUBLE, true, true},
+            // A fast schema evolution cast, which the FE allows only when the zone map can be reused.
+            {TYPE_INT, TYPE_BIGINT, false, true},
+    };
+    auto type_of = [](LogicalType type) {
+        return type == TYPE_VARCHAR ? TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH)
+                                    : TypeDescriptor(type);
+    };
+    for (const auto& c : cases) {
+        SCOPED_TRACE(type_to_string(c.source) + " -> " + type_to_string(c.target) +
+                     (c.flat_json_source ? ", flat_json_source" : ""));
+        CastColumnIterator cast_iter(std::make_unique<PruneAllZoneMapColumnIterator>(10), type_of(c.source),
+                                     type_of(c.target), true, c.flat_json_source);
+        SparseRange<> row_ranges;
+        ASSERT_OK(cast_iter.get_row_ranges_by_zone_map({}, nullptr, &row_ranges, CompoundNodeType::AND));
+        EXPECT_EQ(c.prunes ? 0 : 10, row_ranges.span_size());
+    }
+
+    // Every row of the given range is kept.
+    CastColumnIterator cast_iter(std::make_unique<PruneAllZoneMapColumnIterator>(10), type_of(TYPE_BIGINT),
+                                 type_of(TYPE_VARCHAR), true, true);
+    SparseRange<> row_ranges;
+    const Range<> src_range(2, 5);
+    ASSERT_OK(cast_iter.get_row_ranges_by_zone_map({}, nullptr, &row_ranges, CompoundNodeType::AND, &src_range));
+    EXPECT_EQ(3, row_ranges.span_size());
+}
+
 TEST_F(CastColumnIteratorWithDefaultValueColumnIteratorTest, test_get_io_range_vec) {
     auto source_type = TYPE_INT_DESC;
     auto target_type = TYPE_BIGINT_DESC;
