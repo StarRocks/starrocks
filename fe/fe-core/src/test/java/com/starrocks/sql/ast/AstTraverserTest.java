@@ -121,4 +121,24 @@ public class AstTraverserTest {
             Assertions.assertEquals(1, counter.countOf("protected_table"), groupBy);
         }
     }
+
+    /**
+     * The parser moves the whole FROM clause of a PIVOT under it: a table read there -- directly, in a join, or in
+     * a subquery -- is reached once.
+     */
+    @Test
+    public void testTableUnderPivotVisited() {
+        String pivot = " PIVOT (SUM(v2) FOR v1 IN (1 AS a))";
+        for (String from : new String[] {"protected_table", "outer_table JOIN protected_table ON true",
+                "(SELECT * FROM protected_table) s"}) {
+            QueryStatement stmt = parseWithoutAnalysis("SELECT * FROM " + from + pivot);
+            Assertions.assertInstanceOf(PivotRelation.class,
+                    ((SelectRelation) stmt.getQueryRelation()).getRelation(), from);
+
+            TableVisitCounter counter = new TableVisitCounter();
+            counter.visit(stmt);
+
+            Assertions.assertEquals(1, counter.countOf("protected_table"), from);
+        }
+    }
 }
