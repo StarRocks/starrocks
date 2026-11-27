@@ -23,6 +23,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.common.util.SqlUtils;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
@@ -209,10 +210,11 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
                 continue;
             }
             String partitionName = StringEscapeUtils.escapeSql(partition.getName());
+            String storedColumnName = StatisticUtils.toStoredColumnName(data.getColumnName());
 
             params.add(String.valueOf(table.getId()));
             params.add(String.valueOf(data.getPartitionId()));
-            params.add("'" + StringEscapeUtils.escapeSql(data.getColumnName()) + "'");
+            params.add("'" + SqlUtils.escapeSqlString(storedColumnName) + "'");
             params.add(String.valueOf(db.getId()));
             params.add("'" + tableName + "'");
             params.add("'" + partitionName + "'");
@@ -227,7 +229,7 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
             // int
             row.add(new IntLiteral(table.getId(), IntegerType.BIGINT)); // table id, 8 byte
             row.add(new IntLiteral(data.getPartitionId(), IntegerType.BIGINT)); // partition id, 8 byte
-            row.add(new StringLiteral(data.getColumnName())); // column name, 20 byte
+            row.add(new StringLiteral(storedColumnName)); // column name, 20 byte
             row.add(new IntLiteral(db.getId(), IntegerType.BIGINT)); // db id, 8 byte
             row.add(new StringLiteral(tableName)); // table name, 50 byte
             row.add(new StringLiteral(partitionName)); // partition name, 10 byte
@@ -331,7 +333,7 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
         StringBuilder builder = new StringBuilder();
         VelocityContext context = new VelocityContext();
 
-        String columnNameStr = StringEscapeUtils.escapeSql(columnName);
+        String columnNameStr = SqlUtils.escapeSqlString(columnName);
         String quoteColumnName = StatisticUtils.quoting(table, columnName);
         String quoteColumnKey = "`column_key`";
 

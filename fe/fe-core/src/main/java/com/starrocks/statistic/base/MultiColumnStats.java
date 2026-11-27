@@ -36,11 +36,16 @@ public class MultiColumnStats implements ColumnStats {
     }
 
     @Override
-    public String getColumnNameStr() {
+    public String getColumnName() {
         return columnGroup.stream()
                 .sorted(Comparator.comparingInt(DefaultColumnStats::getColumnId))
                 .map(columnStats -> String.valueOf(columnStats.getColumnId()))
-                .collect(Collectors.collectingAndThen(Collectors.joining(COLUMN_ID_SEPARATOR), s -> "'" + s + "'"));
+                .collect(Collectors.joining(COLUMN_ID_SEPARATOR));
+    }
+
+    @Override
+    public String getColumnNameStr() {
+        return "'" + getColumnName() + "'";
     }
 
     @Override

@@ -14,9 +14,9 @@
 
 package com.starrocks.statistic.base;
 
+import com.starrocks.common.util.SqlUtils;
 import com.starrocks.statistic.sample.SampleInfo;
 import com.starrocks.type.Type;
-import org.apache.commons.lang.StringEscapeUtils;
 
 import static com.starrocks.sql.optimizer.statistics.ColumnStatistic.DEFAULT_COLLECTION_SIZE;
 
@@ -48,8 +48,14 @@ public abstract class BaseColumnStats implements ColumnStats {
         return columnType;
     }
 
+    @Override
+    public String getColumnName() {
+        return columnName;
+    }
+
+    @Override
     public String getColumnNameStr() {
-        return StringEscapeUtils.escapeSql(columnName);
+        return SqlUtils.escapeSqlString(columnName);
     }
 
     public String getQuotedColumnName() {

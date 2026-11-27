@@ -22,6 +22,7 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.util.SqlUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
@@ -32,6 +33,7 @@ import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.statistic.StatisticExecutor;
+import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.statistic.base.BaseColumnStats;
 import com.starrocks.statistic.base.ColumnClassifier;
@@ -188,7 +190,7 @@ public abstract class HyperQueryJob {
 
         params.add(String.valueOf(table.getId()));
         params.add(String.valueOf(data.getPartitionId()));
-        params.add("'" + StringEscapeUtils.escapeSql(data.getColumnName()) + "'");
+        params.add("'" + SqlUtils.escapeSqlString(StatisticUtils.toStoredColumnName(data.getColumnName())) + "'");
         params.add(String.valueOf(db.getId()));
         params.add("'" + tableName + "'");
         params.add("'" + partitionName + "'");
@@ -207,7 +209,7 @@ public abstract class HyperQueryJob {
         List<Expr> row = Lists.newArrayList();
         row.add(new IntLiteral(table.getId(), IntegerType.BIGINT)); // table id, 8 byte
         row.add(new IntLiteral(data.getPartitionId(), IntegerType.BIGINT)); // partition id, 8 byte
-        row.add(new StringLiteral(data.getColumnName())); // column name, 20 byte
+        row.add(new StringLiteral(StatisticUtils.toStoredColumnName(data.getColumnName()))); // column name, 20 byte
         row.add(new IntLiteral(db.getId(), IntegerType.BIGINT)); // db id, 8 byte
         row.add(new StringLiteral(tableName)); // table name, 50 byte
         row.add(new StringLiteral(partitionName)); // partition name, 10 byte

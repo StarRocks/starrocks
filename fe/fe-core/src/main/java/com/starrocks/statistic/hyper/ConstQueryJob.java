@@ -69,7 +69,7 @@ public class ConstQueryJob extends HyperQueryJob {
                 TStatisticData data = new TStatisticData();
                 data.setPartitionId(pid);
                 data.setRowCount(rowCount);
-                data.setColumnName(column.getColumnNameStr());
+                data.setColumnName(column.getColumnName());
                 data.setHll("00".getBytes(StandardCharsets.UTF_8));
                 data.setNullCount(0);
                 data.setDataSize(column.getTypeSize() * rowCount);

@@ -282,6 +282,7 @@ public class StatisticExecutor {
             String statsSql = StatisticSQLBuilder.buildQueryFullStatisticsSQL(tableId, columnNamesForStats, 
                     columnTypesForStats, partitionIds);
             List<TStatisticData> tStatisticData = executeStatisticDQL(context, statsSql);
+            StatisticUtils.restoreColumnNames(tStatisticData, columnNamesForStats, false);
             columnStats.addAll(tStatisticData);
         }
         if (CollectionUtils.isNotEmpty(columnWithSampleStats)) {
@@ -294,6 +295,7 @@ public class StatisticExecutor {
                 String statsSql = StatisticSQLBuilder.buildQueryFullStatisticsSQL(
                         tableId, columnNamesForStats, columnTypesForStats, partitionIds);
                 List<TStatisticData> tStatisticData = executeStatisticDQL(context, statsSql);
+                StatisticUtils.restoreColumnNames(tStatisticData, columnNamesForStats, false);
                 columnStats.addAll(tStatisticData);
             } else {
                 String statsSql = StatisticSQLBuilder.buildQuerySampleStatisticsSQL(dbId, tableId, columnNamesForStats);
@@ -500,7 +502,9 @@ public class StatisticExecutor {
 
     public List<TStatisticData> queryHistogram(ConnectContext statsConnectCtx, Long tableId, List<String> columnNames) {
         String sql = StatisticSQLBuilder.buildQueryHistogramStatisticsSQL(tableId, columnNames);
-        return executeStatisticDQL(statsConnectCtx, sql);
+        List<TStatisticData> rows = executeStatisticDQL(statsConnectCtx, sql);
+        StatisticUtils.restoreColumnNames(rows, columnNames, true);
+        return rows;
     }
 
     public List<TStatisticData> queryHistogram(ConnectContext statsConnectCtx, String tableUUID, List<String> columnNames) {
@@ -701,7 +705,9 @@ public class StatisticExecutor {
     public List<TStatisticData> queryPartitionLevelColumnNDV(ConnectContext context, long tableId,
                                                              List<Long> partitions, List<String> columns) {
         String sql = StatisticSQLBuilder.buildQueryPartitionStatisticsSQL(tableId, partitions, columns);
-        return executeStatisticDQL(context, sql);
+        List<TStatisticData> rows = executeStatisticDQL(context, sql);
+        StatisticUtils.restoreColumnNames(rows, columns, false);
+        return rows;
     }
 
     private static List<TStatisticData> deserializerStatisticData(List<TResultBatch> sqlResult) throws TException {

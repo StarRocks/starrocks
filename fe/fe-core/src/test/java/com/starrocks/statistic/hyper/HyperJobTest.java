@@ -754,6 +754,11 @@ public class HyperJobTest extends DistributedEnvPlanTestBase {
 
             @Override
             public String getColumnNameStr() {
+                return getColumnName();
+            }
+
+            @Override
+            public String getColumnName() {
                 return "c_foreign";
             }
 

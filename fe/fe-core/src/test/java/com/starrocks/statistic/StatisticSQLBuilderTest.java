@@ -15,6 +15,7 @@
 package com.starrocks.statistic;
 
 import com.google.common.collect.ImmutableList;
+import com.starrocks.thrift.TStatisticData;
 import com.starrocks.type.IntegerType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -204,5 +205,85 @@ class StatisticSQLBuilderTest {
         Assertions.assertTrue(histogramSql.contains("db_name = 'd''b'"), histogramSql);
         Assertions.assertTrue(histogramSql.contains("table_name = 'o''brien'"), histogramSql);
         Assertions.assertTrue(histogramSql.contains("column_name in ('c''1')"), histogramSql);
+    }
+
+    private static String columnStatsSql(String name) {
+        return StatisticSQLBuilder.buildQueryFullStatisticsSQL(1L, ImmutableList.of(name),
+                ImmutableList.of(IntegerType.INT))
+                + StatisticSQLBuilder.buildQueryPartitionStatisticsSQL(1L, ImmutableList.of(2L), ImmutableList.of(name));
+    }
+
+    private static String histogramSql(String name) {
+        return StatisticSQLBuilder.buildQueryHistogramStatisticsSQL(1L, ImmutableList.of(name))
+                + StatisticSQLBuilder.buildDropHistogramSQL(1L, ImmutableList.of(name));
+    }
+
+    @Test
+    void shortColumnNamesArePlainInPredicates() {
+        List<String> names = ImmutableList.of("c1", "c2");
+        String full = StatisticSQLBuilder.buildQueryFullStatisticsSQL(1L, names,
+                ImmutableList.of(IntegerType.INT, IntegerType.INT));
+        Assertions.assertTrue(full.contains("table_id = 1 and column_name in (\"c1\", \"c2\")"), full);
+
+        String partition = StatisticSQLBuilder.buildQueryPartitionStatisticsSQL(1L, ImmutableList.of(2L), names);
+        Assertions.assertTrue(partition.contains("`column_name` in ('c1','c2')"), partition);
+
+        String histogram = StatisticSQLBuilder.buildQueryHistogramStatisticsSQL(1L, names);
+        Assertions.assertTrue(histogram.contains("table_id = 1 and column_name in ('c1', 'c2')"), histogram);
+
+        Assertions.assertEquals("delete from histogram_statistics where table_id = 1 and column_name in ('c1', 'c2')",
+                StatisticSQLBuilder.buildDropHistogramSQL(1L, names));
+    }
+
+    // Names are stored hashed above the PK limit of their table, so the read and drop predicates must match that.
+    @Test
+    void longColumnNamesAreHashedInPredicate() {
+        String atColumnLimit = "c".repeat(StatisticUtils.COLUMN_NAME_PK_MAX_BYTES);
+        String overColumnLimit = "c".repeat(StatisticUtils.COLUMN_NAME_PK_MAX_BYTES + 1);
+        String overHistogramLimit = "c".repeat(StatisticUtils.HISTOGRAM_COLUMN_NAME_PK_MAX_BYTES + 1);
+
+        Assertions.assertTrue(columnStatsSql(atColumnLimit).contains(atColumnLimit));
+        Assertions.assertTrue(histogramSql(atColumnLimit).contains(atColumnLimit));
+
+        String hash = StatisticUtils.toStoredColumnName(overColumnLimit);
+        Assertions.assertNotEquals(overColumnLimit, hash);
+        Assertions.assertFalse(columnStatsSql(overColumnLimit).contains(overColumnLimit));
+        Assertions.assertTrue(columnStatsSql(overColumnLimit).contains(hash));
+        // still within the limit of histogram_statistics
+        Assertions.assertTrue(histogramSql(overColumnLimit).contains(overColumnLimit));
+
+        String histogramHash = StatisticUtils.toStoredHistogramColumnName(overHistogramLimit);
+        Assertions.assertNotEquals(overHistogramLimit, histogramHash);
+        Assertions.assertFalse(histogramSql(overHistogramLimit).contains(overHistogramLimit));
+        Assertions.assertTrue(histogramSql(overHistogramLimit).contains(histogramHash));
+    }
+
+    @Test
+    void emptyColumnListOmitsColumnPredicate() {
+        List<String> none = ImmutableList.of();
+        String partition = StatisticSQLBuilder.buildQueryPartitionStatisticsSQL(1L, ImmutableList.of(2L), none);
+        Assertions.assertFalse(partition.contains("`column_name` in"), partition);
+
+        String histogram = StatisticSQLBuilder.buildQueryHistogramStatisticsSQL(1L, none);
+        Assertions.assertFalse(histogram.contains("`column_name` in"), histogram);
+    }
+
+    @Test
+    void restoreColumnNamesMapsHashesBackToRequestedNames() {
+        TStatisticData shortRow = row(StatisticUtils.toStoredColumnName("c1"));
+        String longName = "c".repeat(StatisticUtils.COLUMN_NAME_PK_MAX_BYTES + 1);
+        TStatisticData longRow = row(StatisticUtils.toStoredColumnName(longName));
+
+        StatisticUtils.restoreColumnNames(ImmutableList.of(shortRow, longRow),
+                ImmutableList.of("c1", longName), false);
+
+        Assertions.assertEquals("c1", shortRow.getColumnName());
+        Assertions.assertEquals(longName, longRow.getColumnName());
+    }
+
+    private static TStatisticData row(String columnName) {
+        TStatisticData data = new TStatisticData();
+        data.setColumnName(columnName);
+        return data;
     }
 }

@@ -60,6 +60,7 @@ import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient;
 import com.starrocks.thrift.TResultSinkType;
+import com.starrocks.thrift.TStatisticData;
 import com.starrocks.transaction.InsertOverwriteJobStats;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.type.DateType;
@@ -75,12 +76,15 @@ import org.apache.iceberg.PartitionField;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -516,6 +520,60 @@ public class StatisticUtils {
     // separate non-key columns on every row, so no traceability is lost by hashing table_uuid.
     public static String hashTableUuidForPkStorage(String tableUuid) {
         return Hashing.murmur3_128().hashUnencodedChars(tableUuid).toString();
+    }
+
+    // Largest column_name that the BE accepts for the table's PK is the default of primary_key_limit_size (128B)
+    // column_statistics PK is (table_id BIGINT, partition_id BIGINT, column_name VARCHAR): 128 - 2 * 8
+    static final int COLUMN_NAME_PK_MAX_BYTES = 112;
+
+    // histogram_statistics PK is (table_id BIGINT, column_name VARCHAR): 128 - 8
+    static final int HISTOGRAM_COLUMN_NAME_PK_MAX_BYTES = 120;
+
+    // The column_name stored in column_statistics: the raw name, or a deterministic, fixed-length
+    // (32 hex chars) hash if it exceeds the PK size limit
+    public static String toStoredColumnName(String columnName) {
+        return toStoredColumnName(columnName, COLUMN_NAME_PK_MAX_BYTES);
+    }
+
+    // The column_name stored in histogram_statistics, same as toStoredColumnName.
+    public static String toStoredHistogramColumnName(String columnName) {
+        return toStoredColumnName(columnName, HISTOGRAM_COLUMN_NAME_PK_MAX_BYTES);
+    }
+
+    static String toStoredName(String columnName, boolean histogram) {
+        return histogram ? toStoredHistogramColumnName(columnName) : toStoredColumnName(columnName);
+    }
+
+    static String toStoredColumnName(String columnName, int maxBytes) {
+        if (columnName.getBytes(StandardCharsets.UTF_8).length <= maxBytes) {
+            return columnName;
+        }
+        return Hashing.murmur3_128().hashUnencodedChars(columnName).toString();
+    }
+
+    // Statistics rows come back with the stored column_name, which is a hash for long names. The statistics caches
+    // match on the real name, and a hash cannot be reversed. We map the stored names of the requested columns back to
+    // the real ones. histogram selects the limit of histogram_statistics instead of column_statistics.
+    public static void restoreColumnNames(List<TStatisticData> rows, Collection<String> requestedNames,
+                                          boolean histogram) {
+        Map<String, String> storedToReal = new HashMap<>();
+        for (String name : requestedNames) {
+            String stored = toStoredName(name, histogram);
+            if (!stored.equals(name)) {
+                storedToReal.put(stored, name);
+            }
+        }
+        // If we have no hashed names we are done
+        if (storedToReal.isEmpty()) {
+            return;
+        }
+
+        for (TStatisticData row : rows) {
+            String real = storedToReal.get(row.getColumnName());
+            if (real != null) {
+                row.setColumnName(real);
+            }
+        }
     }
 
     public static Optional<Double> convertStatisticsToDouble(Type type, String statistic) {
