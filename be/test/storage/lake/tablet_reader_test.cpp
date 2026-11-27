@@ -4113,7 +4113,7 @@ TEST_F(LakeTabletReaderSpit, test_index_warm_includes_bitmap_index_roots) {
         ranges.emplace_back(std::get<0>(*call), std::get<1>(*call));
         *std::get<2>(*call) = std::make_shared<FakeIndexWarmHandle>();
     });
-    std::unique_ptr<ColumnPredicate> pred(new_column_eq_predicate(get_type_info(TYPE_INT), 1, "8"));
+    std::unique_ptr<ColumnPredicate> pred(new_column_eq_predicate(get_type_info(TYPE_INT), 1, "16"));
     auto read = [&]() {
         ranges.clear();
         auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), _tablet_metadata, *_schema);
@@ -4125,15 +4125,18 @@ TEST_F(LakeTabletReaderSpit, test_index_warm_includes_bitmap_index_roots) {
         params.pred_tree = PredicateTree::create(std::move(root));
         EXPECT_OK(reader->open(params));
         auto chunk = ChunkFactory::new_chunk(*_schema, 1024);
-        int64_t rows = 0;
+        std::vector<int32_t> keys;
         while (true) {
             chunk->reset();
             auto st = reader->get_next(chunk.get());
             if (st.is_end_of_file()) break;
             EXPECT_OK(st);
-            rows += chunk->num_rows();
+            if (!st.ok()) break;
+            for (size_t i = 0; i < chunk->num_rows(); ++i) {
+                keys.push_back(chunk->get(i)[0].get_int32());
+            }
         }
-        EXPECT_EQ(1, rows); // c1 = 8 is the row with key 4
+        EXPECT_EQ(std::vector<int32_t>{8}, keys); // c1 = 16 is the row with key 8
         auto stats = reader->stats();
         reader->close();
         return stats;
