@@ -482,6 +482,11 @@ struct THdfsScanRangeExt {
 }
 
 // Hdfs scan range
+// Binary Thrift payload of THdfsScanRange.lance_split_info.
+struct TLanceScanSplit {
+    1: optional i64 dataset_version
+}
+
 struct THdfsScanRange {
     // File name (not the full path).  The path is assumed to be relative to the
     // 'location' of the THdfsPartition referenced by partition_id.

@@ -162,6 +162,12 @@ public class CatalogConnectorMetadata implements ConnectorMetadata, DelegatingCo
     }
 
     @Override
+    public Table getTable(ConnectContext context, String dbName, String tblName, ConnectorTableVersion version) {
+        ConnectorMetadata metadata = metadataOfTable(tblName);
+        return (metadata == null ? metadataOfDb(dbName) : metadata).getTable(context, dbName, tblName, version);
+    }
+
+    @Override
     public String getTableComment(ConnectContext context, String dbName, String tblName) {
         return metadataOfTable(dbName, tblName).getTableComment(context, dbName, tblName);
     }

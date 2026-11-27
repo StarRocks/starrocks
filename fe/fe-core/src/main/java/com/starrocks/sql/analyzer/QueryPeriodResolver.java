@@ -14,10 +14,14 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.IcebergTable;
+import com.starrocks.catalog.LanceTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.ConnectorTableVersion;
+import com.starrocks.connector.ConnectorType;
 import com.starrocks.connector.PointerType;
 import com.starrocks.connector.iceberg.IcebergMetadata;
 import com.starrocks.qe.ConnectContext;
@@ -45,6 +49,24 @@ public class QueryPeriodResolver {
     private static final Logger LOG = LogManager.getLogger(QueryPeriodResolver.class);
 
     private QueryPeriodResolver() {
+    }
+
+    static Table lookupTable(TableRelation relation, String catalog, String database, String name,
+                             ConnectContext session, MetadataMgr metadata) {
+        QueryPeriod period = relation.getQueryPeriod();
+        Catalog source = period == null ? null : session.getGlobalStateMgr().getCatalogMgr().getCatalogByName(catalog);
+        if (source == null || !ConnectorType.LANCE.getName().equalsIgnoreCase(source.getType())) {
+            return metadata.getTable(session, catalog, database, name);
+        }
+        if (period.getPeriodType() != QueryPeriod.PeriodType.VERSION || period.getStart().isPresent()) {
+            throw new SemanticException("Lance supports FOR VERSION AS OF with a version number or tag");
+        }
+        ConnectorTableVersion selector = resolve(period.getEnd(), period.getPeriodType(), session).orElseThrow();
+        Table table = metadata.getTable(session, catalog, database, name, selector);
+        if (table instanceof LanceTable lanceTable) {
+            relation.setTvrVersionRange(TvrTableSnapshot.of(lanceTable.getDatasetVersion()));
+        }
+        return table;
     }
 
     public static Optional<ConnectorTableVersion> resolve(Optional<Expr> version,
@@ -88,6 +110,15 @@ public class QueryPeriodResolver {
      */
     public static Table resolveAndBindTable(TableRelation tableRelation, Table table,
                                             ConnectContext session, MetadataMgr metadataMgr) {
+        if (table instanceof LanceTable && tableRelation.getTvrVersionRange() == null) {
+            if (tableRelation.getQueryPeriod() != null) {
+                return lookupTable(tableRelation, table.getCatalogName(), table.getCatalogDBName(),
+                        table.getCatalogTableName(), session, metadataMgr);
+            }
+            if (tableRelation.getQueryPeriodString() != null) {
+                throw new SemanticException("Lance supports point-in-time reads with FOR VERSION AS OF");
+            }
+        }
         if (tableRelation.getQueryPeriod() == null || tableRelation.getTvrVersionRange() != null) {
             return table;
         }

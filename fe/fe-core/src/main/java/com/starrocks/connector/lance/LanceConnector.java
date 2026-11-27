@@ -33,7 +33,7 @@ public class LanceConnector implements Connector {
 
     @Override
     public ConnectorMetadata getMetadata() {
-        return metadata;
+        return new LanceMetadata(metadata);
     }
 
     @Override
