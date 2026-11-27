@@ -135,7 +135,6 @@ public:
     // width is known, as for BITMAP or VARBINARY. Exposing it lets ARRAY<GEO> build its type info; every
     // operation that reads, copies, orders or bounds a slot is still rejected below.
     size_t size() const override { return sizeof(Slice); }
-    void shallow_copy(void*, const void*) const override { unsupported(); }
     void deep_copy(void*, const void*, const TypeInfoAllocator*) const override { unsupported(); }
     void direct_copy(void*, const void*) const override { unsupported(); }
     std::string to_string(const void*) const override { unsupported(); }
@@ -188,8 +187,6 @@ class ScalarTypeInfo final : public TypeInfo {
 public:
     ~ScalarTypeInfo() override = default;
 
-    void shallow_copy(void* dest, const void* src) const override { _shallow_copy(dest, src); }
-
     void deep_copy(void* dest, const void* src, const TypeInfoAllocator* allocator) const override {
         _deep_copy(dest, src, allocator);
     }
@@ -211,7 +208,6 @@ protected:
     int _datum_cmp_impl(const Datum& left, const Datum& right) const override { return _datum_cmp(left, right); }
 
 private:
-    void (*_shallow_copy)(void* dest, const void* src);
     void (*_deep_copy)(void* dest, const void* src, const TypeInfoAllocator* allocator);
     void (*_direct_copy)(void* dest, const void* src);
 
@@ -257,10 +253,6 @@ struct ScalarTypeInfoImplBase {
         } else {
             return 0;
         }
-    }
-
-    static void shallow_copy(void* dest, const void* src) {
-        unaligned_store<CppType>(dest, unaligned_load<CppType>(src));
     }
 
     static void deep_copy(void* dest, const void* src, const TypeInfoAllocator* allocator __attribute__((unused))) {
@@ -342,8 +334,7 @@ private:
 
 template <typename TypeInfoImpl>
 ScalarTypeInfo::ScalarTypeInfo([[maybe_unused]] TypeInfoImpl t)
-        : _shallow_copy(TypeInfoImpl::shallow_copy),
-          _deep_copy(TypeInfoImpl::deep_copy),
+        : _deep_copy(TypeInfoImpl::deep_copy),
           _direct_copy(TypeInfoImpl::direct_copy),
           _from_string(TypeInfoImpl::from_string),
           _to_string(TypeInfoImpl::to_string),
@@ -542,9 +533,6 @@ struct ScalarTypeInfoImpl<TYPE_LARGEINT> : public ScalarTypeInfoImplBase<TYPE_LA
 
     // GCC7.3 will generate movaps instruction, which will lead to SEGV when buf is
     // not aligned to 16 byte
-    static void shallow_copy(void* dest, const void* src) {
-        unaligned_store<int128_t>(dest, unaligned_load<int128_t>(src));
-    }
     static void deep_copy(void* dest, const void* src, const TypeInfoAllocator* allocator __attribute__((unused))) {
         unaligned_store<int128_t>(dest, unaligned_load<int128_t>(src));
     }
@@ -579,10 +567,6 @@ struct ScalarTypeInfoImpl<TYPE_INT256> : public ScalarTypeInfoImplBase<TYPE_INT2
     static std::string to_string(const void* src) {
         auto value = unaligned_load<int256_t>(src);
         return value.to_string();
-    }
-
-    static void shallow_copy(void* dest, const void* src) {
-        unaligned_store<int256_t>(dest, unaligned_load<int256_t>(src));
     }
 
     static void deep_copy(void* dest, const void* src, const TypeInfoAllocator* allocator __attribute__((unused))) {
@@ -681,7 +665,6 @@ struct ScalarTypeInfoImpl<TYPE_DECIMALV2> : public ScalarTypeInfoImplBase<TYPE_D
     }
     // GCC7.3 will generate movaps instruction, which will lead to SEGV when buf is
     // not aligned to 16 byte
-    static void shallow_copy(void* dest, const void* src) { memcpy(dest, src, sizeof(CppType)); }
     static void deep_copy(void* dest, const void* src, const TypeInfoAllocator* allocator __attribute__((unused))) {
         memcpy(dest, src, sizeof(CppType));
     }
