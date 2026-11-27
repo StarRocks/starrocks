@@ -22,10 +22,12 @@
 
 #include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <functional>
 #include <memory>
 #include <mutex>
 #include <string>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -42,6 +44,7 @@
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
 #include "common/config_lake_fwd.h"
+#include "common/thread/threadpool.h"
 #include "data_workflows/load/tablet_writer/load_channel_mgr.h"
 #include "exec/exec_env.h"
 #include "fs/fs_util.h"
@@ -2491,11 +2494,11 @@ TEST_F(LakeServiceTest, test_drop_tablet_cache) {
 
     // thread pool is null
     {
-        SyncPoint::GetInstance()->SetCallBack("AgentServer::Impl::get_thread_pool:1",
+        SyncPoint::GetInstance()->SetCallBack("LakeServiceImpl::drop_tablet_cache:thread_pool",
                                               [](void* arg) { *(ThreadPool**)arg = nullptr; });
         SyncPoint::GetInstance()->EnableProcessing();
         DeferOp defer([]() {
-            SyncPoint::GetInstance()->ClearCallBack("AgentServer::Impl::get_thread_pool:1");
+            SyncPoint::GetInstance()->ClearCallBack("LakeServiceImpl::drop_tablet_cache:thread_pool");
             SyncPoint::GetInstance()->DisableProcessing();
         });
 
@@ -2508,6 +2511,133 @@ TEST_F(LakeServiceTest, test_drop_tablet_cache) {
         _lake_service.drop_tablet_cache(&cntl, &request, &response, nullptr);
         ASSERT_TRUE(cntl.Failed());
         ASSERT_EQ("no thread pool to run task", cntl.ErrorText());
+    }
+}
+
+// At most two requests are on the pool at a time, and one of its threads stays free for drop_table and delete_tablet.
+// A request over the limit takes neither a thread nor a queue slot, and runs once a request on the pool has finished.
+// A request with only tablets at version 1 has nothing to drop and does not wait at all. A request that does not get
+// its turn within its wait gives up without running a task.
+TEST_F(LakeServiceTest, test_drop_tablet_cache_limits_requests_on_pool) {
+    struct PoolCase {
+        int max_threads;
+        int max_requests;
+    };
+    for (const auto& pool_case : {PoolCase{4, 2}, PoolCase{2, 1}}) {
+        SCOPED_TRACE(pool_case.max_threads);
+        // Declared before the pool, whose workers use them until it is destroyed.
+        std::atomic<int> task_runs{0};
+        std::atomic<int> waits_for_pool{0};
+        std::atomic<bool> released{false};
+        std::atomic<bool> other_work_ran{false};
+        // Long enough for the request over the limit to get its turn; shortened for the request that is to give up.
+        std::atomic<int64_t> max_wait_ms{5 * 60 * 1000};
+        std::unique_ptr<ThreadPool> pool;
+        ASSERT_OK(ThreadPoolBuilder("drop_cache_limit_test")
+                          .set_min_threads(0)
+                          .set_max_threads(pool_case.max_threads)
+                          .set_max_queue_size(8)
+                          .build(&pool));
+        auto* raw_pool = pool.get();
+
+        SyncPoint::GetInstance()->SetCallBack("LakeServiceImpl::drop_tablet_cache:thread_pool",
+                                              [&](void* arg) { *(ThreadPool**)arg = raw_pool; });
+        SyncPoint::GetInstance()->SetCallBack("LakeServiceImpl::drop_tablet_cache:task_run", [&](void*) {
+            task_runs++;
+            while (!released.load()) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            }
+        });
+        SyncPoint::GetInstance()->SetCallBack("LakeServiceImpl::drop_tablet_cache:wait_for_pool",
+                                              [&](void*) { waits_for_pool++; });
+        SyncPoint::GetInstance()->SetCallBack("LakeServiceImpl::drop_tablet_cache:max_wait_ms",
+                                              [&](void* arg) { *(int64_t*)arg = max_wait_ms.load(); });
+        SyncPoint::GetInstance()->EnableProcessing();
+        DeferOp defer([&]() {
+            released = true;
+            SyncPoint::GetInstance()->ClearCallBack("LakeServiceImpl::drop_tablet_cache:thread_pool");
+            SyncPoint::GetInstance()->ClearCallBack("LakeServiceImpl::drop_tablet_cache:task_run");
+            SyncPoint::GetInstance()->ClearCallBack("LakeServiceImpl::drop_tablet_cache:wait_for_pool");
+            SyncPoint::GetInstance()->ClearCallBack("LakeServiceImpl::drop_tablet_cache:max_wait_ms");
+            SyncPoint::GetInstance()->DisableProcessing();
+        });
+
+        auto drop_cache = [&](int64_t tablet_id, int64_t version, DropTabletCacheResponse* response) {
+            DropTabletCacheRequest request;
+            auto* tablet = request.add_tablets();
+            tablet->set_tablet_id(tablet_id);
+            tablet->set_version(version);
+            brpc::Controller cntl;
+            _lake_service.drop_tablet_cache(&cntl, &request, response, nullptr);
+            EXPECT_FALSE(cntl.Failed()) << cntl.ErrorText();
+        };
+
+        std::vector<DropTabletCacheResponse> responses(pool_case.max_requests + 1);
+        DropTabletCacheResponse empty_response;
+        std::atomic<bool> empty_returned{false};
+        DropTabletCacheResponse timed_out_response;
+        std::atomic<bool> timed_out_returned{false};
+        std::vector<bthread_t> requests;
+        // Runs on every path, so that a failed wait does not leave a bthread behind that uses this stack.
+        auto join_all = [&]() {
+            released = true;
+            for (auto tid : requests) {
+                bthread_join(tid, nullptr);
+            }
+            requests.clear();
+        };
+        DeferOp defer_join(join_all);
+        constexpr int64_t kWaitTimeoutUs = 30 * 1000 * 1000;
+
+        for (int i = 0; i < pool_case.max_requests; i++) {
+            ASSIGN_OR_ABORT(auto tid,
+                            bthreads::start_bthread([&, i]() { drop_cache(_tablet_id + i, 3, &responses[i]); }));
+            requests.push_back(tid);
+        }
+        ASSERT_TRUE(
+                Awaitility().timeout(kWaitTimeoutUs).until([&] { return task_runs.load() == pool_case.max_requests; }));
+
+        // The request over the limit waits for its turn. The requests are sent from bthreads so that a broken limit
+        // fails the waits below instead of blocking the thread that lets the running requests finish.
+        ASSIGN_OR_ABORT(auto over_limit, bthreads::start_bthread([&]() {
+                            drop_cache(_tablet_id + pool_case.max_requests, 3, &responses.back());
+                        }));
+        requests.push_back(over_limit);
+        ASSERT_TRUE(Awaitility().timeout(kWaitTimeoutUs).until([&] { return waits_for_pool.load() > 0; }))
+                << "task_runs=" << task_runs.load();
+        EXPECT_EQ(pool_case.max_requests, task_runs.load());
+
+        // The free thread serves the other work of the pool.
+        ASSERT_OK(raw_pool->submit_func([&]() { other_work_ran = true; }));
+        ASSERT_TRUE(Awaitility().timeout(kWaitTimeoutUs).until([&] { return other_work_ran.load(); }));
+
+        // A request whose tablets are all at version 1 answers at once, without a task.
+        ASSIGN_OR_ABORT(auto empty, bthreads::start_bthread([&]() {
+                            drop_cache(_tablet_id + pool_case.max_requests + 1, 1, &empty_response);
+                            empty_returned = true;
+                        }));
+        requests.push_back(empty);
+        ASSERT_TRUE(Awaitility().timeout(kWaitTimeoutUs).until([&] { return empty_returned.load(); }));
+        EXPECT_EQ(0, empty_response.status().status_code());
+        EXPECT_EQ(pool_case.max_requests, task_runs.load());
+
+        // A request that does not get its turn within its wait gives up and leaves the files to the cache's own
+        // eviction.
+        max_wait_ms = 100;
+        ASSIGN_OR_ABORT(auto timed_out, bthreads::start_bthread([&]() {
+                            drop_cache(_tablet_id + pool_case.max_requests + 2, 3, &timed_out_response);
+                            timed_out_returned = true;
+                        }));
+        requests.push_back(timed_out);
+        ASSERT_TRUE(Awaitility().timeout(kWaitTimeoutUs).until([&] { return timed_out_returned.load(); }));
+        EXPECT_TRUE(Status(timed_out_response.status()).is_time_out()) << timed_out_response.status().DebugString();
+        EXPECT_EQ(pool_case.max_requests, task_runs.load());
+
+        join_all();
+        EXPECT_EQ(pool_case.max_requests + 1, task_runs.load());
+        for (const auto& response : responses) {
+            EXPECT_EQ(0, response.status().status_code());
+        }
     }
 }
 
