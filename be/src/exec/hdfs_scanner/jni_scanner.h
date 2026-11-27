@@ -82,6 +82,9 @@ private:
 
     Status _release_off_heap_table(JNIEnv* env);
 
+    // The JNI part of do_close(); needs a thread that can attach to the JVM.
+    void _close_jni_scanner();
+
     std::string _scanner_type() {
         return _jni_scanner_params.contains("scanner_type") ? _jni_scanner_params["scanner_type"] : "default";
     }
