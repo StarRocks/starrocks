@@ -251,14 +251,16 @@ public:
         auto lhs_nulls = ColumnHelper::count_nulls(lhs);
         auto rhs_nulls = ColumnHelper::count_nulls(rhs);
 
+        constexpr bool enable_simd_selector = can_use_simd_selector<Type>;
+
         // optimization for 3 columns all not null.
         if (bhs_nulls == 0 && lhs_nulls == 0 && rhs_nulls == 0) {
-            // only arithmetic type could use SIMD optimization
+            // only arithmetic type (and DATE/DATETIME on AVX2/NEON) could use SIMD optimization
             if constexpr (lt_is_row_wise_append<Type>) {
                 return _evaluate_complex<false>(list);
-            } else if (bhs->is_constant() || !isArithmeticLT<Type>) {
+            } else if (bhs->is_constant() || !enable_simd_selector) {
                 return _evaluate_general<false>(list);
-            } else if constexpr (isArithmeticLT<Type>) {
+            } else if constexpr (enable_simd_selector) {
                 return dispatch_nonull_template<SelectIfOP, Type>(lhs, rhs, bhs, type());
             } else {
                 __builtin_unreachable();
@@ -266,7 +268,7 @@ public:
         } else {
             if constexpr (lt_is_row_wise_append<Type>) {
                 return _evaluate_complex<true>(list);
-            } else if constexpr (isArithmeticLT<Type>) {
+            } else if constexpr (enable_simd_selector) {
                 // SIMD branch
                 size_t num_rows = list[0]->size();
                 // get null data
@@ -276,7 +278,6 @@ public:
                 auto lds = get_data_column(num_rows, lhs);
                 auto rds = get_data_column(num_rows, rhs);
                 // call select if
-                auto selector = bhs->only_null() ? UInt8Column::create(num_rows) : bhs;
                 auto select_data = dispatch_nonull_template<SelectIfOP, Type>(lds, rds, bhs, type());
                 auto select_null = dispatch_nonull_template<SelectIfOP, TYPE_BOOLEAN>(lns, rns, bhs, TYPE_BOOLEAN_DESC);
                 auto res = NullableColumn::create(select_data, ColumnHelper::as_column<NullColumn>(select_null));

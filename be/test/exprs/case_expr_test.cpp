@@ -1400,4 +1400,134 @@ TEST_F(VectorizedCaseExprTest, selectiveEvaluationWithConstWhen) {
         }
     }
 }
+
+template <LogicalType Type>
+static void verify_simd_multi_selector_non_canonical_truthy_bytes() {
+    using CppType = RunTimeCppType<Type>;
+    using ColumnType = RunTimeColumnType<Type>;
+
+    TExprNode node;
+    node.opcode = TExprOpcode::ADD;
+    node.child_type = TPrimitiveType::BOOLEAN;
+    node.node_type = TExprNodeType::CASE_EXPR;
+    node.num_children = 5;
+    node.__isset.opcode = true;
+    node.__isset.child_type = true;
+    node.case_expr.has_case_expr = false;
+    node.case_expr.has_else_expr = true;
+    node.is_nullable = false;
+    node.type = gen_type_desc(to_thrift(Type));
+
+    constexpr uint8_t kTruthyBytes[] = {0x02, 0x80, 0x81, 0xff};
+    const TypeDescriptor result_type(Type);
+
+    for (int n : {33, 64, 65}) {
+        // nullable_when = false: raw non-nullable BooleanColumn WHEN branches.
+        // nullable_when = true: NullableColumn with all-zero null bitmap (has_null() == false),
+        // exercising ColumnHelper::merge_nullable_filter skipping the loop when !has_null().
+        for (bool nullable_when : {false, true}) {
+            for (int const_mode : {0, 1}) {
+                SCOPED_TRACE(testing::Message() << "type=" << Type << " n=" << n << " nullable_when=" << nullable_when
+                                                << " const_mode=" << const_mode);
+
+                std::vector<uint8_t> when1_bytes(n);
+                std::vector<uint8_t> when2_bytes(n);
+                auto when1_data_col = BooleanColumn::create();
+                auto when2_data_col = BooleanColumn::create();
+                when1_data_col->get_data().resize(n);
+                when2_data_col->get_data().resize(n);
+
+                for (int r = 0; r < n; ++r) {
+                    if (r % 3 == 0) {
+                        when1_bytes[r] = kTruthyBytes[(r / 3) % 4];
+                        // Overlap with when1 on even rows to verify first-match-wins.
+                        when2_bytes[r] = (r % 2 == 0) ? kTruthyBytes[(r + 1) % 4] : 0x00;
+                    } else if (r % 3 == 1) {
+                        when1_bytes[r] = 0x00;
+                        when2_bytes[r] = kTruthyBytes[(r / 3) % 4];
+                    } else {
+                        when1_bytes[r] = 0x00;
+                        when2_bytes[r] = 0x00;
+                    }
+                    when1_data_col->get_data()[r] = when1_bytes[r];
+                    when2_data_col->get_data()[r] = when2_bytes[r];
+                }
+
+                auto wrap_when = [&](BooleanColumn::MutablePtr raw) -> ColumnPtr {
+                    if (!nullable_when) {
+                        return raw;
+                    }
+                    auto nullable = NullableColumn::create(std::move(raw), NullColumn::create(n, 0));
+                    nullable->update_has_null();
+                    return nullable;
+                };
+
+                ColumnPtr when1_col = wrap_when(std::move(when1_data_col));
+                ColumnPtr when2_col = wrap_when(std::move(when2_data_col));
+
+                auto make_var_col = [&](int offset) -> ColumnPtr {
+                    auto col = ColumnType::create();
+                    auto& data = col->get_data();
+                    data.resize(n);
+                    for (int r = 0; r < n; ++r) {
+                        data[r] = static_cast<CppType>((r % 30) + offset);
+                    }
+                    return col;
+                };
+
+                constexpr CppType kThen1Const = static_cast<CppType>(42);
+                constexpr CppType kThen2Const = static_cast<CppType>(91);
+                constexpr CppType kElseConst = static_cast<CppType>(121);
+
+                ColumnPtr then1_col =
+                        (const_mode == 1) ? ColumnHelper::create_const_column<Type>(kThen1Const, n) : make_var_col(1);
+                ColumnPtr then2_col =
+                        (const_mode == 0) ? ColumnHelper::create_const_column<Type>(kThen2Const, n) : make_var_col(50);
+                ColumnPtr else_col =
+                        (const_mode == 1) ? ColumnHelper::create_const_column<Type>(kElseConst, n) : make_var_col(100);
+
+                std::unique_ptr<Expr> expr(VectorizedCaseExprFactory::from_thrift(node, Type, TYPE_BOOLEAN));
+                ASSERT_NE(nullptr, expr);
+
+                MockExpr when1_expr(TYPE_BOOLEAN_DESC, when1_col);
+                MockExpr then1_expr(result_type, then1_col);
+                MockExpr when2_expr(TYPE_BOOLEAN_DESC, when2_col);
+                MockExpr then2_expr(result_type, then2_col);
+                MockExpr else_expr(result_type, else_col);
+
+                expr->_children.push_back(&when1_expr);
+                expr->_children.push_back(&then1_expr);
+                expr->_children.push_back(&when2_expr);
+                expr->_children.push_back(&then2_expr);
+                expr->_children.push_back(&else_expr);
+
+                Chunk chunk;
+                ColumnPtr res = expr->evaluate(nullptr, &chunk);
+                ASSERT_NE(nullptr, res);
+                ASSERT_EQ(n, res->size());
+
+                ColumnViewer<Type> viewer(res);
+                for (int r = 0; r < n; ++r) {
+                    ASSERT_FALSE(viewer.is_null(r)) << "r=" << r;
+                    CppType expected;
+                    if (when1_bytes[r] != 0) {
+                        expected = (const_mode == 1) ? kThen1Const : static_cast<CppType>((r % 30) + 1);
+                    } else if (when2_bytes[r] != 0) {
+                        expected = (const_mode == 0) ? kThen2Const : static_cast<CppType>((r % 30) + 50);
+                    } else {
+                        expected = (const_mode == 1) ? kElseConst : static_cast<CppType>((r % 30) + 100);
+                    }
+                    EXPECT_EQ(expected, viewer.value(r)) << "r=" << r;
+                }
+            }
+        }
+    }
+}
+
+TEST_F(VectorizedCaseExprTest, simdMultiSelectorNonCanonicalTruthyBytes) {
+    verify_simd_multi_selector_non_canonical_truthy_bytes<TYPE_TINYINT>();
+    verify_simd_multi_selector_non_canonical_truthy_bytes<TYPE_SMALLINT>();
+    verify_simd_multi_selector_non_canonical_truthy_bytes<TYPE_INT>();
+    verify_simd_multi_selector_non_canonical_truthy_bytes<TYPE_BIGINT>();
+}
 } // namespace starrocks
