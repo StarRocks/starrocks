@@ -30,6 +30,7 @@ import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.FileTableFunctionRelation;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.JoinRelation;
+import com.starrocks.sql.ast.PivotRelation;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
@@ -510,6 +511,24 @@ class StatementPlannerTest extends PlanTestBase {
                 + "group by (select count(*) from files(\"path\"=\"fake://group_by\", \"format\"=\"csv\"))");
     }
 
+    /**
+     * The parser moves the FROM clause of a PIVOT under it, and a files() there has to be resolved before the lock like
+     * any other: the t0 branch is what the statement locks. The files() relation is taken from under the PIVOT
+     * directly rather than from the collector the planner uses, so that the test does not rest on the walk it checks.
+     */
+    @Test
+    public void testQueryFilesUnderPivotResolvedBeforeLock() throws Exception {
+        String sql = "select v1 from t0 union all "
+                + "select a from files(\"path\"=\"fake://pivot\", \"format\"=\"csv\") f "
+                + "pivot (count(*) for col_int in (1 as a))";
+        QueryStatement stmt =
+                (QueryStatement) UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(sql, connectContext);
+        SelectRelation pivotBranch =
+                (SelectRelation) ((SetOperationRelation) stmt.getQueryRelation()).getRelations().get(1);
+        Relation underPivot = ((PivotRelation) pivotBranch.getRelation()).getQuery();
+        assertFilesResolvedBeforeLock(stmt, List.of((FileTableFunctionRelation) underPivot), sql);
+    }
+
     @Test
     public void testQueryFilesInWhereSubqueryResolvedBeforeLock() throws Exception {
         assertFilesResolvedBeforeLock("select v1 from t0 where v1 in "
@@ -571,7 +590,12 @@ class StatementPlannerTest extends PlanTestBase {
         // parseStmtWithNewParser() analyzes as well, which would resolve files() up front and make the
         // assertion below vacuous. Parse only, so analyzeStatement() sees a pristine AST.
         StatementBase stmt = UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(sql, connectContext);
-        List<FileTableFunctionRelation> fileRelations = AnalyzerUtils.collectFileTableFunctionRelation(stmt);
+        assertFilesResolvedBeforeLock(stmt, AnalyzerUtils.collectFileTableFunctionRelation(stmt), sql);
+    }
+
+    /** The same, for the files() relations given: those the collector the planner uses would not find too. */
+    private void assertFilesResolvedBeforeLock(StatementBase stmt, List<FileTableFunctionRelation> fileRelations,
+                                               String sql) throws Exception {
         assertFalse(fileRelations.isEmpty(), "no files() relation found in: " + sql);
         fileRelations.forEach(relation -> assertNull(relation.getTable(),
                 "files() must be unresolved right after parsing: " + sql));
