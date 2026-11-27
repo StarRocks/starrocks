@@ -26,6 +26,7 @@ import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.analyzer.DecimalV3FunctionAnalyzer;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
+import com.starrocks.sql.optimizer.SubqueryUtils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.AggType;
@@ -34,6 +35,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
+import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -415,6 +417,9 @@ public class PushDownAggregateRewriter extends OptExpressionVisitor<OptExpressio
 
         LogicalAggregationOperator aggregate;
         List<ColumnRefOperator> groupBys = Lists.newArrayList(context.groupBys.keySet());
+        if (groupBys.isEmpty()) {
+            return createUngroupedAggregate(result, context);
+        }
         if ("local".equalsIgnoreCase(sessionVariable.getCboPushDownAggregate()) ||
                 ("auto".equalsIgnoreCase(sessionVariable.getCboPushDownAggregate()) && groupBys.size() <= 1)) {
             // local && un-split
@@ -425,6 +430,36 @@ public class PushDownAggregateRewriter extends OptExpressionVisitor<OptExpressio
         }
 
         return OptExpression.create(aggregate, result);
+    }
+
+    /**
+     * A pushed aggregate with no grouping key is a scalar aggregate, which emits one row even for an empty
+     * input: count gives 0, sum / min / max give NULL. That happens below a join without a key on this side
+     * (CROSS JOIN, or a condition that only filters the other side), and for constant keys (`group by 1 + 1`,
+     * or a UNION branch projecting a constant), which rewriteProject drops since they use no column. Through
+     * the join, the row pairs with every row of the other side, so an empty join becomes a non-empty one and
+     * the aggregate above returns groups instead of no rows. Count the input rows and keep the row only when
+     * that count is positive -- what a GROUP BY on a constant returns -- then project an added count away so
+     * the pushed aggregate outputs the same columns as before.
+     */
+    private OptExpression createUngroupedAggregate(OptExpression input, AggregatePushDownContext context) {
+        Map<ColumnRefOperator, CallOperator> aggregations = Maps.newHashMap(context.aggregations);
+        // reuse a count(*) the query already pushes, or count the rows alongside
+        ColumnRefOperator rowCount = context.aggregations.entrySet().stream()
+                .filter(e -> PushDownAggregateUtils.isCountAgg(e.getValue()) && e.getValue().getArguments().isEmpty())
+                .map(Map.Entry::getKey).findFirst().orElse(null);
+        if (rowCount == null) {
+            CallOperator countRows = SubqueryUtils.createCountRowsOperator();
+            rowCount = factory.create("count", countRows.getType(), countRows.isNullable());
+            aggregations.put(rowCount, countRows);
+        }
+        ScalarOperator nonEmpty = BinaryPredicateOperator.gt(rowCount, ConstantOperator.createBigint(0));
+        LogicalAggregationOperator aggregate = new LogicalAggregationOperator(AggType.GLOBAL, List.of(), List.of(),
+                aggregations, false, -1, nonEmpty);
+
+        Map<ColumnRefOperator, ScalarOperator> outputs = Maps.newHashMap();
+        context.aggregations.keySet().forEach(c -> outputs.put(c, c));
+        return OptExpression.create(new LogicalProjectOperator(outputs), OptExpression.create(aggregate, input));
     }
 
     @Override
