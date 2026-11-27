@@ -588,6 +588,59 @@ TEST_F(VectorIndexWriterTest, get_vector_meta_unknown_quantizer_returns_error) {
     EXPECT_FALSE(get_vector_meta(tablet_index, {}).ok());
 }
 
+// Issue 83465: docs spell the HNSW search param as "efsearch"
+// (vector_index.md, System_variable.md). SessionVariable.getAnnParams()
+// forwards that key unchanged, but tenann only reads the canonical
+// "efSearch" key (index::vector::EF_SEARCH). get_vector_meta must write
+// the user value under that key, not leave the tablet default (40 here)
+// on "efSearch" and a second unread "efsearch" key. The already-working
+// camelCase spelling must keep working; FE accepts any case via
+// toUpperCase(), so mixed spellings must also land on the canonical key.
+TEST_F(VectorIndexWriterTest, get_vector_meta_ann_params_efsearch_case) {
+    auto tablet_index = prepare_tablet_index();
+    configure_hnsw(tablet_index);
+
+    {
+        ASSIGN_OR_ABORT(auto meta, get_vector_meta(tablet_index, {}));
+        EXPECT_EQ(40, meta.search_params()[starrocks::index::vector::EF_SEARCH].get<int>());
+    }
+    {
+        // Documented spelling from the issue 83465 reproduction.
+        ASSIGN_OR_ABORT(auto meta, get_vector_meta(tablet_index, {{"efsearch", "1"}}));
+        EXPECT_EQ(1, meta.search_params()[starrocks::index::vector::EF_SEARCH].get<int>());
+        EXPECT_EQ(meta.search_params().find("efsearch"), meta.search_params().end());
+    }
+    {
+        ASSIGN_OR_ABORT(auto meta, get_vector_meta(tablet_index, {{"efsearch", "400"}}));
+        EXPECT_EQ(400, meta.search_params()[starrocks::index::vector::EF_SEARCH].get<int>());
+        EXPECT_EQ(meta.search_params().find("efsearch"), meta.search_params().end());
+    }
+    {
+        // Previously the only spelling that took effect; must stay working.
+        ASSIGN_OR_ABORT(auto meta, get_vector_meta(tablet_index, {{"efSearch", "1"}}));
+        EXPECT_EQ(1, meta.search_params()[starrocks::index::vector::EF_SEARCH].get<int>());
+    }
+    {
+        ASSIGN_OR_ABORT(auto meta, get_vector_meta(tablet_index, {{"EFSEARCH", "400"}}));
+        EXPECT_EQ(400, meta.search_params()[starrocks::index::vector::EF_SEARCH].get<int>());
+        EXPECT_EQ(meta.search_params().find("EFSEARCH"), meta.search_params().end());
+    }
+    {
+        // Non-ef keys must keep their original names (the `: entry.first`
+        // branch). nprobe=8 would be lost if every key were rewritten to
+        // efSearch. range_search_confidence must stay a float; atoi would
+        // turn 0.5 into 0.
+        ASSIGN_OR_ABORT(auto meta,
+                        get_vector_meta(tablet_index,
+                                        {{"efsearch", "1"}, {"nprobe", "8"}, {"range_search_confidence", "0.5"}}));
+        EXPECT_EQ(1, meta.search_params()[starrocks::index::vector::EF_SEARCH].get<int>());
+        EXPECT_EQ(meta.search_params().find("efsearch"), meta.search_params().end());
+        EXPECT_EQ(8, meta.search_params()["nprobe"].get<int>());
+        EXPECT_TRUE(meta.search_params()[starrocks::index::vector::RANGE_SEARCH_CONFIDENCE].is_number_float());
+        EXPECT_FLOAT_EQ(0.5f, meta.search_params()[starrocks::index::vector::RANGE_SEARCH_CONFIDENCE].get<float>());
+    }
+}
+
 #endif // WITH_TENANN
 
 // ---- resolve_vector_index_build_threshold: single source of truth, B semantics ----
