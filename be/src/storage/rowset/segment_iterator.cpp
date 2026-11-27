@@ -306,6 +306,12 @@ private:
         size_t _first_column_total_rows_read = 0;   // Total rows read for first column
         size_t _first_column_total_rows_passed = 0; // Total rows passed first column filter
 
+        // For each delete conjunct (in delete_predicates order), its columns whose delete_state in the chunk the
+        // delete filter sees is exact for this context (see _init_del_conjunct_proof_cids). A conjunct matches no
+        // row of a chunk when one of them is DEL_NOT_SATISFIED. Empty when some conjunct has no such column, which
+        // turns the per-chunk conjunct skip off for this context.
+        std::vector<std::vector<ColumnId>> _del_conjunct_proof_cids;
+
     private:
         ScanStrategy& _scan_strategy(bool predicate_col_late_materialize_read) {
             if (predicate_col_late_materialize_read) {
@@ -589,6 +595,12 @@ private:
 
     void _build_context_for_predicate(ScanContext* ctx);
 
+    // Fills ctx->_del_conjunct_proof_cids from _del_conjunct_cids and the way |ctx| reads each delete column.
+    void _init_del_conjunct_proof_cids(ScanContext* ctx);
+    // Whether some delete conjunct may match a row of |chunk|, judged only from the delete_state of the columns in
+    // _context->_del_conjunct_proof_cids. True when that list is empty.
+    bool _delete_conjuncts_may_match(const Chunk& chunk) const;
+
     // Build column-specific RuntimeFilterPredicates for late materialization
     // Group runtime filter predicates by ColumnId
     void _build_column_oriented_rf(ScanContext* ctx);
@@ -610,6 +622,10 @@ private:
     BitmapIndexEvaluator _bitmap_index_evaluator;
     // delete predicates
     std::map<ColumnId, ColumnOrPredicate> _del_predicates;
+    // The column ids of each delete conjunct, in _opts.delete_predicates order. Built together with _del_predicates
+    // by _get_row_ranges_by_zone_map and cleared with it on reuse, so it is non-empty only when this scan's zone-map
+    // pass recorded the per-page delete state of every delete column.
+    std::vector<std::vector<ColumnId>> _del_conjunct_cids;
     // True for a vector (ANN) query on a table carrying non-PK delete predicates: the delete survivors are
     // folded into _scan_range up front by _apply_del_predicate, so the ANN search, the PRE gates and the
     // exact rescan see live rows only. It also tells the read loop to skip its (now redundant) per-chunk
@@ -727,6 +743,7 @@ void SegmentIterator::ScanContext::reset() {
     _evaluated_chunk_nums = 0;
     _first_column_total_rows_read = 0;
     _first_column_total_rows_passed = 0;
+    _del_conjunct_proof_cids.clear();
 }
 
 Status SegmentIterator::ScanContext::seek_columns(ordinal_t pos, bool predicate_col_late_materialize_read) {
@@ -1376,6 +1393,9 @@ Status SegmentIterator::_init_reused_scan() {
     // map::insert (no overwrite), so a stale entry would make _apply_del_predicate's prune use the old
     // predicate values. Clear it so the reused scan re-groups against the current predicates.
     _del_predicates.clear();
+    // Same for the per-conjunct columns: a reused scan that skips the zone-map pass (config off, precomputed
+    // scan range) has no per-page delete states of its own, so it must not keep the conjunct skip on.
+    _del_conjunct_cids.clear();
     _bitmap_index_evaluator.close();
     // Release per-scan objects appended via _obj_pool.add() during _init_scan_range_and_context (rewritten
     // predicate iterators, dict-decode column iterators, ...). They are otherwise only freed by close(),
@@ -2958,6 +2978,17 @@ Status SegmentIterator::_get_row_ranges_by_zone_map() {
     if (hit_row_ranges.has_value()) {
         zm_range &= hit_row_ranges.value();
     }
+    // The pass above recorded, for every delete column, the pages of the scan range whose zone map may match the
+    // column's OR group of delete predicates: the root AND visits each delete column with its _del_predicates entry,
+    // and a page it skips for failing a query predicate is dropped from the scan range. That state is per column;
+    // keep each conjunct's columns so the read loop can combine it per conjunct (see _delete_conjuncts_may_match).
+    _del_conjunct_cids.clear();
+    _del_conjunct_cids.reserve(_opts.delete_predicates.size());
+    for (size_t i = 0; i < _opts.delete_predicates.size(); i++) {
+        std::set<ColumnId> conjunct_cids;
+        _opts.delete_predicates[i].get_column_ids(&conjunct_cids);
+        _del_conjunct_cids.emplace_back(conjunct_cids.begin(), conjunct_cids.end());
+    }
 
     StorageMetrics::instance()->segment_rows_read_by_zone_map.increment(zm_range.span_size());
     size_t prev_size = _scan_range.span_size();
@@ -3386,8 +3417,20 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
     // remove (logical) deleted rows. Skipped when _apply_del_predicate already folded the delete
     // survivors into _scan_range (ANN path): the rows reaching here are live by construction, so
     // re-evaluating the delete predicates would read the delete columns again only to delete nothing.
-    if (chunk_size > 0 && chunk->delete_state() != DEL_NOT_SATISFIED && !_opts.delete_predicates.empty() &&
-        !_del_predicate_preapplied) {
+    bool filter_deleted_rows = chunk_size > 0 && chunk->delete_state() != DEL_NOT_SATISFIED &&
+                               !_opts.delete_predicates.empty() && !_del_predicate_preapplied;
+    // The chunk delete_state is the OR over all the columns read, so any column that may match keeps the chunk,
+    // e.g. the IN list of `k1 = 1 AND k2 IN (...)` on the pages of every other k1. Skip it as well when each
+    // delete conjunct has a column that rules it out for the whole chunk.
+    if (filter_deleted_rows && config::enable_delete_predicate_conjunct_skip &&
+        !_context->_del_conjunct_proof_cids.empty()) {
+        SCOPED_RAW_TIMER(&_opts.stats->del_filter_ns);
+        if (!_delete_conjuncts_may_match(*chunk)) {
+            _opts.stats->rows_del_predicate_conjunct_skipped += static_cast<int64_t>(chunk->num_rows());
+            filter_deleted_rows = false;
+        }
+    }
+    if (filter_deleted_rows) {
         SCOPED_RAW_TIMER(&_opts.stats->del_filter_ns);
         size_t old_sz = chunk->num_rows();
         // NOTE: risk of using _selection.data() without initialization
@@ -4391,8 +4434,70 @@ Status SegmentIterator::_build_context(ScanContext* ctx) {
             << ctx->to_string();
 
     _build_context_for_predicate(ctx);
+    _init_del_conjunct_proof_cids(ctx);
 
     return Status::OK();
+}
+
+void SegmentIterator::_init_del_conjunct_proof_cids(ScanContext* ctx) {
+    ctx->_del_conjunct_proof_cids.clear();
+    if (_del_conjunct_cids.empty() || _del_predicate_preapplied) {
+        // No per-page delete states from this scan's zone-map pass, or no per-chunk delete filter at all.
+        return;
+    }
+    // The delete_state of a delete column is exact for a chunk only when the column object the delete filter sees
+    // was filled by the column's own ScalarColumnIterator: its next_batch / next_batch_with_filter /
+    // fetch_values_by_rowid OR into the column the state of every page they read, from the page states this scan's
+    // zone-map pass recorded (the column is in _del_predicates). Any other read leaves the state unknown: another
+    // iterator type may not set it at all (the column keeps its reset value, DEL_NOT_SATISFIED), and a dictionary
+    // code read decodes into another column object that does not carry it. Such columns count as "may match".
+    auto state_is_exact = [&](ColumnId cid) {
+        if (cid >= _column_iterators.size() || !_del_predicates.contains(cid) || ctx->_prune_cols.contains(cid)) {
+            return false;
+        }
+        const auto* scalar_iter = dynamic_cast<const ScalarColumnIterator*>(_column_iterators[cid].get());
+        if (scalar_iter == nullptr) {
+            return false;
+        }
+        auto early = ctx->_column_ids_to_column_iterators.find(cid);
+        if (early != ctx->_column_ids_to_column_iterators.end()) {
+            // Early materialized: read by the plain iterator, not through a DictCode / GlobalDictCode / FillSubfield
+            // wrapper.
+            return early->second == scalar_iter;
+        }
+        // Late materialized: fetched by rowid through the column decoder, which must not be a global dictionary one.
+        return ctx->_late_materialize && cid < _column_decoders.size() &&
+               _column_decoders[cid].iterator() == scalar_iter;
+    };
+    std::vector<std::vector<ColumnId>> proof_cids(_del_conjunct_cids.size());
+    for (size_t i = 0; i < _del_conjunct_cids.size(); i++) {
+        for (ColumnId cid : _del_conjunct_cids[i]) {
+            if (state_is_exact(cid)) {
+                proof_cids[i].push_back(cid);
+            }
+        }
+        if (proof_cids[i].empty()) {
+            // This conjunct can never be ruled out, so no chunk can skip the delete filter.
+            return;
+        }
+    }
+    ctx->_del_conjunct_proof_cids = std::move(proof_cids);
+}
+
+bool SegmentIterator::_delete_conjuncts_may_match(const Chunk& chunk) const {
+    const auto& proof_cids = _context->_del_conjunct_proof_cids;
+    if (proof_cids.empty()) {
+        return true;
+    }
+    // A column's delete_state is DEL_NOT_SATISFIED only if none of the pages read for this chunk may match the OR,
+    // over all conjuncts, of the delete predicates on that column. So it proves that every conjunct constraining
+    // the column matches no row of the chunk.
+    auto rules_out = [&](ColumnId cid) {
+        return chunk.is_cid_exist(cid) && chunk.get_column_raw_ptr_by_id(cid)->delete_state() == DEL_NOT_SATISFIED;
+    };
+    return std::any_of(proof_cids.begin(), proof_cids.end(), [&](const std::vector<ColumnId>& conjunct_cids) {
+        return std::none_of(conjunct_cids.begin(), conjunct_cids.end(), rules_out);
+    });
 }
 
 Status SegmentIterator::_init_context() {

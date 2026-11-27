@@ -181,6 +181,14 @@ CONF_mBool(enable_index_page_level_zonemap_filter, "true");
 // filter path (SegmentIterator::_try_to_update_ranges_by_runtime_filter).
 CONF_mBool(enable_default_value_column_zonemap_filter, "true");
 
+// Skip evaluating the delete predicates of a non-primary-key table on a chunk when no delete (a
+// conjunction of conditions) can match any of its rows: each delete has a column whose pages read
+// for the chunk all have a zone map that excludes that column's delete conditions. It reuses the
+// per-page delete states that the page-level zone map pass already records, so it has no effect
+// when enable_index_page_level_zonemap_filter is off. Turn it off to evaluate the delete
+// predicates on every chunk that some read column marks as possibly deleted, as before.
+CONF_mBool(enable_delete_predicate_conjunct_skip, "true");
+
 CONF_mBool(enable_index_bloom_filter, "true");
 
 CONF_mBool(enable_index_bitmap_filter, "true");

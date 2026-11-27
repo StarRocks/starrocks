@@ -265,6 +265,16 @@ This topic introduces the following types of BE configurations:
 - Description: Whether to prune data by constant-folding the value of a column that is physically absent from a segment. A column added by fast schema evolution (`ALTER TABLE ... ADD COLUMN`) is not written into pre-existing segments, so every row of it holds the column default (or `NULL`). When this is `true`, a predicate on such a column is evaluated against that constant and the segment is skipped entirely when nothing can match. When set to `false`, those segments are read in full and every batch is re-checked against the delete condition, which is the behavior before this option existed. Set it to `false` to roll back if a query returns unexpected results on a table that has had columns added. This option is deliberately separate from `enable_index_page_level_zonemap_filter`, which does not cover the runtime filter path.
 - Introduced in: -
 
+### enable_delete_predicate_conjunct_skip
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Valid values: `true`, `false`
+- Is mutable: Yes
+- Description: Whether a scan of a non-primary-key table skips checking a batch of rows against the conditions of `DELETE` statements when none of the statements can match any row of the batch. Until compaction removes them, the rows that `DELETE` statements removed from such a table are filtered out when they are read. A `DELETE` is a conjunction of conditions, and it cannot match the batch when one of its columns has a zone map that excludes that column's conditions on every data page the batch is read from. When this holds for every `DELETE`, the batch is not checked row by row. This mainly helps a table sorted by a column that the `DELETE` statements filter on, for example a table sorted by `k` after `DELETE ... WHERE k = 1 AND id IN (...)`, when a query reads rows of other `k` values. It relies on the page-level zone map filter, so it has no effect when `enable_index_page_level_zonemap_filter` is `false`. Set it to `false` to check every batch that may hold a deleted row, which is the behavior before this option existed.
+- Introduced in: -
+
 ### enable_json_flat
 
 - Default: true
