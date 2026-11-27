@@ -1317,6 +1317,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: FE 中是否导出表级别指标。禁用后，FE 将跳过导出表指标（如表扫描/加载计数器和表大小指标），但仍将计数器记录在内存中。
 - 引入版本: -
 
+### `enable_metrics_auth_check`
+
+- 默认值: true
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: `/metrics` 接口在导出额外的实体级指标（即通过 `with_table_metrics`、`with_materialized_view_metrics` 和 `with_user_connections` 请求的表、物化视图和用户连接指标）之前是否需要管理员鉴权。设置为 `TRUE` 时，这些额外指标仅返回给拥有管理员角色的已鉴权用户；设置为 `FALSE` 时，将跳过鉴权检查，从而可以在无凭证的情况下抓取这些指标，主要用于开发和测试环境。
+- 引入版本: -
+
 ### `enable_mv_post_image_reload_cache`
 
 - 默认值: true

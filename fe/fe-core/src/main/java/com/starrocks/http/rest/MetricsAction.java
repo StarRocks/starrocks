@@ -36,6 +36,7 @@ package com.starrocks.http.rest;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableSet;
+import com.google.common.util.concurrent.RateLimiter;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Config;
@@ -63,6 +64,7 @@ import java.util.Set;
 public class MetricsAction extends RestBaseAction {
 
     private static final Logger LOG = LogManager.getLogger(MetricsAction.class);
+    private static final RateLimiter NO_AUTH_WARN_RATE_LIMITER = RateLimiter.create(1.0 / 60);
     private static final String TYPE_PARAM = "type";
     // `with_table_metrics=minified` : without tables that have empty values
     // `with_table_metrics=all` : with all table metrics
@@ -175,9 +177,15 @@ public class MetricsAction extends RestBaseAction {
         boolean isCollectTableMetrics = isCollectTableOrMVMetrics(withTableMetrics);
         boolean isCollectMVMetrics = isCollectTableOrMVMetrics(withMaterializedViewsMetrics);
         boolean isCollectUserConnMetrics = isCollectTableOrMVMetrics(withUserConnections);
+        boolean isCollectExtraMetrics = isCollectTableMetrics || isCollectMVMetrics || isCollectUserConnMetrics;
 
         // check request authorization
-        if (isCollectTableMetrics || isCollectMVMetrics || isCollectUserConnMetrics) {
+        if (isCollectExtraMetrics && !Config.enable_metrics_auth_check) {
+            if (NO_AUTH_WARN_RATE_LIMITER.tryAcquire()) {
+                LOG.warn("enable_metrics_auth_check is false, serving extra table/materialized-view/user-connection "
+                        + "metrics without authentication");
+            }
+        } else if (isCollectExtraMetrics) {
             UserIdentity currentUser = null;
             try {
                 // Basic or Bearer, same as every other FE HTTP endpoint. With enable_http_auth the

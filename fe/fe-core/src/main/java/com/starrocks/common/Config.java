@@ -2472,6 +2472,15 @@ public class Config extends ConfigBase {
     public static boolean enable_table_metrics_collect = true;
 
     /**
+     * Guards the admin-role auth check on the /metrics endpoint for the extra per-entity metrics
+     * (table, materialized view, user connection). Kept true in production so those metrics stay
+     * behind authentication; set false in dev/test to scrape them without credentials.
+     */
+    @ConfField(mutable = true, comment = "Whether /metrics requires admin auth for the extra " +
+            "table/materialized-view/user-connection metrics")
+    public static boolean enable_metrics_auth_check = true;
+
+    /**
      * enable replicated storage as default table engine
      */
     @ConfField(mutable = true)
