@@ -601,7 +601,7 @@ void TabletMeta::remove_delete_predicate_by_version(const Version& version) {
 
             // remove delete condition from PB
             _del_pred_array.SwapElements(ordinal, _del_pred_array.size() - 1);
-            _del_pred_array.RemoveLast();
+            _del_pred_array.DeleteSubrange(_del_pred_array.size() - 1, 1);
         }
     }
 }
