@@ -15,6 +15,10 @@
 #include <gtest/gtest.h>
 
 #include <set>
+#include <string>
+#include <string_view>
+#include <utility>
+#include <vector>
 
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
@@ -369,6 +373,155 @@ TEST_F(LakeTabletDeleteDataTest, test_delete_data_with_schema_key) {
     // all rows should be deleted.
     ASSERT_EQ(0, total_rows);
     reader->close();
+}
+
+// The reader builds no predicate on a VARBINARY column, so a stored condition on one fails every later scan of the
+// tablet.
+TEST_F(LakeTabletDeleteDataTest, test_delete_data_rejects_condition_on_varbinary_column) {
+    //  | column |      type     | KEY | NULL |
+    //  +--------+---------------+-----+------+
+    //  |   k    | VARBINARY(16) | YES | YES  |
+    //  |   v    |      INT      | NO  |  NO  |
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(next_id());
+    metadata->set_version(1);
+    auto* schema = metadata->mutable_schema();
+    schema->set_id(next_id());
+    schema->set_num_short_key_columns(1);
+    schema->set_keys_type(DUP_KEYS);
+    schema->set_num_rows_per_row_block(65535);
+    auto* k = schema->add_column();
+    k->set_unique_id(next_id());
+    k->set_name("k");
+    k->set_type("VARBINARY");
+    k->set_length(16);
+    k->set_is_key(true);
+    k->set_is_nullable(true);
+    auto* v = schema->add_column();
+    v->set_unique_id(next_id());
+    v->set_name("v");
+    v->set_type("INT");
+    v->set_is_key(false);
+    v->set_is_nullable(false);
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*metadata));
+
+    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(metadata->id()));
+
+    // DELETE FROM t WHERE k = ''
+    {
+        DeletePredicatePB delete_predicate;
+        delete_predicate.set_version(-1);
+        auto* binary_predicate = delete_predicate.add_binary_predicates();
+        binary_predicate->set_column_name("k");
+        binary_predicate->set_op("=");
+        binary_predicate->set_value("");
+
+        int64_t txn_id = next_id();
+        auto st = tablet.delete_data(txn_id, delete_predicate, nullptr);
+        ASSERT_TRUE(st.is_invalid_argument()) << st;
+        ASSERT_TRUE(tablet.get_txn_log(txn_id).status().is_not_found());
+    }
+
+    // DELETE FROM t WHERE v = 1 AND k IN ('a', 'b'): one invalid condition rejects the whole predicate.
+    {
+        DeletePredicatePB delete_predicate;
+        delete_predicate.set_version(-1);
+        auto* binary_predicate = delete_predicate.add_binary_predicates();
+        binary_predicate->set_column_name("v");
+        binary_predicate->set_op("=");
+        binary_predicate->set_value("1");
+        auto* in_predicate = delete_predicate.add_in_predicates();
+        in_predicate->set_column_name("k");
+        in_predicate->set_is_not_in(false);
+        in_predicate->add_values("a");
+        in_predicate->add_values("b");
+
+        int64_t txn_id = next_id();
+        auto st = tablet.delete_data(txn_id, delete_predicate, nullptr);
+        ASSERT_TRUE(st.is_invalid_argument()) << st;
+        ASSERT_TRUE(tablet.get_txn_log(txn_id).status().is_not_found());
+    }
+
+    // DELETE FROM t WHERE k IS NULL: no operand of the column's type to parse, so the reader can evaluate it.
+    {
+        DeletePredicatePB delete_predicate;
+        delete_predicate.set_version(-1);
+        auto* is_null_predicate = delete_predicate.add_is_null_predicates();
+        is_null_predicate->set_column_name("k");
+        is_null_predicate->set_is_not_null(false);
+
+        int64_t txn_id = next_id();
+        ASSERT_OK(tablet.delete_data(txn_id, delete_predicate, nullptr));
+        ASSIGN_OR_ABORT(auto txn_log, tablet.get_txn_log(txn_id));
+        ASSERT_EQ(1, txn_log->op_write().rowset().delete_predicate().is_null_predicates_size());
+    }
+}
+
+TEST_F(LakeTabletDeleteDataTest, test_delete_data_rejects_invalid_condition) {
+    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
+
+    auto delete_where_equal = [&](const std::string& column_name, const std::string& value, int64_t txn_id) {
+        DeletePredicatePB delete_predicate;
+        delete_predicate.set_version(-1);
+        auto* binary_predicate = delete_predicate.add_binary_predicates();
+        binary_predicate->set_column_name(column_name);
+        binary_predicate->set_op("=");
+        binary_predicate->set_value(value);
+        return tablet.delete_data(txn_id, delete_predicate, nullptr);
+    };
+
+    // A column the schema does not have, a value that is not an INT, and one that overflows it.
+    const std::vector<std::pair<std::string, std::string>> invalid_conditions{
+            {"c9", "3"}, {"c2", "abc"}, {"c2", "2147483648"}};
+    for (const auto& [column_name, value] : invalid_conditions) {
+        int64_t txn_id = next_id();
+        auto st = delete_where_equal(column_name, value, txn_id);
+        ASSERT_TRUE(st.is_invalid_argument()) << column_name << "=" << value << ": " << st;
+        ASSERT_TRUE(tablet.get_txn_log(txn_id).status().is_not_found());
+    }
+
+    int64_t txn_id = next_id();
+    ASSERT_OK(delete_where_equal("c2", "2147483647", txn_id));
+    ASSERT_OK(tablet.get_txn_log(txn_id).status());
+}
+
+// The conditions are checked against the schema the schema key names, not the one in the tablet metadata.
+TEST_F(LakeTabletDeleteDataTest, test_delete_data_checks_condition_with_schema_key) {
+    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
+
+    // The tablet schema plus c3 VARBINARY(16), which the tablet metadata does not have.
+    int64_t schema_id = next_id();
+    TableSchemaKeyPB schema_key;
+    schema_key.set_db_id(next_id());
+    schema_key.set_table_id(next_id());
+    schema_key.set_schema_id(schema_id);
+
+    TabletSchemaPB extended_schema_pb;
+    extended_schema_pb.CopyFrom(_tablet_metadata->schema());
+    extended_schema_pb.set_id(schema_id);
+    extended_schema_pb.set_schema_version(_tablet_metadata->schema().schema_version() + 1);
+    auto c3 = extended_schema_pb.add_column();
+    c3->set_unique_id(next_id());
+    c3->set_name("c3");
+    c3->set_type("VARBINARY");
+    c3->set_length(16);
+    c3->set_is_key(false);
+    c3->set_is_nullable(true);
+    _tablet_mgr->cache_schema(TabletSchema::create(extended_schema_pb));
+
+    DeletePredicatePB delete_predicate;
+    delete_predicate.set_version(-1);
+    auto* binary_predicate = delete_predicate.add_binary_predicates();
+    binary_predicate->set_column_name("c3");
+    binary_predicate->set_op("=");
+    binary_predicate->set_value("x");
+
+    int64_t txn_id = next_id();
+    auto st = tablet.delete_data(txn_id, delete_predicate, &schema_key);
+    ASSERT_TRUE(st.is_invalid_argument()) << st;
+    // c3 was found, in the schema the key names: it is the condition on it that is invalid.
+    ASSERT_EQ(std::string_view::npos, st.message().find("not exist")) << st;
+    ASSERT_TRUE(tablet.get_txn_log(txn_id).status().is_not_found());
 }
 
 } // namespace starrocks::lake

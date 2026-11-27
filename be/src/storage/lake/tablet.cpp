@@ -14,10 +14,13 @@
 
 #include "storage/lake/tablet.h"
 
+#include <fmt/format.h>
+
 #include "column/schema.h"
 #include "fs/fs.h"
 #include "gen_cpp/lake_types.pb.h"
 #include "gen_cpp/tablet_schema.pb.h"
+#include "storage/delete_handler.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/general_tablet_writer.h"
 #include "storage/lake/location_provider.h"
@@ -25,6 +28,7 @@
 #include "storage/lake/metadata_iterator.h"
 #include "storage/lake/pk_tablet_writer.h"
 #include "storage/lake/rowset.h"
+#include "storage/lake/table_schema_service.h"
 #include "storage/lake/tablet_reader.h"
 #include "storage/lake/tablet_reshard_helper.h"
 #include "storage/lake/txn_log.h"
@@ -164,8 +168,40 @@ std::string Tablet::root_location() const {
     return _location_provider->root_location(_id);
 }
 
+Status Tablet::check_delete_predicate(int64_t txn_id, const DeletePredicatePB& delete_predicate,
+                                      const TableSchemaKeyPB* schema_key) {
+    const auto conditions = DeleteHandler::lake_delete_conditions(delete_predicate);
+    if (conditions.empty()) {
+        return Status::OK();
+    }
+    auto latest_metadata = _mgr->get_latest_cached_tablet_metadata(_id);
+    TabletSchemaPtr schema;
+    if (schema_key != nullptr) {
+        // The predicate was generated from the schema |schema_key| names, which the tablet metadata may not have yet.
+        auto* schema_service = _mgr->table_schema_service();
+        ASSIGN_OR_RETURN(schema, schema_service->get_schema_for_load(*schema_key, _id, txn_id, latest_metadata));
+    } else if (latest_metadata != nullptr) {
+        // The reader evaluates the predicate with the schema of the tablet metadata.
+        schema = TabletSchema::create(latest_metadata->schema());
+    } else {
+        ASSIGN_OR_RETURN(schema, get_schema());
+    }
+    DeleteConditionHandler handler;
+    for (const auto& condition : conditions) {
+        auto st = handler.check_condition_valid(*schema, condition);
+        if (!st.ok()) {
+            return st.clone_and_prepend(fmt::format("invalid delete condition on column {}", condition.column_name));
+        }
+    }
+    return Status::OK();
+}
+
 Status Tablet::delete_data(int64_t txn_id, const DeletePredicatePB& delete_predicate,
                            const TableSchemaKeyPB* schema_key) {
+    // A stored delete predicate cannot be removed and the reader applies it to every scan of the tablet, so one it
+    // cannot evaluate would leave the tablet unreadable. Reject it here, as the push handler of a shared-nothing
+    // tablet does.
+    RETURN_IF_ERROR(check_delete_predicate(txn_id, delete_predicate, schema_key));
     auto txn_log = std::make_shared<TxnLog>();
     txn_log->set_tablet_id(_id);
     txn_log->set_txn_id(txn_id);

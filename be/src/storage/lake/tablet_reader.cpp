@@ -44,6 +44,7 @@
 #include "runtime/runtime_state.h"
 #include "runtime/type_info_allocator_adapter.h"
 #include "storage/column_predicate_rewriter.h"
+#include "storage/delete_handler.h"
 #include "storage/delta_column_group.h"
 #include "storage/flat_json_metrics.h"
 #include "storage/json_path_deriver.h"
@@ -1898,47 +1899,7 @@ Status TabletReader::init_delete_predicates(const TabletReaderParams& params, De
             continue;
         }
 
-        const auto& pred_pb = rowset_metadata.delete_predicate();
-        std::vector<TCondition> conds;
-        for (int i = 0; i < pred_pb.binary_predicates_size(); ++i) {
-            const auto& binary_predicate = pred_pb.binary_predicates(i);
-            TCondition cond;
-            cond.__set_column_name(binary_predicate.column_name());
-            auto& op = binary_predicate.op();
-            if (op == "<") {
-                cond.__set_condition_op("<<");
-            } else if (op == ">") {
-                cond.__set_condition_op(">>");
-            } else {
-                cond.__set_condition_op(op);
-            }
-            cond.condition_values.emplace_back(binary_predicate.value());
-            conds.emplace_back(std::move(cond));
-        }
-
-        for (int i = 0; i < pred_pb.is_null_predicates_size(); ++i) {
-            const auto& is_null_predicate = pred_pb.is_null_predicates(i);
-            TCondition cond;
-            cond.__set_column_name(is_null_predicate.column_name());
-            cond.__set_condition_op("IS");
-            cond.condition_values.emplace_back(is_null_predicate.is_not_null() ? "NOT NULL" : "NULL");
-            conds.emplace_back(std::move(cond));
-        }
-
-        for (int i = 0; i < pred_pb.in_predicates_size(); ++i) {
-            TCondition cond;
-            const InPredicatePB& in_predicate = pred_pb.in_predicates(i);
-            cond.__set_column_name(in_predicate.column_name());
-            if (in_predicate.is_not_in()) {
-                cond.__set_condition_op("!*=");
-            } else {
-                cond.__set_condition_op("*=");
-            }
-            for (const auto& value : in_predicate.values()) {
-                cond.condition_values.push_back(value);
-            }
-            conds.emplace_back(std::move(cond));
-        }
+        const auto conds = DeleteHandler::lake_delete_conditions(rowset_metadata.delete_predicate());
 
         ConjunctivePredicates conjunctions;
         for (const auto& cond : conds) {
