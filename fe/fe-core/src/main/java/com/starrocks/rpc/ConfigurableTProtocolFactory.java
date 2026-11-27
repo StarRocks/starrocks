@@ -23,6 +23,7 @@ import org.apache.thrift.protocol.TProtocol;
 import org.apache.thrift.protocol.TProtocolFactory;
 import org.apache.thrift.protocol.TSimpleJSONProtocol;
 import org.apache.thrift.transport.TTransport;
+import org.apache.thrift.transport.TTransportException;
 
 public class ConfigurableTProtocolFactory {
 
@@ -46,11 +47,47 @@ public class ConfigurableTProtocolFactory {
         return factory;
     }
 
-    public static TConfiguration buildTConfiguration() {
-        return new TConfiguration(Config.thrift_max_message_size, Config.thrift_max_frame_size,
-                Config.thrift_max_recursion_depth);
+    public static int effectiveMaxMessageSizeConfig() {
+        int configured = Config.thrift_max_message_size;
+        return configured > 0 ? configured : Integer.MAX_VALUE;
     }
 
+    public static long effectiveMaxMessageSizeBytes() {
+        int configured = Config.thrift_max_message_size;
+        return configured > 0 ? configured : Long.MAX_VALUE;
+    }
+
+    public static int effectiveMaxFrameSizeConfig() {
+        int configured = Config.thrift_max_frame_size;
+        return configured > 0 ? configured : Integer.MAX_VALUE;
+    }
+
+    public static int effectiveRecursionLimitConfig() {
+        int configured = Config.thrift_max_recursion_depth;
+        return configured > 0 ? configured : Integer.MAX_VALUE;
+    }
+
+    public static TConfiguration buildTConfiguration() {
+        return new TConfiguration(effectiveMaxMessageSizeConfig(), effectiveMaxFrameSizeConfig(),
+                effectiveRecursionLimitConfig());
+    }
+
+    private static void applyConfiguration(TTransport trans, TConfiguration configuration) {
+        if (trans == null) {
+            return;
+        }
+        TConfiguration target = trans.getConfiguration();
+        if (target != null) {
+            target.setMaxFrameSize(configuration.getMaxFrameSize());
+            target.setMaxMessageSize(configuration.getMaxMessageSize());
+            target.setRecursionLimit(configuration.getRecursionLimit());
+        }
+        try {
+            trans.updateKnownMessageSize(0);
+        } catch (TTransportException ignored) {
+            // Keep protocol creation resilient if bytes were already consumed on a custom transport.
+        }
+    }
 
     public static class ConfigurableTCompactFactory implements TProtocolFactory {
 
@@ -68,9 +105,7 @@ public class ConfigurableTProtocolFactory {
 
         @Override
         public TProtocol getProtocol(TTransport trans) {
-            trans.getConfiguration().setMaxFrameSize(configuration.getMaxFrameSize());
-            trans.getConfiguration().setMaxMessageSize(configuration.getMaxMessageSize());
-            trans.getConfiguration().setRecursionLimit(configuration.getRecursionLimit());
+            applyConfiguration(trans, configuration);
             return new TCompactProtocol(trans, stringLengthLimit, containerLengthLimit);
         }
     }
@@ -85,9 +120,7 @@ public class ConfigurableTProtocolFactory {
 
         @Override
         public TProtocol getProtocol(TTransport trans) {
-            trans.getConfiguration().setMaxFrameSize(configuration.getMaxFrameSize());
-            trans.getConfiguration().setMaxMessageSize(configuration.getMaxMessageSize());
-            trans.getConfiguration().setRecursionLimit(configuration.getRecursionLimit());
+            applyConfiguration(trans, configuration);
             return new TBinaryProtocol(
                     trans, stringLengthLimit_, containerLengthLimit_, strictRead_, strictWrite_);
         }
@@ -103,9 +136,7 @@ public class ConfigurableTProtocolFactory {
 
         @Override
         public TProtocol getProtocol(TTransport trans) {
-            trans.getConfiguration().setMaxFrameSize(configuration.getMaxFrameSize());
-            trans.getConfiguration().setMaxMessageSize(configuration.getMaxMessageSize());
-            trans.getConfiguration().setRecursionLimit(configuration.getRecursionLimit());
+            applyConfiguration(trans, configuration);
             return new TJSONProtocol(trans, fieldNamesAsString_);
         }
     }
@@ -121,9 +152,7 @@ public class ConfigurableTProtocolFactory {
 
         @Override
         public TProtocol getProtocol(TTransport trans) {
-            trans.getConfiguration().setMaxFrameSize(configuration.getMaxFrameSize());
-            trans.getConfiguration().setMaxMessageSize(configuration.getMaxMessageSize());
-            trans.getConfiguration().setRecursionLimit(configuration.getRecursionLimit());
+            applyConfiguration(trans, configuration);
             return new TSimpleJSONProtocol(trans);
         }
     }

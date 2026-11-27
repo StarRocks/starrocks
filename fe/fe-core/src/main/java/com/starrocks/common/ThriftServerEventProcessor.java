@@ -35,6 +35,7 @@
 package com.starrocks.common;
 
 import com.google.common.base.Preconditions;
+import com.starrocks.rpc.ConfigurableTSocket;
 import com.starrocks.thrift.TNetworkAddress;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -107,6 +108,7 @@ public class ThriftServerEventProcessor implements TServerEventHandler {
 
     @Override
     public void processContext(ServerContext serverContext, TTransport inputTransport, TTransport outputTransport) {
+        ConfigurableTSocket.refreshTransport(inputTransport);
         if (serverContext == null) {
             return;
         }
