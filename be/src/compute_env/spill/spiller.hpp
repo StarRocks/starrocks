@@ -77,6 +77,10 @@ template <class TaskExecutor, class MemGuard>
 Status Spiller::spill(RuntimeState* state, const ChunkPtr& chunk, MemGuard&& guard) {
     SCOPED_TIMER(_metrics.append_data_timer);
     RETURN_IF_ERROR(task_status());
+    // Once cancelled, flush tasks return without writing their mem tables, so those mem tables still hold
+    // rows that were already prepared for writing. Adding to them, or flushing them again, is not safe;
+    // see PartitionedSpillerWriter::flush.
+    RETURN_IF(is_cancel(), Status::Cancelled("cancelled by pipeline"));
     DCHECK(!chunk->is_empty());
     DCHECK(!is_full());
 
@@ -114,6 +118,7 @@ Status Spiller::partitioned_spill(RuntimeState* state, const ChunkPtr& chunk, Sp
                                   Processer&& processer, MemGuard&& guard) {
     SCOPED_TIMER(_metrics.append_data_timer);
     RETURN_IF_ERROR(task_status());
+    RETURN_IF(is_cancel(), Status::Cancelled("cancelled by pipeline"));
     DCHECK(!chunk->is_empty());
     COUNTER_UPDATE(_metrics.spill_rows, chunk->num_rows());
     DCHECK_GT(_opts.init_partition_nums, 0);
@@ -448,6 +453,11 @@ Status PartitionedSpillerWriter::flush_if_full(RuntimeState* state, MemGuard&& g
 
 template <class TaskExecutor, class MemGuard>
 Status PartitionedSpillerWriter::flush(RuntimeState* state, bool is_final_flush, MemGuard&& guard) {
+    // A flush task that finds the spiller cancelled returns without writing its partitions, leaving their
+    // mem tables full, so they would be chosen again here. By then _pick_and_compact_skew_partitions has
+    // already run on them, and for a spiller that is not splittable it dropped their hash column; running
+    // it a second time reads an aggregate column as the hash column and crashes.
+    RETURN_IF(_spiller->is_cancel(), Status::Cancelled("cancelled by pipeline"));
     std::vector<SpilledPartition*> splitting_partitions, spilling_partitions;
     RETURN_IF_ERROR(_choose_partitions_to_flush(is_final_flush, splitting_partitions, spilling_partitions));
     if (spilling_partitions.empty() && splitting_partitions.empty()) {

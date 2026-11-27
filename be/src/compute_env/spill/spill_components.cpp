@@ -723,6 +723,14 @@ Status PartitionedSpillerWriter::_compact_skew_chunks(size_t num_rows, std::vect
     // and diagnostic line instead of an OOB read in the locator loop below.
     // See https://github.com/StarRocks/starrocks/issues/74074.
     CHECK(!chunks.empty()) << "_compact_skew_chunks: empty chunks with num_rows=" << num_rows;
+    // Skew detection reads the hash column, and the compactor takes it as the last column. A chunk whose hash
+    // column was already dropped (a spiller that is not splittable drops it after compacting) has an
+    // aggregate column there instead, so leave such a mem table as it is: compaction is only an optimization.
+    for (const auto& chunk : chunks) {
+        if (chunk != nullptr && !chunk->is_empty() && !chunk->is_slot_exist(Chunk::HASH_AGG_SPILL_HASH_SLOT_ID)) {
+            return Status::OK();
+        }
+    }
     // sample 30 row idx
     std::random_device rd;
     std::mt19937_64 gen(rd());
@@ -758,7 +766,8 @@ Status PartitionedSpillerWriter::_compact_skew_chunks(size_t num_rows, std::vect
         }
         const auto& curr_chunk = chunks[curr_chunk_idx];
         const auto row_idx = idx - (curr_num_rows - curr_chunk->num_rows());
-        auto* hash_column = down_cast<const UInt32Column*>(curr_chunk->columns().back().get());
+        auto* hash_column = down_cast<const UInt32Column*>(
+                curr_chunk->get_column_raw_ptr_by_slot_id(Chunk::HASH_AGG_SPILL_HASH_SLOT_ID));
         auto hash_value = hash_column->get_data()[row_idx];
         ++hash_value_counts[hash_value];
     }
@@ -769,7 +778,8 @@ Status PartitionedSpillerWriter::_compact_skew_chunks(size_t num_rows, std::vect
                                      << " (chunks.size=" << chunks.size() << ")";
         CHECK(!curr_chunk->is_empty()) << "_compact_skew_chunks: empty chunk in frequency pass at idx " << i
                                        << " (chunks.size=" << chunks.size() << ")";
-        auto* hash_column = down_cast<const UInt32Column*>(curr_chunk->columns().back().get());
+        auto* hash_column = down_cast<const UInt32Column*>(
+                curr_chunk->get_column_raw_ptr_by_slot_id(Chunk::HASH_AGG_SPILL_HASH_SLOT_ID));
         auto& hash_values = hash_column->get_data();
         for (auto& hash_value : hash_values) {
             auto it = hash_value_counts.find(hash_value);
