@@ -264,6 +264,35 @@ TEST(DateValueTest, calculate) {
     }
 }
 
+// An offset that leaves [0000-01-01, 9999-12-31] must give an invalid date (NULL in SQL), never a
+// wrapped date that happens to fall back inside the range.
+TEST(DateValueTest, add_out_of_range) {
+    const DateValue base = DateValue::create(2020, 1, 1);
+    // These used to come back as valid dates: the month count had no upper bound (from_date() then
+    // overflowed on a year past 9999), and 7 * 613566757 wrapped to +3 days in 32 bits.
+    ASSERT_FALSE(base.add<TimeUnit::MONTH>(141206412).is_valid());
+    ASSERT_FALSE(base.add<TimeUnit::QUARTER>(47068804).is_valid());
+    ASSERT_FALSE(base.add<TimeUnit::WEEK>(613566757).is_valid());
+    for (int64_t count : {int64_t(std::numeric_limits<int32_t>::max()), int64_t(std::numeric_limits<int32_t>::min()),
+                          -int64_t(std::numeric_limits<int32_t>::min())}) {
+        ASSERT_FALSE(base.add<TimeUnit::DAY>(count).is_valid()) << count;
+        ASSERT_FALSE(base.add<TimeUnit::WEEK>(count).is_valid()) << count;
+        ASSERT_FALSE(base.add<TimeUnit::MONTH>(count).is_valid()) << count;
+        ASSERT_FALSE(base.add<TimeUnit::QUARTER>(count).is_valid()) << count;
+        ASSERT_FALSE(base.add<TimeUnit::YEAR>(count).is_valid()) << count;
+    }
+
+    // Both sides of the upper and lower bounds.
+    ASSERT_EQ("9999-12-31", DateValue::create(9999, 1, 31).add<TimeUnit::MONTH>(11).to_string());
+    ASSERT_EQ("9999-12-01", DateValue::create(9999, 12, 1).add<TimeUnit::MONTH>(0).to_string());
+    ASSERT_FALSE(DateValue::create(9999, 12, 1).add<TimeUnit::MONTH>(1).is_valid());
+    ASSERT_FALSE(DateValue::create(9999, 12, 31).add<TimeUnit::DAY>(1).is_valid());
+    ASSERT_FALSE(DateValue::create(9999, 12, 31).add<TimeUnit::WEEK>(1).is_valid());
+    ASSERT_EQ("0000-01-01", DateValue::create(0, 12, 1).add<TimeUnit::MONTH>(-11).to_string());
+    ASSERT_FALSE(DateValue::create(0, 1, 1).add<TimeUnit::MONTH>(-1).is_valid());
+    ASSERT_FALSE(DateValue::create(0, 1, 1).add<TimeUnit::DAY>(-1).is_valid());
+}
+
 TEST(DateValueTest, cast) {
     DateValue dv;
     dv.from_date(2004, 3, 31);

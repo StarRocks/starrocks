@@ -149,6 +149,41 @@ TEST_F(TimeFunctionsTest, yearAddTest) {
     }
 }
 
+// An offset that leaves [0000-01-01, 9999-12-31] returns NULL. It used to come back as a plausible but
+// wrong date, e.g. months_add('2020-01-01', 141206412) = 9999-12-13.
+TEST_F(TimeFunctionsTest, addOutOfRangeReturnsNull) {
+    using Fn = StatusOr<ColumnPtr> (*)(FunctionContext*, const Columns&);
+    auto call = [this](Fn fn, const TimestampValue& ts, int32_t count) -> std::optional<TimestampValue> {
+        Columns columns;
+        auto tc = TimestampColumn::create();
+        tc->append(ts);
+        auto ic = Int32Column::create();
+        ic->append(count);
+        columns.emplace_back(std::move(tc));
+        columns.emplace_back(std::move(ic));
+        ColumnPtr result = fn(_utils->get_fn_ctx(), columns).value();
+        if (result->is_null(0)) {
+            return std::nullopt;
+        }
+        const Column* data = result->is_nullable()
+                                     ? ColumnHelper::as_raw_column<NullableColumn>(result)->data_column().get()
+                                     : result.get();
+        return ColumnHelper::cast_to_raw<TYPE_DATETIME>(data)->immutable_data()[0];
+    };
+    const TimestampValue base = TimestampValue::create(2020, 1, 1, 0, 0, 0);
+    const int32_t int_min = std::numeric_limits<int32_t>::min();
+
+    ASSERT_EQ(std::nullopt, call(&TimeFunctions::months_add, base, 141206412));
+    ASSERT_EQ(std::nullopt, call(&TimeFunctions::quarters_add, base, 47068804));
+    ASSERT_EQ(std::nullopt, call(&TimeFunctions::weeks_add, base, 613566757));
+    ASSERT_EQ(std::nullopt, call(&TimeFunctions::months_sub, base, int_min));
+    ASSERT_EQ(std::nullopt, call(&TimeFunctions::months_add, TimestampValue::create(9999, 12, 1, 0, 0, 0), 1));
+    ASSERT_EQ(TimestampValue::create(9999, 12, 31, 0, 0, 0),
+              call(&TimeFunctions::months_add, TimestampValue::create(9999, 1, 31, 0, 0, 0), 11));
+    // seconds_sub(ts, INT_MIN) adds 2^31 seconds; negating INT_MIN in 32 bits used to subtract them.
+    ASSERT_EQ(TimestampValue::create(2088, 1, 19, 3, 14, 8), call(&TimeFunctions::seconds_sub, base, int_min));
+}
+
 TEST_F(TimeFunctionsTest, quarterAddTest) {
     Columns columns;
 

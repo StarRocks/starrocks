@@ -1,0 +1,18 @@
+-- name: test_time_add_out_of_range
+-- An offset that moves a date outside [0000-01-01, 9999-12-31] returns NULL. A large month or week
+-- offset used to come back as a wrong date inside the range instead (months_add('2020-01-01',
+-- 141206412) gave 9999-12-13). Values are read from a column so the BE computes them; the last query
+-- checks that FE constant folding agrees.
+CREATE TABLE t_add_oor (k INT, dt DATETIME, d DATE, n INT)
+  DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+  PROPERTIES("replication_num" = "1");
+INSERT INTO t_add_oor VALUES
+  (1, "2020-01-01 00:00:00", "2020-01-01", 141206412),
+  (2, "9999-12-01 00:00:00", "9999-12-01", 1),
+  (3, "9999-01-31 00:00:00", "9999-01-31", 11),
+  (4, "2020-01-01 00:00:00", "2020-01-01", -2147483648);
+SELECT k, months_add(dt, n), add_months(dt, n), months_add(d, n), months_sub(dt, n) FROM t_add_oor ORDER BY k;
+SELECT quarters_add(dt, 47068804), weeks_add(dt, 613566757) FROM t_add_oor WHERE k = 1;
+-- seconds_sub(dt, INT_MIN) adds 2^31 seconds.
+SELECT seconds_sub(dt, n) FROM t_add_oor WHERE k = 4;
+SELECT months_add("2020-01-01 00:00:00", 141206412), weeks_add("2020-01-01 00:00:00", 613566757);

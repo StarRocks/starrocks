@@ -138,7 +138,7 @@ public:
     void from_unix_second(int64_t second, int64_t microsecond = 0);
 
     template <TimeUnit UNIT>
-    TimestampValue add(int count) const {
+    TimestampValue add(int64_t count) const {
         return TimestampValue{timestamp::add<UNIT>(_timestamp, count)};
     }
 

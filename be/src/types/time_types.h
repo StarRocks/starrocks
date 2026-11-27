@@ -132,8 +132,10 @@ public:
 
     static JulianDate from_mysql_date(uint32_t mysql_date);
 
+    // Returns INVALID_DATE when the result falls outside [MIN_DATE, MAX_DATE]. count is 64-bit so that
+    // callers can pass the negation of any INT without overflow.
     template <TimeUnit UNIT>
-    static JulianDate add(JulianDate date, int count);
+    static JulianDate add(JulianDate date, int64_t count);
 
     static void to_string(int year, int month, int day, char* to);
 
@@ -224,10 +226,10 @@ public:
     inline static int get_timezone_offset_by_epoch_seconds(int64_t seconds_from_epoch, const cctz::time_zone& ctz);
 
     template <TimeUnit UNIT>
-    static Timestamp add(Timestamp timestamp, int count);
+    static Timestamp add(Timestamp timestamp, int64_t count);
 
     template <TimeUnit UNIT>
-    static Timestamp sub(Timestamp timestamp, int count);
+    static Timestamp sub(Timestamp timestamp, int64_t count);
 
     template <bool use_iso8601_format = false, bool igonre_microsecond = false>
     static std::string to_string(Timestamp timestamp);
@@ -262,44 +264,41 @@ public:
 
 // ========================== date inline function ===============================
 
+// All arithmetic is 64-bit and every result is range-checked. Without the check, a month count past
+// 9999-12 overflows inside from_date() and a 32-bit 7 * count wraps, and either can land back inside
+// [0000-01-01, 9999-12-31] as a plausible but wrong date.
 template <TimeUnit UNIT>
-JulianDate date::add(JulianDate date, int count) {
-    if constexpr (UNIT == TimeUnit::DAY) {
-        return date + count;
-    } else if constexpr (UNIT == TimeUnit::WEEK) {
-        return date + 7 * count;
+JulianDate date::add(JulianDate date, int64_t count) {
+    if constexpr (UNIT == TimeUnit::DAY || UNIT == TimeUnit::WEEK) {
+        const int64_t julian = static_cast<int64_t>(date) + (UNIT == TimeUnit::WEEK ? 7 * count : count);
+        if (julian < date::MIN_DATE || julian > date::MAX_DATE) {
+            return date::INVALID_DATE;
+        }
+        return static_cast<JulianDate>(julian);
     } else if constexpr (UNIT == TimeUnit::MONTH || UNIT == TimeUnit::QUARTER) {
         int year, month, day;
         to_date_with_cache(date, &year, &month, &day);
 
-        if (UNIT == TimeUnit::QUARTER) {
-            count = 3 * count;
-        }
-        int months = year * 12 + month - 1 + count;
-        if (months < 0) {
-            // @INFO: NOT SUPPORT BCE
+        const int64_t delta = UNIT == TimeUnit::QUARTER ? 3 * count : count;
+        const int64_t months = static_cast<int64_t>(year) * 12 + month - 1 + delta;
+        // @INFO: NOT SUPPORT BCE
+        if (months < 0 || months > 9999 * 12 + 11) {
             return date::INVALID_DATE;
-        } else {
-            year = months / 12;
-            month = (months % 12) + 1;
-            int max_day = DAYS_IN_MONTH[is_leap(year)][month];
-            day = day > max_day ? max_day : day;
-            return from_date(year, month, day);
         }
+        year = static_cast<int>(months / 12);
+        month = static_cast<int>(months % 12) + 1;
+        int max_day = DAYS_IN_MONTH[is_leap(year)][month];
+        day = day > max_day ? max_day : day;
+        return from_date(year, month, day);
     } else {
         int year, month, day;
         to_date_with_cache(date, &year, &month, &day);
 
-        year += count;
-        // year must satisfy condition: 0 <= year <= 9999
-        // because original year must satify this condition,
-        // so count must satify: -year <= count <= (9999 - year)
-        // when year and count all signed int, we can replace
-        // it with "static_cast<unsigned int>(count + year) <= 9999"
-        // to reduce one compare, so we use updated year here.
-        if (static_cast<unsigned int>(year) > 9999) {
+        const int64_t new_year = static_cast<int64_t>(year) + count;
+        if (new_year < 0 || new_year > 9999) {
             return date::INVALID_DATE;
         }
+        year = static_cast<int>(new_year);
 
         if (month == 2 && day == 29 && !is_leap(year)) {
             day = 28;
@@ -410,7 +409,7 @@ inline void timestamp::to_time(Timestamp timestamp, int* hour, int* minute, int*
 }
 
 template <TimeUnit UNIT>
-Timestamp timestamp::add(Timestamp timestamp, int count) {
+Timestamp timestamp::add(Timestamp timestamp, int64_t count) {
     if constexpr (static_cast<int>(UNIT) > static_cast<int>(TimeUnit::HOUR)) {
         JulianDate julian = date::add<UNIT>(to_julian(timestamp), count);
 
@@ -436,7 +435,7 @@ Timestamp timestamp::add(Timestamp timestamp, int count) {
 }
 
 template <TimeUnit UNIT>
-Timestamp timestamp::sub(Timestamp timestamp, int count) {
+Timestamp timestamp::sub(Timestamp timestamp, int64_t count) {
     return timestamp::add<UNIT>(timestamp, -count);
 }
 
