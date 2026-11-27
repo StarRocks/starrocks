@@ -206,6 +206,7 @@ import org.apache.iceberg.UpdateProperties;
 import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.encryption.StarRocksKeyMetadata;
+import org.apache.iceberg.exceptions.CommitFailedException;
 import org.apache.iceberg.exceptions.CommitStateUnknownException;
 import org.apache.iceberg.exceptions.NoSuchNamespaceException;
 import org.apache.iceberg.exceptions.NotFoundException;
@@ -1971,6 +1972,39 @@ public class IcebergMetadataTest extends TableTestBase {
         return invalidated;
     }
 
+    // What a statement asks the other FEs, in call order: the background refresh it dispatches to them, as
+    // refreshOf(db, table), and the drop it waits for, as invalidationOf(db, table)
+    private static List<String> recordOtherFeRequests() {
+        List<String> requests = new ArrayList<>();
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public Future<?> refreshOthersFeTableAsync(TableName tableName, List<String> partitionNames) {
+                requests.add("refresh " + tableName.getCatalog() + "." + tableName.getDb() + "." + tableName.getTbl());
+                return CompletableFuture.completedFuture(null);
+            }
+
+            @Mock
+            public void invalidateOthersFeTable(TableName tableName, int timeoutMs) {
+                requests.add(tableName.getCatalog() + "." + tableName.getDb() + "." + tableName.getTbl() + "@"
+                        + timeoutMs);
+            }
+        };
+        return requests;
+    }
+
+    private static String refreshOf(String dbName, String tableName) {
+        return "refresh " + CATALOG_NAME + "." + dbName + "." + tableName;
+    }
+
+    // IcebergMetadata's own cache of the native tables it has loaded
+    @SuppressWarnings("unchecked")
+    private static Map<TableIdentifier, org.apache.iceberg.Table> cachedNativeTables(IcebergMetadata metadata)
+            throws ReflectiveOperationException {
+        java.lang.reflect.Field field = IcebergMetadata.class.getDeclaredField("tables");
+        field.setAccessible(true);
+        return (Map<TableIdentifier, org.apache.iceberg.Table>) field.get(metadata);
+    }
+
     private static void mockCommitInfoFrontend() {
         new MockUp<NodeMgr>() {
             @Mock
@@ -2122,17 +2156,65 @@ public class IcebergMetadataTest extends TableTestBase {
 
     @Test
     public void testAlterTableRenameInvalidatesBothNamesOnOtherFes(@Mocked IcebergHiveCatalog icebergHiveCatalog)
-            throws StarRocksException {
-        // A peer may still cache a table that had the new name before, dropped by another engine
+            throws Exception {
+        // This FE or a peer may still cache a table that had the new name before, dropped by another engine. The
+        // peers get the background refresh of both names too, for when the wait misses them or is turned off.
         IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
                 Executors.newSingleThreadExecutor(), null);
-        List<String> invalidated = recordOtherFeInvalidations(() -> {
-        });
+        Map<TableIdentifier, org.apache.iceberg.Table> cached = cachedNativeTables(metadata);
+        cached.put(TableIdentifier.of("db", "newTbl"), mockedNativeTableA);
+        List<String> requests = recordOtherFeRequests();
 
         metadata.alterTable(new ConnectContext(), new AlterTableStmt(createTableRef(new TableName("db", "tbl")),
                 Lists.newArrayList(new TableRenameClause("newTbl"))));
 
-        Assertions.assertEquals(List.of(invalidationOf("db", "tbl"), invalidationOf("db", "newTbl")), invalidated);
+        Assertions.assertAll(
+                () -> Assertions.assertFalse(cached.containsKey(TableIdentifier.of("db", "newTbl"))),
+                () -> Assertions.assertEquals(List.of(refreshOf("db", "tbl"), refreshOf("db", "newTbl"),
+                        invalidationOf("db", "tbl"), invalidationOf("db", "newTbl")), requests));
+    }
+
+    @Test
+    public void testAlterTableLooksForAnUnknownCommitStateInTheCauseChain(
+            @Mocked IcebergHiveCatalog icebergHiveCatalog) throws Exception {
+        // A wrapped unknown state drops the cached table too, a failure known not to be applied does not. Either way
+        // the statement fails with the exception it got, also when that exception's causes form a loop.
+        AtomicReference<RuntimeException> failure = new AtomicReference<>();
+        new MockUp<ConnectorAlterTableExecutor>() {
+            @Mock
+            public ShowResultSet execute() {
+                throw failure.get();
+            }
+        };
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), null);
+        Map<TableIdentifier, org.apache.iceberg.Table> cached = cachedNativeTables(metadata);
+        List<String> requests = recordOtherFeRequests();
+        ColumnDef added = new ColumnDef("c1", new TypeDef(TypeFactory.createType(PrimitiveType.INT)), true);
+        AlterTableStmt stmt = new AlterTableStmt(createTableRef(new TableName("db", "tbl")),
+                Lists.newArrayList(new AddColumnClause(added, null, null, new HashMap<>())));
+        RuntimeException first = new RuntimeException("first");
+        RuntimeException loop = new RuntimeException("second", first);
+        first.initCause(loop);
+
+        RuntimeException wrapped = new StarRocksConnectorException("Failed to alter table",
+                new CommitStateUnknownException(new RuntimeException("503 from the catalog")));
+        failure.set(wrapped);
+        cached.put(TableIdentifier.of("db", "tbl"), mockedNativeTableA);
+        Assertions.assertSame(wrapped, Assertions.assertThrows(RuntimeException.class,
+                () -> metadata.alterTable(new ConnectContext(), stmt)));
+        Assertions.assertFalse(cached.containsKey(TableIdentifier.of("db", "tbl")));
+        Assertions.assertEquals(List.of(refreshOf("db", "tbl"), invalidationOf("db", "tbl")), requests);
+
+        for (RuntimeException otherFailure : List.of(new CommitFailedException("Commit conflict"), loop)) {
+            requests.clear();
+            failure.set(otherFailure);
+            cached.put(TableIdentifier.of("db", "tbl"), mockedNativeTableA);
+            Assertions.assertSame(otherFailure, Assertions.assertThrows(RuntimeException.class,
+                    () -> metadata.alterTable(new ConnectContext(), stmt)));
+            Assertions.assertTrue(cached.containsKey(TableIdentifier.of("db", "tbl")), otherFailure.toString());
+            Assertions.assertEquals(List.of(), requests, otherFailure.toString());
+        }
     }
 
     @Test
@@ -2145,10 +2227,11 @@ public class IcebergMetadataTest extends TableTestBase {
         Mockito.when(icebergCatalog.getTable(Mockito.any(), Mockito.eq(dbName), Mockito.eq(tableName)))
                 .thenReturn(stateUnknownTable);
         Mockito.when(icebergCatalog.getIcebergCatalogType()).thenReturn(IcebergCatalogType.HIVE_CATALOG);
-        List<String> invalidated = recordOtherFeInvalidations(() -> {
-        });
+        List<String> requests = recordOtherFeRequests();
         IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergCatalog,
                 Executors.newSingleThreadExecutor(), DEFAULT_CATALOG_PROPERTIES);
+        Map<TableIdentifier, org.apache.iceberg.Table> cached = cachedNativeTables(metadata);
+        cached.put(TableIdentifier.of(dbName, tableName), stateUnknownTable);
 
         ColumnDef added = new ColumnDef("c1", new TypeDef(TypeFactory.createType(PrimitiveType.INT)), true);
         AlterTableStmt stmt = new AlterTableStmt(createTableRef(new TableName(CATALOG_NAME, dbName, tableName)),
@@ -2160,8 +2243,11 @@ public class IcebergMetadataTest extends TableTestBase {
                 () -> Assertions.assertTrue(exception instanceof CommitStateUnknownException
                         || exception.getCause() instanceof CommitStateUnknownException, exception.toString()),
                 () -> Assertions.assertNotNull(stateUnknownTable.schema().findField("c1"), "the ALTER was applied"),
+                () -> Assertions.assertFalse(cached.containsKey(TableIdentifier.of(dbName, tableName))),
                 () -> Mockito.verify(icebergCatalog).invalidateTableCache(dbName, tableName),
-                () -> Assertions.assertEquals(List.of(invalidationOf(dbName, tableName)), invalidated));
+                () -> Mockito.verify(icebergCatalog).invalidatePartitionCache(dbName, tableName),
+                () -> Assertions.assertEquals(List.of(refreshOf(dbName, tableName), invalidationOf(dbName, tableName)),
+                        requests));
     }
 
     @Test

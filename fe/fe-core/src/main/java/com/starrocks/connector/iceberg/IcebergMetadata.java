@@ -509,6 +509,8 @@ public class IcebergMetadata implements ConnectorMetadata {
                 icebergCatalog.invalidateCache(dbName, tableName);
             }
             asyncRefreshOthersFeMetadataCache(dbName, tableName);
+            // as for the old name, the fallback for a peer the wait below misses or skips (a timeout of 0 or less)
+            newTableName.ifPresent(name -> asyncRefreshOthersFeMetadataCache(dbName, name));
         }
         // Schema and property changes, branches and tags, and the table procedures (rollback, cherry-pick,
         // expire snapshots, ...) all commit new table metadata. A rename drops the old name, and the new one too:
