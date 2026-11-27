@@ -381,6 +381,34 @@ Status TransactionStreamLoadAction::_on_header(HttpRequest* http_req, StreamLoad
     return _exec_plan_fragment(http_req, ctx);
 }
 
+// Parses and checks the CSV format headers as StreamLoadAction does. The FE plans the CSV scan with them.
+static Status parse_csv_format_headers(HttpRequest* http_req, TStreamLoadPutRequest* request) {
+    if (!http_req->header(HTTP_SKIP_HEADER).empty()) {
+        int64_t skip_header = 0;
+        RETURN_IF_ERROR(parse_int64_param(HTTP_SKIP_HEADER, http_req->header(HTTP_SKIP_HEADER), &skip_header));
+        if (skip_header < 0) {
+            return Status::InvalidArgument("skip_header must be equal or greater than 0");
+        }
+        request->__set_skipHeader(skip_header);
+    }
+    if (!http_req->header(HTTP_TRIM_SPACE).empty()) {
+        if (boost::iequals(http_req->header(HTTP_TRIM_SPACE), "false")) {
+            request->__set_trimSpace(false);
+        } else if (boost::iequals(http_req->header(HTTP_TRIM_SPACE), "true")) {
+            request->__set_trimSpace(true);
+        } else {
+            return Status::InvalidArgument("Invalid trim space format. Must be bool type");
+        }
+    }
+    if (!http_req->header(HTTP_ENCLOSE).empty()) {
+        request->__set_enclose(http_req->header(HTTP_ENCLOSE)[0]);
+    }
+    if (!http_req->header(HTTP_ESCAPE).empty()) {
+        request->__set_escape(http_req->header(HTTP_ESCAPE)[0]);
+    }
+    return Status::OK();
+}
+
 Status TransactionStreamLoadAction::_parse_request(HttpRequest* http_req, StreamLoadContext* ctx,
                                                    TStreamLoadPutRequest& request) {
     set_request_auth(&request, ctx->auth);
@@ -407,6 +435,13 @@ Status TransactionStreamLoadAction::_parse_request(HttpRequest* http_req, Stream
     }
     if (!http_req->header(HTTP_ROW_DELIMITER).empty()) {
         request.__set_rowDelimiter(http_req->header(HTTP_ROW_DELIMITER));
+    }
+    // A load with a channel (a parallel or multi-table transaction) was planned by the FE from these same headers,
+    // with the FE's own parsing (trim_space: 1 is true there), so they are left to that plan. For any other
+    // transaction stream load this request is the plan request. All its load calls feed one data stream, so
+    // skip_header skips the first rows of the transaction's data, counted across the calls, not of each call.
+    if (!ctx->is_channel_stream_load_context()) {
+        RETURN_IF_ERROR(parse_csv_format_headers(http_req, &request));
     }
     if (!http_req->header(HTTP_PARTITIONS).empty()) {
         request.__set_partitions(http_req->header(HTTP_PARTITIONS));
