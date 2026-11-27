@@ -115,4 +115,60 @@ TEST_F(PercentileFunctionsTest, percentileNullTest) {
     ASSERT_TRUE(result->is_null(0));
 }
 
+// A quantile outside [0, 1] and an empty percentile have no answer: NULL, not NaN.
+TEST_F(PercentileFunctionsTest, percentileApproxRawWithoutAnswerIsNull) {
+    PercentileValue empty;
+    PercentileValue five;
+    five.add(5);
+    auto percentiles = PercentileColumn::create();
+    percentiles->append(&five);
+    percentiles->append(&five);
+    percentiles->append(&five);
+    percentiles->append(&empty);
+    auto quantiles = DoubleColumn::create();
+    quantiles->append(0.5);
+    quantiles->append(-1);
+    quantiles->append(1.5);
+    quantiles->append(0.5);
+    Columns columns;
+    columns.emplace_back(std::move(percentiles));
+    columns.emplace_back(std::move(quantiles));
+
+    ColumnPtr column = PercentileFunctions::percentile_approx_raw(ctx, columns).value();
+    ASSERT_TRUE(column->is_nullable());
+    auto result = ColumnHelper::as_column<NullableColumn>(column);
+    ASSERT_FALSE(result->is_null(0));
+    ASSERT_EQ(5, result->data_column()->get(0).get_double());
+    ASSERT_TRUE(result->is_null(1));
+    ASSERT_TRUE(result->is_null(2));
+    ASSERT_TRUE(result->is_null(3));
+}
+
+// A constant percentile with a column of quantiles answers each row, and one row without an answer does not make the
+// others NULL.
+TEST_F(PercentileFunctionsTest, percentileApproxRawConstPercentileColumnQuantile) {
+    PercentileValue five;
+    five.add(5);
+    auto percentile = PercentileColumn::create();
+    percentile->append(&five);
+    auto quantiles = DoubleColumn::create();
+    quantiles->append(0.5);
+    quantiles->append(-1);
+    quantiles->append(0.25);
+    Columns columns;
+    columns.emplace_back(ConstColumn::create(std::move(percentile), 3));
+    columns.emplace_back(std::move(quantiles));
+
+    ColumnPtr column = PercentileFunctions::percentile_approx_raw(ctx, columns).value();
+    ASSERT_FALSE(column->is_constant());
+    ASSERT_TRUE(column->is_nullable());
+    auto result = ColumnHelper::as_column<NullableColumn>(column);
+    ASSERT_EQ(3, result->size());
+    ASSERT_FALSE(result->is_null(0));
+    ASSERT_EQ(5, result->data_column()->get(0).get_double());
+    ASSERT_TRUE(result->is_null(1));
+    ASSERT_FALSE(result->is_null(2));
+    ASSERT_EQ(5, result->data_column()->get(2).get_double());
+}
+
 } // namespace starrocks

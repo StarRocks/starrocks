@@ -14,6 +14,8 @@
 
 #include "exprs/percentile_functions.h"
 
+#include <cmath>
+
 #include "column/column_builder.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
@@ -59,10 +61,17 @@ StatusOr<ColumnPtr> PercentileFunctions::percentile_approx_raw(FunctionContext* 
             builder.append_null();
         } else {
             double result = viewer1.value(row)->quantile(viewer2.value(row));
-            builder.append(result);
+            // The t-digest answers NaN for a quantile outside [0, 1] and for an empty digest. NaN is not a SQL value:
+            // NOT (x > NaN) and x > NaN are both false. Return NULL, as PERCENTILE_APPROX does over no rows.
+            if (std::isnan(result)) {
+                builder.append_null();
+            } else {
+                builder.append(result);
+            }
         }
     }
-    return builder.build(columns[0]->is_constant());
+    // Constant only when both arguments are: a constant percentile with a column of quantiles gives one answer per row.
+    return builder.build(ColumnHelper::is_all_const(columns));
 }
 
 struct LCPercentileExtracter {
