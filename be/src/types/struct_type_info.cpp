@@ -24,8 +24,6 @@ public:
 
     ~StructTypeInfo() override = default;
 
-    void shallow_copy(void* dest, const void* src) const override { CHECK(false); }
-
     void deep_copy(void* dest, const void* src, const TypeInfoAllocator* allocator) const override { CHECK(false); }
 
     void direct_copy(void* dest, const void* src) const override { CHECK(false); }

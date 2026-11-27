@@ -28,10 +28,6 @@ public:
 
     ~ArrayTypeInfo() override = default;
 
-    void shallow_copy(void* dest, const void* src) const override {
-        unaligned_store<Collection>(dest, unaligned_load<Collection>(src));
-    }
-
     void deep_copy(void* dest, const void* src, const TypeInfoAllocator* allocator) const override {
         DCHECK_NE(allocator, nullptr);
         Collection dest_value;
