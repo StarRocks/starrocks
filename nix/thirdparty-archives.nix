@@ -184,10 +184,10 @@ let
       md5 = "6cbfc54c2ab3b4d7284e188e185c2b0b";
       sha256 = "0acr9f6m6jdbhlqbq5hx321d1j234lpznv13crmxgy0wwh8d162p";
     };
-    "jemalloc-5.3.0.tar.bz2" = {
-      url = "https://github.com/jemalloc/jemalloc/releases/download/5.3.0/jemalloc-5.3.0.tar.bz2";
-      md5 = "09a8328574dab22a7df848eae6dbbf53";
-      sha256 = "1apyxjd1ixy4g8xkr61p0ny8jiz8vyv1j0k4nxqkxpqrf4g2vf1d";
+    "jemalloc-5.3.1.tar.bz2" = {
+      url = "https://github.com/jemalloc/jemalloc/releases/download/5.3.1/jemalloc-5.3.1.tar.bz2";
+      md5 = "2b183326fcff2c087efd7efc0a808ba2";
+      sha256 = "14kgf0hs864hp5xxqfqh37l1d8wwg57h7wv28rffs8ig4f0bq9iq";
     };
     "kafel-76d0f41bf3eb5c4008713d64b9767b461a9129a3.tar.gz" = {
       url = "https://github.com/google/kafel/archive/76d0f41bf3eb5c4008713d64b9767b461a9129a3.tar.gz";
@@ -508,7 +508,7 @@ let
       "h3-4.5.0-1b536c34225191ba24a75a840f634d4a48c3b206.tar.gz"
       "bitshuffle-0.5.1.tar.gz"
       "CRoaring-4.2.1.tar.gz"
-      "jemalloc-5.3.0.tar.bz2"
+      "jemalloc-5.3.1.tar.bz2"
       "cctz-2.3.tar.gz"
       "fmt-10.2.1.zip"
       "ryu-aa31ca9361d21b1a00ee054aac49c87d07e74abc.zip"
@@ -583,7 +583,7 @@ let
       "h3-4.5.0-1b536c34225191ba24a75a840f634d4a48c3b206.tar.gz"
       "bitshuffle-0.5.1.tar.gz"
       "CRoaring-4.2.1.tar.gz"
-      "jemalloc-5.3.0.tar.bz2"
+      "jemalloc-5.3.1.tar.bz2"
       "cctz-2.3.tar.gz"
       "fmt-10.2.1.zip"
       "ryu-aa31ca9361d21b1a00ee054aac49c87d07e74abc.zip"
@@ -657,7 +657,7 @@ let
       "h3-4.5.0-1b536c34225191ba24a75a840f634d4a48c3b206.tar.gz"
       "bitshuffle-0.5.1.tar.gz"
       "CRoaring-4.2.1.tar.gz"
-      "jemalloc-5.3.0.tar.bz2"
+      "jemalloc-5.3.1.tar.bz2"
       "cctz-2.3.tar.gz"
       "fmt-10.2.1.zip"
       "ryu-aa31ca9361d21b1a00ee054aac49c87d07e74abc.zip"
