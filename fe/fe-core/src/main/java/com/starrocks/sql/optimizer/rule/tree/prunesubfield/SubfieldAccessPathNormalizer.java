@@ -118,6 +118,13 @@ public class SubfieldAccessPathNormalizer {
                     parentPath = childPath;
                 }
             }
+            if (parentPath.hasChildPath() && parentPath.getValueType() != InvalidType.INVALID) {
+                // This path is read whole, and longer paths below it were read too: the node now serves those reads
+                // as well, so it is read as the column's own type, not as the scalar type its own read asked for.
+                // Otherwise get_json_int(j, '$.q') with get_json_int(j, '$.q.6') reads q as BIGINT, and q.6 comes
+                // out NULL. A variant column keeps its type, as deriveCompatibleValueType() does.
+                parentPath.setValueType(root.getType().isVariantType() ? root.getType() : JsonType.JSON);
+            }
             parentPath.clearChildPath();
         }
         rootPath.clearUnusedValueType();
