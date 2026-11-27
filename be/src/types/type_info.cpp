@@ -931,6 +931,12 @@ struct ScalarTypeInfoImpl<TYPE_VARBINARY> : ScalarTypeInfoImpl<TYPE_VARCHAR> {
     static constexpr int32_t size = StorageCppTypeSize<TYPE_VARBINARY>;
 };
 
+template <>
+struct ScalarTypeInfoImpl<TYPE_VARIANT> : ScalarTypeInfoImpl<TYPE_VARCHAR> {
+    static constexpr LogicalType type = TYPE_VARIANT;
+    static constexpr int32_t size = StorageCppTypeSize<TYPE_VARIANT>;
+};
+
 void (*ScalarTypeInfoImpl<TYPE_CHAR>::set_to_max)(void*) = nullptr;
 
 // NOTE

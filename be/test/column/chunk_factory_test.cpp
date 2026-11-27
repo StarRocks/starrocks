@@ -173,4 +173,33 @@ TEST(ChunkFactoryTest, rejects_missing_or_mismatched_geo_descriptor) {
     }
 }
 
+TEST(ChunkFactoryTest, column_from_field_type_variant) {
+    // Regression test for #84783: field_type_dispatch_column was missing
+    // TYPE_VARIANT, causing SIGABRT when building columns for VARIANT fields.
+    auto column = ChunkFactory::column_from_field_type(TYPE_VARIANT, false);
+    ASSERT_NE(nullptr, column);
+    ASSERT_FALSE(column->is_nullable());
+
+    auto nullable_column = ChunkFactory::column_from_field_type(TYPE_VARIANT, true);
+    ASSERT_NE(nullptr, nullable_column);
+    ASSERT_TRUE(nullable_column->is_nullable());
+}
+
+TEST(ChunkFactoryTest, new_chunk_pooled_variant) {
+    // Regression test for #84783: schema-backed VARIANT columns must preserve
+    // TYPE_VARIANT through TypeInfo, not fall back to TYPE_NONE.
+    auto type_info = get_type_info(TYPE_VARIANT);
+    ASSERT_EQ(TYPE_VARIANT, type_info->type());
+
+    Fields fields;
+    fields.emplace_back(std::make_shared<Field>(0, "variant_col", type_info, true));
+    Schema schema(std::move(fields));
+
+    // Verify the field type is preserved through the schema.
+    ASSERT_EQ(TYPE_VARIANT, schema.field(0)->type()->type());
+
+    auto chunk = std::unique_ptr<Chunk>(ChunkFactory::new_chunk_pooled(schema, 8));
+    ASSERT_NE(nullptr, chunk);
+}
+
 } // namespace starrocks
