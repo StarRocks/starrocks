@@ -15,6 +15,7 @@
 package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
 import com.google.common.collect.ImmutableMap;
+import com.starrocks.alter.AlterJobMgr;
 import com.starrocks.authentication.UserIdentityUtils;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
@@ -590,6 +591,86 @@ class MvConnectorViewRedefinitionTest extends MVTestBase {
             starRocksAssert.dropTable("mv_view_table_1");
         }
     }
+
+    /**
+     * <b>Given</b> a refreshed unpartitioned mv on a view reading table_1 UNION ALL table_2, and an FE from before the
+     * adoption of redefined base tables in the cluster, e.g. during a rolling upgrade.
+     * <br><b>When</b> the view drops the table_2 branch and the mv is refreshed.
+     * <br><b>Then</b> the leader does not journal the adoption, which that FE would replay keeping table_1's version,
+     * but inactivates the mv without its versions on every FE. Activation keeps refusing to adopt table_1 until that
+     * FE is upgraded, and then adopts it as a stale base table.
+     */
+    @Test
+    void redefinedBaseTablesInactivateTheMvWhileAnOlderFrontendIsInTheCluster() throws Exception {
+        String mvName = "table_view_older_frontend_mv";
+        createViewBaseTables("");
+        // the FEs the leader's heartbeats found not to adopt them, see AlterJobMgrTest for how they are found
+        List<String> olderFrontends = new ArrayList<>(List.of("fe_not_upgraded"));
+        new MockUp<AlterJobMgr>() {
+            @Mock
+            public List<String> frontendsNotAdoptingRedefinedMvBaseTables() {
+                return olderFrontends;
+            }
+        };
+        tableViewSql = TABLE_1_SQL + " UNION ALL " + TABLE_2_SQL;
+        try {
+            starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW " + mvName + " " +
+                    "DISTRIBUTED BY HASH(c_custkey) BUCKETS 1 REFRESH DEFERRED MANUAL " +
+                    "PROPERTIES (\"replication_num\" = \"1\", \"query_rewrite_consistency\" = \"checked\") " +
+                    "AS SELECT * FROM " + TABLE_VIEW);
+            refreshMaterializedView("test", mvName);
+            MaterializedView mv = getMv(mvName);
+            List<BaseTableInfo> baseTableInfos = mv.getBaseTableInfos();
+
+            // when: the view drops the table_2 branch, and the mv is refreshed
+            tableViewSql = TABLE_1_SQL;
+            List<JournalEntity> journals = recordMvJournals();
+            Exception refreshError = assertThrows(Exception.class, () -> refreshMV("test", mv));
+            assertTrue(refreshError.getMessage().contains(OLDER_FRONTENDS_CANNOT_ADOPT), refreshError.getMessage());
+
+            // then: the mv keeps its base tables, but is inactive without the versions of its old definition
+            assertFalse(mv.isActive());
+            assertTrue(mv.getInactiveReason().contains("fe_not_upgraded"), mv.getInactiveReason());
+            assertEquals(baseTableInfos, mv.getBaseTableInfos());
+            assertTrue(mv.getRefreshScheme().getAsyncRefreshContext().getBaseTableVisibleVersionMap().isEmpty());
+            PlanTestBase.assertNotContains(getFragmentPlan(TABLE_1_SQL), "TABLE: " + mvName);
+            // and: an inactivation every version replays, not the adoption
+            assertFalse(journals.stream().anyMatch(
+                    journal -> journal.opCode() == OperationType.OP_ALTER_MATERIALIZED_VIEW_BASE_TABLE_INFOS));
+            List<AlterMaterializedViewStatusLog> statusLogs = journals.stream()
+                    .filter(journal -> journal.opCode() == OperationType.OP_ALTER_MATERIALIZED_VIEW_STATUS)
+                    .map(journal -> (AlterMaterializedViewStatusLog) journal.data())
+                    .collect(Collectors.toList());
+            assertEquals(1, statusLogs.size());
+            assertEquals(AlterMaterializedViewStatusClause.INACTIVE, statusLogs.get(0).getStatus());
+            assertTrue(statusLogs.get(0).isClearVersionMap());
+
+            // when: the mv is activated before that FE is upgraded
+            String activate = "ALTER MATERIALIZED VIEW " + mvName + " ACTIVE";
+            Exception activateError = assertThrows(Exception.class, () -> cluster.runSql("test", activate));
+            // then: the activation does not adopt table_1 either
+            assertTrue(activateError.getMessage().contains(OLDER_FRONTENDS_CANNOT_ADOPT), activateError.getMessage());
+            assertFalse(mv.isActive());
+            assertEquals(baseTableInfos, mv.getBaseTableInfos());
+
+            // when: that FE is upgraded, and the mv is activated
+            olderFrontends.clear();
+            cluster.runSql("test", activate);
+            // then: it adopts table_1, stale until a refresh rebuilds the mv
+            assertTrue(mv.isActive(), mv.getInactiveReason());
+            assertAdoptedTable1AsStale(mv);
+            refreshMaterializedView("test", mvName);
+            assertTrue(mv.getRefreshScheme().getAsyncRefreshContext().getBaseTableVisibleVersionMap()
+                    .containsKey(getTable("test", "mv_view_table_1").getId()));
+        } finally {
+            tableViewSql = TABLE_1_SQL;
+            dropMv("test", mvName);
+            starRocksAssert.dropTable("mv_view_table_2");
+            starRocksAssert.dropTable("mv_view_table_1");
+        }
+    }
+
+    private static final String OLDER_FRONTENDS_CANNOT_ADOPT = "cannot adopt them yet";
 
     /** A refreshed mv on the view's union, inactivated by the user, after which the view keeps table_1 only. */
     private MaterializedView createInactiveMvOnRedefinedTableViewUnion(String mvName) throws Exception {

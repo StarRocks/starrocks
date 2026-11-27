@@ -16,6 +16,7 @@ package com.starrocks.scheduler.mv.pct;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Maps;
+import com.starrocks.alter.AlterJobMgr;
 import com.starrocks.alter.AlterMVJobExecutor;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Database;
@@ -282,12 +283,25 @@ public final class MVPCTRefreshProcessor extends MVRefreshProcessor {
                     " in syncBaseTableInfosWithDefinedQuery");
         }
         String inactiveReason = null;
+        // see AlterJobMgr#frontendsNotAdoptingRedefinedMvBaseTables
+        List<String> olderFrontends = AlterJobMgr.frontendsNotAdoptingRedefinedMvBaseTables();
         try {
             if (GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), mv.getId()) == null) {
                 throw new DmlException("refresh failed: materialized view %s.%s does not exist, " +
                         "it may have been dropped during refresh", db.getFullName(), mv.getName());
             }
-            if (mv.getPartitionInfo().isUnPartitioned()) {
+            if (mv.getPartitionInfo().isUnPartitioned() && !olderFrontends.isEmpty()) {
+                // An older FE would replay the adoption keeping the versions of the old base tables, so keep those
+                // and stop using the mv on every FE, without the versions the old definition was refreshed with. The
+                // activation of a later run adopts the new base tables once every FE is upgraded.
+                inactiveReason = MaterializedViewExceptions.inactiveReasonForMvBaseTablesRedefinedOnOlderFrontends(
+                        MvUtils.formatBaseTableInfos(mv.getBaseTableInfos()),
+                        MvUtils.formatBaseTableInfos(newBaseTableInfos), olderFrontends);
+                // a retry of this refresh finds the mv inactive already
+                if (mv.isActive()) {
+                    AlterMVJobExecutor.inactiveMvFromRefreshLocked(mv, inactiveReason);
+                }
+            } else if (mv.getPartitionInfo().isUnPartitioned()) {
                 // NOTE: fixRelationship in replaceBaseTableInfos resolves the new base tables under the mv lock,
                 // as the replay of this entry does.
                 GlobalStateMgr.getCurrentState().getEditLog().logAlterMvBaseTableInfos(

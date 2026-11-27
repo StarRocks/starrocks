@@ -64,6 +64,10 @@ public class FrontendHbResponse extends HeartbeatResponse implements Writable {
     // predates the rebuild (it does not report it).
     @SerializedName("rebuildsLakeIndexPayload")
     private boolean rebuildsLakeIndexPayload;
+    // Whether the FE replays an mv adopting the base tables of a redefined connector view, see
+    // MaterializedView#replaceBaseTableInfos; false for an FE that predates it (it does not report it).
+    @SerializedName("adoptsRedefinedMvBaseTables")
+    private boolean adoptsRedefinedMvBaseTables;
 
     private float heapUsedPercent;
 
@@ -143,6 +147,14 @@ public class FrontendHbResponse extends HeartbeatResponse implements Writable {
         this.rebuildsLakeIndexPayload = rebuildsLakeIndexPayload;
     }
 
+    public boolean adoptsRedefinedMvBaseTables() {
+        return adoptsRedefinedMvBaseTables;
+    }
+
+    public void setAdoptsRedefinedMvBaseTables(boolean adoptsRedefinedMvBaseTables) {
+        this.adoptsRedefinedMvBaseTables = adoptsRedefinedMvBaseTables;
+    }
+
 
 
     @Override
@@ -156,6 +168,7 @@ public class FrontendHbResponse extends HeartbeatResponse implements Writable {
         sb.append(", feStartTime: ").append(TimeUtils.longToTimeString(feStartTime));
         sb.append(", feVersion: ").append(feVersion);
         sb.append(", rebuildsLakeIndexPayload: ").append(rebuildsLakeIndexPayload);
+        sb.append(", adoptsRedefinedMvBaseTables: ").append(adoptsRedefinedMvBaseTables);
         return sb.toString();
     }
 

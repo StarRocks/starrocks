@@ -89,6 +89,7 @@ import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.TaskRunManager;
 import com.starrocks.scheduler.mv.MVTimelinessMgr;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.NodeMgr;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.MaterializedViewAnalyzer;
@@ -101,12 +102,15 @@ import com.starrocks.sql.ast.RangeDistributionDesc;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.parser.SqlParser;
+import com.starrocks.system.Frontend;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.util.Strings;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -330,7 +334,7 @@ public class AlterJobMgr {
         if (!isReplay) {
             MaterializedViewAnalyzer.checkBaseTables(
                     tableNameTableMap, materializedView.getPartitionInfo().isUnPartitioned());
-            checkPartitionedMvBaseTablesNotRedefined(materializedView, tableNameTableMap, baseTableInfos);
+            checkRedefinedBaseTablesAdoptable(materializedView, tableNameTableMap, baseTableInfos);
         }
         TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
         Task task = taskManager.getTask(materializedView);
@@ -343,22 +347,59 @@ public class AlterJobMgr {
     }
 
     /**
-     * The partition expressions of an mv stay bound to the base tables it was created on. Once a connector view
-     * redefined in its catalog makes the mv read others, it stays inactive until the view reads them again, see
-     * MVPCTRefreshProcessor#syncBaseTableInfosWithDefinedQuery. The connector view is among the tables the defined
-     * query just resolved, so telling one apart costs no connector round trip.
+     * Whether an activation may adopt the base tables of a connector view redefined in its catalog, see
+     * MVPCTRefreshProcessor#syncBaseTableInfosWithDefinedQuery, which applies the same rules. The partition
+     * expressions of an mv stay bound to the base tables it was created on, so a partitioned mv stays inactive until
+     * the view reads them again. An unpartitioned one stays inactive until every FE can replay the adoption. The
+     * connector view is among the tables the defined query just resolved, so telling one apart costs no connector
+     * round trip.
      */
-    private static void checkPartitionedMvBaseTablesNotRedefined(MaterializedView materializedView,
-                                                                 Map<TableName, Table> tableNameTableMap,
-                                                                 Set<BaseTableInfo> baseTableInfos) {
-        if (materializedView.getPartitionInfo().isUnPartitioned()
-                || tableNameTableMap.values().stream().noneMatch(Table::isConnectorView)
+    private static void checkRedefinedBaseTablesAdoptable(MaterializedView materializedView,
+                                                          Map<TableName, Table> tableNameTableMap,
+                                                          Set<BaseTableInfo> baseTableInfos) {
+        if (tableNameTableMap.values().stream().noneMatch(Table::isConnectorView)
                 || MvUtils.isSameBaseTables(materializedView.getBaseTableInfos(), baseTableInfos)) {
             return;
         }
-        throw new SemanticException(MaterializedViewExceptions.inactiveReasonForPartitionedMvBaseTablesRedefined(
-                MvUtils.formatBaseTableInfos(materializedView.getBaseTableInfos()),
-                MvUtils.formatBaseTableInfos(Lists.newArrayList(baseTableInfos))));
+        String oldBaseTables = MvUtils.formatBaseTableInfos(materializedView.getBaseTableInfos());
+        String newBaseTables = MvUtils.formatBaseTableInfos(Lists.newArrayList(baseTableInfos));
+        if (!materializedView.getPartitionInfo().isUnPartitioned()) {
+            throw new SemanticException(MaterializedViewExceptions.inactiveReasonForPartitionedMvBaseTablesRedefined(
+                    oldBaseTables, newBaseTables));
+        }
+        List<String> olderFrontends = frontendsNotAdoptingRedefinedMvBaseTables();
+        if (!olderFrontends.isEmpty()) {
+            throw new SemanticException(MaterializedViewExceptions.inactiveReasonForMvBaseTablesRedefinedOnOlderFrontends(
+                    oldBaseTables, newBaseTables, olderFrontends));
+        }
+    }
+
+    /**
+     * The FEs other than this one that cannot replay an mv adopting the base tables of a redefined connector view,
+     * see MaterializedView#replaceBaseTableInfos. An FE from before the adoption replays that journal entry as a plain
+     * base-table update, which keeps the versions the mv was refreshed with and activates it, and replays an
+     * activation with new base tables the same way: it would rewrite queries to the rows of the view's old definition.
+     * Until every FE reports the adoption in its heartbeat (for example, while the FEs are being upgraded one by one),
+     * such an mv is made inactive instead, which every version replays. Observers count too, since they rewrite
+     * queries, and so does an FE that is not alive: it may come back on another version.
+     */
+    public static List<String> frontendsNotAdoptingRedefinedMvBaseTables() {
+        NodeMgr nodeMgr = GlobalStateMgr.getCurrentState().getNodeMgr();
+        return frontendsNotAdoptingRedefinedMvBaseTables(nodeMgr.getFrontends(null), nodeMgr.getNodeName());
+    }
+
+    @VisibleForTesting
+    static List<String> frontendsNotAdoptingRedefinedMvBaseTables(Collection<Frontend> frontends, String selfName) {
+        List<String> missing = new ArrayList<>();
+        for (Frontend fe : frontends) {
+            if (fe.getNodeName().equals(selfName)) {
+                continue;
+            }
+            if (!fe.isAlive() || !fe.adoptsRedefinedMvBaseTables()) {
+                missing.add(fe.getNodeName());
+            }
+        }
+        return missing;
     }
 
     /**

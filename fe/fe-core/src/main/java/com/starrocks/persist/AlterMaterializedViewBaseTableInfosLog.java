@@ -59,7 +59,9 @@ public class AlterMaterializedViewBaseTableInfosLog implements Writable {
     protected List<Integer> queryOutputIndices = Lists.newArrayList();
 
     // Set when the mv's defined query resolved to other base tables, see MaterializedView#replaceBaseTableInfos.
-    // An older FE ignores it and replays the entry as a DEFAULT one, adopting the base tables without the rest.
+    // An older FE would ignore it and replay the entry as a DEFAULT one, which keeps the versions of the old base
+    // tables, so it is only journaled once every FE reports it replays it, see
+    // AlterJobMgr#frontendsNotAdoptingRedefinedMvBaseTables.
     @SerializedName("baseTablesRedefined")
     private boolean baseTablesRedefined;
 
@@ -126,7 +128,7 @@ public class AlterMaterializedViewBaseTableInfosLog implements Writable {
         this.mvId = mvId;
         this.alterType = AlterType.DEFAULT.ordinal();
         this.baseTableInfos = baseTableInfos;
-        // empty, so that an older FE replaying it as a DEFAULT entry keeps the versions it has
+        // not read on replay, which clears the versions, see MaterializedView#replaceBaseTableInfos
         this.baseTableVisibleVersionMap = Maps.newHashMap();
         this.baseTableInfoVisibleVersionMap = Maps.newHashMap();
     }

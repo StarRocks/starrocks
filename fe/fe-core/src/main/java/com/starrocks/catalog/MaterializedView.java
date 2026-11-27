@@ -1974,7 +1974,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             this.baseTableInfos = journaledBaseTableInfos;
         } else {
             // the leader's activation found the defined query reading other base tables, see
-            // AlterJobMgr#applyAlterMaterializedViewStatus; the relinking below covers the new ones
+            // AlterJobMgr#rebuildRelationshipForActivate; the relinking below covers the new ones
             adoptRedefinedBaseTableInfos(journaledBaseTableInfos);
         }
         if (GlobalStateMgr.isCheckpointThread()) {

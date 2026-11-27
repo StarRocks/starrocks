@@ -420,6 +420,7 @@ public class HeartbeatMgr extends LeaderDaemon {
                             JvmStats.getJvmHeapUsedPercent(), MachineInfo.getInstance().getCpuCores(),
                             MachineInfo.getInstance().getMacAddress());
                     response.setRebuildsLakeIndexPayload(true);
+                    response.setAdoptsRedefinedMvBaseTables(true);
                     return response;
                 } else {
                     return new FrontendHbResponse(fe.getNodeName(), "not ready");
@@ -446,6 +447,7 @@ public class HeartbeatMgr extends LeaderDaemon {
                             result.getFeStartTime(), result.getFeVersion(), result.getHeapUsedPercent(),
                             result.getCpuCores(), result.getMacAddress());
                     response.setRebuildsLakeIndexPayload(result.rebuildsLakeIndexPayload());
+                    response.setAdoptsRedefinedMvBaseTables(result.adoptsRedefinedMvBaseTables());
                     return response;
                 }
             } catch (Exception e) {

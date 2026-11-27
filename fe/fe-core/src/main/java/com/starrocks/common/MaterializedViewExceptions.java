@@ -21,6 +21,7 @@ import com.starrocks.sql.common.MVInactiveException;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.exception.ExceptionUtils;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -170,6 +171,18 @@ public class MaterializedViewExceptions {
         return String.format("base-tables redefined: reads [%s] instead of [%s], partition-expression rebinding " +
                 "is not supported, restore the view definition or recreate the materialized view",
                 newBaseTables, oldBaseTables);
+    }
+
+    /**
+     * Create the inactive reason when the defined query of an unpartitioned mv resolves to other base tables while an
+     * FE that cannot replay adopting them is in the cluster, see AlterJobMgr#frontendsNotAdoptingRedefinedMvBaseTables.
+     */
+    public static String inactiveReasonForMvBaseTablesRedefinedOnOlderFrontends(String oldBaseTables,
+                                                                               String newBaseTables,
+                                                                               List<String> frontends) {
+        return String.format("base-tables redefined: reads [%s] instead of [%s], FE %s cannot adopt them yet, " +
+                "the materialized view is activated again once every FE is upgraded",
+                newBaseTables, oldBaseTables, frontends);
     }
 
     public static String inactiveReasonForBaseInfoMissed() {
