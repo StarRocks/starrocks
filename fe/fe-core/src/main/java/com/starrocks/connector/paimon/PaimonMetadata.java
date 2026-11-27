@@ -666,8 +666,20 @@ public class PaimonMetadata implements ConnectorMetadata {
             return TvrTableSnapshot.of(Optional.of(snapshotId));
         } else {
             TvrVersionRange range = TvrTableDelta.of(start, end);
-            return DEFAULT_MAIN_BRANCH.equals(branch) ? range : new PaimonVersionRange(range, branch);
+            String tag = start.isEmpty() ? endVersion.map(PaimonMetadata::getRequestedTag).orElse(null) : null;
+            return DEFAULT_MAIN_BRANCH.equals(branch) && tag == null ? range : new PaimonVersionRange(range, branch, tag);
         }
+    }
+
+    private static String getRequestedTag(ConnectorTableVersion version) {
+        ConstantOperator value = version.getConstantOperator();
+        if (version.getPointerType() == PointerType.VERSION && value.getType().isStringType()) {
+            String reference = value.getVarchar().toLowerCase(java.util.Locale.ROOT);
+            if (reference.startsWith("tag:")) {
+                return reference.substring("tag:".length());
+            }
+        }
+        return null;
     }
 
     private static String getRequestedBranch(ConnectorTableVersion version) {
@@ -913,7 +925,11 @@ public class PaimonMetadata implements ConnectorMetadata {
         org.apache.paimon.table.Table versionedPaimonTable = getNativeTable(resolvedTable,
                 tvrVersionRange, paimonTable.getCatalogDBName(), paimonTable.getCatalogTableName());
         Map<String, String> options = new HashMap<>();
-        if (snapshotId >= 0) {
+        String tag = PaimonVersionRange.tagOf(tvrVersionRange);
+        if (tag != null && tvrVersionRange.start().isEmpty()) {
+            // A tag survives the expiration of its snapshot, so read it by name rather than by snapshot id.
+            options.put(CoreOptions.SCAN_TAG_NAME.key(), tag);
+        } else if (snapshotId >= 0) {
             options.put(CoreOptions.SCAN_SNAPSHOT_ID.key(), String.valueOf(snapshotId));
         }
         if (versionedPaimonTable instanceof FileStoreTable

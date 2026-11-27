@@ -19,19 +19,34 @@ import com.starrocks.common.tvr.TvrVersionRange;
 
 import java.util.Objects;
 
-/** A scan's branch is part of its version identity, including across statistics and scan planning. */
+/**
+ * A scan's branch, and the tag it was pinned by, are part of its version identity, including across
+ * statistics and scan planning. A tag read is planned by tag name because the tag outlives the
+ * expiration of the snapshot it references.
+ */
 final class PaimonVersionRange extends TvrVersionRange {
     private final TvrVersionRange range;
     private final String branch;
+    // Null unless the range is a non-incremental read pinned by a tag.
+    private final String tag;
 
     PaimonVersionRange(TvrVersionRange range, String branch) {
+        this(range, branch, null);
+    }
+
+    PaimonVersionRange(TvrVersionRange range, String branch, String tag) {
         super(range.from(), range.to());
         this.range = range;
         this.branch = branch;
+        this.tag = tag;
     }
 
     static String branchOf(TvrVersionRange range) {
         return range instanceof PaimonVersionRange ? ((PaimonVersionRange) range).branch : "main";
+    }
+
+    static String tagOf(TvrVersionRange range) {
+        return range instanceof PaimonVersionRange ? ((PaimonVersionRange) range).tag : null;
     }
 
     @Override
@@ -41,29 +56,31 @@ final class PaimonVersionRange extends TvrVersionRange {
 
     @Override
     public PaimonVersionRange copy(TvrVersion from, TvrVersion to) {
-        return new PaimonVersionRange(range.copy(from, to), branch);
+        return new PaimonVersionRange(range.copy(from, to), branch, tag);
     }
 
     @Override
     public boolean timeRangeEquals(TvrVersionRange other) {
         return other instanceof PaimonVersionRange && branch.equals(((PaimonVersionRange) other).branch)
+                && Objects.equals(tag, ((PaimonVersionRange) other).tag)
                 && range.timeRangeEquals(((PaimonVersionRange) other).range);
     }
 
     @Override
     public String toString() {
-        return range + " branch=" + branch;
+        return range + " branch=" + branch + (tag == null ? "" : " tag=" + tag);
     }
 
     @Override
     public boolean equals(Object other) {
         return other instanceof PaimonVersionRange
                 && branch.equals(((PaimonVersionRange) other).branch)
+                && Objects.equals(tag, ((PaimonVersionRange) other).tag)
                 && range.equals(((PaimonVersionRange) other).range);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(range, branch);
+        return Objects.hash(range, branch, tag);
     }
 }
