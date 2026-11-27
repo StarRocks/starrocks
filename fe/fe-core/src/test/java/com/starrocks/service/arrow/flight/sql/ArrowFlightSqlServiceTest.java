@@ -20,16 +20,33 @@ import mockit.Invocation;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
+import org.apache.arrow.flight.FlightClient;
+import org.apache.arrow.flight.FlightRuntimeException;
 import org.apache.arrow.flight.FlightServer;
+import org.apache.arrow.flight.FlightStatusCode;
+import org.apache.arrow.flight.Location;
+import org.apache.arrow.memory.BufferAllocator;
+import org.apache.arrow.memory.RootAllocator;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
+import java.net.ServerSocket;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
 public class ArrowFlightSqlServiceTest {
+    @TempDir
+    Path tempDir;
+
     @Test
     public void testDisable() {
         ArrowFlightSqlService service = new ArrowFlightSqlService(-1);
@@ -110,5 +127,61 @@ public class ArrowFlightSqlServiceTest {
             Config.arrow_flight_max_header_size = saved;
         }
         Assertions.assertEquals(List.of(32768, 65536), passed);
+    }
+
+    // A TLS setup that can't be used must stop the FE from starting, not leave it serving plaintext.
+    @Test
+    public void testTlsWithoutCertificateFails() {
+        Config.arrow_flight_ssl_enable = true;
+        try {
+            assertThrows(IllegalArgumentException.class, () -> new ArrowFlightSqlService(1234));
+        } finally {
+            Config.arrow_flight_ssl_enable = false;
+        }
+    }
+
+    @Test
+    public void testTls() throws Exception {
+        ArrowFlightTestSupport.PemFiles pem = ArrowFlightTestSupport.generateSelfSignedCertificate(tempDir, "fe");
+        Config.arrow_flight_ssl_enable = true;
+        Config.arrow_flight_ssl_cert_file = pem.cert.toString();
+        Config.arrow_flight_ssl_key_file = pem.key.toString();
+        Config.arrow_flight_ssl_ca_cert_file = pem.cert.toString();
+        int port;
+        try (ServerSocket socket = new ServerSocket(0)) {
+            port = socket.getLocalPort();
+        }
+
+        ArrowFlightSqlService service = new ArrowFlightSqlService(port);
+        Thread serverThread = new Thread(service::start);
+        serverThread.start();
+        try (BufferAllocator allocator = new RootAllocator()) {
+            long deadline = System.currentTimeMillis() + 30_000;
+            while (!service.running && System.currentTimeMillis() < deadline) {
+                Thread.sleep(50);
+            }
+            assertTrue(service.running);
+
+            // Over TLS the call reaches the application, which wants a login
+            try (FlightClient client = ArrowFlightSqlTlsConfig.fromConfig().newClient(allocator, "localhost", port)) {
+                FlightRuntimeException e = assertThrows(FlightRuntimeException.class,
+                        () -> client.listActions().forEach(action -> { }));
+                assertEquals(FlightStatusCode.UNAUTHENTICATED, e.status().code());
+            }
+            // A plaintext client doesn't get that far
+            try (FlightClient plaintext = FlightClient.builder(allocator,
+                    Location.forGrpcInsecure("localhost", port)).build()) {
+                FlightRuntimeException e = assertThrows(FlightRuntimeException.class,
+                        () -> plaintext.listActions().forEach(action -> { }));
+                assertNotEquals(FlightStatusCode.UNAUTHENTICATED, e.status().code());
+            }
+        } finally {
+            service.stop();
+            serverThread.join(10_000);
+            Config.arrow_flight_ssl_enable = false;
+            Config.arrow_flight_ssl_cert_file = "";
+            Config.arrow_flight_ssl_key_file = "";
+            Config.arrow_flight_ssl_ca_cert_file = "";
+        }
     }
 }
