@@ -33,14 +33,15 @@ DROP TABLE t_alter_basic;
 
 -- 3  Schema Change: MODIFY COLUMN type on a light-weight table.
 -- Creates shadow tablets; light_weight_tablet_creation = true must
--- still let the rewrite finish.
+-- still let the rewrite finish. The values are numeric strings so the
+-- result does not depend on how an invalid cast is treated.
 CREATE TABLE t_schema_change (
     c0 INT,
     c1 VARCHAR(10)
 ) DUPLICATE KEY(c0)
 DISTRIBUTED BY HASH(c0) BUCKETS 4
 PROPERTIES("light_weight_tablet_creation" = "true");
-INSERT INTO t_schema_change VALUES (1, 'a'), (2, 'b');
+INSERT INTO t_schema_change VALUES (1, '10'), (2, '20');
 ALTER TABLE t_schema_change MODIFY COLUMN c1 INT;
 function: wait_alter_table_finish()
 DESC t_schema_change;
