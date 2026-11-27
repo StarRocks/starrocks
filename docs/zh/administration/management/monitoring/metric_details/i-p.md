@@ -757,8 +757,8 @@ products: [oss, enterprise, cloud, anywhere]
 
 - 单位：计数
 - 类型：累计
-- 标签：`request`（`put_object` 或 `head_object`），`result`（`expired`、`resend_fast`、`resend_slow`、`resend_error` 或 `no_budget`）
-- 描述：发往存算分离对象存储的小请求的快速重发（`enable_object_storage_fast_retry`）的事件数。`expired`：带短超时的一次发送没有及时收到响应，被中止。`resend_fast`：一次重发在短超时内收到响应。`resend_slow`：一次重发收到了响应，但用时超过短超时。`resend_error`：一次重发以网络错误结束，之后由 SDK 按原来的方式重试。`no_budget`：预算（`object_storage_fast_retry_budget_percent`）用完，一次发送没有带短超时。在 `enable_poco_client_for_aws_sdk` 为 `false` 时注册。
+- 标签：`request`（`put_object`、`head_object` 或 `get_object`），`result`（`expired`、`resend_fast`、`resend_slow`、`resend_error` 或 `no_budget`）
+- 描述：发往存算分离对象存储的小请求的快速重发（`enable_object_storage_fast_retry`）的事件数。`expired`：带短超时的一次发送没有及时收到响应，被中止；对 `get_object` 来说，是一次发送超过空闲时间限制都没有收到数据。`resend_fast`：一次重发在短超时内收到响应。`resend_slow`：一次重发收到了响应，但用时超过短超时。`resend_error`：一次重发以网络错误结束，之后由 SDK 按原来的方式重试。`no_budget`：预算（`object_storage_fast_retry_budget_percent`）用完，一次发送没有带短超时；对 `get_object` 来说，是一次发送超过了空闲时间限制，但因为预算用完没有被中止。在 `enable_poco_client_for_aws_sdk` 为 `false` 时注册。
 
 ## `ordinal_index_mem_bytes`
 

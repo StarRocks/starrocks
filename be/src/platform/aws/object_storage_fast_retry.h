@@ -32,8 +32,9 @@ namespace starrocks {
 //
 // Object storage now and then answers a small request one or two seconds late, while the same request sent
 // again is answered within tens of milliseconds. Fast retry gives the SDK's first attempt of such a request a
-// short whole-request timeout. When a send with the short timeout times out, it is aborted and the same signed
-// request is sent again at once, without the SDK's retry back-off. At most FastRetryPolicy::short_attempts sends
+// short whole-request timeout; a ranged GET gets a limit on the time it may go without receiving a byte instead,
+// so that a transfer that is slow but moving is never cut. When a send with the short timeout times out, it is
+// aborted and the same signed request is sent again at once, without the SDK's retry back-off. At most FastRetryPolicy::short_attempts sends
 // carry the short timeout, each with a token from the budget. Once they are used up or no token is left, the next
 // send is an ordinary one.
 //
@@ -49,8 +50,9 @@ namespace starrocks {
 enum class FastRetryRequestClass : uint8_t {
     PUT_OBJECT = 0,
     HEAD_OBJECT = 1,
+    GET_OBJECT = 2,
 };
-inline constexpr size_t kNumFastRetryRequestClasses = 2;
+inline constexpr size_t kNumFastRetryRequestClasses = 3;
 
 const char* fast_retry_request_class_name(FastRetryRequestClass request_class);
 
@@ -60,18 +62,22 @@ const char* fast_retry_request_class_name(FastRetryRequestClass request_class);
 //   (no transfer encoding, no aws-chunked content encoding) and not conditional (no If-Match or If-None-Match).
 //   This leaves out multipart uploads, copies and writes of sub-resources such as tags.
 // - HEAD_OBJECT: a HEAD on an object key with no query string.
+// - GET_OBJECT: a GET of a closed byte range (Range: bytes=first-last) of an object key with no query string. A
+//   resend writes the body from the start of the same response stream again, which starts over from the first
+//   byte of the range.
 std::optional<FastRetryRequestClass> classify_fast_retry_request(const Aws::Http::HttpRequest& request);
 
 inline constexpr int32_t kMaxFastRetryShortAttempts = 3;
 
 struct FastRetryPolicy {
-    // Whole-request timeout of a send that carries the short timeout. 0 turns fast retry off.
+    // Whole-request timeout of a send that carries the short timeout. For GET_OBJECT, the longest time such a send may
+    // go without receiving a byte, from its start. 0 turns fast retry off.
     int64_t timeout_ms = 0;
     // Largest number of sends that carry the short timeout, 1 to kMaxFastRetryShortAttempts. A send carries it only
     // with a token from the budget. Once these sends are used up or no token is left, the next send is an ordinary
     // one.
     int32_t short_attempts = 1;
-    // Largest request body the class covers.
+    // Largest request body the class covers. For GET_OBJECT, the largest byte range.
     int64_t max_body_bytes = 0;
     // Upper bound of the extra requests, in percent of the requests of the class. 0 turns fast retry off.
     int32_t budget_percent = 0;
@@ -89,6 +95,8 @@ FastRetryPolicy fast_retry_policy(FastRetryRequestClass request_class);
 // taken before the send, concurrent sends cannot overdraw it: the extra requests stay within budget_percent of the
 // requests plus kMaxTokens, and fast retry stops by itself when the object storage is slow as a whole. How many
 // sends carry the short timeout at the same time depends on the tokens left when they start.
+// A GET_OBJECT send takes its token only when its idle limit has run out, to abort the send: it holds none while it
+// runs, so the GETs in flight are all watched however many there are. Without a token it is not aborted.
 class FastRetryBudget {
 public:
     static constexpr int64_t kMaxTokens = 100;
@@ -122,12 +130,13 @@ enum class FastRetryResult : uint8_t {
     RESEND_SLOW = 2,
     // A resend ended with a network error. The SDK retries the request as it does without fast retry.
     RESEND_ERROR = 3,
-    // A send went without the short timeout because the budget had run out.
+    // A send went without the short timeout because the budget had run out; for GET_OBJECT, a send whose idle
+    // limit ran out was not aborted because the budget had run out.
     NO_BUDGET = 4,
 };
 inline constexpr size_t kNumFastRetryResults = 5;
 
-// object_storage_fast_retry_total{request="put_object|head_object",
+// object_storage_fast_retry_total{request="put_object|head_object|get_object",
 //                                 result="expired|resend_fast|resend_slow|resend_error|no_budget"}
 class ObjectStorageFastRetryMetrics {
 public:

@@ -592,7 +592,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 类型：Boolean
 - 单位：-
 - 是否动态：是
-- 描述：是否立即重发发往存算分离对象存储的慢的小请求。设为 `true` 时，starlet 发出的 PutObject（body 不超过 `object_storage_fast_retry_put_max_bytes`）和 HeadObject 在 SDK 的第一次尝试上带一个覆盖整个请求的短超时（`object_storage_fast_retry_put_timeout_ms`、`object_storage_fast_retry_head_timeout_ms`）。超时后中止这次请求，立即在新连接上把同一个已签名的请求再发一次，不经过 SDK 重试的 back-off。一个请求最多有 `object_storage_fast_retry_put_short_attempts` 或 `object_storage_fast_retry_head_short_attempts` 次发送带短超时，每次都要从预算（`object_storage_fast_retry_budget_percent`）里取到令牌。次数用完或者取不到令牌时，下一次发送用原来的超时。每次超时最多让请求多花一个短超时的时间，下一次发送本身的耗时和等待空闲连接的时间另算。SDK 自己的重试、分片上传，以及 BE 为外表、导出、备份创建的对象存储客户端不受影响。被中止的 PutObject 仍可能在重发之后被对象存储执行。开了版本管理的 bucket 上，被中止但已被对象存储执行的 PutObject 会给这个对象多留一个内容相同的版本，需要用 lifecycle 规则清理非当前版本。`enable_poco_client_for_aws_sdk` 为 `true` 时不生效。修改后对之后发出的请求生效，不需要重启。可以通过指标 `object_storage_fast_retry_total` 确认是否生效。
+- 描述：是否立即重发发往存算分离对象存储的慢的小请求。设为 `true` 时，starlet 发出的 PutObject（body 不超过 `object_storage_fast_retry_put_max_bytes`）和 HeadObject 在 SDK 的第一次尝试上带一个覆盖整个请求的短超时（`object_storage_fast_retry_put_timeout_ms`、`object_storage_fast_retry_head_timeout_ms`）。按范围读、范围不超过 `object_storage_fast_retry_get_max_bytes` 的 GetObject 改为限制最多多长时间收不到数据（`object_storage_fast_retry_get_idle_ms`），传得慢但一直有数据的传输不会被中止。超时后中止这次请求，立即在新连接上把同一个已签名的请求再发一次，不经过 SDK 重试的 back-off。一个请求最多有 `object_storage_fast_retry_put_short_attempts` 或 `object_storage_fast_retry_head_short_attempts` 次发送带短超时，每次都要从预算（`object_storage_fast_retry_budget_percent`）里取到令牌。次数用完或者取不到令牌时，下一次发送用原来的超时。每次超时最多让请求多花一个短超时的时间，下一次发送本身的耗时和等待空闲连接的时间另算。SDK 自己的重试、分片上传，以及 BE 为外表、导出、备份创建的对象存储客户端不受影响。被中止的 PutObject 仍可能在重发之后被对象存储执行。开了版本管理的 bucket 上，被中止但已被对象存储执行的 PutObject 会给这个对象多留一个内容相同的版本，需要用 lifecycle 规则清理非当前版本。`enable_poco_client_for_aws_sdk` 为 `true` 时不生效。修改后对之后发出的请求生效，不需要重启。可以通过指标 `object_storage_fast_retry_total` 确认是否生效。
 - 引入版本：-
 
 ### object_storage_fast_retry_put_timeout_ms
@@ -640,13 +640,40 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：一个 HeadObject 最多有这么多次发送带短超时，取值 1 到 3。次数用完或者预算（`object_storage_fast_retry_budget_percent`）里取不到令牌时，下一次发送用原来的超时。
 - 引入版本：-
 
+### object_storage_fast_retry_get_idle_ms
+
+- 默认值：2000
+- 类型：Int
+- 单位：毫秒
+- 是否动态：是
+- 描述：快速重发覆盖的按范围读的 GetObject（见 `enable_object_storage_fast_retry`）最多可以多长时间收不到任何数据，从这次发送开始时算起。超过这个时间，就中止这次发送，立即在新连接上把同一个已签名的请求再发一次。只要还在持续收到数据，不管传输花多长时间都不会被中止。没有数据到达时大约每秒检查一次，所以中止可能比设定值晚最多一秒。`0` 表示对 GetObject 关闭快速重发。
+- 引入版本：-
+
+### object_storage_fast_retry_get_short_attempts
+
+- 默认值：1
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：一个 GetObject 最多有这么多次发送带空闲时间限制（`object_storage_fast_retry_get_idle_ms`），取值 1 到 3。次数用完或者预算（`object_storage_fast_retry_budget_percent`）里取不到令牌时，下一次发送用原来的超时。
+- 引入版本：-
+
+### object_storage_fast_retry_get_max_bytes
+
+- 默认值：1048576
+- 类型：Int
+- 单位：Bytes
+- 是否动态：是
+- 描述：快速重发覆盖的 GetObject 的最大读取范围。重发会从范围的第一个字节开始把整个范围重新读一遍，范围越大，重发的代价越高。没有闭区间范围（`bytes=first-last`）的 GetObject 不会被覆盖。
+- 引入版本：-
+
 ### object_storage_fast_retry_budget_percent
 
 - 默认值：2
 - 类型：Int
 - 单位：-
 - 是否动态：是
-- 描述：快速重发多发的请求的上限，按每个对象存储客户端上每类请求（PutObject、HeadObject）的请求数的百分比计算。超时的发送用完这份预算后，请求不再带短超时，直到又有足够多的请求正常完成，所以对象存储整体变慢时快速重发会自己停下来。每个客户端每类请求初始有 100 个令牌，余额最多 100 个。请求带短超时发送之前先取 1 个令牌，这次发送没有超时就还回去，所以并发的请求不会超出预算；取不到令牌的请求不带短超时发送。取值 0 到 100，`0` 表示关闭快速重发。
+- 描述：快速重发多发的请求的上限，按每个对象存储客户端上每类请求（PutObject、HeadObject、GetObject）的请求数的百分比计算。超时的发送用完这份预算后，请求不再带短超时，直到又有足够多的请求正常完成，所以对象存储整体变慢时快速重发会自己停下来。每个客户端每类请求初始有 100 个令牌，余额最多 100 个。请求带短超时发送之前先取 1 个令牌，这次发送没有超时就还回去，所以并发的请求不会超出预算；取不到令牌的请求不带短超时发送。GetObject 只在空闲时间超限、要中止这次发送时才取令牌，发送过程中不占令牌；取不到令牌就不中止。取值 0 到 100，`0` 表示关闭快速重发。
 - 引入版本：-
 
 ### parquet_late_materialization_enable

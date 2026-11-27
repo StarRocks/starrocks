@@ -125,6 +125,7 @@ protected:
         _saved_put_max_bytes = config::object_storage_fast_retry_put_max_bytes;
         _saved_head_timeout_ms = config::object_storage_fast_retry_head_timeout_ms;
         _saved_head_short_attempts = config::object_storage_fast_retry_head_short_attempts;
+        _saved_get_idle_ms = config::object_storage_fast_retry_get_idle_ms;
         _saved_budget_percent = config::object_storage_fast_retry_budget_percent;
 
         config::enable_object_storage_fast_retry = true;
@@ -133,6 +134,7 @@ protected:
         config::object_storage_fast_retry_put_max_bytes = 1048576;
         config::object_storage_fast_retry_head_timeout_ms = 300;
         config::object_storage_fast_retry_head_short_attempts = 1;
+        config::object_storage_fast_retry_get_idle_ms = 300;
         config::object_storage_fast_retry_budget_percent = 2;
 
         // The first send of every request is held; resends, and the warm-up below, are answered at once.
@@ -184,6 +186,7 @@ protected:
         config::object_storage_fast_retry_put_max_bytes = _saved_put_max_bytes;
         config::object_storage_fast_retry_head_timeout_ms = _saved_head_timeout_ms;
         config::object_storage_fast_retry_head_short_attempts = _saved_head_short_attempts;
+        config::object_storage_fast_retry_get_idle_ms = _saved_get_idle_ms;
         config::object_storage_fast_retry_budget_percent = _saved_budget_percent;
     }
 
@@ -208,6 +211,7 @@ private:
     int64_t _saved_put_max_bytes = 0;
     int64_t _saved_head_timeout_ms = 0;
     int32_t _saved_head_short_attempts = 0;
+    int64_t _saved_get_idle_ms = 0;
     int32_t _saved_budget_percent = 0;
 };
 
@@ -254,6 +258,33 @@ TEST_F(StarletFastRetryTest, starlet_head_object_is_resent_at_once) {
     EXPECT_EQ(heads[0].target, heads[1].target);
     EXPECT_EQ(1, fast_retry_count(FastRetryRequestClass::HEAD_OBJECT, FastRetryResult::EXPIRED) - expired);
     EXPECT_EQ(1, resend_count(FastRetryRequestClass::HEAD_OBJECT) - resent);
+}
+
+TEST_F(StarletFastRetryTest, starlet_range_get_is_resent_at_once) {
+    auto fs = new_fs_starlet();
+    const int64_t expired = fast_retry_count(FastRetryRequestClass::GET_OBJECT, FastRetryResult::EXPIRED);
+    const int64_t resent = resend_count(FastRetryRequestClass::GET_OBJECT);
+
+    // With the size known, starlet reads the range with one GetObject and no HeadObject.
+    FileInfo info;
+    info.path = build_starlet_uri(kShardId, "get-key");
+    info.size = 1024 * 1024;
+    ASSIGN_OR_ABORT(auto file, fs->new_random_access_file(info));
+    std::string data(64 * 1024, '\0');
+    auto start = std::chrono::steady_clock::now();
+    ASSERT_OK(file->read_at_fully(4096, data.data(), data.size()));
+    EXPECT_LT(ms_since(start), kHoldMs / 2);
+    for (size_t i = 0; i < data.size(); ++i) {
+        ASSERT_EQ(DelayingHttpServer::object_byte(4096 + static_cast<int64_t>(i)), data[i]) << i;
+    }
+
+    std::vector<ReceivedRequest> gets = requests_to(*_server, "GET", "/get-key");
+    ASSERT_GE(gets.size(), 2u);
+    EXPECT_FALSE(gets[0].header("range").empty());
+    EXPECT_EQ(gets[0].header("range"), gets[1].header("range"));
+    EXPECT_EQ("attempt=1", gets[1].header("amz-sdk-request"));
+    EXPECT_EQ(1, fast_retry_count(FastRetryRequestClass::GET_OBJECT, FastRetryResult::EXPIRED) - expired);
+    EXPECT_EQ(1, resend_count(FastRetryRequestClass::GET_OBJECT) - resent);
 }
 
 TEST_F(StarletFastRetryTest, switch_applies_to_the_clients_starlet_keeps) {

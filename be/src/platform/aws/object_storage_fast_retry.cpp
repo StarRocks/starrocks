@@ -25,6 +25,7 @@
 #include <charconv>
 #include <chrono>
 #include <ios>
+#include <limits>
 #include <string>
 #include <string_view>
 #include <system_error>
@@ -55,6 +56,53 @@ constexpr std::array<const char*, kNumFastRetryResults> kResultNames = {"expired
 // again when the call returns, in case the override was not reached. The value can never stay on the thread
 // for a later request.
 thread_local int64_t tls_short_timeout_ms = 0;
+
+// Aborts a GET send that goes idle_ms without receiving a byte, with a token of the budget that it takes only then:
+// a GET holds no token while it runs, so any number of GETs in flight can be watched. Without a token the send goes
+// on, and it is aborted later once a token is there. libcurl calls progress() while the send runs, about once per
+// second when nothing arrives. The pool resets a handle when the send succeeds and destroys it when the send fails,
+// which removes the callback with it.
+struct IdleWatch {
+    int64_t idle_ms = 0;
+    FastRetryBudget* budget = nullptr;
+    std::chrono::steady_clock::time_point last_byte;
+    curl_off_t received = 0;
+    bool expired = false;
+    bool no_budget = false;
+
+    static int progress(void* data, curl_off_t /*dltotal*/, curl_off_t dlnow, curl_off_t /*ultotal*/,
+                        curl_off_t /*ulnow*/) {
+        auto* watch = static_cast<IdleWatch*>(data);
+        const auto now = std::chrono::steady_clock::now();
+        if (dlnow != watch->received) {
+            watch->received = dlnow;
+            watch->last_byte = now;
+            return 0;
+        }
+        if (now - watch->last_byte < std::chrono::milliseconds(watch->idle_ms)) {
+            return 0;
+        }
+        if (!watch->budget->try_acquire()) {
+            watch->no_budget = true;
+            return 0;
+        }
+        watch->expired = true;
+        return 1;
+    }
+};
+
+// The idle watch of the GET send in progress on this thread, handed to OverrideOptionsOnConnectionHandle() like
+// tls_short_timeout_ms.
+thread_local IdleWatch* tls_idle_watch = nullptr;
+
+class ScopedIdleWatch {
+public:
+    explicit ScopedIdleWatch(IdleWatch* watch) { tls_idle_watch = watch; }
+    ~ScopedIdleWatch() { tls_idle_watch = nullptr; }
+
+    ScopedIdleWatch(const ScopedIdleWatch&) = delete;
+    ScopedIdleWatch& operator=(const ScopedIdleWatch&) = delete;
+};
 
 class ScopedShortTimeout {
 public:
@@ -113,6 +161,30 @@ std::optional<int64_t> content_length(const Aws::Http::HttpRequest& request) {
     return length;
 }
 
+// The length of the closed byte range of a GET (Range: bytes=first-last), or nullopt for any other range.
+std::optional<int64_t> range_bytes(const Aws::Http::HttpRequest& request) {
+    constexpr std::string_view kPrefix = "bytes=";
+    std::optional<std::string_view> value = header_value(request, "range");
+    if (!value.has_value() || !value->starts_with(kPrefix)) {
+        return std::nullopt;
+    }
+    value->remove_prefix(kPrefix.size());
+    const char* end = value->data() + value->size();
+    int64_t first = 0;
+    int64_t last = 0;
+    auto [dash, first_ec] = std::from_chars(value->data(), end, first);
+    if (first_ec != std::errc() || dash == end || *dash != '-') {
+        return std::nullopt;
+    }
+    auto [ptr, last_ec] = std::from_chars(dash + 1, end, last);
+    // A length that int64_t cannot hold is no small range either.
+    if (last_ec != std::errc() || ptr != end || first < 0 || last < first ||
+        last - first == std::numeric_limits<int64_t>::max()) {
+        return std::nullopt;
+    }
+    return last - first + 1;
+}
+
 // CurlHttpClient reports a curl error as "curlCode: <code>, <message>". On a send that carries the short timeout,
 // CURLE_OPERATION_TIMEDOUT means that the send timed out: the short timeout expired, or the connect timeout or the
 // low speed time ran out first. With the default configs the short timeout is the shortest of the three. Each of
@@ -146,13 +218,16 @@ const char* fast_retry_request_class_name(FastRetryRequestClass request_class) {
         return "put_object";
     case FastRetryRequestClass::HEAD_OBJECT:
         return "head_object";
+    case FastRetryRequestClass::GET_OBJECT:
+        return "get_object";
     }
     return "unknown";
 }
 
 std::optional<FastRetryRequestClass> classify_fast_retry_request(const Aws::Http::HttpRequest& request) {
     const Aws::Http::HttpMethod method = request.GetMethod();
-    if (method != Aws::Http::HttpMethod::HTTP_PUT && method != Aws::Http::HttpMethod::HTTP_HEAD) {
+    if (method != Aws::Http::HttpMethod::HTTP_PUT && method != Aws::Http::HttpMethod::HTTP_HEAD &&
+        method != Aws::Http::HttpMethod::HTTP_GET) {
         return std::nullopt;
     }
     if (header_value(request, Aws::Http::SDK_REQUEST_HEADER) != kSdkFirstAttempt) {
@@ -165,6 +240,9 @@ std::optional<FastRetryRequestClass> classify_fast_retry_request(const Aws::Http
     }
     if (method == Aws::Http::HttpMethod::HTTP_HEAD) {
         return FastRetryRequestClass::HEAD_OBJECT;
+    }
+    if (method == Aws::Http::HttpMethod::HTTP_GET) {
+        return range_bytes(request).has_value() ? std::optional(FastRetryRequestClass::GET_OBJECT) : std::nullopt;
     }
 
     if (request.GetContentBody() == nullptr || content_length(request).value_or(0) <= 0) {
@@ -197,6 +275,11 @@ FastRetryPolicy fast_retry_policy(FastRetryRequestClass request_class) {
         policy.timeout_ms = config::object_storage_fast_retry_head_timeout_ms;
         policy.short_attempts = config::object_storage_fast_retry_head_short_attempts;
         policy.max_body_bytes = 0;
+        break;
+    case FastRetryRequestClass::GET_OBJECT:
+        policy.timeout_ms = config::object_storage_fast_retry_get_idle_ms;
+        policy.short_attempts = config::object_storage_fast_retry_get_short_attempts;
+        policy.max_body_bytes = config::object_storage_fast_retry_get_max_bytes;
         break;
     }
     policy.timeout_ms = std::max<int64_t>(policy.timeout_ms, 0);
@@ -267,6 +350,14 @@ int64_t ObjectStorageFastRetryMetrics::value(FastRetryRequestClass request_class
 }
 
 void FastRetryCurlHttpClient::OverrideOptionsOnConnectionHandle(CURL* handle) const {
+    if (IdleWatch* watch = std::exchange(tls_idle_watch, nullptr); watch != nullptr) {
+        // CurlHttpClient installs a progress callback only for an event-stream request with a body, never for a
+        // GET; it applies cancellation (ContinueRequest) and the read limiter in its write callback, which stays.
+        watch->last_byte = std::chrono::steady_clock::now();
+        curl_easy_setopt(handle, CURLOPT_NOPROGRESS, 0L);
+        curl_easy_setopt(handle, CURLOPT_XFERINFOFUNCTION, &IdleWatch::progress);
+        curl_easy_setopt(handle, CURLOPT_XFERINFODATA, watch);
+    }
     const int64_t timeout_ms = std::exchange(tls_short_timeout_ms, 0);
     if (timeout_ms > 0) {
         // The pool resets a handle to the client's defaults when the send succeeds and destroys it when the send
@@ -281,6 +372,7 @@ std::shared_ptr<Aws::Http::HttpResponse> FastRetryCurlHttpClient::MakeRequest(
         Aws::Utils::RateLimits::RateLimiterInterface* writeLimiter) const {
     // Start every request from a cleared value, so that a request without fast retry never reads one.
     tls_short_timeout_ms = 0;
+    tls_idle_watch = nullptr;
     // Read for every request, so that turning the switch on or off at runtime also applies to the clients that
     // starlet has created already and keeps reusing.
     if (!config::enable_object_storage_fast_retry) {
@@ -289,7 +381,10 @@ std::shared_ptr<Aws::Http::HttpResponse> FastRetryCurlHttpClient::MakeRequest(
     const std::optional<FastRetryRequestClass> request_class = classify_fast_retry_request(*request);
     if (request_class.has_value()) {
         const FastRetryPolicy policy = fast_retry_policy(*request_class);
-        if (policy.enabled() && content_length(*request).value_or(0) <= policy.max_body_bytes) {
+        const int64_t bytes = *request_class == FastRetryRequestClass::GET_OBJECT
+                                      ? range_bytes(*request).value_or(std::numeric_limits<int64_t>::max())
+                                      : content_length(*request).value_or(0);
+        if (policy.enabled() && bytes <= policy.max_body_bytes) {
             return make_request_with_fast_retry(request, *request_class, policy, readLimiter, writeLimiter);
         }
     }
@@ -314,22 +409,29 @@ std::shared_ptr<Aws::Http::HttpResponse> FastRetryCurlHttpClient::make_request_w
 
     for (int32_t send_index = 0;; ++send_index) {
         bool short_timeout = send_index < policy.short_attempts;
-        // The token is taken before the send, so that concurrent sends cannot overdraw the budget.
-        if (short_timeout && !budget.try_acquire()) {
+        // A GET carries the limit as an idle watch, which takes its token only when it aborts the send. The other
+        // classes carry a whole-request timeout, whose token is taken before the send, so that concurrent sends
+        // cannot overdraw the budget.
+        const bool watch_idle = short_timeout && request_class == FastRetryRequestClass::GET_OBJECT;
+        if (short_timeout && !watch_idle && !budget.try_acquire()) {
             metrics->increment(request_class, FastRetryResult::NO_BUDGET);
             short_timeout = false;
         }
-        ScopedToken token(short_timeout ? &budget : nullptr);
-
+        ScopedToken token(short_timeout && !watch_idle ? &budget : nullptr);
+        IdleWatch idle_watch{.idle_ms = policy.timeout_ms, .budget = &budget};
         const auto start = std::chrono::steady_clock::now();
         std::shared_ptr<Aws::Http::HttpResponse> response;
         {
-            ScopedShortTimeout scoped_short_timeout(short_timeout ? policy.timeout_ms : 0);
+            ScopedIdleWatch scoped_idle_watch(watch_idle ? &idle_watch : nullptr);
+            ScopedShortTimeout scoped_short_timeout(short_timeout && !watch_idle ? policy.timeout_ms : 0);
             response = CurlHttpClient::MakeRequest(request, read_limiter, write_limiter);
         }
         const int64_t send_ms = elapsed_ms(start);
+        if (idle_watch.no_budget && !idle_watch.expired) {
+            metrics->increment(request_class, FastRetryResult::NO_BUDGET);
+        }
 
-        if (short_timeout && short_timeout_expired(*response)) {
+        if (watch_idle ? idle_watch.expired : short_timeout && short_timeout_expired(*response)) {
             // The send timed out: it keeps its token.
             token.consume();
             metrics->increment(request_class, FastRetryResult::EXPIRED);
