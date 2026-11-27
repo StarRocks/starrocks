@@ -124,6 +124,14 @@ TEST_F(AddNullableColumnTest, test_add_boolean) {
     ASSERT_TRUE(st.ok());
     ASSERT_EQ("[1]", column->debug_string());
 
+    column->reset_column();
+    json = R"(  { "f_boolean": 99999999999999999999}  )"_padded;
+    doc = parser.iterate(json);
+    val = doc.find_field("f_boolean");
+    st = add_nullable_column(column.get(), TYPE_BOOLEAN_DESC, "f_boolean", &val, false);
+    ASSERT_TRUE(st.ok());
+    ASSERT_EQ("[1]", column->debug_string());
+
     // string
     column->reset_column();
     json = R"(  { "f_boolean": "TrUe"}  )"_padded;
@@ -370,5 +378,27 @@ TEST_F(AddNullableColumnTest, test_invalid_json_convert) {
         ASSERT_TRUE(st.message().find("Failed to convert simdjson value") != std::string_view::npos &&
                     st.message().find("<truncated>") != std::string_view::npos);
     }
+}
+
+TEST_F(AddNullableColumnTest, test_Only_Null_And_Boolean_Column) {
+    auto col = ColumnHelper::create_column(TYPE_BOOLEAN_DESC, true);
+    simdjson::ondemand::parser parser;
+    const std::vector<std::string_view> rows = {
+            R"({"key": null})",
+            R"({"key": true})",
+            R"({"key": false})",
+            R"({"key": 1})",
+            R"({"key": 0})",
+            R"({"key": 18446744073709551616})",
+            R"({"key": 99999999999999999999})",
+    };
+    for (std::string_view raw : rows) {
+        simdjson::padded_string json(raw);
+        auto doc = parser.iterate(json);
+        simdjson::ondemand::value val = doc.find_field("key");
+        ASSERT_OK(add_nullable_column(col.get(), TYPE_BOOLEAN_DESC, "key", &val, false));
+    }
+    ASSERT_EQ(7U, col->size());
+    ASSERT_EQ("[NULL, 1, 0, 1, 0, 1, 1]", col->debug_string());
 }
 } // namespace starrocks

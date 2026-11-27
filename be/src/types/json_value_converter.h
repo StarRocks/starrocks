@@ -14,13 +14,8 @@
 
 #pragma once
 
-#ifdef __APPLE__
-#include "simdjson.h"
-#else
-#include "simdjson/ondemand.h"
-#endif
-
 #include "common/statusor.h"
+#include "simdjson.h"
 #include "types/json_value.h"
 
 namespace starrocks {

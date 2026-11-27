@@ -1675,4 +1675,85 @@ TEST_F(JsonParserTest, test_debezium_json_document_stream_parser_error_cases) {
     }
 }
 
+TEST_F(JsonParserTest, array_parser_rejects_buffer_without_simdjson_padding) {
+    std::string unpadded = R"([{"k":1}])";
+    simdjson::ondemand::parser sp;
+    JsonArrayParser parser(&sp);
+    EXPECT_FALSE(parser.parse(unpadded.data(), unpadded.size(), unpadded.size()).ok());
+
+    std::string padded = unpadded;
+    padded.resize(unpadded.size() + simdjson::SIMDJSON_PADDING);
+    EXPECT_OK(parser.parse(padded.data(), unpadded.size(), padded.size()));
+
+    // simdjson 5.x also accepts >= SIMDJSON_PADDING trailing whitespace inside len.
+    std::string ws = unpadded + std::string(simdjson::SIMDJSON_PADDING, ' ');
+    EXPECT_OK(parser.parse(ws.data(), ws.size(), ws.size()));
+}
+
+TEST_F(JsonDocumentStreamParserTest, document_stream_parser_multi_isa_equivalence) {
+    const simdjson::implementation* original_impl = simdjson::get_active_implementation();
+    DeferOp restore_impl([original_impl]() { simdjson::get_active_implementation() = original_impl; });
+
+    const std::string input =
+            "{\"k1\":\"\\u6C49\\u5B57\",\"k2\":1}\n"
+            "{\"k1\":\"\\uD83D\\uDE00\",\"k2\":2}\n"
+            "{\"k1\":\"bad\",\"k2\":}\n";
+
+    for (const simdjson::implementation* impl : simdjson::get_available_implementations()) {
+        if (impl == nullptr || !impl->supported_by_runtime_system()) {
+            continue;
+        }
+        simdjson::get_active_implementation() = impl;
+        for (int32_t batch_sz : {64, 1000000}) {
+            config::json_parse_many_batch_size = batch_sz;
+            std::string padded = input;
+            padded.resize(input.size() + simdjson::SIMDJSON_PADDING, '\0');
+            simdjson::ondemand::parser local_parser;
+            JsonDocumentStreamParser parser(&local_parser);
+            ASSERT_OK(parser.parse(padded.data(), input.size(), padded.size()));
+
+            std::vector<std::string> loaded_k1;
+            int filtered = 0;
+            faststring str_buf;
+            Status st;
+            while (true) {
+                simdjson::ondemand::object row;
+                st = parser.get_current(&row);
+                if (st.is_end_of_file()) {
+                    break;
+                }
+                ASSERT_OK(st);
+                bool ok = true;
+                std::string k1_val;
+                try {
+                    for (auto field : row) {
+                        std::string_view key = field_unescaped_key_safe(field, &str_buf).value();
+                        simdjson::ondemand::value val = field.value();
+                        if (key == "k1") {
+                            k1_val.assign(value_get_string_safe(&val, &str_buf).value());
+                        } else if (key == "k2") {
+                            [[maybe_unused]] int64_t v = val.get_int64().value();
+                        }
+                    }
+                } catch (simdjson::simdjson_error&) {
+                    ok = false;
+                }
+                if (ok) {
+                    loaded_k1.push_back(std::move(k1_val));
+                } else {
+                    ++filtered;
+                }
+                st = parser.advance();
+                if (st.is_end_of_file()) {
+                    break;
+                }
+                ASSERT_OK(st);
+            }
+            EXPECT_TRUE(st.is_end_of_file()) << impl->name();
+            EXPECT_EQ((std::vector<std::string>{"汉字", "\xF0\x9F\x98\x80"}), loaded_k1) << impl->name();
+            EXPECT_EQ(1, filtered) << impl->name();
+        }
+    }
+}
+
 } // namespace starrocks
