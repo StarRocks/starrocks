@@ -16,13 +16,7 @@
 
 #include <gtest/gtest.h>
 
-<<<<<<< HEAD
-=======
 #include "column/binary_column.h"
-#include "compute_env/global_dict/fragment_dict_state.h"
-#include "compute_env/load/stream_load_pipe.h"
-#include "compute_env/query/scan_conjuncts_manager.h"
->>>>>>> 518c6f0 ([BugFix] Accept a plain one-row column as a constant predicate value in scan pushdown (#84693))
 #include "exec/tablet_scanner.h"
 #include "exprs/binary_predicate.h"
 #include "exprs/column_ref.h"
