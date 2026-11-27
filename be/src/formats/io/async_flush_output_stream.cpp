@@ -40,6 +40,9 @@ AsyncFlushOutputStream::AsyncFlushOutputStream(std::unique_ptr<WritableFile> fil
 AsyncFlushOutputStream::~AsyncFlushOutputStream() = default;
 
 Status AsyncFlushOutputStream::write(const uint8_t* data, int64_t size) {
+    if (UNLIKELY(_aborted)) {
+        return Status::Cancelled("Output stream aborted during writer initialization");
+    }
     _total_size += size;
     DCHECK(_slice_chunk_queue.empty() || (_slice_chunk_queue.size() == 1 && !_slice_chunk_queue.front()->is_full()))
             << "empty or at most one not full buffer";
@@ -106,6 +109,9 @@ const std::string& AsyncFlushOutputStream::filename() const {
 }
 
 Status AsyncFlushOutputStream::close() {
+    if (UNLIKELY(_aborted)) {
+        return Status::OK();
+    }
     DCHECK(_slice_chunk_queue.empty() || (_slice_chunk_queue.size() == 1 && !_slice_chunk_queue.front()->is_full()))
             << "empty or at most one not full buffer";
 
@@ -169,6 +175,18 @@ Status AsyncFlushOutputStream::close() {
     to_enqueue_tasks.emplace_back(close_task);
     enqueue_tasks_and_maybe_submit_task(std::move(to_enqueue_tasks));
     return Status::OK();
+}
+
+Status AsyncFlushOutputStream::abort_before_flush() {
+    DCHECK_LT(_total_size, BUFFER_MAX_SIZE);
+    DCHECK_LE(_slice_chunk_queue.size(), 1);
+    // Discard the header and reject writes from the format writer's destructor.
+    _aborted = true;
+    if (!_slice_chunk_queue.empty()) {
+        std::unique_ptr<SliceChunk> buffer(_slice_chunk_queue.front());
+        _slice_chunk_queue.pop_front();
+    }
+    return _file->close();
 }
 
 void AsyncFlushOutputStream::enqueue_tasks_and_maybe_submit_task(std::vector<Task> tasks) {
