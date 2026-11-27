@@ -16,16 +16,23 @@
 package com.starrocks.sql.plan;
 
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
+import com.starrocks.qe.ConnectContext;
+import mockit.Invocation;
+import mockit.Mock;
+import mockit.MockUp;
 import org.apache.commons.lang.StringUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Stream;
 
 public class ColocateJoinTest extends PlanTestBase {
@@ -48,6 +55,24 @@ public class ColocateJoinTest extends PlanTestBase {
                 "\"colocate_with\" = \"colocate_group_1\"" +
                 ");");
     }
+    @Test
+    void testColocateStabilityScopeCoversPlanning() throws Exception {
+        AtomicBoolean askedInsideScope = new AtomicBoolean(false);
+        new MockUp<ColocateTableIndex>() {
+            @Mock
+            public boolean isGroupUnstable(Invocation invocation, ColocateTableIndex.GroupId groupId) {
+                if (ConnectContext.get() != null && ConnectContext.get().getColocateGroupStability() != null) {
+                    askedInsideScope.set(true);
+                }
+                return invocation.proceed(groupId);
+            }
+        };
+        String plan = getFragmentPlan("select * from colocate_t0 join colocate_t1 on v1 = v4");
+        Assertions.assertTrue(plan.contains("INNER JOIN (COLOCATE)"), plan);
+        Assertions.assertTrue(askedInsideScope.get());
+        Assertions.assertNull(connectContext.getColocateGroupStability());
+    }
+
     @ParameterizedTest(name = "sql_{index}: {0}.")
     @MethodSource("colocateJoinOnceSqls")
     void testColocateJoinOnce(String sql) throws Exception {
