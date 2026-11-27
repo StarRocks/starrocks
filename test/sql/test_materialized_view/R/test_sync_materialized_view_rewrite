@@ -298,9 +298,6 @@ SELECT col2,col3,col0,id,col1 FROM test_base_table1 ORDER BY col2,col3,col0;
 -- result:
 -- !result
 [UC]analyze full table test_base_table1 with sync mode;
--- result:
-test_db_e3f75413b34b493eb4e027136dfe5df3.test_base_table1	analyze	status	OK
--- !result
 function: wait_materialized_view_finish()
 -- result:
 None
@@ -377,19 +374,20 @@ set select_ratio_threshold=-1;
 -- !result
 function: print_hit_materialized_view("select * from (select col0, col2, col3, id, col1 from test_base_table1 where col0=123456789 or col2 >='2022-04-30 12:00:00') t;", "rollup: mv_test_base_table1",  "rollup: test_base_table1")
 -- result:
-False
+True
 -- !result
 select * from (select col0, col2, col3, id, col1 from test_base_table1 where col0=123456789 or col2 >='2022-04-30 12:00:00') t;
 -- result:
-E: (1064, 'Unknown error')
+123456789	2022-04-30 12:00:00	Guangdong	1	10001
+987654321	2022-04-30 13:00:00	Fujian	None	None
 -- !result
 function: print_hit_materialized_view("select * from (select col0, col2, col3, id, col1 from test_base_table1 where col0=123456789 or col2 ='2022-04-30 12:00:00') t;", "rollup: mv_test_base_table1",  "rollup: test_base_table1")
 -- result:
-False
+True
 -- !result
 select * from (select col0, col2, col3, id, col1 from test_base_table1 where col0=123456789 or col2 ='2022-04-30 12:00:00') t;
 -- result:
-E: (1064, 'Unknown error')
+123456789	2022-04-30 12:00:00	Guangdong	1	10001
 -- !result
 set select_ratio_threshold = 0.15;
 -- result:
