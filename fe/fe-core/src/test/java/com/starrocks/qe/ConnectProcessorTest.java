@@ -69,12 +69,8 @@ import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.DDLTestBase;
 import com.starrocks.sql.ast.PrepareStmt;
 import com.starrocks.sql.ast.StatementBase;
-<<<<<<< HEAD
-=======
 import com.starrocks.sql.common.AuditEncryptionChecker;
-import com.starrocks.sql.common.LargeInPredicateException;
 import com.starrocks.sql.parser.SqlParser;
->>>>>>> 4a23b69 ([UT] Test audit log masking of credentials the checker misses (#84770))
 import com.starrocks.system.Frontend;
 import com.starrocks.thrift.TMasterOpRequest;
 import com.starrocks.thrift.TMasterOpResult;
