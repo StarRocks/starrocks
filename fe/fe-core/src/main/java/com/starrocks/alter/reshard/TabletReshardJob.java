@@ -21,6 +21,7 @@ import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.RecycleMaterializedIndexInfo;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.io.Writable;
@@ -40,6 +41,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
+import java.util.function.ToIntFunction;
 
 /*
  * TabletReshardJob is for tablet splitting and merging.
@@ -159,6 +166,29 @@ public abstract class TabletReshardJob implements Writable {
     private transient LeaderLease admissionLease;
     // Published only after the installed replacement layout's CLEANING record is durable.
     private transient volatile boolean layoutReady;
+
+    // The PENDING step's StarOS shard creation: leader-session state, never journaled. StarMgr can take its whole
+    // scheduling budget (30 s) to answer, while one thread runs every reshard job in the cluster, so the request
+    // runs on the lake alter publish pool and later rounds poll it, as AlterJobV2#publishVersion does.
+    // createShardsFuture is the request in flight, createShardsLease the leader lease it was submitted under,
+    // createShardsSubmittedMs the time it was submitted, and createShardsRejectedNanos the System.nanoTime() at which
+    // the pool rejected the last submission, or null when it was not rejected. A rejected submission is retried
+    // once SHARD_CREATION_RESUBMIT_DELAY_MS has passed on that monotonic clock, so a wall-clock jump neither
+    // stalls nor hastens the retry.
+    private transient Future<Integer> createShardsFuture;
+    private transient LeaderLease createShardsLease;
+    private transient long createShardsSubmittedMs;
+    transient Long createShardsRejectedNanos;
+
+    static final long SHARD_CREATION_RESUBMIT_DELAY_MS = 1000L;
+
+    // Thrown by a shard creation worker that stopped because the leader session that submitted it has ended. The
+    // poll that finds it resubmits the request under the current lease instead of aborting the job.
+    static class ShardCreationSessionEndedException extends TabletReshardException {
+        public ShardCreationSessionEndedException(String message) {
+            super(message);
+        }
+    }
 
     public boolean isLayoutReady() {
         return layoutReady && (jobState == JobState.CLEANING || jobState == JobState.FINISHED);
@@ -414,6 +444,140 @@ public abstract class TabletReshardJob implements Writable {
 
     public String getErrorMessage() {
         return errorMessage;
+    }
+
+    /**
+     * Polls the PENDING step's StarOS shard creation, submitting it to the lake alter publish pool when none is in
+     * flight. Returns true once the shards exist; until then the job stays PENDING and the next round polls again.
+     *
+     * <p>The request belongs to the leader session it was submitted under. Once that session ends, its outcome is
+     * dropped unread (the request is not cancelled; a worker still running starts no further (partition, index)
+     * batch, though a batch already started may finish, see {@link #checkShardCreationLease}), and a new request is
+     * submitted only under a valid lease. A worker that stopped because its session ended never aborts the job: the
+     * next round submits again.
+     *
+     * <p>A submission the pool rejects is retried no sooner than {@link #SHARD_CREATION_RESUBMIT_DELAY_MS} later,
+     * and the job is not aborted. A failed creation is rethrown here, on the scheduler thread, so {@code run()}
+     * aborts the still-PENDING job exactly as it did when the scheduler thread made the call itself.
+     *
+     * @param createShards creates the new shards on StarOS under the given lease and returns how many it sent;
+     *                     runs on a pool thread
+     */
+    protected boolean pollShardCreation(ToIntFunction<LeaderLease> createShards) {
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        if (createShardsFuture != null) {
+            // isDone() is read before the lease is checked, so a request is consumed only if its session was still
+            // current after it finished: a worker that stopped on seeing its session end is never taken for one
+            // that ran under a valid lease.
+            boolean done = createShardsFuture.isDone();
+            if (!globalStateMgr.isLeaderLeaseValid(createShardsLease)) {
+                LOG.info("Dropped the shard creation of tablet reshard job {} submitted under {}: "
+                        + "that leader session has ended", jobId, createShardsLease);
+                createShardsFuture = null;
+                createShardsLease = null;
+            } else if (!done) {
+                return false;
+            }
+        }
+        if (createShardsFuture == null) {
+            if (createShardsRejectedNanos != null && nowNanos() - createShardsRejectedNanos
+                    < TimeUnit.MILLISECONDS.toNanos(SHARD_CREATION_RESUBMIT_DELAY_MS)) {
+                return false;
+            }
+            LeaderLease lease = globalStateMgr.captureLeaderLease();
+            if (!globalStateMgr.isLeaderLeaseValid(lease)) {
+                return false;
+            }
+            ThreadPoolExecutor executor = globalStateMgr.getLakeAlterPublishExecutor();
+            long submittedMs = System.currentTimeMillis();
+            try {
+                createShardsFuture = executor.submit(() -> createShards.applyAsInt(lease));
+            } catch (RejectedExecutionException e) {
+                createShardsRejectedNanos = nowNanos();
+                LOG.warn("Failed to submit the shard creation of tablet reshard job {}, retrying in {} ms: "
+                                + "activeCount={}, poolSize={}, maximumPoolSize={}",
+                        jobId, SHARD_CREATION_RESUBMIT_DELAY_MS, executor.getActiveCount(), executor.getPoolSize(),
+                        executor.getMaximumPoolSize());
+                return false;
+            }
+            createShardsRejectedNanos = null;
+            createShardsLease = lease;
+            createShardsSubmittedMs = submittedMs;
+            // Also checked right after submitting, in the same order as above, so a request that has already
+            // finished is consumed in this round.
+            if (!createShardsFuture.isDone() || !globalStateMgr.isLeaderLeaseValid(lease)) {
+                return false;
+            }
+        }
+        int shardCount;
+        try {
+            shardCount = createShardsFuture.get();
+        } catch (InterruptedException e) {
+            // Not reachable once isDone() holds; keep the future for the next round.
+            Thread.currentThread().interrupt();
+            return false;
+        } catch (ExecutionException e) {
+            createShardsFuture = null;
+            createShardsLease = null;
+            Throwable cause = e.getCause();
+            if (cause instanceof ShardCreationSessionEndedException) {
+                // A worker stops this way only after its lease has ended, which the lease check above already
+                // catches (isDone() is read before the lease), so this branch is defensive. If it is ever seen
+                // under a valid lease, submit again on the next round; never abort for it.
+                LOG.info("Shard creation of tablet reshard job {} stopped, submitting it again: {}",
+                        jobId, cause.getMessage());
+                return false;
+            }
+            if (cause instanceof RuntimeException runtimeException) {
+                throw runtimeException;
+            }
+            if (cause instanceof Error error) {
+                throw error;
+            }
+            throw new TabletReshardException("Failed to create new shards on StarOS: " + cause.getMessage(), cause);
+        }
+        createShardsFuture = null;
+        createShardsLease = null;
+        LOG.info("Created {} new shards on StarOS for tablet reshard job in {} ms. {}",
+                shardCount, System.currentTimeMillis() - createShardsSubmittedMs, this);
+        return true;
+    }
+
+    /**
+     * Called by a shard creation worker before it starts each (partition, index) batch: once the leader session that
+     * submitted it has ended, the worker starts no further batch. A batch already started may finish, including
+     * StarOSAgent's transport retry of the same request.
+     */
+    static void checkShardCreationLease(LeaderLease lease) {
+        if (!GlobalStateMgr.getCurrentState().isLeaderLeaseValid(lease)) {
+            throw new ShardCreationSessionEndedException(
+                    "Stopped creating new shards on StarOS: the leader session that started it has ended");
+        }
+    }
+
+    // The monotonic clock the resubmit delay is measured on; a method so tests can drive it.
+    long nowNanos() {
+        return System.nanoTime();
+    }
+
+    // Resolves the job's table for shard creation. Unlike the jobs' getOlapTable(), never changes the job when the
+    // table is gone: shard creation runs on a pool thread and may run after this FE lost and regained leadership and
+    // after the job left PENDING.
+    protected OlapTable findOlapTable() {
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(getDbId(), getTableId());
+        if (table == null) {
+            throw new TabletReshardException("Table not found. " + this);
+        }
+        return (OlapTable) table;
+    }
+
+    // Forgets the shard creation of a leader session that has ended: the request in flight, if any, is dropped (not
+    // cancelled) and the next leader session submits its own.
+    void resetShardCreation() {
+        createShardsFuture = null;
+        createShardsLease = null;
+        createShardsSubmittedMs = 0;
+        createShardsRejectedNanos = null;
     }
 
     public void run() {
