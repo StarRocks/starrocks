@@ -100,4 +100,25 @@ public class AstTraverserTest {
         Assertions.assertEquals(1, counter.countOf("protected_table"),
                 "once outputExpr is resolved, only it (not the stale parsed selectList) must be traversed");
     }
+
+    /**
+     * Before analysis the grouping expressions are only in the parsed GROUP BY clause, as the select list is: a
+     * table read by a subquery there is reached in every kind of grouping, once.
+     */
+    @Test
+    public void testTableInsideGroupBySubqueryVisitedBeforeAnalysis() {
+        String read = "(SELECT COUNT(*) FROM protected_table)";
+        for (String groupBy : new String[] {read, "GROUPING SETS ((v1), (" + read + "))",
+                "ROLLUP (v1, " + read + ")", "CUBE (v1, " + read + ")"}) {
+            QueryStatement stmt = parseWithoutAnalysis("SELECT COUNT(*) FROM outer_table GROUP BY " + groupBy);
+            Assertions.assertNull(((SelectRelation) stmt.getQueryRelation()).getGroupBy(),
+                    "the group-by list is not populated until analysis");
+
+            TableVisitCounter counter = new TableVisitCounter();
+            counter.visit(stmt);
+
+            Assertions.assertEquals(1, counter.countOf("outer_table"), groupBy);
+            Assertions.assertEquals(1, counter.countOf("protected_table"), groupBy);
+        }
+    }
 }

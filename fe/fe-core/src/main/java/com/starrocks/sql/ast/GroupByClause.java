@@ -151,6 +151,25 @@ public class GroupByClause implements ParseNode {
         return oriGroupingExprs;
     }
 
+    /**
+     * The grouping expressions as parsed: the sets for GROUPING SETS, the expression list for every other kind.
+     * Unlike {@link #getGroupingExprs}, this generates nothing: that expansion is the analyzer's to do.
+     */
+    public List<Expr> getParsedGroupingExprs() {
+        List<Expr> exprs = new ArrayList<>();
+        if (oriGroupingExprs != null) {
+            oriGroupingExprs.stream().filter(e -> e != null).forEach(exprs::add);
+        }
+        if (groupingSetList != null) {
+            for (List<Expr> groupingSet : groupingSetList) {
+                if (groupingSet != null) {
+                    groupingSet.stream().filter(e -> e != null).forEach(exprs::add);
+                }
+            }
+        }
+        return exprs;
+    }
+
     public ArrayList<Expr> getGroupingExprs() {
         if (!exprGenerated) {
             try {
