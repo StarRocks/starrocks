@@ -25,6 +25,10 @@ namespace starrocks {
 
 class TabletColumn;
 
+// The storage type info of a tablet column, recursing into ARRAY/MAP/STRUCT children.
+// storage's get_type_info(const TabletColumn&) delegates here.
+TypeInfoPtr get_tablet_column_type_info(const TabletColumn& col);
+
 class StorageSchemaHelper {
 public:
     static Field convert_field(ColumnId id, const TabletColumn& c);
