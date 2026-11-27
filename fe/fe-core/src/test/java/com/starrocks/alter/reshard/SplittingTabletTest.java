@@ -27,6 +27,7 @@ import com.starrocks.type.TypeFactory;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -173,6 +174,6 @@ public class SplittingTabletTest {
         Assertions.assertEquals(18, restoredType.getScalarPrecision());
         Assertions.assertEquals(2, restoredType.getScalarScale());
         // The restored boundary serializes the canonical decimal text the BE validator parses.
-        Assertions.assertEquals("10.00", restoredLower.toProto().value);
+        Assertions.assertEquals("10.00", new String(restoredLower.toProto().value, StandardCharsets.UTF_8));
     }
 }

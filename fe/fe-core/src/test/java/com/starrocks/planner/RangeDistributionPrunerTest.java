@@ -14,8 +14,11 @@
 
 package com.starrocks.planner;
 
+import com.baidu.bjf.remoting.protobuf.Codec;
+import com.baidu.bjf.remoting.protobuf.ProtobufProxy;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.protobuf.CodedOutputStream;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.Tablet;
@@ -24,17 +27,25 @@ import com.starrocks.catalog.Tuple;
 import com.starrocks.catalog.Variant;
 import com.starrocks.common.Config;
 import com.starrocks.common.Range;
+import com.starrocks.proto.TabletRangePB;
+import com.starrocks.proto.TuplePB;
+import com.starrocks.proto.VariantPB;
+import com.starrocks.proto.VariantTypePB;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.type.BooleanType;
 import com.starrocks.type.DateType;
 import com.starrocks.type.IntegerType;
+import com.starrocks.type.TypeSerializer;
 import com.starrocks.type.VarcharType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
+import java.io.ByteArrayOutputStream;
+import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
@@ -706,6 +717,88 @@ public class RangeDistributionPrunerTest {
 
         Set<Long> result = pruner.prune().stream().collect(Collectors.toSet());
         Assertions.assertEquals(Collections.singleton(2L), result);
+    }
+
+    // Tablet 1 = (-inf, boundary) and tablet 2 = [boundary, +inf), with the boundary decoded from wire bytes the
+    // way a compute node's split result reaches FE; return the tablets matching an equality filter on the probe.
+    private Set<Long> pruneSplitAtWireBoundary(byte[] boundary, String probe) throws Exception {
+        Column k = new Column("k", VarcharType.VARCHAR, false);
+
+        TabletRangePB lowerPb = new TabletRangePB();
+        lowerPb.upperBound = tuplePBFromWire(boundary);
+        lowerPb.upperBoundIncluded = false;
+        TabletRangePB upperPb = new TabletRangePB();
+        upperPb.lowerBound = tuplePBFromWire(boundary);
+        upperPb.lowerBoundIncluded = true;
+        LocalTablet tablet1 = new LocalTablet(1L);
+        tablet1.setRange(TabletRange.fromProto(lowerPb));
+        LocalTablet tablet2 = new LocalTablet(2L);
+        tablet2.setRange(TabletRange.fromProto(upperPb));
+
+        PartitionColumnFilter filter = new PartitionColumnFilter();
+        filter.setLowerBound(new StringLiteral(probe), true);
+        filter.setUpperBound(new StringLiteral(probe), true);
+        Map<String, PartitionColumnFilter> filters = Maps.newHashMap();
+        filters.put("k", filter);
+
+        RangeDistributionPruner pruner = new RangeDistributionPruner(
+                Lists.newArrayList(tablet1, tablet2), Lists.newArrayList(k), filters);
+        return new HashSet<>(pruner.prune());
+    }
+
+    // Wire bytes of a VariantPB as the compute node writes them: type, variant_type and the value as raw bytes in
+    // field 2, decoded by the protobuf codec FE uses, so the value never passes through a String.
+    public static TuplePB tuplePBFromWire(byte[] raw) throws Exception {
+        Codec<VariantPB> codec = ProtobufProxy.create(VariantPB.class);
+        VariantPB typeOnly = new VariantPB();
+        typeOnly.type = TypeSerializer.toProtobuf(VarcharType.VARCHAR);
+        typeOnly.variantType = VariantTypePB.NORMAL_VALUE;
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        CodedOutputStream coded = CodedOutputStream.newInstance(out);
+        coded.writeRawBytes(codec.encode(typeOnly));
+        coded.writeByteArray(2, raw);
+        coded.flush();
+        TuplePB tuple = new TuplePB();
+        tuple.values = List.of(codec.decode(out.toByteArray()));
+        return tuple;
+    }
+
+    private static byte[] concat(String prefix, int repeat, int... tail) {
+        byte[] head = prefix.repeat(repeat).getBytes(StandardCharsets.UTF_8);
+        byte[] bytes = Arrays.copyOf(head, head.length + tail.length);
+        for (int i = 0; i < tail.length; i++) {
+            bytes[head.length + i] = (byte) tail[i];
+        }
+        return bytes;
+    }
+
+    // The boundary 'p' x 10, C3 A9, FF is not valid UTF-8. The probe is above 'p' x 10, C3 A9 and below FF at the
+    // next byte, so it belongs to tablet 1 under unsigned byte order; lossy decoding would turn the boundary into
+    // "pppppppppp" + "é" + U+FFFD and put the probe in tablet 2.
+    @Test
+    public void testPruneWithBoundaryThatIsNotValidUtf8() throws Exception {
+        byte[] boundary = concat("p", 10, 0xC3, 0xA9, 0xFF);
+        String probe = "pppppppppp" + "é😀";
+        Assertions.assertTrue(Arrays.compareUnsigned(probe.getBytes(StandardCharsets.UTF_8), boundary) < 0);
+        Assertions.assertEquals(Collections.singleton(1L), pruneSplitAtWireBoundary(boundary, probe));
+    }
+
+    // The boundary 'p' x 35, C3 ends in a truncated multi-byte sequence; the probe extends it with a valid
+    // continuation byte and sorts above it.
+    @Test
+    public void testPruneWithBoundaryTruncatedInsideAMultiByteCharacter() throws Exception {
+        byte[] boundary = concat("p", 35, 0xC3);
+        String probe = "p".repeat(35) + "é";
+        Assertions.assertTrue(Arrays.compareUnsigned(probe.getBytes(StandardCharsets.UTF_8), boundary) > 0);
+        Assertions.assertEquals(Collections.singleton(2L), pruneSplitAtWireBoundary(boundary, probe));
+    }
+
+    @Test
+    public void testPruneWithValidNonAsciiBoundaryFromTheWire() throws Exception {
+        byte[] boundary = concat("p", 10, 0xC3, 0xA9);
+        Assertions.assertEquals(Collections.singleton(1L), pruneSplitAtWireBoundary(boundary, "a"));
+        Assertions.assertEquals(Collections.singleton(2L),
+                pruneSplitAtWireBoundary(boundary, new String(boundary, StandardCharsets.UTF_8)));
     }
 
     // Build a tablet with optional open (infinite) bounds: a null lower/upper string means -inf/+inf,
