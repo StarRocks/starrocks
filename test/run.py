@@ -32,7 +32,7 @@ if not os.environ.get("version"):
     version = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
     os.environ["version"] = version
 
-from lib import sr_sql_lib, ColorEnum
+from lib import random_settings, sr_sql_lib, ColorEnum
 from lib.sr_sql_lib import self_print
 
 
@@ -61,6 +61,8 @@ python run.py [-d dirname/file] [-r] [-l] [-c ${concurrency}] [-t ${time}] [-a $
               --run_info           Extra info
               --arrow              Only run the arrow protocol
               --check-status       Check cluster status before run cases
+              --random-settings    SEED|auto: run each case with random, result-invariant session variables picked
+                                   from SEED and the case name; validate mode only
         """
     )
 
@@ -82,6 +84,7 @@ if __name__ == "__main__":
     keep_alive = False
     run_info = ""
     check_status = False
+    random_settings_seed = None
 
     args = "hld:rvc:t:x:y:pa:C:"
     detail_args = [
@@ -104,6 +107,7 @@ if __name__ == "__main__":
         "log_filtered",
         "arrow",
         "check-status",
+        "random-settings=",
     ]
 
     case_dir = None
@@ -184,6 +188,24 @@ if __name__ == "__main__":
         if opt == "--check-status":
             check_status = True
 
+        if opt == "--random-settings":
+            try:
+                random_settings_seed = random_settings.parse_seed(arg)
+            except ValueError as e:
+                print(e)
+                sys.exit(1)
+
+    if random_settings_seed is not None:
+        if record:
+            print("--random-settings only works in validate mode: an R file records the default settings.")
+            sys.exit(1)
+        self_print(
+            f"Random settings seed: {random_settings_seed}. Replay a case with "
+            f"--random-settings={random_settings_seed} --case_filter='^<case name>$'",
+            ColorEnum.CYAN,
+            bold=True,
+        )
+
     # merge cluster info to attr
     cluster_attr = "!cloud" if cluster == "native" else "!native"
     attr = f"{attr},{cluster_attr}".strip(",")
@@ -230,6 +252,7 @@ if __name__ == "__main__":
             "check_status": str(check_status),
             "case_timeout": str(timeout),
             "arrow_mode": "true" if arrow_mode else "false",
+            "random_settings_seed": "" if random_settings_seed is None else str(random_settings_seed),
         }
     )
 

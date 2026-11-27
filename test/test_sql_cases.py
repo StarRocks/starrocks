@@ -22,6 +22,7 @@ test_sql_cases
 @Author : Brook.Ye
 """
 import copy
+import functools
 import json
 import os
 import re
@@ -38,6 +39,7 @@ from cup import log
 
 from lib import sr_sql_lib
 from lib import choose_cases
+from lib import random_settings
 from lib import sql_annotation
 from lib.sr_sql_lib import self_print
 from lib import *
@@ -48,6 +50,7 @@ from lib import *
 record_mode = os.environ.get("record_mode", "false") == "true"
 arrow_mode = os.environ.get("arrow_mode", "false") == "true"
 case_time = int(os.environ.get("case_timeout", 600))
+random_settings_seed = os.environ.get("random_settings_seed", "")
 
 case_list = choose_cases.choose_cases(record_mode).case_list
 
@@ -67,6 +70,21 @@ def doc_func(_, num, param):
 def name_func(testcase_func, param_num, param):
     """name func"""
     return parameterized.to_safe_name(param.args[0].name)
+
+
+def note_random_settings(func):
+    """Add the case's random settings to a failure message, so the failure says how to replay it."""
+
+    @functools.wraps(func)
+    def wrapper(self, *args, **kwargs):
+        try:
+            return func(self, *args, **kwargs)
+        except AssertionError as e:
+            if not getattr(self, "random_settings", None):
+                raise
+            raise AssertionError("%s\n%s" % (e, self.random_settings_note())) from e
+
+    return wrapper
 
 
 class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
@@ -103,6 +121,7 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
         self.check_cluster_status()
         self._init_global_configs()
         self._init_global_session_variables()
+        self._apply_random_settings()
 
     def _init_global_configs(self):
         """
@@ -129,6 +148,42 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
         for session_variable in session_variables:
             sql = "SET %s;" % session_variable
             self.execute_sql(sql)
+
+    def _apply_random_settings(self):
+        """With --random-settings, SET the case's random, result-invariant session variables."""
+        self.random_settings = {}
+        # Not in record mode, and not on Arrow Flight SQL (--arrow or the @arrow_flight_sql tag).
+        if not random_settings_seed or record_mode or self.mysql_lib is not self.starrocks_sql_lib:
+            return
+        reason = random_settings.exempt_reason(self.case_info.sql, self.case_info.tags)
+        if reason:
+            self_print(f"[RANDOM SETTINGS] default settings, {reason}", ColorEnum.CYAN, logout=True)
+            return
+
+        settings = random_settings.pick(random_settings_seed, self.case_info.name, self.case_info.sql)
+        for name, value in settings.items():
+            stmt = random_settings.set_statement(name, value)
+            res = self.execute_sql(stmt)
+            if res["status"]:
+                self.random_settings[name] = value
+                # function: execute_prepared_sql runs on a connection of its own.
+                self.mysql_prepared_stmt_lib.execute(stmt)
+            else:
+                # A variable an older branch does not have: run without it rather than fail the case.
+                self_print(f"[RANDOM SETTINGS] skip {name}={value}: {res['msg']}", ColorEnum.YELLOW, logout=True)
+        self_print(self.random_settings_note(), ColorEnum.CYAN, logout=True)
+
+    def _apply_random_settings_to(self, conn):
+        """SET the case's random settings on a connection a CONCURRENCY thread takes from the pool."""
+        for name, value in self.random_settings.items():
+            self.execute_sql(random_settings.set_statement(name, value), conn=conn)
+
+    def random_settings_note(self):
+        return "[RANDOM SETTINGS] %s\n    replay: python3 run.py --random-settings=%s --case_filter='^%s$'" % (
+            random_settings.describe(self.random_settings),
+            random_settings_seed,
+            self.case_info.name,
+        )
 
 
     @sql_annotation.ignore_timeout()
@@ -417,6 +472,7 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
     # -------------------------------------------
     @parameterized.expand([[case_info] for case_info in case_list], doc_func=doc_func, name_func=name_func)
     @sql_annotation.timeout(case_time)
+    @note_random_settings
     def test_sql_basic(self, case_info: choose_cases.ChooseCase.CaseTR):
         """
         sql tester
@@ -655,6 +711,7 @@ Start to run: %s
 
                         # init a conn for thread
                         this_conn = self.connection_pool.connection()
+                        self._apply_random_settings_to(this_conn)
                         _t_conn_list.append([this_conn, this_t_id])
 
                         t = threading.Thread(
