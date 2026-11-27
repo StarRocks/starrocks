@@ -1901,9 +1901,19 @@ StatusOr<int64_t> garbage_file_check(std::string_view root_location) {
     return datafile_gc(root_location, "", 0, false);
 }
 
-Status drop_tablet_cache(TabletManager* tablet_mgr, int64_t tablet_id, int64_t version) {
+void drop_tablet_cache(TabletManager* tablet_mgr, int64_t tablet_id, int64_t version) {
+    // Only the files whose size is recorded are dropped: for a file of unknown size the file system looks the size up,
+    // which may read the object storage. A size of 0 is unknown too, as for a .cols file written before its size was
+    // recorded.
     auto drop_cache_func = [&](std::string& path, int64_t offset, int64_t size) {
+<<<<<<< HEAD
         auto fs_or = FileSystem::CreateSharedFromString(path);
+=======
+        if (size <= 0) {
+            return;
+        }
+        auto fs_or = FileSystemFactory::CreateSharedFromString(path);
+>>>>>>> 787edb3 ([BugFix] Keep drop_tablet_cache from starving drop_table and stalling the recycle bin (#84757))
         if (fs_or.ok()) {
             TEST_SYNC_POINT_CALLBACK("drop_tablet_cache:drop_local_cache", &path);
             auto result = (*fs_or)->drop_local_cache(path, offset, size);
@@ -1915,15 +1925,15 @@ Status drop_tablet_cache(TabletManager* tablet_mgr, int64_t tablet_id, int64_t v
         }
     };
     // Skip version 1 which is the initial empty metadata (no rowsets, no delvecs to drop).
-    while (version > 1) {
-        auto res = tablet_mgr->get_tablet_metadata(tablet_id, version, false /* No need to fill meta cache */,
-                                                   false /* No need to fill data cache */);
-        if (res.status().is_not_found()) {
+    for (int64_t walked_versions = 0; version > 1 && walked_versions < kDropTabletCacheMaxWalkVersions;
+         walked_versions++) {
+        // Only the metadata already in the metadata cache is used, so that dropping the cache reads nothing from
+        // storage. A version that is not there ends the walk, because its prev_garbage_version is unknown.
+        auto metadata = tablet_mgr->metacache()->lookup_tablet_metadata(
+                MetacacheKey::tablet_metadata(tablet_mgr->tablet_metadata_location(tablet_id, version)));
+        if (metadata == nullptr) {
             break;
-        } else if (!res.ok()) {
-            return res.status();
         }
-        auto metadata = std::move(res).value();
         for (const auto& rowset : metadata->rowsets()) {
             for (const auto& segment_meta : rowset.segment_metas()) {
                 std::string segment_path = tablet_mgr->segment_location(tablet_id, segment_meta.filename());
@@ -1942,9 +1952,11 @@ Status drop_tablet_cache(TabletManager* tablet_mgr, int64_t tablet_id, int64_t v
             drop_cache_func(sst_path, 0 /* offset */, sst.filesize());
         }
         for (const auto& [_, dcg_ver] : metadata->dcg_meta().dcgs()) {
-            for (const auto& filename : dcg_ver.column_files()) {
-                std::string dcg_path = tablet_mgr->segment_location(tablet_id, filename);
-                drop_cache_func(dcg_path, 0 /* offset */, -1 /* unknown size */);
+            for (int i = 0; i < dcg_ver.column_files_size(); i++) {
+                std::string dcg_path = tablet_mgr->segment_location(tablet_id, dcg_ver.column_files(i));
+                // column_file_sizes is empty, or 0 for a file, when the sizes were not recorded.
+                int64_t size = i < dcg_ver.column_file_sizes_size() ? dcg_ver.column_file_sizes(i) : 0;
+                drop_cache_func(dcg_path, 0 /* offset */, size);
             }
         }
 
@@ -1952,7 +1964,6 @@ Status drop_tablet_cache(TabletManager* tablet_mgr, int64_t tablet_id, int64_t v
         CHECK_LT(metadata->prev_garbage_version(), version);
         version = metadata->prev_garbage_version();
     }
-    return Status::OK();
 }
 
 } // namespace starrocks::lake
