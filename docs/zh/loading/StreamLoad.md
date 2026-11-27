@@ -17,7 +17,7 @@ StarRocks 提供了两种从本地文件系统导入数据的方法：
 
 每种选项都有其自身的优势：
 
-- Stream Load 支持 CSV 和 JSON 文件格式。如果您想从少量文件中导入数据，并且每个文件的大小不超过 10 GB，建议使用此方法。
+- Stream Load 支持 CSV、JSON 和 Arrow（IPC stream 格式）文件格式。如果您想从少量文件中导入数据，并且每个文件的大小不超过 10 GB，建议使用此方法。
 - Broker Load 支持 Parquet、ORC、CSV 和 JSON 文件格式（从 v3.2.3 开始支持 JSON 文件格式）。如果您想从大量文件中导入数据，并且每个文件的大小超过 10 GB，或者文件存储在网络附加存储（NAS）设备中，建议使用此方法。**从 v2.5 开始支持使用 Broker Load 从本地文件系统导入数据。**
 
 对于 CSV 数据，请注意以下几点：
@@ -320,6 +320,7 @@ Merge Commit 支持同步和异步两种模式。每种模式都有其优缺点�
 
 - Merge Commit 仅支持将**同质**加载请求合并到单个数据库和表中。“同质”表示 Stream Load 参数相同，包括：通用参数、JSON 格式参数、CSV 格式参数、`opt_properties` 和 Merge Commit 参数。
 - 对于加载 CSV 格式的数据，您必须确保每行以行分隔符结束。不支持 `skip_header`。
+- 不支持 Arrow 格式。开启 Merge Commit 的 Arrow 格式请求会被拒绝。
 - 服务器会自动生成事务的标签。如果指定，它们将被忽略。
 - Merge Commit 将多个加载请求合并为一个事务。如果一个请求包含数据质量问题，事务中的所有请求都将失败。
 

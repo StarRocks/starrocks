@@ -17,7 +17,7 @@ StarRocks provides two methods of loading data from a local file system:
 
 Each of these options has its own advantages:
 
-- Stream Load supports CSV and JSON file formats. This method is recommended if you want to load data from a small number of files whose individual sizes do not exceed 10 GB.
+- Stream Load supports CSV, JSON, and Arrow (IPC streaming format) file formats. This method is recommended if you want to load data from a small number of files whose individual sizes do not exceed 10 GB.
 - Broker Load supports Parquet, ORC, CSV, and JSON file formats (JSON file format is supported from v3.2.3 onwards). This method is recommended if you want to load data from a large number of files whose individual sizes exceed 10 GB, or if the files are stored in a network attached storage (NAS) device. **Using Broker Load to load data from a local file system is supported from v2.5 onwards.**
 
 For CSV data, take note of the following points:
@@ -320,6 +320,7 @@ Merge Commit supports both synchronous and asynchronous modes. Each mode has adv
 
 - Merge Commit only supports merging **homogeneous** loading requests into a single database and table. "Homogeneous" indicates that the Stream Load parameters are identical, including: common parameters, JSON format parameters, CSV format parameters, `opt_properties`, and Merge Commit parameters.
 - For loading CSV-formatted data, you must ensure that each row ends with a line separator. `skip_header` is not supported.
+- The Arrow format is not supported. A request in this format that enables Merge Commit is rejected.
 - The server automatically generates labels for transactions. They will be ignored if specified.
 - Merge Commit merges multiple loading requests into a single transaction. If one request contains data quality issues, all requests in the transaction will fail.
 
