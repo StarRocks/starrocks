@@ -1,0 +1,82 @@
+-- name: test_view_null_order_sql_mode
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table tn (k int, v int) duplicate key(k) distributed by hash(k) buckets 1 properties ("replication_num" = "1");
+-- result:
+-- !result
+insert into tn values (2, 20), (null, 0), (1, 10);
+-- result:
+-- !result
+set sql_mode = 'SORT_NULLS_LAST';
+-- result:
+-- !result
+select k from tn order by k nulls first limit 1;
+-- result:
+None
+-- !result
+create view v_asc_nf as select k from tn order by k nulls first limit 1;
+-- result:
+-- !result
+select * from v_asc_nf;
+-- result:
+None
+-- !result
+create view v_desc_nl as select k from tn order by k desc nulls last limit 1;
+-- result:
+-- !result
+select * from v_desc_nl;
+-- result:
+2
+-- !result
+create view v_asc as select k from tn order by k limit 1;
+-- result:
+-- !result
+select * from v_asc;
+-- result:
+1
+-- !result
+create view v_win as select k, row_number() over (order by k nulls first) as rn from tn;
+-- result:
+-- !result
+select * from v_win order by rn;
+-- result:
+None	1
+1	2
+2	3
+-- !result
+create view v_concat as select group_concat(k order by k nulls first) as s from tn;
+-- result:
+-- !result
+select * from v_concat;
+-- result:
+1,2
+-- !result
+set sql_mode = DEFAULT;
+-- result:
+-- !result
+select * from v_asc_nf;
+-- result:
+None
+-- !result
+select * from v_desc_nl;
+-- result:
+2
+-- !result
+select * from v_asc;
+-- result:
+1
+-- !result
+select * from v_win order by rn;
+-- result:
+None	1
+1	2
+2	3
+-- !result
+select * from v_concat;
+-- result:
+1,2
+-- !result
