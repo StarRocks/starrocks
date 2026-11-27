@@ -117,12 +117,15 @@ public class RecursiveCTEAstCheck extends AstTraverser<Void, Void> {
         recursiveDefinitionDepth++;
         try {
             visitWithScope(union, () -> {
+                int unionScopeStart = cteScope.size();
                 if (union.hasWithClause()) {
                     union.getCteRelations().forEach(x -> visit(x, context));
                 }
                 List<QueryRelation> members = union.getRelations();
                 visit(members.get(0), context);
-                cteScope.add(new CteScopeEntry(name, true));
+                // Put the recursive CTE behind the UNION's own WITH clause, so a same-named CTE defined there
+                // shadows it, as QueryAnalyzer resolves it.
+                cteScope.add(unionScopeStart, new CteScopeEntry(name, true));
                 members.subList(1, members.size()).forEach(x -> visit(x, context));
             });
         } finally {

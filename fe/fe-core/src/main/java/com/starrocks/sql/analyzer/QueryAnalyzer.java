@@ -548,9 +548,14 @@ public class QueryAnalyzer {
                 return false;
             }
             QueryRelation anchor = unionRelation.getRelations().get(0);
+            // The UNION's own WITH clause (WITH x AS (...) SELECT ... UNION ALL ...) is visible to every member,
+            // as it is when the definition is analyzed as an ordinary CTE. Analyze it into a child scope first,
+            // otherwise a member would resolve x to a same-named table (or fail) and the WITH body would stay
+            // unanalyzed. The recursive CTE itself is registered on cteScope, which the child scope can see.
+            Scope memberScope = analyzeCTE(unionRelation, cteScope);
             // process is like union operator
             // analyze cte anchor
-            Scope anchorScope = process(anchor, cteScope);
+            Scope anchorScope = process(anchor, memberScope);
             Type[] outputTypes = anchorScope.getRelationFields().getAllFields().stream().map(Field::getType).toArray(Type[]::new);
 
             if (withQuery.getColumnOutputNames() == null) {
@@ -585,7 +590,7 @@ public class QueryAnalyzer {
             boolean addedToPath = recursiveCteAnalysisPath().add(withQuery);
             try {
                 for (int i = 1; i < unionRelation.getRelations().size(); ++i) {
-                    Scope relation = process(unionRelation.getRelations().get(i), cteScope);
+                    Scope relation = process(unionRelation.getRelations().get(i), memberScope);
                     if (relation.getRelationFields().size() != outputSize) {
                         throw new SemanticException("Operands have unequal number of columns");
                     }

@@ -39,6 +39,7 @@ import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.ast.OriginStatement;
 import com.starrocks.sql.ast.QualifiedName;
+import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.RandomDistributionDesc;
 import com.starrocks.sql.ast.Relation;
@@ -382,7 +383,9 @@ public class RecursiveCTEExecutor {
 
             // split recursive cte
             boolean isDistinct = SetQualifier.DISTINCT.equals(unionRelation.getQualifier());
-            SubqueryRelation subquery = new SubqueryRelation(new QueryStatement(unionRelation.getRelations().get(0)));
+            List<CTERelation> unionCTEs = unionRelation.getCteRelations();
+            SubqueryRelation subquery =
+                    new SubqueryRelation(memberStatement(unionRelation.getRelations().get(0), unionCTEs));
             subquery.setAlias(new TableName(null, "anchar_" + System.currentTimeMillis()));
             SelectRelation startSelect = new SelectRelation(
                     new SelectList(List.of(new SelectListItem(subquery.getAlias()),
@@ -393,11 +396,11 @@ public class RecursiveCTEExecutor {
             QueryStatement start = new QueryStatement(startSelect);
             QueryStatement recursive;
             if (unionRelation.getRelations().size() == 2) {
-                recursive = new QueryStatement(unionRelation.getRelations().get(1));
+                recursive = memberStatement(unionRelation.getRelations().get(1), unionCTEs);
             } else {
-                recursive = new QueryStatement(new UnionRelation(
+                recursive = memberStatement(new UnionRelation(
                         unionRelation.getRelations().subList(1, unionRelation.getRelations().size()),
-                        unionRelation.getQualifier()));
+                        unionRelation.getQualifier()), unionCTEs);
             }
 
             recursiveCTEGroups.put(node.getName(), new RecursiveCTEGroup(start, recursive, isDistinct,
@@ -407,6 +410,18 @@ public class RecursiveCTEExecutor {
             visit(start.getQueryRelation());
             visit(recursive.getQueryRelation());
             return null;
+        }
+
+        // Every member of the UNION sees the UNION's own WITH clause (WITH x AS (...) SELECT ... UNION ALL ...).
+        // The members are run here as statements of their own, so carry that WITH clause along with each one;
+        // without it a member would read a same-named table instead of the CTE.
+        private QueryStatement memberStatement(QueryRelation member, List<CTERelation> unionCTEs) {
+            if (unionCTEs.isEmpty()) {
+                return new QueryStatement(member);
+            }
+            SubqueryRelation scoped = new SubqueryRelation(new QueryStatement(member));
+            unionCTEs.forEach(scoped::addCTERelation);
+            return new QueryStatement(scoped);
         }
 
     }

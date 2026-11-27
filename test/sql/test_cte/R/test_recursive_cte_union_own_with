@@ -1,0 +1,90 @@
+-- name: test_recursive_cte_union_own_with
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table t0 (v1 int) duplicate key(v1) distributed by hash(v1) buckets 1 properties("replication_num" = "1");
+-- result:
+-- !result
+create table t1 (v1 int) duplicate key(v1) distributed by hash(v1) buckets 1 properties("replication_num" = "1");
+-- result:
+-- !result
+insert into t0 values (1);
+-- result:
+-- !result
+insert into t1 values (10);
+-- result:
+-- !result
+with recursive q as (
+    with t0 as (select v1 from t1)
+    select v1 from t0
+    union all
+    select v1 + 1 from q where v1 < 12
+)
+select * from q;
+-- result:
+[REGEX].*Recursive CTE is not supported.*
+-- !result
+select * from (
+    with recursive q as (
+        with t0 as (select v1 from t1)
+        select v1 from t0
+        union all
+        select v1 + 1 from q where v1 < 12
+    )
+    select * from q
+) s;
+-- result:
+[REGEX].*Recursive CTE is not supported.*
+-- !result
+with recursive q as (
+    with t0 as (select v1 from t1)
+    select v1 from t0
+    union all
+    select v1 + 1 from q where v1 < 12
+)
+select /*+ SET_VAR(enable_recursive_cte=true)*/ * from q order by v1;
+-- result:
+10
+11
+12
+-- !result
+with recursive q as (
+    with w as (select v1 from t1)
+    select v1 from w
+    union all
+    select v1 + 1 from q where v1 < 12
+)
+select /*+ SET_VAR(enable_recursive_cte=true)*/ * from q order by v1;
+-- result:
+10
+11
+12
+-- !result
+with recursive q as (
+    with t0 as (select v1 from t1)
+    select v1 from t0
+    union all
+    select v1 from t0
+)
+select * from q order by v1;
+-- result:
+10
+10
+-- !result
+with recursive q as (
+    with q as (select v1 from t1)
+    select v1 from q
+    union all
+    select v1 from q
+)
+select /*+ SET_VAR(enable_recursive_cte=true)*/ * from q order by v1;
+-- result:
+10
+10
+-- !result
+drop database db_${uuid0};
+-- result:
+-- !result
