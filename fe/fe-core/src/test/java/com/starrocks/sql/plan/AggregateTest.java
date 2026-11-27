@@ -19,6 +19,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.ScanNode;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.base.ColumnIdentifier;
@@ -3526,5 +3527,26 @@ public class AggregateTest extends PlanTestBase {
         String plan = getFragmentPlan("select v1, named_struct('a', sum(v2), 'b', max(v3)).a from t0 group by v1");
         assertContains(plan, "output: sum(2: v2), max(3: v3)");
         assertContains(plan, "named_struct('a', 4: sum, 'b', 5: max).a");
+    }
+
+    @Test
+    public void testNoRuntimeAdaptiveDopWithSpill() throws Exception {
+        String sql = "select t0.v1, t0.v2 from t1 cross join t0 group by t0.v1, t0.v2";
+        SessionVariable sv = connectContext.getSessionVariable();
+        boolean oldAdaptive = sv.isEnableRuntimeAdaptiveDop();
+        boolean oldSpill = sv.isEnableSpill();
+        try {
+            sv.setEnableRuntimeAdaptiveDop(true);
+            sv.setEnableSpill(false);
+            ExecPlan plan = getExecPlan(sql);
+            Assertions.assertTrue(plan.getFragments().stream().anyMatch(PlanFragment::isUseRuntimeAdaptiveDop));
+
+            sv.setEnableSpill(true);
+            plan = getExecPlan(sql);
+            Assertions.assertTrue(plan.getFragments().stream().noneMatch(PlanFragment::isUseRuntimeAdaptiveDop));
+        } finally {
+            sv.setEnableRuntimeAdaptiveDop(oldAdaptive);
+            sv.setEnableSpill(oldSpill);
+        }
     }
 }

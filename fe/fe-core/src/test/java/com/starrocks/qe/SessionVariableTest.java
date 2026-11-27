@@ -190,4 +190,17 @@ public class SessionVariableTest {
                 SessionVariable.SCAN_HIVE_PARTITION_NUM_LIMIT + "\": 512}");
         Assertions.assertEquals(4096, sessionVariable.getScanLakePartitionNumLimit());
     }
+
+    @Test
+    public void testRuntimeAdaptiveDopIsOffWithSpill() {
+        SessionVariable variables = new SessionVariable();
+        variables.setEnableRuntimeAdaptiveDop(true);
+        Assertions.assertTrue(variables.isEnableRuntimeAdaptiveDop());
+
+        variables.setEnableSpill(true);
+        Assertions.assertFalse(variables.isEnableRuntimeAdaptiveDop());
+
+        variables.setEnableSpill(false);
+        Assertions.assertTrue(variables.isEnableRuntimeAdaptiveDop());
+    }
 }

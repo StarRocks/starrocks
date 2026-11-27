@@ -865,7 +865,7 @@ FROM test;
 ### enable_runtime_adaptive_dop
 
 * **范围**: Session
-* **描述**: 当为某个 Session 启用此功能时，Planner 和 Fragment Builder 会标记支持运行时自适应 DOP 的 Pipeline-capable Fragment，使其在运行时使用自适应并行度。此选项仅在 `enable_pipeline_engine` 为 true 时生效。启用后，Fragment 在计划构建期间会使用自适应并行度：Join 的 Probe 可能会等待所有 Build 阶段完成（这与 `group_execution` 行为冲突），启用运行时自适应 DOP 会禁用 Pipeline 级别的 Multi-Partitioned Runtime Filter。该参数会记录在 Query Profile 中，并且可以在每个会话中切换。
+* **描述**: 当为某个 Session 启用此功能时，Planner 和 Fragment Builder 会标记支持运行时自适应 DOP 的 Pipeline-capable Fragment，使其在运行时使用自适应并行度。此选项仅在 `enable_pipeline_engine` 为 true 且未开启 Spill 时生效：`enable_spill` 为 true，或语句自身开启了 Spill（例如在 `enable_connector_sink_spill` 开启时写入 Iceberg、Hive 或 FILES() 表）时，不会使用运行时自适应 DOP。启用后，Fragment 在计划构建期间会使用自适应并行度：Join 的 Probe 可能会等待所有 Build 阶段完成（这与 `group_execution` 行为冲突），启用运行时自适应 DOP 会禁用 Pipeline 级别的 Multi-Partitioned Runtime Filter。该参数会记录在 Query Profile 中，并且可以在每个会话中切换。
 * **默认值**: `false`
 * **数据类型**: boolean
 * **引入版本**: v3.2.0
