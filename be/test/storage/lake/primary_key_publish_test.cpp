@@ -4230,11 +4230,18 @@ TEST_P(LakePrimaryKeyPublishTest, test_cloud_native_index_minor_compact_because_
         // Publish version
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
         version++;
-        if (i == config::cloud_native_pk_index_rebuild_files_threshold / 2 - 1) {
-            // last one, check need rebuilt file cnt
+        // Each publish adds a segment and a del file. The one that would leave threshold files to rebuild flushes.
+        if (i == config::cloud_native_pk_index_rebuild_files_threshold / 2 - 2) {
             ASSIGN_OR_ABORT(auto new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
             EXPECT_EQ(new_tablet_metadata->sstable_meta().sstables_size(), 0);
             EXPECT_EQ(
+                    LakePersistentIndex::need_rebuild_counts(*new_tablet_metadata, new_tablet_metadata->sstable_meta())
+                            .first,
+                    config::cloud_native_pk_index_rebuild_files_threshold - 2);
+        } else if (i == config::cloud_native_pk_index_rebuild_files_threshold / 2 - 1) {
+            ASSIGN_OR_ABORT(auto new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+            EXPECT_GT(new_tablet_metadata->sstable_meta().sstables_size(), 0);
+            EXPECT_LT(
                     LakePersistentIndex::need_rebuild_counts(*new_tablet_metadata, new_tablet_metadata->sstable_meta())
                             .first,
                     config::cloud_native_pk_index_rebuild_files_threshold);
@@ -4251,8 +4258,8 @@ TEST_P(LakePrimaryKeyPublishTest, test_cloud_native_index_minor_compact_because_
         GetParam().persistent_index_type != PersistentIndexTypePB::CLOUD_NATIVE) {
         GTEST_SKIP() << "this case only for cloud native index";
     }
-    // Set row threshold to kChunkSize * 2 rows: after 2 writes the pending row count equals
-    // the threshold, so the 3rd commit triggers an early flush.
+    // Set row threshold to kChunkSize * 2 rows: the 2nd write would leave that many rows to rebuild,
+    // so its commit flushes.
     ConfigResetGuard row_guard(&config::cloud_native_pk_index_rebuild_rows_threshold, (int64_t)kChunkSize * 2);
     ConfigResetGuard memtable_guard(&config::pk_index_memtable_max_count, 1);
 
@@ -4277,11 +4284,18 @@ TEST_P(LakePrimaryKeyPublishTest, test_cloud_native_index_minor_compact_because_
         delta_writer->close();
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
         version++;
-        if (i == 1) {
-            // After 2 writes, verify row count has reached the threshold and no SST yet.
-            ASSIGN_OR_ABORT(auto new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+        ASSIGN_OR_ABORT(auto new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+        if (i == 0) {
+            // One write is below the threshold: no sstable yet.
             EXPECT_EQ(new_tablet_metadata->sstable_meta().sstables_size(), 0);
             EXPECT_EQ(
+                    LakePersistentIndex::need_rebuild_counts(*new_tablet_metadata, new_tablet_metadata->sstable_meta())
+                            .second,
+                    kChunkSize);
+        } else if (i == 1) {
+            // The 2nd write reaches it, and its own commit flushes.
+            EXPECT_GT(new_tablet_metadata->sstable_meta().sstables_size(), 0);
+            EXPECT_LT(
                     LakePersistentIndex::need_rebuild_counts(*new_tablet_metadata, new_tablet_metadata->sstable_meta())
                             .second,
                     kChunkSize * 2);
@@ -4289,7 +4303,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_cloud_native_index_minor_compact_because_
     }
     ASSERT_EQ(kChunkSize, read_rows(tablet_id, version));
     ASSIGN_OR_ABORT(auto new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
-    // The 3rd commit must have triggered an early flush due to the row threshold.
+    // The row threshold must have triggered an early flush.
     EXPECT_TRUE(new_tablet_metadata->sstable_meta().sstables_size() > 0);
 }
 
