@@ -371,8 +371,8 @@ public class DeletePlanTest extends PlanTestBase {
     // runtime adaptive DOP (which must not run together with spill), and only on a copy of the session variable.
     @Test
     public void testIcebergDeleteConnectorSinkSpillBeforePlanning() throws Exception {
-        String sql = "delete from iceberg0.unpartitioned_db.t0_v2 where id in " +
-                "(select id from iceberg0.partitioned_db.t1_v2 group by id)";
+        String sql = "delete from iceberg0.unpartitioned_db.t0 where id in " +
+                "(select id from iceberg0.partitioned_db.t1 group by id)";
         SessionVariable original = connectContext.getSessionVariable();
         SessionVariable sv = (SessionVariable) original.clone();
         connectContext.setSessionVariable(sv);

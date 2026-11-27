@@ -21,6 +21,8 @@ import com.starrocks.connector.iceberg.ScalarOperatorToIcebergExpr;
 import com.starrocks.planner.IcebergScanNode;
 import com.starrocks.planner.PlanNode;
 import com.starrocks.planner.SlotId;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -158,8 +160,6 @@ public class IcebergPlannerUtils {
                 new ScalarOperatorToIcebergExpr.IcebergContext(nativeSchema.asStruct());
         return new ScalarOperatorToIcebergExpr().convert(Collections.singletonList(predicate), icebergContext);
     }
-<<<<<<< HEAD
-=======
 
     /**
      * Turns spill on for a statement that writes through a connector sink, when enable_connector_sink_spill is set.
@@ -178,25 +178,4 @@ public class IcebergPlannerUtils {
             sv.setSpillMemLimitThreshold(sv.getConnectorSinkSpillMemLimitThreshold());
         }
     }
-
-    public static void configureIcebergSinkPipeline(ExecPlan execPlan, ConnectContext session,
-                                                     boolean canUsePipeline) {
-        if (!canUsePipeline) {
-            execPlan.getFragments().get(0).setPipelineDop(1);
-            return;
-        }
-
-        SessionVariable sv = session.getSessionVariable();
-        PlanFragment sinkFragment = execPlan.getFragments().get(0);
-        if (sv.getEnableAdaptiveSinkDop()) {
-            long warehouseId = session.getCurrentComputeResource().getWarehouseId();
-            sinkFragment.setPipelineDop(sv.getSinkDegreeOfParallelism(warehouseId));
-        } else {
-            sinkFragment.setPipelineDop(sv.getParallelExecInstanceNum());
-        }
-        sinkFragment.setHasIcebergTableSink();
-        sinkFragment.disableRuntimeAdaptiveDop();
-        sinkFragment.setForceSetTableSinkDop();
-    }
->>>>>>> 086e6d2 ([BugFix] Do not use runtime adaptive DOP together with spill (#84447))
 }
