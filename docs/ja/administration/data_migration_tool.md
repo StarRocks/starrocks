@@ -151,12 +151,13 @@ ADMIN SET FRONTEND CONFIG("lake_compaction_max_tasks"="-1");
        "aws.s3.use_instance_profile" = "false",
        "aws.s3.access_key" = "<access_key>",
        "aws.s3.secret_key" = "<secret_key>",
-       "aws.s3.enable_partitioned_prefix" = "false"
+       "aws.s3.enable_partitioned_prefix" = "<same_as_source>",
+       "aws.s3.num_partitioned_prefix" = "<same_as_source>"
    );
    ```
 
    :::note
-   - ソースクラスターの設定に関わらず、`aws.s3.enable_partitioned_prefix` は `false` に設定してください。移行ツールはソースパーティションのフルパスを使用して直接ファイルを読み取るため、ミラーリングされたボリュームにはパーティションプレフィックスを適用してはなりません。
+   - S3 ソースの場合、ターゲットクラスター上の `src_<source_volume_name>` ミラーボリュームを、ソースボリュームのディスク上のパーティションプレフィックスレイアウトと一致するように設定してください。ソースがパーティションプレフィックスを使用している場合は、`aws.s3.enable_partitioned_prefix` を `true` に設定し、`aws.s3.num_partitioned_prefix` をソースと同じ実効値に設定してください。この実効値は、機能が有効なときに `DESCRIBE STORAGE VOLUME` の `Params` で確認できます。ソースが数を指定せずに機能を有効にしている場合、実効値は `256` です。ソースがプレフィックスなしのキーを使用している場合は、`aws.s3.enable_partitioned_prefix` を無効のままにし、`aws.s3.num_partitioned_prefix` は省略してください。これらの設定はソースオブジェクトの読み取りに使用するミラーに適用されます。ターゲットテーブル自身のストレージボリュームには、別のレイアウトを使用できます。
    - 移行するテーブルが使用する**各**ストレージボリュームに対してこの手順を繰り返します。例えば、ソースが `builtin_storage_volume` を使用している場合、ターゲットクラスターに `src_builtin_storage_volume` を作成します。
    - ソースストレージボリュームには一時的な認証情報（アクセスキー / シークレットキー）を使用することを推奨します。移行完了後に失効させることができます。
    :::
