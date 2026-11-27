@@ -784,6 +784,8 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
                             aggOperator.isSplit(), aggOperator.getLimit(),
                             aggOperator.getPredicate(), aggOperator.getProjection());
             newHashAggregator.setMergedLocalAgg(aggOperator.isMergedLocalAgg());
+            // without it a one-phase agg whose shuffle was pruned runs per tablet group and repeats groups
+            newHashAggregator.setWithLocalShuffle(aggOperator.isWithLocalShuffle());
             newHashAggregator.setTopNLocalAgg(aggOperator.isTopNLocalAgg());
             newHashAggregator.setTopNSortInfo(rewriteTopNSortInfo(aggOperator.getTopNSortInfo(),
                     context.stringColumnIdToDictColumnIds, context));

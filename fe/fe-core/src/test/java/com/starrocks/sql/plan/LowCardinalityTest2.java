@@ -20,6 +20,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.planner.OlapScanNode;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.sql.optimizer.dump.QueryDumpSerializer;
@@ -30,10 +31,13 @@ import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
 import com.starrocks.statistic.StatisticsMetaManager;
+import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
@@ -2540,6 +2544,51 @@ public class LowCardinalityTest2 extends PlanTestBase {
         assertContains(plan, "  9:Decode\n" +
                 "  |  <dict id 12> : <string id 3>\n" +
                 "  |  <dict id 13> : <string id 9>");
+    }
+
+    @Test
+    public void testDictAggregateKeepsLocalShuffle() throws Exception {
+        // On a single BE the shuffle below a one-phase aggregate is pruned and the aggregate shuffles locally
+        // instead. The dict rewrite has to keep that, or every tablet group finalizes its own groups and the same
+        // key comes out several times.
+        new MockUp<SystemInfoService>() {
+            @Mock
+            public boolean isSingleBackendAndComputeNode() {
+                return true;
+            }
+        };
+        SessionVariable sv = connectContext.getSessionVariable();
+        boolean previousLocalShuffle = sv.isEnableLocalShuffleAgg();
+        boolean previousV2 = sv.isUseLowCardinalityOptimizeV2();
+        int previousAggStage = sv.getNewPlannerAggStage();
+        StatisticStorage previousStorage = connectContext.getGlobalStateMgr().getStatisticStorage();
+        boolean previousRunningUnitTest = FeConstants.runningUnitTest;
+        String tableName = "dict_local_shuffle_agg";
+        starRocksAssert.withTable("CREATE TABLE " + tableName + " (k BIGINT, s VARCHAR(20) NOT NULL) " +
+                "DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 4 PROPERTIES (\"replication_num\"=\"1\")");
+        try {
+            OlapTable table = getOlapTable(tableName);
+            setTableStatistics(table, 10000);
+            CachedStatisticStorage storage = new CachedStatisticStorage();
+            storage.addColumnStatistic(table, "s", ColumnStatistic.builder().setNullsFraction(0)
+                    .setAverageRowSize(3).setDistinctValuesCount(5).build());
+            connectContext.getGlobalStateMgr().setStatisticStorage(storage);
+            // the empty test partitions count as having data, so the scan keeps its tablets and the shuffle
+            FeConstants.runningUnitTest = true;
+            sv.setEnableLocalShuffleAgg(true);
+            sv.setUseLowCardinalityOptimizeV2(false);
+            sv.setNewPlanerAggStage(1);
+            String plan = getVerboseExplain("SELECT s, count(*) FROM " + tableName + " GROUP BY s");
+            assertContains(plan, "dict_col=s", "withLocalShuffle: true");
+            assertNotContains(plan, "colocate exec groups");
+        } finally {
+            sv.setEnableLocalShuffleAgg(previousLocalShuffle);
+            sv.setUseLowCardinalityOptimizeV2(previousV2);
+            sv.setNewPlanerAggStage(previousAggStage);
+            connectContext.getGlobalStateMgr().setStatisticStorage(previousStorage);
+            FeConstants.runningUnitTest = previousRunningUnitTest;
+            starRocksAssert.dropTable(tableName);
+        }
     }
 
     @Test
