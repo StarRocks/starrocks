@@ -175,10 +175,15 @@ protected:
                                                        size_t ahead_blocks, double late_ratio = 2.0,
                                                        int64_t object_offset = 0, size_t block_size = kBlockSize,
                                                        bool use_page_cache = false, bool idle_when_cached = false) {
-        return std::make_unique<SegmentPrefetchWindow>(
-                std::vector<SegmentPrefetchWindow::Column>{{_reader, &_stream, object_offset, use_page_cache}}, range,
-                start_row, ahead_blocks, late_ratio, block_size, &_stats, ReadAheadBudget::instance(),
-                idle_when_cached);
+        const SegmentPrefetchWindow::Column column{_reader, &_stream, object_offset, use_page_cache};
+        // As a query reader's window: the column it reads ahead is the one it reads.
+        std::vector<SegmentPrefetchWindow::Column> probe_columns;
+        if (idle_when_cached) {
+            probe_columns.push_back(column);
+        }
+        return std::make_unique<SegmentPrefetchWindow>(std::vector<SegmentPrefetchWindow::Column>{column}, range,
+                                                       start_row, ahead_blocks, late_ratio, block_size, &_stats,
+                                                       ReadAheadBudget::instance(), std::move(probe_columns));
     }
 
     // Puts the given pages of the column in a page cache of the test's own (standard UT initialization leaves the
@@ -743,8 +748,8 @@ TEST_F(SegmentPrefetchWindowTest, warm_rows_skips_pages_in_the_page_cache) {
     EXPECT_EQ(1, _stats.remote_prefetch_cached_pages);
 }
 
-// A window built to idle when cached asks for its first page; when that page needs no fetch, it asks for nothing more,
-// neither ahead nor for the late-materialized rows, holds nothing, and leaves the node's budget.
+// A window given the columns to probe asks for their first page; when that page needs no fetch, it asks for nothing
+// more, neither ahead nor for the late-materialized rows, holds nothing, and leaves the node's budget.
 TEST_F(SegmentPrefetchWindowTest, window_idles_when_its_first_page_is_cached) {
     auto* budget = ReadAheadBudget::instance();
     const int64_t members = budget->members();
@@ -783,8 +788,10 @@ TEST_F(SegmentPrefetchWindowTest, window_reads_ahead_when_its_first_page_needs_a
     _stream.warms.clear();
     auto window = make_window(&range, 0, 8, 2.0, 0, kBlockSize, false, true);
     window->advance(0);
-    ASSERT_EQ(warms, _stream.warms.size());
+    // The probe's warm-up of the first page, then the window's.
+    ASSERT_EQ(warms + 1, _stream.warms.size());
     ASSERT_GT(warms, 1u);
+    EXPECT_EQ(_stream.warms[0].offset, _stream.warms[1].offset);
     for (const auto& w : _stream.warms) {
         EXPECT_FALSE(w.urgent);
     }
@@ -807,32 +814,75 @@ TEST_F(SegmentPrefetchWindowTest, window_idles_when_its_first_page_is_in_the_pag
     window->advance(0);
     EXPECT_TRUE(_stream.warms.empty());
     EXPECT_TRUE(window->idle());
-    EXPECT_EQ(1, _stats.remote_prefetch_cached_pages);
 }
 
-// A window with no column to read ahead probes with the first late-materialized pages it asks for: when they need no
+// The window idles only when the first page of every column the reader reads needs no fetch. A column read ahead whose
+// first page is in the page cache -- one that holds the rows of many readers, or a key column the reader's short key
+// lookup has just read -- does not make the window idle when the next column needs a fetch.
+TEST_F(SegmentPrefetchWindowTest, window_reads_ahead_when_any_column_needs_a_fetch) {
+    ASSERT_NO_FATAL_FAILURE(cache_pages({0}));
+    RecordingStream cold;
+    cold.submitted = 1;
+    SparseRange<> range(0, kRows);
+    const SegmentPrefetchWindow::Column hot{_reader, &_stream, 0, true};
+    // Read late: the window probes it but does not read it ahead.
+    const SegmentPrefetchWindow::Column late{_reader, &cold};
+    SegmentPrefetchWindow window({hot}, &range, 0, 8, 2.0, kBlockSize, &_stats, ReadAheadBudget::instance(),
+                                 {hot, late});
+    window.advance(0);
+    EXPECT_FALSE(window.idle());
+    EXPECT_EQ(0, _stats.remote_prefetch_idle_windows);
+    // The late column's first page was asked for only to probe: nothing holds it.
+    ASSERT_EQ(1u, cold.warms.size());
+    EXPECT_EQ(static_cast<int64_t>(_pages[0].pointer.offset), cold.warms[0].offset);
+    EXPECT_TRUE(cold.warms[0].handle.expired());
+    // The column read ahead is: from its second page on, the first being in the page cache.
+    ASSERT_FALSE(_stream.warms.empty());
+    EXPECT_EQ(static_cast<int64_t>(_pages[1].pointer.offset), _stream.warms[0].offset);
+    EXPECT_FALSE(_stream.warms[0].handle.expired());
+}
+
+// When the first page of every column needs no fetch, the window idles.
+TEST_F(SegmentPrefetchWindowTest, window_idles_when_every_column_is_cached) {
+    ASSERT_NO_FATAL_FAILURE(cache_pages({0}));
+    RecordingStream warm;
+    SparseRange<> range(0, kRows);
+    const SegmentPrefetchWindow::Column hot{_reader, &_stream, 0, true};
+    const SegmentPrefetchWindow::Column late{_reader, &warm};
+    SegmentPrefetchWindow window({hot}, &range, 0, 8, 2.0, kBlockSize, &_stats, ReadAheadBudget::instance(),
+                                 {hot, late});
+    window.advance(0);
+    EXPECT_TRUE(window.idle());
+    EXPECT_EQ(1, _stats.remote_prefetch_idle_windows);
+    EXPECT_TRUE(_stream.warms.empty());
+    ASSERT_EQ(1u, warm.warms.size());
+    EXPECT_TRUE(warm.warms[0].handle.expired());
+}
+
+// A window with no column to read ahead probes the columns it reads late the same way: when their first page needs no
 // fetch, it goes idle and asks for nothing more.
 TEST_F(SegmentPrefetchWindowTest, late_only_window_idles_when_its_first_late_pages_are_cached) {
     SparseRange<> range(0, kRows);
-    SegmentPrefetchWindow window({}, &range, 0, 1024, 2.0, kBlockSize, &_stats, ReadAheadBudget::instance(), true);
+    SegmentPrefetchWindow window({}, &range, 0, 1024, 2.0, kBlockSize, &_stats, ReadAheadBudget::instance(),
+                                 {{_reader, &_stream}});
     EXPECT_TRUE(window.exhausted());
-    std::vector<rowid_t> rows{_pages[0].first, _pages[1].first};
-    window.warm_rows({{_reader, &_stream}}, rows.data(), rows.size());
-    ASSERT_FALSE(_stream.warms.empty());
+    window.advance(0);
+    ASSERT_EQ(1u, _stream.warms.size());
     EXPECT_TRUE(window.idle());
     EXPECT_EQ(1, _stats.remote_prefetch_idle_windows);
 
-    const size_t warms = _stream.warms.size();
     std::vector<rowid_t> next{_pages[4].first};
     window.warm_rows({{_reader, &_stream}}, next.data(), next.size());
-    EXPECT_EQ(warms, _stream.warms.size());
+    EXPECT_EQ(1u, _stream.warms.size());
 }
 
-// When those pages need a fetch, the window goes on warming the late-materialized rows of each chunk.
+// When it needs a fetch, the window goes on warming the late-materialized rows of each chunk.
 TEST_F(SegmentPrefetchWindowTest, late_only_window_reads_on_when_its_first_late_pages_need_a_fetch) {
     _stream.submitted = 1;
     SparseRange<> range(0, kRows);
-    SegmentPrefetchWindow window({}, &range, 0, 1024, 2.0, kBlockSize, &_stats, ReadAheadBudget::instance(), true);
+    SegmentPrefetchWindow window({}, &range, 0, 1024, 2.0, kBlockSize, &_stats, ReadAheadBudget::instance(),
+                                 {{_reader, &_stream}});
+    window.advance(0);
     std::vector<rowid_t> rows{_pages[0].first, _pages[1].first};
     window.warm_rows({{_reader, &_stream}}, rows.data(), rows.size());
     EXPECT_FALSE(window.idle());
@@ -847,7 +897,7 @@ TEST_F(SegmentPrefetchWindowTest, late_only_window_reads_on_when_its_first_late_
     EXPECT_EQ(0, _stats.remote_prefetch_idle_windows);
 }
 
-// A window not built to idle when cached (compaction) reads ahead even when its first page needs no fetch.
+// A window given no column to probe (compaction) reads ahead even when its first page needs no fetch.
 TEST_F(SegmentPrefetchWindowTest, window_without_idle_when_cached_reads_ahead_cached_pages) {
     SparseRange<> range(0, kRows);
     // The window holds the whole column: the pages after the first are asked for as well.
