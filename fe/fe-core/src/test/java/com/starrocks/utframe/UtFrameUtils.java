@@ -937,21 +937,17 @@ public class UtFrameUtils {
         // mock be num. A shared-data dump taken with enable_cbo_warehouse_exec_nodes on records the alive execution
         // nodes of the query's warehouse, which the cluster costed broadcasts and hash joins with, and usually no
         // backends. Replay runs in shared-nothing mode, where the cost model counts backends, so mock that many nodes
-        // (up to replayMaxBackendNum) and pass the recorded number on through cbo_debug_alive_backend_number, which
+        // (up to 3) and pass the recorded number on through cbo_debug_alive_backend_number, which
         // the backend counts of the cost model return. With the variable turned off in the replay, the recorded
         // backends are used instead, as the cluster would have with it off.
         backendId = 10002;
-<<<<<<< HEAD
-        int beNumToAdd = Math.min(3, replayDumpInfo.getBeNum());
-=======
         boolean useExecNodeNumber = replayDumpInfo.getExecNodeNumber() > 0
                 && connectContext.getSessionVariable().isEnableCboWarehouseExecNodes();
         if (useExecNodeNumber && connectContext.getSessionVariable().getCboDebugAliveBackendNumber() <= 0) {
             connectContext.getSessionVariable().setCboDebugAliveBackendNumber(replayDumpInfo.getExecNodeNumber());
         }
         int replayNodeNum = useExecNodeNumber ? replayDumpInfo.getExecNodeNumber() : replayDumpInfo.getBeNum();
-        int beNumToAdd = Math.min(replayMaxBackendNum, replayNodeNum);
->>>>>>> 38254d3 ([BugFix] Count the warehouse's execution nodes when costing joins in shared-data mode (#82918))
+        int beNumToAdd = Math.min(3, replayNodeNum);
         for (int i = 1; i < beNumToAdd; ++i) {
             //UtFrameUtils.addMockBackend(backendId++);
             String host = String.format("127.0.0.%s", i + 1);

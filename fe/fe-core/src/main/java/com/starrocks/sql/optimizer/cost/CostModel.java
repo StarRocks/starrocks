@@ -414,14 +414,7 @@ public class CostModel {
                     if (outputSize > sessionVariable.getMaxExecMemByte()) {
                         result = result.multiplyBy(StatisticsEstimateCoefficient.BROADCAST_JOIN_MEM_EXCEED_PENALTY);
                     }
-<<<<<<< HEAD
-                    LOG.debug("beNum: {}, aliveBeNum: {}, outputSize: {}.", aliveBackendNumber, beNum, outputSize);
-=======
-                    LOG.debug("beNum: {}, execNodeNumber: {}, outputSize: {}, broadcastMemThreshold: {}, " +
-                                    "broadcastMemExceededPenaltyFactor: {}.",
-                            beNum, execNodeNumber, outputSize, broadcastMemThreshold,
-                            broadcastMemExceededPenaltyFactor);
->>>>>>> 38254d3 ([BugFix] Count the warehouse's execution nodes when costing joins in shared-data mode (#82918))
+                    LOG.debug("beNum: {}, execNodeNumber: {}, outputSize: {}.", beNum, execNodeNumber, outputSize);
                     break;
                 case SHUFFLE:
                     // This is used to generate "ScanNode->LocalShuffle->OnePhaseLocalAgg" for the single backend,

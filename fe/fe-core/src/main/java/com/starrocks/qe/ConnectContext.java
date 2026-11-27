@@ -91,11 +91,8 @@ import com.starrocks.sql.optimizer.dump.DumpInfo;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.spm.SQLPlanStorage;
-<<<<<<< HEAD
-import com.starrocks.thrift.TAuthInfo;
-=======
 import com.starrocks.system.SystemInfoService;
->>>>>>> 38254d3 ([BugFix] Count the warehouse's execution nodes when costing joins in shared-data mode (#82918))
+import com.starrocks.thrift.TAuthInfo;
 import com.starrocks.thrift.TPipelineProfileLevel;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TUserIdentity;
