@@ -82,6 +82,8 @@ public interface IcebergCatalog extends MemoryTrackable {
     int UNPARTITIONED_LAST_UPDATED_AT_COLUMN_INDEX = 7;
     int PARTITION_DATA_COLUMN_INDEX = 0;
     int SPEC_ID_COLUMN_INDEX = 1;
+    // Iceberg's initial partition spec id (TableMetadata.INITIAL_SPEC_ID, package-private there)
+    int INITIAL_PARTITION_SPEC_ID = 0;
     int PARTITION_LAST_UPDATED_AT_COLUMN_INDEX = 9;
     int PARTITION_RECORD_COUNT_COLUMN_INDEX = 2;
     int PARTITION_FILE_COUNT_COLUMN_INDEX = 3;
@@ -419,6 +421,14 @@ public interface IcebergCatalog extends MemoryTrackable {
                             StructProjection partitionData = row.get(PARTITION_DATA_COLUMN_INDEX, StructProjection.class);
                             int specId = row.get(SPEC_ID_COLUMN_INDEX, Integer.class);
                             PartitionSpec spec = nativeTable.specs().get(specId);
+
+                            // Since Iceberg 1.10, PARTITIONS reports the initial spec id (0) for a partition whose live
+                            // files were all written by snapshots that have expired. On a table whose only spec is not 0
+                            // (e.g. tables converted by XTable), such a row can only belong to that spec.
+                            if (spec == null && specId == INITIAL_PARTITION_SPEC_ID && nativeTable.specs().size() == 1) {
+                                spec = nativeTable.spec();
+                                specId = spec.specId();
+                            }
 
                             // Old partition specs may be referenced in metadata even if they have been deleted. Skip them.
                             if (spec == null) {
