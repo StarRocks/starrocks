@@ -138,14 +138,8 @@ static bool get_predicate_value(ObjectPool* obj_pool, const SlotDescriptor& slot
     if (column_ptr->is_nullable()) {
         data = down_cast<NullableColumn*>(column_ptr.get())->data_column();
     } else if (column_ptr->is_constant()) {
-<<<<<<< HEAD:be/src/exec/olap_scan_prepare.cpp
         data = down_cast<ConstColumn*>(column_ptr.get())->data_column();
-    } else { // defensive check.
-        DCHECK(false) << "unreachable path: unknown column type of expr evaluate result";
-=======
-        data = down_cast<const ConstColumn*>(column_ptr.get())->data_column();
     } else if (column_ptr->size() != 1) {
->>>>>>> 518c6f0 ([BugFix] Accept a plain one-row column as a constant predicate value in scan pushdown (#84693)):be/src/compute_env/query/scan_conjuncts_manager.cpp
         return false;
     }
 
