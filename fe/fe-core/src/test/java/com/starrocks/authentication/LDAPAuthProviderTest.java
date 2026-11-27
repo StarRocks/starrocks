@@ -389,7 +389,7 @@ class LDAPAuthProviderTest {
             @Mock
             protected void checkPassword(String dn, String password) throws Exception {
                 if (dn.contains("ou=A")) {
-                    throw new AuthenticationException("bind failed for ou=A");
+                    throw new javax.naming.AuthenticationException("bind failed for ou=A");
                 }
             }
         };
@@ -425,7 +425,7 @@ class LDAPAuthProviderTest {
         new MockUp<LDAPAuthProvider>() {
             @Mock
             protected void checkPassword(String dn, String password) throws Exception {
-                throw new AuthenticationException("bind failed");
+                throw new javax.naming.AuthenticationException("bind failed");
             }
         };
 

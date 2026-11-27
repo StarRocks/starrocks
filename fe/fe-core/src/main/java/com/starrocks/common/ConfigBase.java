@@ -306,6 +306,19 @@ public class ConfigBase {
             throws InvalidConfException {
         // TODO: refactor to allow register custom validator for each config field
         switch (f.getName()) {
+            case "authentication_ldap_simple_conn_timeout_ms":
+            case "authentication_ldap_simple_conn_read_timeout_ms":
+            case "authentication_ldap_simple_max_retries":
+            case "authentication_ldap_simple_retry_interval_ms":
+                int ldapValue = Integer.parseInt(confVal);
+                int ldapMin = f.getName().equals("authentication_ldap_simple_max_retries") ? 0 : 1;
+                int ldapMax = f.getName().equals("authentication_ldap_simple_max_retries") ? 5 :
+                        (f.getName().equals("authentication_ldap_simple_retry_interval_ms") ? 10000 : 300000);
+                if (ldapValue < ldapMin || ldapValue > ldapMax) {
+                    throw new InvalidConfException("'" + f.getName() + "' must be in [" + ldapMin + ", " +
+                            ldapMax + "], current value: " + confVal);
+                }
+                break;
             case "authentication_chain":
                 Set<String> argsSet = new HashSet<>(Arrays.asList(arrayArgs));
                 if (!f.getType().equals(String[].class)
