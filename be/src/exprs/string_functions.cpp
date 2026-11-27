@@ -3666,12 +3666,16 @@ StatusOr<ColumnPtr> StringFunctions::regexp_extract(FunctionContext* context, co
 // `regex` in `str_sp` to `str_col`. `matches` is a caller-provided buffer of at least
 // `max_matches` StringPieces used for RE2 submatches (index 0 = whole match).
 //
-// Advancing the cursor by the WHOLE match span (matches[0]) -- with a one-byte step after
+// Advancing the cursor by the WHOLE match span (matches[0]) -- with a one-character step after
 // any zero-length match -- is what keeps every capture group in lock-step with the group-0
 // path. Using RE2::FindAndConsumeN here instead would only expose the post-match cursor,
 // which cannot distinguish "skipped N bytes then matched 0" from a genuine advance, so a
 // zero-length match found past the cursor (e.g. "($)" against "abc") would be emitted twice
 // and zero-length matches at the cursor (e.g. "(a*)") would loop forever.
+//
+// Each search starts at `pos` within the whole input rather than in input.substr(pos), so RE2
+// sees the text before the cursor: ^, \A and \b then match only where they would in the whole
+// string ("^." against "abc" is ['a'], not ['a','b','c']).
 template <typename IndexType>
 static void extract_group_matches(const re2::StringPiece& str_sp, const re2::RE2& regex, int group,
                                   BinaryColumn* str_col, IndexType& index, re2::StringPiece* matches, int max_matches) {
@@ -3679,14 +3683,14 @@ static void extract_group_matches(const re2::StringPiece& str_sp, const re2::RE2
     size_t pos = 0;
 
     while (pos <= input.size()) {
-        re2::StringPiece remaining = input.substr(pos);
-        if (regex.Match(remaining, 0, remaining.size(), RE2::UNANCHORED, matches, max_matches)) {
+        if (regex.Match(input, pos, input.size(), RE2::UNANCHORED, matches, max_matches)) {
             str_col->append(Slice(matches[group].data(), matches[group].size()));
             index += 1;
-            // Move past the whole match; step one byte after a zero-length match.
+            // Move past the whole match; step one UTF-8 character after a zero-length match, so no
+            // empty match is found inside a multibyte character ('' against 'é' gives two, not three).
             pos = matches[0].data() - input.data() + matches[0].size();
             if (matches[0].size() == 0) {
-                pos++;
+                pos += pos < input.size() ? UTF8_BYTE_LENGTH_TABLE[static_cast<uint8_t>(input[pos])] : 1;
             }
         } else {
             break;

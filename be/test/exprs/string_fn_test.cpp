@@ -3491,6 +3491,49 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpExtractAllPatternZero) {
     }
 }
 
+PARALLEL_TEST(VecStringFunctionsTest, regexpExtractAllMatchIteration) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto context = ctx.get();
+
+    Columns columns;
+
+    auto str = BinaryColumn::create();
+    auto pattern = BinaryColumn::create();
+    auto index = Int64Column::create();
+
+    // Later matches must not treat the end of the previous match as the start of the text, and a
+    // zero-length match steps over a whole UTF-8 character, as in Trino.
+    std::string strs[] = {"abc", "abc", "foo bar baz", "12x\n34x", "aaa", "aé", "日本"};
+    std::string ptns[] = {"^.", "\\A.", "\\bba", "(?m)^(\\d+)x", "a", "", "x*"};
+    int indexs[] = {0, 0, 0, 1, 0, 0, 0};
+    std::string res[] = {"['a']", "['a']", "['ba','ba']", "['12','34']", "['a','a','a']", "['','','']", "['','','']"};
+
+    for (int i = 0; i < sizeof(strs) / sizeof(strs[0]); ++i) {
+        str->append(strs[i]);
+        pattern->append(ptns[i]);
+        index->append(indexs[i]);
+    }
+
+    columns.emplace_back(str);
+    columns.emplace_back(pattern);
+    columns.emplace_back(index);
+
+    context->set_constant_columns(columns);
+
+    ASSERT_TRUE(
+            StringFunctions::regexp_extract_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+
+    auto result = StringFunctions::regexp_extract_all(context, columns).value();
+
+    ASSERT_TRUE(
+            StringFunctions::regexp_close(context, FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
+                    .ok());
+
+    for (int i = 0; i < sizeof(strs) / sizeof(strs[0]); ++i) {
+        ASSERT_EQ(res[i], result->debug_item(i));
+    }
+}
+
 PARALLEL_TEST(VecStringFunctionsTest, regexpExtractAllConstPatternZero) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     auto context = ctx.get();

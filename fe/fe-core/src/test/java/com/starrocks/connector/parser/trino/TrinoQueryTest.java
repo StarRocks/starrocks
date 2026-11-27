@@ -823,6 +823,57 @@ public class TrinoQueryTest extends TrinoTestBase {
         sql = "select regexp_extract('1abb 2b 14m', '[a-z]+', 1);";
         assertPlanContains(sql, "<slot 2> : if(regexp_extract('1abb 2b 14m', '[a-z]+', 1) = '', NULL, " +
                 "regexp_extract('1abb 2b 14m', '[a-z]+', 1))");
+
+        // Trino's . doesn't match a newline unless the pattern sets (?s), so the pattern clears the BE's dot_nl
+        sql = "select regexp_extract_all('1a 2b 14m', '\\d+');";
+        assertPlanContains(sql, "regexp_extract_all('1a 2b 14m', '(?-s)\\\\d+', 0)");
+
+        sql = "select regexp_extract_all('a1', '.(\\d)', 1);";
+        assertPlanContains(sql, "regexp_extract_all('a1', '(?-s).(\\\\d)', 1)");
+    }
+
+    @Test
+    public void testTypedLiterals() throws Exception {
+        String sql = "select v1 from t0 where v2 = BIGINT '42'";
+        assertPlanContains(sql, "2: v2 = 42");
+
+        // Integers are read as Trino reads them: spaces, a sign and leading zeros are allowed, and the value must fit
+        sql = "select v1 from t0 where v2 = BIGINT ' +042 ' and v3 = TINYINT '-128'";
+        assertPlanContains(sql, "2: v2 = 42", "3: v3 = -128");
+        analyzeFail("select BIGINT 'x'", "'x' is not a valid BIGINT literal");
+        analyzeFail("select BIGINT '4.0'", "'4.0' is not a valid BIGINT literal");
+        analyzeFail("select INT '2147483648'", "'2147483648' is not a valid INTEGER literal");
+        // StarRocks type names that aren't Trino types
+        analyzeFail("select LARGEINT '1'", "unknown type LARGEINT");
+
+        sql = "select DOUBLE '1.5' + v1 from t0";
+        assertPlanContains(sql, "1.5 + CAST(1: v1 AS DOUBLE)");
+
+        // Trino's single-letter and numeric BOOLEAN spellings, in any case
+        sql = "select if(BOOLEAN 't', v1, 0), if(BOOLEAN 'F', 0, v2), if(BOOLEAN '0', 0, v3) from t0";
+        assertPlanContains(sql, "OUTPUT EXPRS:1: v1 | 2: v2 | 3: v3");
+
+        // DOUBLE values are parsed as Trino parses them, including spellings a StarRocks string cast doesn't take
+        sql = "select DOUBLE '1e3' + v1, DOUBLE '0x1p3' + v2 from t0";
+        assertPlanContains(sql, "1000.0 + CAST(1: v1 AS DOUBLE)", "8.0 + CAST(2: v2 AS DOUBLE)");
+
+        // Values that StarRocks can't hold or compares otherwise are rejected instead of becoming NULL or false
+        analyzeFail("select DOUBLE 'NaN'", "does not support NaN or infinite DOUBLE literals");
+        analyzeFail("select DOUBLE '-Infinity'", "does not support NaN or infinite DOUBLE literals");
+        analyzeFail("select DOUBLE 'x'", "'x' is not a valid DOUBLE literal");
+        // Trino parses CHAR 'a' as a CharLiteral, which isn't converted: Trino ignores trailing spaces in CHAR
+        // comparisons and StarRocks doesn't
+        analyzeFail("select CHAR 'a' = CHAR 'a '", "Unsupported expression [CHAR 'a']");
+    }
+
+    @Test
+    public void testCountDistinctFilter() throws Exception {
+        String sql = "select count(distinct v2) filter (where v3 > 1) from t0";
+        assertPlanContains(sql, "if(3: v3 > 1, 2: v2, NULL)");
+
+        // count(*) with a filter still becomes count_if
+        sql = "select count(*) filter (where v3 > 1) from t0";
+        assertPlanContains(sql, "count_if(1, 4: expr)", "<slot 4> : 3: v3 > 1");
     }
 
     @Test
