@@ -106,9 +106,56 @@ private:
     RowsetId _rowset_id;
 };
 
+// An overlapped rowset whose segments all load as lost: with experimental_lake_ignore_lost_segment a lake
+// Rowset skips every NotFound segment, so get_segments_checked() succeeds with an empty list while
+// num_rows() (from the rowset metadata) stays non-zero.
+class AllSegmentsLostRowset : public BaseRowset {
+public:
+    explicit AllSegmentsLostRowset(int64_t num_rows) : _num_rows(num_rows) { _rowset_id.init(2); }
+    RowsetId rowset_id() const override { return _rowset_id; }
+    int64_t num_rows() const override { return _num_rows; }
+    bool is_overlapped() const override { return true; }
+    std::vector<SegmentSharedPtr> get_segments() override { return {}; }
+    StatusOr<std::vector<SegmentSharedPtr>> get_segments_checked() override { return std::vector<SegmentSharedPtr>{}; }
+    bool has_data_files() const override { return true; }
+    int64_t start_version() const override { return 1; }
+    int64_t end_version() const override { return 1; }
+
+private:
+    int64_t _num_rows;
+    RowsetId _rowset_id;
+};
+
 } // namespace
 
 class LogicalSplitMorselQueueTest : public ::testing::Test {};
+
+// An overlapped largest rowset with no segment left must not put a null segment into the segment group:
+// that used to call Segment::load_index() on nullptr and crash the CN.
+TEST_F(LogicalSplitMorselQueueTest, overlapped_rowset_without_segments_does_not_crash) {
+    auto schema = make_schema();
+    std::vector<BaseTabletSharedPtr> tablets = {std::make_shared<FakeTablet>(10003, 100)};
+    std::vector<std::vector<BaseRowsetSharedPtr>> tablet_rowsets = {{std::make_shared<AllSegmentsLostRowset>(100)}};
+
+    Morsels morsels;
+    morsels.emplace_back(std::make_unique<ScanMorsel>(1, make_scan_range(10003)));
+    LogicalSplitMorselQueue queue(std::move(morsels), 1, 25);
+    queue.set_tablets(tablets);
+    queue.set_tablet_rowsets(tablet_rowsets);
+    queue.set_tablet_schema(schema);
+
+    // Drain the queue; it must terminate without error.
+    int num_morsels = 0;
+    while (true) {
+        auto morsel_or = queue.try_get();
+        ASSERT_TRUE(morsel_or.ok()) << morsel_or.status();
+        if (morsel_or.value() == nullptr) {
+            break;
+        }
+        ASSERT_LT(++num_morsels, 100);
+    }
+    ASSERT_TRUE(queue.empty());
+}
 
 // RB-2037: a segment-load failure of the largest rowset must fail the query with the load error. An
 // overlapped rowset used to turn the empty get_segments() result into a null largest segment and
