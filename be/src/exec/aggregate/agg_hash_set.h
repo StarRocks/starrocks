@@ -63,7 +63,7 @@ inline size_t agg_hash_map_default_prefetch_dist() {
 }
 
 #define AGG_HASH_SET_PRECOMPUTE_HASH_VALS()                  \
-    hashes.reserve(chunk_size);                              \
+    hashes.resize(chunk_size);                               \
     for (size_t i = 0; i < chunk_size; i++) {                \
         hashes[i] = this->hash_set.hash_function()(keys[i]); \
     }                                                        \
@@ -698,7 +698,8 @@ struct AggHashSetOfSerializedKeyFixedSize : public AggHashSet<HashSet, AggHashSe
     // and are mainly used in the first stage of two-stage aggregation when aggr reduction is low
     template <bool compute_and_allocate>
     void build_set(size_t chunk_size, const Columns& key_columns, MemPool* pool, Filter* not_founds) {
-        DCHECK(fixed_byte_size != -1);
+        DCHECK(has_null_column || fixed_byte_size != -1);
+        DCHECK_LE(chunk_size, static_cast<size_t>(_chunk_size));
         slice_sizes.assign(chunk_size, 0);
         if constexpr (!compute_and_allocate) {
             DCHECK(not_founds);
@@ -756,13 +757,13 @@ struct AggHashSetOfSerializedKeyFixedSize : public AggHashSet<HashSet, AggHashSe
     }
 
     void insert_keys_to_columns(ResultVector& keys, MutableColumns& key_columns, int32_t chunk_size) {
-        DCHECK(fixed_byte_size != -1);
-        tmp_slices.reserve(chunk_size);
+        DCHECK(has_null_column || fixed_byte_size != -1);
+        tmp_slices.resize(chunk_size);
 
         if (!has_null_column) {
             for (int i = 0; i < chunk_size; i++) {
                 FixedSizeSliceKey& key = keys[i];
-                tmp_slices[i].data = key.u.data;
+                tmp_slices[i].data = reinterpret_cast<char*>(&key.u);
                 tmp_slices[i].size = fixed_byte_size;
             }
         } else {
