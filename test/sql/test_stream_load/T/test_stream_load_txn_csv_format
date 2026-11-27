@@ -1,0 +1,29 @@
+-- name: test_stream_load_txn_csv_format
+create database db_${uuid0};
+use db_${uuid0};
+
+CREATE TABLE t1 (
+    k VARCHAR(32) NOT NULL,
+    name VARCHAR(64),
+    note VARCHAR(64)
+) PRIMARY KEY (k)
+DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+-- One transaction, two load calls with the same CSV format headers. The calls feed one data stream, so skip_header
+-- counts across them: it skips the only row of the first call and the first row of the second one. The rows keep
+-- an enclosed column separator, escaped quotes, and leading spaces that trim_space removes.
+shell: curl -s --location-trusted -u root: -H "label:txn_csv_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:t1" -XPOST ${url}/api/transaction/begin | jq -r '.Status'
+
+shell: curl -s --location-trusted -u root: -H "label:txn_csv_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:t1" -H "column_separator:," -H 'enclose:"' -H 'escape:\' -H "skip_header:2" -H "trim_space:true" -T ${root_path}/sql/test_stream_load/data/txn_csv_format_header.csv -XPUT ${url}/api/transaction/load | jq -r '.Status'
+
+shell: curl -s --location-trusted -u root: -H "label:txn_csv_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:t1" -H "column_separator:," -H 'enclose:"' -H 'escape:\' -H "skip_header:2" -H "trim_space:true" -T ${root_path}/sql/test_stream_load/data/txn_csv_format_rows.csv -XPUT ${url}/api/transaction/load | jq -r '.Status'
+
+shell: curl -s --location-trusted -u root: -H "label:txn_csv_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:t1" -XPOST ${url}/api/transaction/prepare | jq -r '.Status'
+
+shell: curl -s --location-trusted -u root: -H "label:txn_csv_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:t1" -XPOST ${url}/api/transaction/commit | jq -r '.Status'
+
+sync;
+select k, concat('[', name, ']'), concat('[', note, ']') from t1 order by k;
+
+drop database db_${uuid0};
