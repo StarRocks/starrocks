@@ -1,0 +1,55 @@
+-- name: test_update_during_schema_change
+-- While a schema change has a shadow index, an UPDATE writes to both indexes, so its sink tuple carries the
+-- table's full schema -- the base columns plus whatever exists only in the shadow index. The UPDATE built its
+-- output from the base schema alone, so the two counts differed and the BE rejected the fragment with "number of
+-- exprs is not same with slots": a row-mode UPDATE failed during any such schema change, and a column-mode
+-- UPDATE during one that adds a generated column. INSERT fills those columns and was never affected.
+-- A transaction stream load opened before the ALTER holds the job in WAITING_TXN, with the shadow index in place.
+create database db_${uuid0};
+use db_${uuid0};
+
+-- Adding a generated column.
+create table t_gen (id bigint not null, v1 bigint not null, v2 bigint not null)
+primary key(id) distributed by hash(id) buckets 1 properties("replication_num" = "1", "fast_schema_evolution" = "true");
+insert into t_gen values (1, 2, 3), (2, 3, 4), (3, 4, 5);
+[UC]shell: curl --location-trusted -u root: -H "label:txn_gen_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:t_gen" -XPOST ${url}/api/transaction/begin
+alter table t_gen add column g bigint as v2 * 100;
+function: wait_alter_table_waiting_txn()
+update t_gen set v2 = 40 where id = 2;
+set partial_update_mode = 'column';
+update t_gen set v2 = 50 where id = 3;
+set partial_update_mode = 'auto';
+[UC]shell: curl --location-trusted -u root: -H "label:txn_gen_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -XPOST ${url}/api/transaction/rollback
+function: wait_alter_table_finish()
+select * from t_gen order by id;
+
+-- Adding a plain column to a table without fast schema evolution, which rewrites the data through a shadow index.
+create table t_add (id bigint not null, v1 bigint not null, v2 bigint not null)
+primary key(id) distributed by hash(id) buckets 1 properties("replication_num" = "1", "fast_schema_evolution" = "false");
+insert into t_add values (1, 2, 3), (2, 3, 4), (3, 4, 5);
+[UC]shell: curl --location-trusted -u root: -H "label:txn_add_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:t_add" -XPOST ${url}/api/transaction/begin
+alter table t_add add column n bigint default "7";
+function: wait_alter_table_waiting_txn()
+update t_add set v2 = 40 where id = 2;
+set partial_update_mode = 'column';
+update t_add set v2 = 50 where id = 3;
+set partial_update_mode = 'auto';
+[UC]shell: curl --location-trusted -u root: -H "label:txn_add_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -XPOST ${url}/api/transaction/rollback
+function: wait_alter_table_finish()
+select * from t_add order by id;
+
+-- Changing a column's type.
+create table t_mod (id bigint not null, v1 bigint not null, v2 bigint not null)
+primary key(id) distributed by hash(id) buckets 1 properties("replication_num" = "1", "fast_schema_evolution" = "true");
+insert into t_mod values (1, 2, 3), (2, 3, 4), (3, 4, 5);
+[UC]shell: curl --location-trusted -u root: -H "label:txn_mod_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:t_mod" -XPOST ${url}/api/transaction/begin
+alter table t_mod modify column v1 largeint;
+function: wait_alter_table_waiting_txn()
+update t_mod set v1 = 40 where id = 2;
+set partial_update_mode = 'column';
+update t_mod set v1 = 50 where id = 3;
+set partial_update_mode = 'auto';
+[UC]shell: curl --location-trusted -u root: -H "label:txn_mod_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -XPOST ${url}/api/transaction/rollback
+function: wait_alter_table_finish()
+select * from t_mod order by id;
+drop database db_${uuid0};
