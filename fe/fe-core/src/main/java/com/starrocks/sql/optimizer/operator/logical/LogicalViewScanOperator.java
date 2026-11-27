@@ -92,6 +92,14 @@ public class LogicalViewScanOperator  extends LogicalScanOperator {
         return this.optPlanEvaluator.evaluate();
     }
 
+    /**
+     * Same as {@link #getOriginalPlanEvaluator()} but the original plan is only required to produce
+     * {@code requiredColumns} (column refs of the inlined view), so the columns nobody uses are pruned.
+     */
+    public OptExpression getOriginalPlanEvaluator(ColumnRefSet requiredColumns) {
+        return this.optPlanEvaluator.evaluate(requiredColumns);
+    }
+
     public Map<ColumnRefOperator, ScalarOperator> getOriginalColumnRefToInlinedColumnRefMap() {
         return originalColumnRefToInlinedColumnRefMap;
     }
@@ -107,6 +115,8 @@ public class LogicalViewScanOperator  extends LogicalScanOperator {
         private final ColumnRefFactory columnRefFactory;
 
         private Optional<OptExpression> originalPlan = Optional.empty();
+        // evaluated plans which are only required to produce a subset of the view's output columns
+        private final Map<ColumnRefSet, OptExpression> prunedPlans = Maps.newHashMap();
 
         public OptPlanEvaluator(OptExpression logicalTree,
                                 ConnectContext connectContext,
@@ -120,12 +130,23 @@ public class LogicalViewScanOperator  extends LogicalScanOperator {
 
         public OptExpression evaluate() {
             if (!originalPlan.isPresent()) {
-                OptExpression optExpression = MvUtils.optimizeViewPlan(logicalTree, connectContext, requiredColumns,
-                        columnRefFactory);
+                // optimize a copy, the optimization changes the tree and the tree is also used by evaluate(columns)
+                OptExpression optExpression = MvUtils.optimizeViewPlan(MvUtils.cloneExpression(logicalTree),
+                        connectContext, requiredColumns, columnRefFactory);
                 originalPlan = Optional.of(optExpression);
             }
             Preconditions.checkArgument(originalPlan.isPresent(), "Original plan is not set");
             return originalPlan.get();
+        }
+
+        /**
+         * Evaluate the original plan which is only required to produce {@code columns}. The plan is optimized from
+         * a fresh copy of the logical tree because the optimization changes the tree.
+         */
+        public OptExpression evaluate(ColumnRefSet columns) {
+            return prunedPlans.computeIfAbsent(columns.clone(), key ->
+                    MvUtils.optimizeViewPlan(MvUtils.cloneExpression(logicalTree), connectContext, key.clone(),
+                            columnRefFactory));
         }
     }
 
