@@ -1,0 +1,52 @@
+-- name: test_recursive_cte_union_own_with
+create database db_${uuid0};
+use db_${uuid0};
+create table t0 (v1 int) duplicate key(v1) distributed by hash(v1) buckets 1 properties("replication_num" = "1");
+create table t1 (v1 int) duplicate key(v1) distributed by hash(v1) buckets 1 properties("replication_num" = "1");
+insert into t0 values (1);
+insert into t1 values (10);
+with recursive q as (
+    with t0 as (select v1 from t1)
+    select v1 from t0
+    union all
+    select v1 + 1 from q where v1 < 12
+)
+select * from q;
+select * from (
+    with recursive q as (
+        with t0 as (select v1 from t1)
+        select v1 from t0
+        union all
+        select v1 + 1 from q where v1 < 12
+    )
+    select * from q
+) s;
+with recursive q as (
+    with t0 as (select v1 from t1)
+    select v1 from t0
+    union all
+    select v1 + 1 from q where v1 < 12
+)
+select /*+ SET_VAR(enable_recursive_cte=true)*/ * from q order by v1;
+with recursive q as (
+    with w as (select v1 from t1)
+    select v1 from w
+    union all
+    select v1 + 1 from q where v1 < 12
+)
+select /*+ SET_VAR(enable_recursive_cte=true)*/ * from q order by v1;
+with recursive q as (
+    with t0 as (select v1 from t1)
+    select v1 from t0
+    union all
+    select v1 from t0
+)
+select * from q order by v1;
+with recursive q as (
+    with q as (select v1 from t1)
+    select v1 from q
+    union all
+    select v1 from q
+)
+select /*+ SET_VAR(enable_recursive_cte=true)*/ * from q order by v1;
+drop database db_${uuid0};

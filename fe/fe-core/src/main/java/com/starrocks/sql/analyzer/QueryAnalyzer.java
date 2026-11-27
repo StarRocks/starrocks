@@ -453,12 +453,14 @@ public class QueryAnalyzer {
     }
 
     private class Visitor implements AstVisitorExtendInterface<Scope, Scope> {
-        // Names of the recursive CTEs whose recursive members are currently being analyzed, innermost
-        // on top. A stack, not a single value: a recursive CTE nested inside another one must not
-        // overwrite the outer name and then clear it, or a reference back to the outer CTE stops being
-        // recognized as recursive and its definition gets expanded without end (StackOverflowError /
-        // hang in the table collectors).
-        private final Deque<String> recursiveCteStack = new ArrayDeque<>();
+        // The recursive CTEs whose recursive members are currently being analyzed, innermost on top. A
+        // stack, not a single value: a recursive CTE nested inside another one must not overwrite the
+        // outer one and then clear it, or a reference back to the outer CTE stops being recognized as
+        // recursive and its definition gets expanded without end (StackOverflowError / hang in the table
+        // collectors). It holds the CTE definitions, not their names, and is matched by identity: a
+        // reference is recursive only if it resolves to the CTE being defined, not to a same-named CTE
+        // that shadows it (e.g. one defined in a subquery of a member). CTERelation does not override equals.
+        private final Deque<CTERelation> recursiveCteStack = new ArrayDeque<>();
         // Fallback for cyclic view detection when there is no session; the shared path lives on the
         // session (see viewExpansionStack()) so it survives the fresh QueryAnalyzer that each
         // scalar/IN/EXISTS subquery spawns.
@@ -467,7 +469,7 @@ public class QueryAnalyzer {
         // recursiveCteAnalysisPath(). recursiveCteStack above is per-Visitor and cannot see a
         // recursive reference that a subquery resolves in its own fresh Visitor, so the shared path
         // on the session is what catches those.
-        private final Set<String> localRecursiveCtePath = new HashSet<>();
+        private final Set<CTERelation> localRecursiveCtePath = Sets.newIdentityHashSet();
         private final Deque<AnalyzeState> queryBlockAnalyzeStates = new ArrayDeque<>();
 
         public Visitor() {
@@ -484,7 +486,7 @@ public class QueryAnalyzer {
         // reference routed through a scalar/IN/EXISTS subquery (which gets its own QueryAnalyzer/Visitor,
         // hence an empty recursiveCteStack) is still observed; only when session is null do we fall back
         // to the per-Visitor set.
-        private Set<String> recursiveCteAnalysisPath() {
+        private Set<CTERelation> recursiveCteAnalysisPath() {
             return session != null ? session.getRecursiveCteAnalysisPath() : localRecursiveCtePath;
         }
 
@@ -546,9 +548,14 @@ public class QueryAnalyzer {
                 return false;
             }
             QueryRelation anchor = unionRelation.getRelations().get(0);
+            // The UNION's own WITH clause (WITH x AS (...) SELECT ... UNION ALL ...) is visible to every member,
+            // as it is when the definition is analyzed as an ordinary CTE. Analyze it into a child scope first,
+            // otherwise a member would resolve x to a same-named table (or fail) and the WITH body would stay
+            // unanalyzed. The recursive CTE itself is registered on cteScope, which the child scope can see.
+            Scope memberScope = analyzeCTE(unionRelation, cteScope);
             // process is like union operator
             // analyze cte anchor
-            Scope anchorScope = process(anchor, cteScope);
+            Scope anchorScope = process(anchor, memberScope);
             Type[] outputTypes = anchorScope.getRelationFields().getAllFields().stream().map(Field::getType).toArray(Type[]::new);
 
             if (withQuery.getColumnOutputNames() == null) {
@@ -576,14 +583,14 @@ public class QueryAnalyzer {
             withQuery.setScope(new Scope(RelationId.of(withQuery), new RelationFields(cteOutputs)));
             cteScope.addCteQueries(cteName, withQuery);
             int outputSize = anchorScope.getRelationFields().size();
-            this.recursiveCteStack.push(cteName);
+            this.recursiveCteStack.push(withQuery);
             // Also mark it on the session-shared path so a reference resolved inside a subquery's own
-            // Visitor can still tell this CTE is mid-analysis. addedToPath guards a same-named CTE
-            // nested inside another so only the outermost occurrence clears the entry.
-            boolean addedToPath = recursiveCteAnalysisPath().add(cteName);
+            // Visitor can still tell this CTE is mid-analysis. addedToPath guards the same definition
+            // being analyzed again inside itself so only the outermost occurrence clears the entry.
+            boolean addedToPath = recursiveCteAnalysisPath().add(withQuery);
             try {
                 for (int i = 1; i < unionRelation.getRelations().size(); ++i) {
-                    Scope relation = process(unionRelation.getRelations().get(i), cteScope);
+                    Scope relation = process(unionRelation.getRelations().get(i), memberScope);
                     if (relation.getRelationFields().size() != outputSize) {
                         throw new SemanticException("Operands have unequal number of columns");
                     }
@@ -605,7 +612,7 @@ public class QueryAnalyzer {
             } finally {
                 this.recursiveCteStack.pop();
                 if (addedToPath) {
-                    recursiveCteAnalysisPath().remove(cteName);
+                    recursiveCteAnalysisPath().remove(withQuery);
                 }
             }
             if (!withQuery.isRecursive()) {
@@ -866,8 +873,10 @@ public class QueryAnalyzer {
                         newCteRelation.setResolvedInFromClause(true);
                         newCteRelation.setScope(
                                 new Scope(RelationId.of(newCteRelation), new RelationFields(outputFields.build())));
-                        if (!recursiveCteStack.isEmpty() && recursiveCteStack.contains(tableName.getTbl())) {
-                            if (tableName.getTbl().equals(recursiveCteStack.peek())) {
+                        // Match the CTE the name resolved to, not the name: a same-named CTE that shadows the
+                        // recursive one (e.g. defined in a subquery of a member) is an ordinary reference.
+                        if (!recursiveCteStack.isEmpty() && recursiveCteStack.contains(withRelation)) {
+                            if (withRelation == recursiveCteStack.peek()) {
                                 // Direct self-reference in the recursive member of the CTE being analyzed.
                                 newCteRelation.setRecursive(true);
                                 withRelation.setRecursive(true);
@@ -880,7 +889,7 @@ public class QueryAnalyzer {
                                 throw new SemanticException("Doesn't support multi-level recursive CTE",
                                         tableRelation.getPos());
                             }
-                        } else if (recursiveCteAnalysisPath().contains(tableName.getTbl())) {
+                        } else if (recursiveCteAnalysisPath().contains(withRelation)) {
                             // The name is a recursive CTE whose recursive member is still being analyzed in
                             // an enclosing scope, yet this reference is resolved by a nested QueryAnalyzer
                             // whose own recursiveCteStack does not contain it -- i.e. the reference sits

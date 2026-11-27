@@ -18,10 +18,12 @@ import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.qe.recursivecte.RecursiveCTEAstCheck;
 import com.starrocks.qe.recursivecte.RecursiveCTEExecutor;
+import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CreateTableAsSelectStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.parser.SqlParser;
+import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -461,5 +463,113 @@ public class RecursiveCTETest extends PlanTestBase {
                 + " select n from (with r(n) as (select 2) (select n from r)) x"
                 + ") select * from r";
         Assertions.assertFalse(hasRecursiveCte(sql));
+    }
+
+    @Test
+    public void testSubqueryCteShadowingRecursiveCteNameIsNotRecursive() throws Exception {
+        // The q inside the subquery is an ordinary CTE that shadows the recursive candidate q. The analyzer used
+        // to match the recursive CTE by name and mark that inner q recursive, so planning failed with
+        // "Recursive CTE is not supported" instead of reading it.
+        String sql = "with recursive q(n) as ("
+                + " select 1"
+                + " union all"
+                + " select n from (with q(n) as (select 2) (select n from q)) x"
+                + ") select * from q";
+        connectContext.getSessionVariable().setEnableRecursiveCTE(false);
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "UNION");
+    }
+
+    @Test
+    public void testScalarSubqueryCteShadowingRecursiveCteNameIsNotRecursive() throws Exception {
+        // The scalar subquery is analyzed by a fresh QueryAnalyzer, which sees the recursive CTE only through
+        // the session-shared path. Its q is an ordinary CTE that shadows the recursive one, so it must not be
+        // rejected as a multi-level recursive reference; the FROM q of the member is still recursive.
+        String sql = "with recursive q(n) as ("
+                + " select 1"
+                + " union all"
+                + " select n + 1 from q where n < (select max(n) from (with q(n) as (select 3) (select n from q)) x)"
+                + ") select * from q";
+        String plan = explainRecursiveCte(sql);
+        assertContains(plan, "Recursive Statement:");
+    }
+
+    // The UNION that defines a recursive CTE may carry its own WITH clause. The CTE it defines (t0 below, over
+    // the base table t1) is visible to every member and shadows the base table t0.
+    private static final String UNION_OWN_WITH_RECURSIVE_SQL = "with recursive q as ("
+            + " with t0 as (select v4 as v1 from t1)"
+            + " select v1 from t0"
+            + " union all"
+            + " select v1 + 1 from q where v1 < 3"
+            + ") select * from q";
+
+    @Test
+    public void testUnionOwnWithInRecursiveCteAnalyzed() throws Exception {
+        // The analyzer used to analyze only the UNION members, never the UNION's own WITH clause: the anchor
+        // read the base table t0, and the body of the inner t0 stayed unanalyzed, so the privilege check
+        // failed on its null table with a NullPointerException instead of reporting the recursive CTE as
+        // unsupported.
+        connectContext.getSessionVariable().setEnableRecursiveCTE(false);
+        StatementBase statement = UtFrameUtils.parseStmtWithNewParser(UNION_OWN_WITH_RECURSIVE_SQL, connectContext);
+        Authorizer.check(statement, connectContext);
+        SemanticException e = Assertions.assertThrows(SemanticException.class,
+                () -> getFragmentPlan(UNION_OWN_WITH_RECURSIVE_SQL));
+        Assertions.assertTrue(e.getMessage().contains("Recursive CTE is not supported"), e.getMessage());
+
+        // A name that matches no table used to fail with "Unknown table" instead.
+        String sql = "with recursive q as ("
+                + " with w as (select v4 as v1 from t1)"
+                + " select v1 from w"
+                + " union all"
+                + " select v1 + 1 from q where v1 < 3"
+                + ") select * from q";
+        e = Assertions.assertThrows(SemanticException.class, () -> getFragmentPlan(sql));
+        Assertions.assertTrue(e.getMessage().contains("Recursive CTE is not supported"), e.getMessage());
+    }
+
+    @Test
+    public void testUnionOwnWithInNonRecursiveCteUnderWithRecursive() throws Exception {
+        // No self reference, so the definition is analyzed again as an ordinary CTE. The first pass used to bind
+        // t0 to the base table and qualify its name, so the second pass kept reading the base table t0.
+        connectContext.getSessionVariable().setEnableRecursiveCTE(false);
+        String sql = "with recursive q as ("
+                + " with t0 as (select v4 as v1 from t1)"
+                + " select v1 from t0"
+                + " union all"
+                + " select v1 from t0"
+                + ") select * from q";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "TABLE: t1");
+        assertNotContains(plan, "TABLE: t0");
+    }
+
+    @Test
+    public void testUnionOwnWithKeptBySplitRecursiveCte() throws Exception {
+        // RecursiveCTEExecutor runs the anchor and the recursive member as statements of their own; both must
+        // keep the UNION's own WITH clause, or the anchor reads the base table t0.
+        String plan = explainRecursiveCte(UNION_OWN_WITH_RECURSIVE_SQL);
+        assertContains(plan, "Start Statement: ");
+        String start = plan.substring(plan.indexOf("Start Statement: "), plan.indexOf("Recursive Statement: "));
+        assertContains(start, "WITH `t0`");
+        assertContains(start, "FROM `test`.`t1`");
+        assertNotContains(start, "FROM `test`.`t0`");
+        String recursive = plan.substring(plan.indexOf("Recursive Statement: "));
+        assertContains(recursive, "WITH `t0`");
+    }
+
+    @Test
+    public void testUnionOwnWithShadowsRecursiveCteName() throws Exception {
+        // A CTE of the UNION's own WITH clause named like the recursive CTE shadows it, so there is no
+        // recursive reference.
+        String sql = "with recursive q as ("
+                + " with q as (select v4 as v1 from t1)"
+                + " select v1 from q"
+                + " union all"
+                + " select v1 from q"
+                + ") select * from q";
+        Assertions.assertFalse(hasRecursiveCte(sql));
+        connectContext.getSessionVariable().setEnableRecursiveCTE(false);
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "TABLE: t1");
     }
 }
