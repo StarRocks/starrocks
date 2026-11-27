@@ -25,7 +25,8 @@ namespace starrocks {
 
 class TabletColumn;
 
-// The storage type info of a tablet column, recursing into ARRAY/MAP/STRUCT children.
+// The storage type info of a tablet column, recursing into ARRAY/MAP/STRUCT children. A GEO column
+// gets a GeoTypeInfo built from its descriptor, which the column must carry.
 // storage's get_type_info(const TabletColumn&) delegates here.
 TypeInfoPtr get_tablet_column_type_info(const TabletColumn& col);
 

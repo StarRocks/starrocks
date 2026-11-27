@@ -16,6 +16,8 @@
 
 #include "base/utility/defer_op.h"
 #include "column/column_helper.h"
+#include "column/geo_column.h"
+#include "column/nullable_column.h"
 #include "common/config_rowset_fwd.h"
 #include "gtest/gtest.h"
 #include "storage/rowset/column_iterator.h"
@@ -23,6 +25,8 @@
 #include "storage/types.h"
 #include "storage_primitive/column_or_predicate.h"
 #include "storage_primitive/column_predicate_factory.h"
+#include "types/geo_type_info.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks {
 class DefaultValueColumnIteratorTest : public testing::Test {
@@ -60,6 +64,34 @@ TEST_F(DefaultValueColumnIteratorTest, delete_after_column) {
     for (size_t i = 0; i < 10; i++) {
         ASSERT_TRUE(column->is_null(i));
     }
+}
+
+// A GEO column added by schema change can be read back as NULL. A non-NULL default has no row
+// conversion (GeoTypeInfo::from_string is NotSupported), so init() reports it instead of materializing it.
+TEST_F(DefaultValueColumnIteratorTest, geo_default_value) {
+    const GeoTypeDescriptor descriptor{GEO_LOGICAL_TYPE_GEOGRAPHY, GEO_EDGE_ALGORITHM_SPHERICAL, "OGC:CRS84",
+                                       std::nullopt};
+    TypeInfoPtr type_info = get_geo_type_info(TypeDescriptor::create_geo_type(TYPE_GEOGRAPHY, descriptor)).value();
+
+    for (bool has_default_value : {true, false}) {
+        SCOPED_TRACE(has_default_value);
+        DefaultValueColumnIterator iter(has_default_value, has_default_value ? "NULL" : "", true, type_info, 0, 4);
+        ColumnIteratorOptions opts;
+        ASSERT_TRUE(iter.init(opts).ok());
+
+        auto column = NullableColumn::create(GeoColumn::create(GeoColumnDescriptor{descriptor}), NullColumn::create());
+        size_t num_rows = 4;
+        ASSERT_TRUE(iter.next_batch(&num_rows, column.get()).ok());
+        ASSERT_EQ(4, column->size());
+        for (size_t i = 0; i < 4; i++) {
+            ASSERT_TRUE(column->is_null(i));
+        }
+    }
+
+    DefaultValueColumnIterator iter(true, "POINT(1 2)", true, type_info, 0, 4);
+    ColumnIteratorOptions opts;
+    Status st = iter.init(opts);
+    ASSERT_TRUE(st.is_not_supported()) << st;
 }
 
 // Test that DefaultValueColumnIterator properly destroys placement-new'd Datum
