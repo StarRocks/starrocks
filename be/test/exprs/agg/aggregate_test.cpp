@@ -3256,8 +3256,8 @@ std::vector<std::string> approx_top_k_bigint_result(const Column& result) {
     const auto* fields = down_cast<const StructColumn*>(ColumnHelper::get_data_column(&array.elements()));
     std::vector<std::string> items;
     for (size_t i = offset; i < offset + size; ++i) {
-        const Datum item = fields->field_column_raw_ptr(0)->get(i);
-        const Datum count = fields->field_column_raw_ptr(1)->get(i);
+        const Datum item = fields->fields()[0]->get(i);
+        const Datum count = fields->fields()[1]->get(i);
         items.emplace_back((item.is_null() ? std::string("NULL") : std::to_string(item.get_int64())) + ":" +
                            std::to_string(count.get_int64()));
     }
@@ -3340,8 +3340,8 @@ TEST_F(AggregateTest, test_approx_top_k_convert_to_serialize_format) {
     }
 
     Columns src = {input};
-    MutableColumnPtr serialized = BinaryColumn::create();
-    func->convert_to_serialize_format(ctx, src, input->size(), serialized);
+    ColumnPtr serialized = BinaryColumn::create();
+    func->convert_to_serialize_format(ctx, src, input->size(), &serialized);
     const auto* binary = down_cast<const BinaryColumn*>(serialized.get());
     ASSERT_EQ(values.size(), binary->size());
     for (size_t i = 0; i < values.size(); ++i) {
@@ -3395,8 +3395,8 @@ TEST_F(AggregateTest, test_approx_top_k_convert_to_serialize_format_nullable) {
     {
         const AggregateFunction* nested = get_aggregate_function("approx_top_k", TYPE_BIGINT, TYPE_ARRAY, false);
         ASSERT_NE(nullptr, nested);
-        MutableColumnPtr serialized = BinaryColumn::create();
-        nested->convert_to_serialize_format(ctx, src, input->size(), serialized);
+        ColumnPtr serialized = BinaryColumn::create();
+        nested->convert_to_serialize_format(ctx, src, input->size(), &serialized);
         const auto* binary = down_cast<const BinaryColumn*>(serialized.get());
         ASSERT_EQ(rows.size(), binary->size());
         for (size_t i = 0; i < rows.size(); ++i) {
@@ -3416,8 +3416,8 @@ TEST_F(AggregateTest, test_approx_top_k_convert_to_serialize_format_nullable) {
     // Through the nullable wrapper: merging the per-row states must give what aggregating the rows directly gives.
     const AggregateFunction* func = get_aggregate_function("approx_top_k", TYPE_BIGINT, TYPE_ARRAY, true);
     ASSERT_NE(nullptr, func);
-    MutableColumnPtr serialized = ColumnHelper::create_column(TypeDescriptor(TYPE_VARBINARY), true);
-    func->convert_to_serialize_format(ctx, src, input->size(), serialized);
+    ColumnPtr serialized = ColumnHelper::create_column(TypeDescriptor(TYPE_VARBINARY), true);
+    func->convert_to_serialize_format(ctx, src, input->size(), &serialized);
     ASSERT_EQ(rows.size(), serialized->size());
     for (size_t i = 0; i < rows.size(); ++i) {
         ASSERT_EQ(!rows[i].has_value(), serialized->is_null(i)) << "row " << i;
