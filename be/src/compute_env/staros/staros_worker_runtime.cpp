@@ -23,6 +23,7 @@
 #include <limits>
 #include <utility>
 
+#include "base/failpoint/fail_point.h"
 #include "common/config_staros_worker_fwd.h"
 #include "common/configbase.h"
 #include "common/gflags_utils.h"
@@ -79,7 +80,40 @@ DECLARE_int64(remote_read_retain_prefetched_bytes);
 
 namespace starrocks {
 
+#if defined(FIU_ENABLE) && defined(STARLET_HAS_CACHE_FILL_FAULT_INJECTOR)
+DEFINE_FAIL_POINT(remote_io_block_read_error);
+DEFINE_FAIL_POINT(remote_io_block_short_read);
+DEFINE_FAIL_POINT(remote_io_fill_complete_error);
+DEFINE_FAIL_POINT(remote_io_handle_release_pause);
+#endif
+
 namespace {
+
+#if defined(FIU_ENABLE) && defined(STARLET_HAS_CACHE_FILL_FAULT_INJECTOR)
+// Installed once before the scheduler starts. Runtime controls and hit/pause evidence belong
+// to the existing BE failpoint registry; StarOS owns status propagation and resource cleanup.
+absl::Status inject_cache_fill_fault(staros::starlet::fslib::CacheFillFaultPoint point) {
+    using Point = staros::starlet::fslib::CacheFillFaultPoint;
+    switch (point) {
+    case Point::BEFORE_READ:
+        FAIL_POINT_TRIGGER_RETURN(remote_io_block_read_error,
+                                  absl::UnavailableError("injected remote_io_block_read_error"));
+        break;
+    case Point::SHORT_READ:
+        FAIL_POINT_TRIGGER_RETURN(remote_io_block_short_read,
+                                  absl::DataLossError("injected remote_io_block_short_read"));
+        break;
+    case Point::BEFORE_COMPLETE:
+        FAIL_POINT_TRIGGER_RETURN(remote_io_fill_complete_error,
+                                  absl::UnavailableError("injected remote_io_fill_complete_error"));
+        break;
+    case Point::BEFORE_HANDLE_RELEASE:
+        FAIL_POINT_TRIGGER_EXECUTE(remote_io_handle_release_pause, {});
+        break;
+    }
+    return absl::OkStatus();
+}
+#endif
 
 // Both globals are read by any thread that touches a starlet-backed filesystem and are released by
 // `shutdown_staros_worker()` while such threads may still be running, so every access goes through
@@ -263,6 +297,9 @@ Status enable_remote_io_scheduler() {
     }
     RETURN_IF_ERROR(validate_remote_io_scheduler_config());
     const fslib::RemoteReadSchedulerOptions opts = remote_read_scheduler_options();
+#if defined(FIU_ENABLE) && defined(STARLET_HAS_CACHE_FILL_FAULT_INJECTOR)
+    fslib::set_cache_fill_fault_injector(&inject_cache_fill_fault);
+#endif
     // Installed before the scheduler exists, so that no fill buffer is ever allocated with another allocator.
     if (auto st = fslib::set_fill_buffer_allocator(
                 fslib::FillBufferAllocator{&allocate_fill_buffer, &release_fill_buffer});
