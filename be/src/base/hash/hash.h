@@ -6,7 +6,9 @@
 #include "base/hash/hash_fwd.h"
 #include "base/hash/unaligned_access.h"
 #include "base/string/slice.h"
-#if defined(__aarch64__) && defined(__ARM_FEATURE_CRC32)
+#if defined(__x86_64__) && defined(__SSE4_2__)
+#include <nmmintrin.h>
+#elif defined(__aarch64__) && defined(__ARM_FEATURE_CRC32)
 #include <arm_acle.h>
 #endif
 
@@ -102,7 +104,7 @@ inline uint32_t crc_hash_32(const void* data, int32_t bytes, uint32_t hash) {
     hash = ~starrocks::crc32c::Extend(~hash, (const char*)data, bytes);
 #else
     uint32_t words = bytes / sizeof(uint32_t);
-    bytes = bytes % 4 /*sizeof(uint32_t)*/;
+    bytes = bytes % sizeof(uint32_t);
 
     auto* p = reinterpret_cast<const uint8_t*>(data);
 
@@ -117,7 +119,17 @@ inline uint32_t crc_hash_32(const void* data, int32_t bytes, uint32_t hash) {
         p += sizeof(uint32_t);
     }
 
-    while (bytes--) {
+    if (bytes & 2) {
+#if defined(__x86_64__)
+        hash = _mm_crc32_u16(hash, unaligned_load<uint16_t>(p));
+#elif defined(__aarch64__) && defined(__ARM_FEATURE_CRC32)
+        hash = __crc32ch(hash, unaligned_load<uint16_t>(p));
+#else
+#error "Not supported architecture"
+#endif
+        p += sizeof(uint16_t);
+    }
+    if (bytes & 1) {
 #if defined(__x86_64__)
         hash = _mm_crc32_u8(hash, *p);
 #elif defined(__aarch64__) && defined(__ARM_FEATURE_CRC32)
@@ -125,11 +137,10 @@ inline uint32_t crc_hash_32(const void* data, int32_t bytes, uint32_t hash) {
 #else
 #error "Not supported architecture"
 #endif
-        ++p;
     }
 #endif
 
-    // The lower half of the CRC hash has has poor uniformity, so swap the halves
+    // The lower half of the CRC hash has poor uniformity, so swap the halves
     // for anyone who only uses the first several bits of the hash.
     hash = phmap_mix<4>()(hash);
     return hash;
@@ -152,13 +163,20 @@ inline uint64_t crc_hash_64_unmixed(const void* data, int32_t length, uint64_t h
     auto* p = reinterpret_cast<const uint8_t*>(data);
     auto* end = reinterpret_cast<const uint8_t*>(data) + length;
 
+#if defined(__aarch64__) && !defined(__ARM_FEATURE_CRC32)
+    hash = ~starrocks::crc32c::Extend(static_cast<uint32_t>(~hash), reinterpret_cast<const char*>(p),
+                                      words * sizeof(uint64_t));
+    if (remainder != 0) {
+        p = end - 8;
+        hash = ~starrocks::crc32c::Extend(static_cast<uint32_t>(~hash), reinterpret_cast<const char*>(p),
+                                          sizeof(uint64_t));
+    }
+#else
     while (words--) {
 #if defined(__x86_64__) && defined(__SSE4_2__)
         hash = _mm_crc32_u64(hash, unaligned_load<uint64_t>(p));
 #elif defined(__aarch64__) && defined(__ARM_FEATURE_CRC32)
         hash = __crc32cd(hash, unaligned_load<uint64_t>(p));
-#elif defined(__aarch64__) && !defined(__ARM_FEATURE_CRC32)
-        hash = ~starrocks::crc32c::Extend(~hash, reinterpret_cast<const char*>(p), sizeof(uint64_t));
 #else
 #error "Not supported architecture"
 #endif
@@ -171,12 +189,11 @@ inline uint64_t crc_hash_64_unmixed(const void* data, int32_t length, uint64_t h
         hash = _mm_crc32_u64(hash, unaligned_load<uint64_t>(p));
 #elif defined(__aarch64__) && defined(__ARM_FEATURE_CRC32)
         hash = __crc32cd(hash, unaligned_load<uint64_t>(p));
-#elif defined(__aarch64__) && !defined(__ARM_FEATURE_CRC32)
-        hash = ~starrocks::crc32c::Extend(~hash, reinterpret_cast<const char*>(p), sizeof(uint64_t));
 #else
 #error "Not supported architecture"
 #endif
     }
+#endif
 
     return hash;
 #endif
