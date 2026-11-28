@@ -636,6 +636,10 @@ struct TIcebergSchemaField {
     // (all names kept across renames). Readers resolve such files by these names instead of the current name.
     6: optional list<string> mapped_names
 
+    // True for Iceberg timestamptz (TimestampType.withZone()) fields so writers encode values in UTC
+    // and set Parquet TimestampLogicalType.isAdjustedToUTC=true. Unset/false preserves wall-clock encoding.
+    7: optional bool is_adjusted_to_utc
+
     // Children fields for struct, map and list(array)
     100: optional list<TIcebergSchemaField> children
 }

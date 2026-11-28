@@ -22,6 +22,12 @@ For Parquet data files, StarRocks honors the Iceberg table properties `write.par
 
 For Parquet data files, set the Iceberg table property `write.parquet.compression-level` to an integer to control the selected codec's compression level. Accepted ranges are -131072 to 22 for ZSTD, -1 to 9 for GZIP, and 0 to 11 for Brotli. Other codecs do not support an explicit level. An invalid value rejects the write. If this property is absent, the Parquet writer uses its codec default. The level does not apply to position-delete files.
 
+:::caution
+
+StarRocks encodes Iceberg `timestamptz` (`TIMESTAMP WITH TIME ZONE`) data columns and partition transforms in UTC using the session time zone. When performing a rolling upgrade to a version that includes this behavior, upgrade BE nodes before FE nodes; otherwise an upgraded FE can dispatch the `__iceberg_transform_timestamptz_identity` transform to an older BE and fail writes to `timestamptz`-partitioned Iceberg tables. If existing write jobs manually convert values using `CONVERT_TZ(..., 'UTC')` as a workaround for earlier versions, remove that workaround after upgrading to avoid double timezone conversion.
+
+:::
+
 ### Syntax
 
 ```SQL

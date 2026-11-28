@@ -121,6 +121,7 @@ std::vector<formats::FileColumnId> IcebergUtils::generate_parquet_field_ids(
     std::vector<formats::FileColumnId> file_column_ids(fields.size());
     for (int i = 0; i < fields.size(); ++i) {
         file_column_ids[i].field_id = fields[i].field_id;
+        file_column_ids[i].is_adjusted_to_utc = fields[i].__isset.is_adjusted_to_utc && fields[i].is_adjusted_to_utc;
         file_column_ids[i].children = generate_parquet_field_ids(fields[i].children);
     }
     return file_column_ids;

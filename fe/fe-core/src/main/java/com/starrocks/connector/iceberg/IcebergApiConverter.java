@@ -98,6 +98,8 @@ import java.math.BigInteger;
 import java.nio.ByteBuffer;
 import java.nio.charset.CharacterCodingException;
 import java.nio.charset.StandardCharsets;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -481,17 +483,49 @@ public class IcebergApiConverter {
     }
 
     public static String getWriteDefaultValue(Schema schema, String columnName) {
-        Types.NestedField field = schema.findField(columnName);
-        if (field == null) {
-            field = schema.columns().stream()
-                    .filter(col -> col.name().equalsIgnoreCase(columnName))
-                    .findFirst()
-                    .orElse(null);
-        }
+        Types.NestedField field = findFieldIgnoreCase(schema, columnName);
         if (field == null) {
             return null;
         }
         return toWriteDefaultValueString(field);
+    }
+
+    // Returns the write-default for a TIMESTAMPTZ column formatted in the session time zone at plan time,
+    // or null if the column is not a TIMESTAMPTZ with a write-default. BE converts TIMESTAMPTZ values from
+    // the session time zone to UTC on write, so plan-time defaults must be in session local time without
+    // mutating the session-independent cached schema.
+    public static String getSessionTimestamptzWriteDefaultValue(Schema schema, String columnName, ZoneId sessionZoneId) {
+        if (schema == null || columnName == null || sessionZoneId == null) {
+            return null;
+        }
+        Types.NestedField field = findFieldIgnoreCase(schema, columnName);
+        if (field == null || !(field.type() instanceof Types.TimestampType timestampType) ||
+                !timestampType.shouldAdjustToUTC() || field.writeDefault() == null) {
+            return null;
+        }
+        long micros = ((Number) field.writeDefault()).longValue();
+        ZonedDateTime sessionTime = DateTimeUtil.timestamptzFromMicros(micros).atZoneSameInstant(sessionZoneId);
+        // StarRocks DATETIME carries no timezone offset, and the BE Parquet writer resolves repeated
+        // DST-overlap civil times to their earlier ("pre") instant. Reject a default whose original instant
+        // was the later overlap occurrence rather than silently shifting it on write.
+        if (!sessionTime.withEarlierOffsetAtOverlap().equals(sessionTime)) {
+            throw new SemanticException(String.format(
+                    "Cannot materialize Iceberg timestamptz write-default '%s' for column '%s' in session " +
+                            "time zone '%s' because it falls in the second occurrence of a DST fall-back overlap",
+                    DateTimeUtil.timestamptzFromMicros(micros), columnName, sessionZoneId.getId()));
+        }
+        return sessionTime.format(READ_DEFAULT_DATETIME_FORMATTER);
+    }
+
+    private static Types.NestedField findFieldIgnoreCase(Schema schema, String columnName) {
+        Types.NestedField field = schema.findField(columnName);
+        if (field != null) {
+            return field;
+        }
+        return schema.columns().stream()
+                .filter(col -> col.name().equalsIgnoreCase(columnName))
+                .findFirst()
+                .orElse(null);
     }
 
     public static Literal<?> toIcebergDefaultLiteral(Column column, org.apache.iceberg.types.Type icebergType) {
@@ -716,6 +750,12 @@ public class IcebergApiConverter {
         String initialDefault = toReadInitialDefaultValueString(nestedField);
         if (initialDefault != null) {
             tIcebergSchemaField.setInitial_default(initialDefault);
+        }
+        if (nestedField.type().typeId() == org.apache.iceberg.types.Type.TypeID.TIMESTAMP) {
+            Types.TimestampType timestampType = (Types.TimestampType) nestedField.type();
+            if (timestampType.shouldAdjustToUTC()) {
+                tIcebergSchemaField.setIs_adjusted_to_utc(true);
+            }
         }
         // Preserve external semantics independently of SQL type conversion.
         // Do not infer these parameters from WKB or map these fields to VARBINARY.
@@ -1164,21 +1204,25 @@ public class IcebergApiConverter {
         String escapedName =  "`" + name + "`";
         String transform = field.transform().toString();
         String prefix = withTransfomPrefix ? FeConstants.ICEBERG_TRANSFORM_EXPRESSION_PREFIX : "";
+        boolean isTimestampWithZone = withTransfomPrefix &&
+                Types.TimestampType.withZone().equals(schema.findType(field.sourceId()));
+        String tzPrefix = isTimestampWithZone ? "timestamptz_" : "";
 
         switch (transform) {
             case "identity":
-                return escapedName;
+                return isTimestampWithZone ? prefix + format("timestamptz_identity(%s)", escapedName) : escapedName;
             case "year":
             case "month":
             case "day":
             case "hour":
+                return prefix + format("%s%s(%s)", tzPrefix, transform, escapedName);
             case "void":
                 return prefix + format("%s(%s)", transform, escapedName);
         }
 
         Matcher matcher = ICEBERG_BUCKET_PATTERN.matcher(transform);
         if (matcher.matches()) {
-            return prefix + format("bucket(%s, %s)", escapedName, matcher.group(1));
+            return prefix + format("%sbucket(%s, %s)", tzPrefix, escapedName, matcher.group(1));
         }
 
         matcher = ICEBERG_TRUNCATE_PATTERN.matcher(transform);

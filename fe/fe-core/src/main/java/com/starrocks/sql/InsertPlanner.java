@@ -43,7 +43,9 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.iceberg.IcebergApiConverter;
 import com.starrocks.connector.iceberg.IcebergRowLineageUtils;
 import com.starrocks.connector.paimon.PaimonSinkExtra;
 import com.starrocks.connector.paimon.PaimonUtils;
@@ -134,6 +136,7 @@ import org.apache.iceberg.PartitionSpec;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -514,7 +517,7 @@ public class InsertPlanner {
 
         //1. Process the literal value of the insert values type and cast it into the type of the target table
         if (queryRelation instanceof ValuesRelation) {
-            castLiteralToTargetColumnsType(insertStmt);
+            castLiteralToTargetColumnsType(insertStmt, session);
         }
 
         //2. Build Logical plan
@@ -525,7 +528,8 @@ public class InsertPlanner {
         }
 
         //3. Fill in the default value and NULL
-        OptExprBuilder optExprBuilder = fillDefaultValue(logicalPlan, columnRefFactory, insertStmt, outputColumns);
+        OptExprBuilder optExprBuilder =
+                fillDefaultValue(logicalPlan, columnRefFactory, insertStmt, outputColumns, session);
 
         //4. Fill key partition columns constant value for data lake format tables.
         if (targetTable.isPaimonTable() && insertStmt.isStaticKeyPartitionInsert()) {
@@ -889,7 +893,22 @@ public class InsertPlanner {
 
 
 
-    private void castLiteralToTargetColumnsType(InsertStmt insertStatement) {
+    private String resolveDefaultValue(Table targetTable, Column targetColumn, ConnectContext session) {
+        if (targetTable instanceof IcebergTable icebergTable && targetColumn.getType().isDatetime()
+                && icebergTable.getNativeTable() != null && icebergTable.getNativeTable().schema() != null) {
+            ZoneId zoneId = session != null && session.getSessionVariable() != null
+                    ? TimeUtils.getOrSystemTimeZone(session.getSessionVariable().getTimeZone()).toZoneId()
+                    : TimeUtils.getTimeZone().toZoneId();
+            String sessionWriteDefault = IcebergApiConverter.getSessionTimestamptzWriteDefaultValue(
+                    icebergTable.getNativeTable().schema(), targetColumn.getName(), zoneId);
+            if (sessionWriteDefault != null) {
+                return sessionWriteDefault;
+            }
+        }
+        return targetColumn.calculatedDefaultValue();
+    }
+
+    private void castLiteralToTargetColumnsType(InsertStmt insertStatement, ConnectContext session) {
         Preconditions.checkState(insertStatement.getQueryStatement().getQueryRelation() instanceof ValuesRelation,
                 "must values");
         ValuesRelation values = (ValuesRelation) insertStatement.getQueryStatement().getQueryRelation();
@@ -921,7 +940,8 @@ public class InsertPlanner {
                         if (isAutoIncrement) {
                             row.set(valueIdx, new NullLiteral());
                         } else {
-                            row.set(valueIdx, new StringLiteral(targetColumn.calculatedDefaultValue()));
+                            row.set(valueIdx, new StringLiteral(
+                                    resolveDefaultValue(insertStatement.getTargetTable(), targetColumn, session)));
                         }
                     }
                     row.set(valueIdx, TypeManager.addCastExpr(row.get(valueIdx), targetColumn.getType()));
@@ -941,7 +961,8 @@ public class InsertPlanner {
                             if (isAutoIncrement) {
                                 row.set(idx, new NullLiteral());
                             } else {
-                                row.set(idx, new StringLiteral(targetColumn.calculatedDefaultValue()));
+                                row.set(idx, new StringLiteral(
+                                        resolveDefaultValue(insertStatement.getTargetTable(), targetColumn, session)));
                             }
                         }
                         row.set(idx, TypeManager.addCastExpr(row.get(idx), targetColumn.getType()));
@@ -953,7 +974,8 @@ public class InsertPlanner {
     }
 
     private OptExprBuilder fillDefaultValue(LogicalPlan logicalPlan, ColumnRefFactory columnRefFactory,
-                                            InsertStmt insertStatement, List<ColumnRefOperator> outputColumns) {
+                                            InsertStmt insertStatement, List<ColumnRefOperator> outputColumns,
+                                            ConnectContext session) {
         Map<ColumnRefOperator, ScalarOperator> columnRefMap = new HashMap<>();
 
         // Same as castLiteralToTargetColumnsType(): the query output does not contain skipped
@@ -988,7 +1010,8 @@ public class InsertPlanner {
                             }
                             scalarOperator = SqlToScalarOperatorTranslator.translate(expr);
                         } else {
-                            scalarOperator = ConstantOperator.createVarchar(targetColumn.calculatedDefaultValue());
+                            scalarOperator = ConstantOperator.createVarchar(
+                                    resolveDefaultValue(insertStatement.getTargetTable(), targetColumn, session));
                         }
                     } else if (defaultValueType == Column.DefaultValueType.VARY) {
                         if (isValidDefaultFunction(targetColumn.getDefaultExpr().getExpr())) {

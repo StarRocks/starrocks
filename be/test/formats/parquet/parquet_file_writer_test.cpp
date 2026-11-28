@@ -58,15 +58,16 @@ public:
 
 protected:
     HdfsScannerContext _scanner_ctx;
-    HdfsScannerContext* _create_scan_context(const std::vector<TypeDescriptor>& type_descs) {
+    HdfsScannerContext* _create_scan_context(const std::vector<TypeDescriptor>& type_descs,
+                                             const std::vector<std::string>& column_names = {}) {
         auto ctx = _pool.add(new HdfsScannerContext());
 
         ctx->format_scan_context.lazy_column_coalesce_counter = &_lazy_column_coalesce_counter;
 
         std::vector<parquet::Utils::SlotDesc> slot_descs;
-        for (auto& type_desc : type_descs) {
-            auto type_name = type_desc.debug_string();
-            slot_descs.push_back({type_name, type_desc});
+        for (size_t i = 0; i < type_descs.size(); ++i) {
+            auto col_name = i < column_names.size() ? column_names[i] : type_descs[i].debug_string();
+            slot_descs.push_back({col_name, type_descs[i]});
         }
         slot_descs.push_back({""});
 
@@ -145,8 +146,9 @@ protected:
     // Drains the reader instead of taking a single chunk. _read_chunk calls get_next() once, which is
     // enough for the small single-row-group files most tests write, but returns only the first row
     // group when a test deliberately forces several.
-    ChunkPtr _read_all_rows(const std::vector<TypeDescriptor>& type_descs) {
-        auto ctx = _create_scan_context(type_descs);
+    ChunkPtr _read_all_rows(const std::vector<TypeDescriptor>& type_descs,
+                            const std::vector<std::string>& column_names = {}) {
+        auto ctx = _create_scan_context(type_descs, column_names);
         ASSIGN_OR_ABORT(auto file, _fs.new_random_access_file(_file_path));
         ASSIGN_OR_ABORT(auto file_size, _fs.get_file_size(_file_path));
         auto file_reader = std::make_shared<parquet::FileReader>(config::vector_chunk_size, file.get(), file_size);
@@ -1675,6 +1677,72 @@ TEST_F(ParquetFileWriterTest, TestWriteReadEncryptedAcrossRowGroupsAndPages) {
     expected->append(*c1);
     expected->append(*c2);
     parquet::Utils::assert_equal_chunk(expected.get(), read_chunk.get());
+}
+
+TEST_F(ParquetFileWriterTest, TestWriteTimestamptzAdjustedToUtc) {
+    // Same table mixes a timestamptz column (is_adjusted_to_utc=true) and a timestamp NTZ column
+    // (is_adjusted_to_utc=false) written under Asia/Shanghai (UTC+8).
+    std::vector<TypeDescriptor> type_descs{TypeDescriptor::from_logical_type(TYPE_DATETIME),
+                                           TypeDescriptor::from_logical_type(TYPE_DATETIME)};
+    std::vector<std::string> column_names{"ts_tz", "ts_ntz"};
+    _writer_options->time_zone = "Asia/Shanghai";
+    std::vector<FileColumnId> column_ids(2);
+    column_ids[0].field_id = 1;
+    column_ids[0].is_adjusted_to_utc = true;
+    column_ids[1].field_id = 2;
+    column_ids[1].is_adjusted_to_utc = false;
+    _writer_options->column_ids = column_ids;
+
+    ASSIGN_OR_ASSERT_FAIL(auto writer, _create_writer(type_descs, {}, column_names));
+
+    auto chunk = std::make_shared<Chunk>();
+    auto make_ts_col = []() {
+        auto data = TimestampColumn::create();
+        data->append(TimestampValue::create(2026, 3, 1, 2, 0, 0, 123456));
+        data->append(TimestampValue::create(2026, 3, 1, 2, 0, 0, 123456));
+        auto nulls = NullColumn::create();
+        nulls->append(0);
+        nulls->append(1);
+        return NullableColumn::create(std::move(data), std::move(nulls));
+    };
+    chunk->append_column(make_ts_col(), 0);
+    chunk->append_column(make_ts_col(), 1);
+
+    ASSERT_OK(writer->write(chunk.get()));
+    auto result = writer->close();
+    ASSERT_TRUE(result.io_status.ok()) << result.io_status;
+
+    // 2026-03-01 02:00:00.123456 Asia/Shanghai == 2026-02-28 18:00:00.123456 UTC
+    constexpr int64_t kExpectedUtcMicros = 1772301600123456LL;
+    constexpr int64_t kExpectedWallMicros = 1772330400123456LL;
+
+    ASSERT_TRUE(result.file_statistics.lower_bounds.has_value());
+    int64_t tz_min = 0;
+    int64_t ntz_min = 0;
+    memcpy(&tz_min, result.file_statistics.lower_bounds->at(1).data(), sizeof(int64_t));
+    memcpy(&ntz_min, result.file_statistics.lower_bounds->at(2).data(), sizeof(int64_t));
+    EXPECT_EQ(kExpectedUtcMicros, tz_min);
+    EXPECT_EQ(kExpectedWallMicros, ntz_min);
+
+    // Inspect written Parquet logical types directly.
+    ASSIGN_OR_ASSERT_FAIL(auto ro_file, _fs.new_random_access_file(_file_path));
+    ASSIGN_OR_ASSERT_FAIL(auto file_size, _fs.get_file_size(_file_path));
+    std::string bytes(file_size, '\0');
+    ASSERT_OK(ro_file->read_at_fully(0, bytes.data(), file_size));
+    auto arrow_buf = std::make_shared<arrow::Buffer>(reinterpret_cast<const uint8_t*>(bytes.data()), file_size);
+    auto parquet_reader = ::parquet::ParquetFileReader::Open(std::make_shared<arrow::io::BufferReader>(arrow_buf));
+    const auto* schema = parquet_reader->metadata()->schema();
+    const auto tz_lt = std::static_pointer_cast<const ::parquet::TimestampLogicalType>(
+            schema->Column(0)->schema_node()->logical_type());
+    const auto ntz_lt = std::static_pointer_cast<const ::parquet::TimestampLogicalType>(
+            schema->Column(1)->schema_node()->logical_type());
+    EXPECT_TRUE(tz_lt->is_adjusted_to_utc());
+    EXPECT_FALSE(ntz_lt->is_adjusted_to_utc());
+
+    // Round-trip read in Asia/Shanghai restores 2026-03-01 02:00:00.123456 for both columns.
+    auto read_chunk = _read_all_rows(type_descs, column_names);
+    ASSERT_TRUE(read_chunk != nullptr);
+    parquet::Utils::assert_equal_chunk(chunk.get(), read_chunk.get());
 }
 
 } // namespace starrocks::formats

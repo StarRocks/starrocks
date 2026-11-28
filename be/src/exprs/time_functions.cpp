@@ -3472,6 +3472,38 @@ StatusOr<ColumnPtr> TimeFunctions::iceberg_timestamptz_hours_since_epoch_datetim
             context, columns, [](const TimestampValue& timestamp) { return iceberg_hours_since_epoch(timestamp); });
 }
 
+StatusOr<ColumnPtr> TimeFunctions::iceberg_timestamptz_identity_datetime(FunctionContext* context,
+                                                                         const starrocks::Columns& columns) {
+    DCHECK_EQ(columns.size(), 1);
+
+    auto datetime_viewer = ColumnViewer<TYPE_DATETIME>(columns[0]);
+    auto size = columns[0]->size();
+    ColumnBuilder<TYPE_DATETIME> result(size);
+    bool use_utc_fast_path =
+            should_use_iceberg_timestamptz_utc_fast_path(get_iceberg_timestamptz_session_timezone(context));
+
+    for (int row = 0; row < size; ++row) {
+        if (datetime_viewer.is_null(row)) {
+            result.append_null();
+            continue;
+        }
+        if (use_utc_fast_path) {
+            result.append(datetime_viewer.value(row));
+            continue;
+        }
+        TimestampValue normalized_timestamp;
+        if (!normalize_iceberg_timestamptz_to_utc(context, datetime_viewer.value(row), &normalized_timestamp) ||
+            !normalized_timestamp.is_valid()) {
+            return Status::InvalidArgument(
+                    fmt::format("Iceberg timestamptz value '{}' cannot be represented in UTC within DATETIME range",
+                                datetime_viewer.value(row).to_string()));
+        }
+        result.append(normalized_timestamp);
+    }
+
+    return result.build(ColumnHelper::is_all_const(columns));
+}
+
 // used as start point of time_slice.
 TimestampValue TimeFunctions::start_of_time_slice = TimestampValue::create(1, 1, 1, 0, 0, 0);
 TimestampValue TimeFunctions::unix_epoch = TimestampValue::create(1970, 1, 1, 0, 0, 0);

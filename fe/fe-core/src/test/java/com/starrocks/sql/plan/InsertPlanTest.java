@@ -1480,6 +1480,48 @@ public class InsertPlanTest extends PlanTestBase {
     }
 
     @Test
+    public void testInsertIcebergTimestamptzWriteDefaultUsesSessionTimezone() throws Exception {
+        long utcMicros = ((Number) org.apache.iceberg.expressions.Literal.of("2026-01-01T10:00:00Z")
+                .to(Types.TimestampType.withZone()).value()).longValue();
+        Schema icebergSchema = new Schema(
+                Types.NestedField.required(1, "id", Types.IntegerType.get()),
+                Types.NestedField.optional("ts_tz")
+                        .withId(2)
+                        .ofType(Types.TimestampType.withZone())
+                        .withWriteDefault(org.apache.iceberg.expressions.Literal.of(utcMicros))
+                        .build()
+        );
+        List<Column> fullSchema = com.starrocks.connector.iceberg.IcebergApiConverter.toFullSchemas(icebergSchema);
+        Assertions.assertEquals("2026-01-01 10:00", fullSchema.get(1).getDefaultValue());
+
+        String catalogName = "iceberg_catalog_tz_write_default";
+        String tableName = "iceberg_tz_write_default_table";
+        long tableId = 12345588L;
+        String prevTz = connectContext.getSessionVariable().getTimeZone();
+        connectContext.getSessionVariable().setTimeZone("Asia/Shanghai");
+        try {
+            String omittedPlan = getIcebergStaticPartitionInsertExecPlan(
+                    catalogName, tableName, tableId, icebergSchema, PartitionSpec.unpartitioned(),
+                    fullSchema, Lists.newArrayList(), Lists.newArrayList(), "(id) values (1)");
+            Assertions.assertTrue(omittedPlan.contains("2026-01-01 18:00:00"),
+                    "Omitted timestamptz write-default should be materialized in session timezone:\n" + omittedPlan);
+            Assertions.assertFalse(omittedPlan.contains("2026-01-01 10:00"),
+                    "Omitted timestamptz write-default must not stay in UTC wall clock:\n" + omittedPlan);
+
+            String explicitDefaultPlan = getInsertExecPlan(String.format(
+                    "explain insert into %s.iceberg_db.%s values (1, default)", catalogName, tableName));
+            Assertions.assertTrue(explicitDefaultPlan.contains("2026-01-01 18:00:00"),
+                    "Explicit DEFAULT on timestamptz should be materialized in session timezone:\n"
+                            + explicitDefaultPlan);
+
+            // Cached schema column default must stay session-independent (UTC string).
+            Assertions.assertEquals("2026-01-01 10:00", fullSchema.get(1).getDefaultValue());
+        } finally {
+            connectContext.getSessionVariable().setTimeZone(prevTz);
+        }
+    }
+
+    @Test
     public void testInsertIcebergWithGlobalShuffleTruncateTransformPartition() throws Exception {
         Schema icebergSchema = new Schema(
                 Types.NestedField.required(1, "data", Types.StringType.get()),

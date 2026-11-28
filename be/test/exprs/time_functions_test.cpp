@@ -4736,6 +4736,39 @@ TEST_F(TimeFunctionsTest, IcebergTimestamptzTransTest) {
                         .value();
         auto hours = ColumnHelper::as_column<Int64Column>(hour_result);
         ASSERT_EQ(-7, hours->get_data()[0]);
+
+        Columns identity_cols;
+        auto ts_col = TimestampColumn::create();
+        ts_col->append(TimestampValue::create(2026, 3, 1, 2, 0, 0, 123456));
+        ts_col->append(TimestampValue::create(2026, 3, 1, 2, 0, 0, 123456));
+        auto nulls = NullColumn::create();
+        nulls->append(0);
+        nulls->append(1);
+        identity_cols.emplace_back(NullableColumn::create(std::move(ts_col), std::move(nulls)));
+
+        ColumnPtr id_result =
+                TimeFunctions::iceberg_timestamptz_identity_datetime(_utils->get_fn_ctx(), identity_cols).value();
+        ColumnViewer<TYPE_DATETIME> id_viewer(id_result);
+        ASSERT_FALSE(id_viewer.is_null(0));
+        ASSERT_EQ(TimestampValue::create(2026, 2, 28, 18, 0, 0, 123456), id_viewer.value(0));
+        ASSERT_TRUE(id_viewer.is_null(1));
+    }
+
+    {
+        RuntimeState* state = _utils->get_fn_ctx()->state();
+        std::string prev_timezone = state->timezone();
+        ASSERT_TRUE(state->set_timezone("-05:00"));
+        DeferOp defer([&]() { state->set_timezone(prev_timezone); });
+
+        // 9999-12-31 23:59:59 in -05:00 overflows DATETIME upper bound (10000-01-01 04:59:59 UTC);
+        // reject instead of silently routing a non-null value into the NULL partition.
+        Columns overflow_cols;
+        auto ts_col = TimestampColumn::create();
+        ts_col->append(TimestampValue::create(9999, 12, 31, 23, 59, 59, 0));
+        overflow_cols.emplace_back(std::move(ts_col));
+
+        auto overflow_st = TimeFunctions::iceberg_timestamptz_identity_datetime(_utils->get_fn_ctx(), overflow_cols);
+        ASSERT_FALSE(overflow_st.ok());
     }
 }
 

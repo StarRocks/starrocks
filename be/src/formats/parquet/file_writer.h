@@ -72,6 +72,7 @@ namespace starrocks::parquet {
 
 struct FileColumnId {
     int32_t field_id = -1;
+    bool is_adjusted_to_utc = false;
     std::vector<FileColumnId> children;
 };
 
