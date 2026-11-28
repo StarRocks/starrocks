@@ -969,6 +969,22 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
     }
 
     @Test
+    public void testJsonPruneKeyReadWithPathsBelowIt() throws Exception {
+        // A key read whole at a scalar type, with paths below it read in the same query: the key serves those reads
+        // too, so it is read as JSON. It used to keep the BIGINT of its own read while the paths below it were
+        // dropped, and get_json_int(j1, '$.q.6') then extracted from a BIGINT and read NULL.
+        String sql = "select get_json_int(j1, '$.q'), get_json_int(j1, '$.q.6'), " +
+                "get_json_int(j1, '$.q.\"7\"') from js0;";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "ColumnAccessPath: [/j1/q(json)]");
+
+        // read alone, the key keeps the type of its read
+        sql = "select get_json_int(j1, '$.q') from js0;";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "ColumnAccessPath: [/j1/q(bigint(20))]");
+    }
+
+    @Test
     public void testJsonArrayPat() throws Exception {
         String sql = "select " +
                 "get_json_int(j1, '$.a[2].b[1].c1'), " +
