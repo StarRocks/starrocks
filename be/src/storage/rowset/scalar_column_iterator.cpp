@@ -41,6 +41,8 @@
 #include "base/phmap/phmap.h"
 #include "cache/mem_cache/page_handle_fwd.h"
 #include "column/column_hash.h"
+#include "column/geo_column.h"
+#include "column/nullable_column.h"
 #include "common/config_rowset_fwd.h"
 #include "common/config_scan_io_fwd.h"
 #include "common/config_storage_fwd.h"
@@ -258,7 +260,21 @@ Status ScalarColumnIterator::_seek_to_pos_in_page(ParsedPage* page, ordinal_t of
     return page->seek(offset_in_page);
 }
 
+Status ScalarColumnIterator::_check_geo_destination(const Column* dst) const {
+    const auto* descriptor = _reader->geo_descriptor();
+    if (descriptor == nullptr) {
+        return Status::OK();
+    }
+    const auto* nullable = dynamic_cast<const NullableColumn*>(dst);
+    const auto* geo = nullable == nullptr ? nullptr : dynamic_cast<const GeoColumn*>(nullable->data_column_raw_ptr());
+    if (geo == nullptr || geo->descriptor().type != *descriptor) {
+        return Status::InvalidArgument("GEO read destination does not match the storage schema");
+    }
+    return Status::OK();
+}
+
 Status ScalarColumnIterator::next_batch(size_t* n, Column* dst) {
+    RETURN_IF_ERROR(_check_geo_destination(dst));
     size_t remaining = *n;
     size_t prev_bytes = dst->byte_size();
     bool contain_deleted_row = (dst->delete_state() != DEL_NOT_SATISFIED);
@@ -316,6 +332,7 @@ Status ScalarColumnIterator::null_count(size_t* count) {
 }
 
 Status ScalarColumnIterator::next_batch(const SparseRange<>& range, Column* dst) {
+    RETURN_IF_ERROR(_check_geo_destination(dst));
     auto read_func = [](ParsedPage* page, Column* column, const SparseRange<>& read_range) -> Status {
         return page->read(column, read_range);
     };
@@ -844,6 +861,7 @@ Status ScalarColumnIterator::_fetch_by_rowid_helper(const rowid_t* rowids, size_
 }
 
 Status ScalarColumnIterator::fetch_values_by_rowid(const rowid_t* rowids, size_t size, Column* values) {
+    RETURN_IF_ERROR(_check_geo_destination(values));
     auto rowid_reader = [&](ParsedPage* page, Column* column, const rowid_t* rowid_batch, size_t* count) {
         return page->read_by_rowids(column, rowid_batch, count);
     };

@@ -24,11 +24,14 @@
 #include <sstream>
 #include <type_traits>
 
+#include "base/compression/block_compression.h"
+#include "base/compression/compression_headers.h"
 #include "base/container/raw_container.h"
 #include "base/simd/simd.h"
 #include "column/append_with_mask.h"
 #include "column/binary_column.h"
 #include "column/column_helper.h"
+#include "column/geo_column.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
 #include "common/config_rowset_fwd.h"
@@ -45,6 +48,28 @@ void BinaryPlainPageBuilder::reset() {
     _next_offset = 0;
     _size_estimate = sizeof(uint32_t);
     _finished = false;
+}
+
+StatusOr<size_t> BinaryPlainPageBuilder::add_geo(const Slice* slices, size_t count,
+                                                 const BlockCompressionCodec* codec) {
+    // Leave room for the serialized DataPage footer, footer length and checksum in PagePointer::size.
+    constexpr size_t kMaxBodySize = UINT32_MAX - 64;
+    const size_t limit = codec == nullptr ? kMaxBodySize : std::min(kMaxBodySize, codec->max_input_size());
+    constexpr size_t kSingleRowOverhead = 2 * sizeof(uint32_t) + LZ4_COMPRESSBOUND(1);
+    uint64_t size = _size_estimate;
+    size_t written = 0;
+    for (; written < count; ++written) {
+        const Slice& value = slices[written];
+        if (limit < kSingleRowOverhead || value.size > limit - kSingleRowOverhead) {
+            return Status::InvalidArgument("GEO WKB exceeds the plain page size limit");
+        }
+        if ((_options.data_page_size != 0 && size > _options.data_page_size) ||
+            size + sizeof(uint32_t) + value.size + LZ4_COMPRESSBOUND(_offsets.size() + written + 1) > limit) {
+            break;
+        }
+        size += sizeof(uint32_t) + value.size;
+    }
+    return add(reinterpret_cast<const uint8_t*>(slices), written);
 }
 
 template <LogicalType Type>
@@ -216,22 +241,45 @@ Status BinaryPlainPageDecoder<Type>::next_batch(const SparseRange<>& range, Colu
             return Status::OK();
         }
     } else {
-        // other types
+        uint32_t end = _cur_idx;
+        size_t bytes = 0;
         while (to_read > 0) {
-            _cur_idx = iter.begin();
             Range<> r = iter.next(to_read);
-            size_t end = _cur_idx + r.span_size();
-            for (; _cur_idx < end; _cur_idx++) {
-                strs.emplace_back(string_at_index(_cur_idx));
+            end = r.end();
+            if constexpr (kGeo) {
+                bytes += offset(end) - offset(r.begin());
+            }
+            for (auto i = r.begin(); i < end; ++i) {
+                strs.emplace_back(string_at_index(i));
             }
             to_read -= r.span_size();
         }
-        if (range.size() == 1) {
-            if (dst->append_continuous_strings(strs)) {
+        if constexpr (kGeo) {
+            if (strs.empty()) {
                 return Status::OK();
             }
-        } else if (dst->append_strings(strs)) {
+            auto* nullable = dst->is_nullable() ? down_cast<NullableColumn*>(dst) : nullptr;
+            auto* geo = down_cast<GeoColumn*>(nullable == nullptr ? dst : nullable->data_column_raw_ptr());
+            if (geo->size() + strs.size() + 1 >= Column::MAX_CAPACITY_LIMIT / sizeof(uint32_t) ||
+                geo->byte_size() + bytes >= Column::MAX_CAPACITY_LIMIT) {
+                return Status::CapacityLimitExceed("GEO plain page batch exceeds column capacity");
+            }
+            geo->append_wkb_batch(strs.data(), strs.size());
+            if (nullable != nullptr) {
+                auto& nulls = nullable->null_column_data();
+                nulls.resize(nulls.size() + strs.size(), 0);
+            }
+            _cur_idx = end;
             return Status::OK();
+        } else {
+            _cur_idx = end;
+            if (range.size() == 1) {
+                if (dst->append_continuous_strings(strs)) {
+                    return Status::OK();
+                }
+            } else if (dst->append_strings(strs)) {
+                return Status::OK();
+            }
         }
     }
     return Status::InvalidArgument("Column::append_strings() not supported");
@@ -498,5 +546,7 @@ template class BinaryPlainPageDecoder<TYPE_OBJECT>;
 template class BinaryPlainPageDecoder<TYPE_PERCENTILE>;
 template class BinaryPlainPageDecoder<TYPE_JSON>;
 template class BinaryPlainPageDecoder<TYPE_VARBINARY>;
+template class BinaryPlainPageDecoder<TYPE_GEOGRAPHY>;
+template class BinaryPlainPageDecoder<TYPE_GEOMETRY>;
 
 } // namespace starrocks

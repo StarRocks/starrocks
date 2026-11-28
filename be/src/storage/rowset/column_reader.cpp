@@ -147,6 +147,13 @@ ColumnReader::~ColumnReader() {
 
 Status ColumnReader::_init(ColumnMetaPB* meta, const TabletColumn* column) {
     _column_type = static_cast<LogicalType>(meta->type());
+    if (_column_type == TYPE_GEOGRAPHY || _column_type == TYPE_GEOMETRY) {
+        const auto* descriptor = column == nullptr ? nullptr : column->geo_descriptor();
+        if (descriptor == nullptr) {
+            return Status::InvalidArgument("Missing GEO descriptor in the storage schema");
+        }
+        _geo_descriptor = std::make_unique<GeoTypeDescriptor>(*descriptor);
+    }
     _column_length = meta->length();
     _dict_page_pointer = PagePointer(meta->dict_page());
     // pick up the compression-dict page pointer if present (unset -> size 0 ->

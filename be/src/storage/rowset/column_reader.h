@@ -67,6 +67,7 @@ class ZstdDDict;
 class ColumnPredicate;
 class Column;
 class ZoneMapDetail;
+struct GeoTypeDescriptor;
 
 class BloomFilter;
 class BitmapIndexIterator;
@@ -189,6 +190,7 @@ public:
 
     PagePointer get_dict_page_pointer() const { return _dict_page_pointer; }
     LogicalType column_type() const { return _column_type; }
+    const GeoTypeDescriptor* geo_descriptor() const { return _geo_descriptor.get(); }
     int32_t column_length() const { return _column_length; }
     bool has_all_dict_encoded() const { return _flags & kHasAllDictEncodedMask; }
     bool all_dict_encoded() const { return _flags & kAllDictEncodedMask; }
@@ -325,6 +327,7 @@ private:
     // the meta in ColumnReader takes up a lot of memory,
     // and now the content that is not needed in Meta is not saved to ColumnReader
     LogicalType _column_type = TYPE_UNKNOWN;
+    std::unique_ptr<GeoTypeDescriptor> _geo_descriptor;
     [[maybe_unused]] LogicalType _column_child_type = TYPE_UNKNOWN;
     int32_t _column_length = 0; // Original column length from segment footer
     PagePointer _dict_page_pointer;

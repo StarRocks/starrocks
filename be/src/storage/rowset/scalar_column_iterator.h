@@ -131,6 +131,7 @@ public:
     bool support_push_down_predicate(const std::vector<const ColumnPredicate*>& compound_and_predicates) override;
 
 private:
+    Status _check_geo_destination(const Column* dst) const;
     static Status _seek_to_pos_in_page(ParsedPage* page, ordinal_t offset_in_page);
     Status _load_next_page(bool* eos);
     Status _read_data_page(const OrdinalPageIndexIterator& iter);
