@@ -96,6 +96,9 @@ public class PruneScanColumnRule extends TransformationRule {
                 LogicalScanOperator.Builder builder = OperatorBuilderFactory.build(scanOperator);
                 Operator newScanOperator =
                         builder.withOperator(scanOperator).setColRefToColumnMetaMap(newColumnRefMap).build();
+                if (newScanOperator.getOpType() == OperatorType.LOGICAL_LANCE_SCAN) {
+                    ((LogicalScanOperator) newScanOperator).getScanOptimizeOption().setCanUseAnyColumn(canUseAnyColumn);
+                }
                 return Lists.newArrayList(new OptExpression(newScanOperator));
             }
         }

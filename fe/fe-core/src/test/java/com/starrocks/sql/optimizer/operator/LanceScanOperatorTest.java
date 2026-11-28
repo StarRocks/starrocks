@@ -251,6 +251,51 @@ public class LanceScanOperatorTest {
         LogicalLanceScanOperator pruned = fixture.prune(countScan);
         Assertions.assertEquals(1, pruned.getColRefToColumnMetaMap().size());
         Assertions.assertFalse(pruned.getColRefToColumnMetaMap().containsKey(fixture.embedding));
+        Assertions.assertTrue(pruned.getScanOptimizeOption().getCanUseAnyColumn());
+        Assertions.assertNotSame(countScan.getScanOptimizeOption(), pruned.getScanOptimizeOption());
+        Assertions.assertFalse(countScan.getScanOptimizeOption().getCanUseAnyColumn());
+        Assertions.assertFalse(fixture.scan.getScanOptimizeOption().getCanUseAnyColumn());
+        Assertions.assertTrue(new PhysicalLanceScanOperator(pruned).getScanOptimizeOption().getCanUseAnyColumn());
+        Assertions.assertTrue(fixture.rule.transform(OptExpression.create(pruned), fixture.context).isEmpty());
+        Assertions.assertTrue(pruned.getScanOptimizeOption().getCanUseAnyColumn());
+    }
+
+    @Test
+    public void testBuilderCopiesScanOptimizationOptions() {
+        PruningFixture fixture = new PruningFixture();
+        fixture.scan.getScanOptimizeOption().setCanUseAnyColumn(true);
+        fixture.scan.getScanOptimizeOption().setCanUseMinMaxOpt(true);
+        fixture.scan.getScanOptimizeOption().setCanUseCountOpt(true);
+        fixture.scan.getScanOptimizeOption().setUsePartitionColumnValueOnly(true);
+        LogicalLanceScanOperator copy = new LogicalLanceScanOperator.Builder().withOperator(fixture.scan).build();
+        Assertions.assertNotSame(fixture.scan.getScanOptimizeOption(), copy.getScanOptimizeOption());
+        Assertions.assertTrue(copy.getScanOptimizeOption().getCanUseAnyColumn());
+        Assertions.assertTrue(copy.getScanOptimizeOption().getCanUseMinMaxOpt());
+        Assertions.assertTrue(copy.getScanOptimizeOption().getCanUseCountOpt());
+        Assertions.assertTrue(copy.getScanOptimizeOption().getUsePartitionColumnValueOnly());
+        copy.getScanOptimizeOption().setCanUseAnyColumn(false);
+        Assertions.assertTrue(fixture.scan.getScanOptimizeOption().getCanUseAnyColumn());
+    }
+
+    @Test
+    public void testCountOptimizationRequiresUnusedColumnsAndEnabledSession() {
+        PruningFixture fixture = new PruningFixture();
+        when(fixture.task.getRequiredColumns()).thenReturn(new ColumnRefSet());
+        LogicalLanceScanOperator filtered = fixture.prune(fixture.scan);
+        Assertions.assertFalse(filtered.getScanOptimizeOption().getCanUseAnyColumn());
+        Assertions.assertTrue(filtered.getColRefToColumnMetaMap().containsKey(fixture.filter));
+
+        LogicalLanceScanOperator countScan = new LogicalLanceScanOperator.Builder().withOperator(fixture.scan)
+                .setPredicate(null).build();
+        fixture.context.getSessionVariable().setEnableCountStarOptimization(false);
+        Assertions.assertFalse(fixture.prune(countScan).getScanOptimizeOption().getCanUseAnyColumn());
+
+        fixture.context.getSessionVariable().setEnableCountStarOptimization(true);
+        // COUNT(nullable_column), grouping and expressions all require their input column.
+        when(fixture.task.getRequiredColumns()).thenReturn(new ColumnRefSet(fixture.filter.getId()));
+        LogicalLanceScanOperator nullableCount = fixture.prune(countScan);
+        Assertions.assertEquals(Set.of(fixture.filter), nullableCount.getColRefToColumnMetaMap().keySet());
+        Assertions.assertFalse(nullableCount.getScanOptimizeOption().getCanUseAnyColumn());
     }
 
     private static class PruningFixture {
