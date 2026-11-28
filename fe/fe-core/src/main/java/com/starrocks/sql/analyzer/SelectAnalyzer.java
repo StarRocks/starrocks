@@ -730,6 +730,13 @@ public class SelectAnalyzer {
                     new RewriteAliasVisitor(sourceScope, outputScope, outputExpressions, session);
             Expr rewrite = e.accept(visitor, null);
             analyzeExpression(rewrite, analyzeState, sourceScope);
+            // Same checks as a plain GROUP BY key; without them an aggregate inside ROLLUP/CUBE/GROUPING SETS
+            // reaches the planner and fails with an internal error instead of a semantic one.
+            if (analyzeState.getColumnReferences().get(rewrite) == null) {
+                AnalyzerUtils.verifyNoAggregateFunctions(rewrite, "GROUP BY");
+                AnalyzerUtils.verifyNoWindowFunctions(rewrite, "GROUP BY");
+                AnalyzerUtils.verifyNoGroupingFunctions(rewrite, "GROUP BY");
+            }
             return rewrite;
         }).collect(Collectors.toList());
     }
