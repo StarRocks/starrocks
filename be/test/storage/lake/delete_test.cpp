@@ -208,7 +208,7 @@ TEST_F(LakeTabletDeleteDataTest, test_delete_data_without_schema_key) {
 
     // Execute delete_data without schema_key
     int64_t txn_id = next_id();
-    ASSERT_OK(tablet.delete_data(txn_id, delete_predicate, nullptr));
+    ASSERT_OK(tablet.delete_data(txn_id, &delete_predicate, nullptr));
 
     // Verify txn log was created
     ASSIGN_OR_ABORT(auto txn_log, tablet.get_txn_log(txn_id));
@@ -318,7 +318,7 @@ TEST_F(LakeTabletDeleteDataTest, test_delete_data_with_schema_key) {
     binary_predicate->set_value("5");
 
     int64_t txn_id = next_id();
-    ASSERT_OK(tablet.delete_data(txn_id, delete_predicate, &schema_key));
+    ASSERT_OK(tablet.delete_data(txn_id, &delete_predicate, &schema_key));
 
     // Verify txn log was created with schema_key
     ASSIGN_OR_ABORT(auto txn_log, tablet.get_txn_log(txn_id));
@@ -369,6 +369,93 @@ TEST_F(LakeTabletDeleteDataTest, test_delete_data_with_schema_key) {
     // all rows should be deleted.
     ASSERT_EQ(0, total_rows);
     reader->close();
+}
+
+// A tablet that FE has pruned out of a DELETE gets a txn log without the delete predicate. Publishing it must
+// advance the version without adding a rowset, and every row must stay readable.
+TEST_F(LakeTabletDeleteDataTest, test_delete_data_without_predicate) {
+    create_rowsets_with_data();
+
+    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
+
+    int64_t txn_id = next_id();
+    ASSERT_OK(tablet.delete_data(txn_id, nullptr, nullptr));
+
+    ASSIGN_OR_ABORT(auto txn_log, tablet.get_txn_log(txn_id));
+    ASSERT_TRUE(txn_log->has_op_write());
+    ASSERT_TRUE(txn_log->op_write().has_rowset());
+    ASSERT_FALSE(txn_log->op_write().rowset().has_delete_predicate());
+    ASSERT_EQ(0, txn_log->op_write().rowset().num_rows());
+    ASSERT_EQ(0, txn_log->op_write().rowset().segment_metas_size());
+
+    ASSIGN_OR_ABORT(auto metadata_v4, publish_single_version(_tablet_metadata->id(), 4, txn_id));
+    ASSERT_EQ(4, metadata_v4->version());
+    ASSERT_EQ(2, metadata_v4->rowsets_size());
+    for (const auto& rowset : metadata_v4->rowsets()) {
+        ASSERT_FALSE(rowset.has_delete_predicate());
+    }
+    ASSERT_EQ(_tablet_metadata->next_rowset_id(), metadata_v4->next_rowset_id());
+
+    auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), metadata_v4, *_schema);
+    ASSERT_OK(reader->prepare());
+    TabletReaderParams params;
+    ASSERT_OK(reader->open(params));
+    auto read_chunk_ptr = ChunkFactory::new_chunk(*_schema, 1024);
+    int total_rows = 0;
+    while (true) {
+        read_chunk_ptr->reset();
+        auto st = reader->get_next(read_chunk_ptr.get());
+        if (st.is_end_of_file()) {
+            break;
+        }
+        ASSERT_OK(st);
+        total_rows += read_chunk_ptr->num_rows();
+    }
+    // 10 rows in rowset 1 and 5 rows in rowset 2, none deleted.
+    ASSERT_EQ(15, total_rows);
+    reader->close();
+}
+
+// A pruned tablet still carries the schema key of the DELETE, so it moves to the new schema with the other
+// tablets of the partition.
+TEST_F(LakeTabletDeleteDataTest, test_delete_data_without_predicate_with_schema_key) {
+    create_rowsets_with_data();
+
+    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
+
+    int64_t schema_id = next_id();
+    TableSchemaKeyPB schema_key;
+    schema_key.set_db_id(next_id());
+    schema_key.set_table_id(next_id());
+    schema_key.set_schema_id(schema_id);
+
+    TabletSchemaPB extended_schema_pb;
+    extended_schema_pb.CopyFrom(_tablet_metadata->schema());
+    extended_schema_pb.set_id(schema_id);
+    extended_schema_pb.set_schema_version(_tablet_metadata->schema().schema_version() + 1);
+    auto c3 = extended_schema_pb.add_column();
+    c3->set_unique_id(next_id());
+    c3->set_name("c3");
+    c3->set_type("INT");
+    c3->set_is_key(false);
+    c3->set_is_nullable(false);
+    c3->set_default_value("5");
+    _tablet_mgr->cache_schema(TabletSchema::create(extended_schema_pb));
+
+    int64_t txn_id = next_id();
+    ASSERT_OK(tablet.delete_data(txn_id, nullptr, &schema_key));
+
+    ASSIGN_OR_ABORT(auto txn_log, tablet.get_txn_log(txn_id));
+    ASSERT_TRUE(txn_log->op_write().has_schema_key());
+    ASSERT_EQ(schema_id, txn_log->op_write().schema_key().schema_id());
+    ASSERT_FALSE(txn_log->op_write().rowset().has_delete_predicate());
+
+    ASSIGN_OR_ABORT(auto metadata_v4, publish_single_version(_tablet_metadata->id(), 4, txn_id));
+    ASSERT_EQ(schema_id, metadata_v4->schema().id());
+    ASSERT_EQ(2, metadata_v4->rowsets_size());
+    for (const auto& rowset : metadata_v4->rowsets()) {
+        ASSERT_FALSE(rowset.has_delete_predicate());
+    }
 }
 
 } // namespace starrocks::lake

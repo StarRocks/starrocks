@@ -164,7 +164,7 @@ std::string Tablet::root_location() const {
     return _location_provider->root_location(_id);
 }
 
-Status Tablet::delete_data(int64_t txn_id, const DeletePredicatePB& delete_predicate,
+Status Tablet::delete_data(int64_t txn_id, const DeletePredicatePB* delete_predicate,
                            const TableSchemaKeyPB* schema_key) {
     auto txn_log = std::make_shared<TxnLog>();
     txn_log->set_tablet_id(_id);
@@ -177,7 +177,11 @@ Status Tablet::delete_data(int64_t txn_id, const DeletePredicatePB& delete_predi
     rowset->set_overlapped(false);
     rowset->set_num_rows(0);
     rowset->set_data_size(0);
-    rowset->mutable_delete_predicate()->CopyFrom(delete_predicate);
+    // Without a predicate the rowset holds nothing, and the txn log applier does not add it to the
+    // tablet metadata, like the empty rowset of a load that wrote no row to this tablet.
+    if (delete_predicate != nullptr) {
+        rowset->mutable_delete_predicate()->CopyFrom(*delete_predicate);
+    }
     // A delete-predicate rowset still needs a uid to satisfy the reshard-merge
     // invariant (every rowset must carry one). The uid is per-tablet and independent
     // across siblings; MERGE dedups predicate rowsets by version (one txn == one

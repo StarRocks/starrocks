@@ -17,8 +17,10 @@ package com.starrocks.lake.delete;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
@@ -53,10 +55,17 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.zip.CRC32;
 
 public class LakeDeleteJobTest {
 
@@ -282,5 +291,159 @@ public class LakeDeleteJobTest {
         Assertions.assertTrue(exception.getMessage().contains("lock timeout"), exception.getMessage());
         // The failed delete must not leave its transaction PREPARED until it times out.
         Assertions.assertEquals(runningBefore, txnMgr.getRunningTxnNums());
+    }
+
+    private static final String PRUNE_TABLE_SQL = "CREATE TABLE %s (k BIGINT, u BIGINT, v INT) DUPLICATE KEY(k, u) " +
+            "DISTRIBUTED BY HASH(k) BUCKETS 8 PROPERTIES('replication_num' = '1');";
+
+    /**
+     * Runs the DELETE and returns the requests sent to the compute nodes. Every request fails, so that the job stops
+     * before it commits.
+     */
+    private static List<DeleteDataRequest> runAndCaptureRequests(LakeService lakeService, ConnectContext ctx,
+                                                                 String deleteSql) throws Exception {
+        DeleteStmt deleteStmt = (DeleteStmt) UtFrameUtils.parseStmtWithNewParser(deleteSql, ctx);
+        List<DeleteDataRequest> requests = Collections.synchronizedList(new ArrayList<>());
+        LakeServiceWithMetrics wrappedLakeService = new LakeServiceWithMetrics(lakeService);
+        new MockUp<LakeServiceWithMetrics>() {
+            @Mock
+            Future<DeleteDataResponse> deleteData(DeleteDataRequest request) {
+                requests.add(request);
+                DeleteDataResponse response = new DeleteDataResponse();
+                response.failedTablets = List.of(request.tabletIds.get(0));
+                return CompletableFuture.completedFuture(response);
+            }
+        };
+        new MockUp<BrpcProxy>() {
+            @Mock
+            public LakeService getLakeService(String host, int port) throws RpcException {
+                return wrappedLakeService;
+            }
+        };
+        Assertions.assertThrows(DdlException.class,
+                () -> GlobalStateMgr.getCurrentState().getDeleteMgr().process(deleteStmt));
+        Assertions.assertFalse(requests.isEmpty());
+        return requests;
+    }
+
+    private static List<Long> tabletsInBucketOrder(StarRocksAssert starRocksAssert, String db, String tbl) {
+        OlapTable table = (OlapTable) starRocksAssert.getTable(db, tbl);
+        Partition partition = table.getPartitions().iterator().next();
+        return partition.getDefaultPhysicalPartition().getLatestBaseIndex().getTabletIdsInOrder();
+    }
+
+    private static int bigintBucket(long value, int bucketNum) {
+        CRC32 crc = new CRC32();
+        crc.update(ByteBuffer.allocate(8).order(ByteOrder.LITTLE_ENDIAN).putLong(value).array());
+        return (int) (crc.getValue() % bucketNum);
+    }
+
+    @Test
+    public void testDeleteDataRequestPrunesBuckets(@Mocked LakeService lakeService) throws Exception {
+        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+        ctx.setThreadLocalInfo();
+        StarRocksAssert starRocksAssert = new StarRocksAssert(ctx);
+        starRocksAssert.withDatabase("test").withTable(String.format(PRUNE_TABLE_SQL, "test.prune_table"));
+        List<Long> tablets = tabletsInBucketOrder(starRocksAssert, "test", "prune_table");
+        Assertions.assertEquals(8, tablets.size());
+
+        List<DeleteDataRequest> requests = runAndCaptureRequests(lakeService, ctx,
+                "DELETE FROM test.prune_table WHERE k = 123457 AND u IN (1, 2);");
+
+        // Every tablet still gets a request, so that every tablet of the partition has a txn log to publish,
+        // but only the tablet of the bucket of 123457 gets the delete predicate.
+        Set<Long> sent = new HashSet<>();
+        Set<Long> pruned = new HashSet<>();
+        for (DeleteDataRequest request : requests) {
+            sent.addAll(request.tabletIds);
+            Assertions.assertNotNull(request.prunedTabletIds);
+            Assertions.assertTrue(request.tabletIds.containsAll(request.prunedTabletIds));
+            pruned.addAll(request.prunedTabletIds);
+            Assertions.assertEquals(1, request.deletePredicate.binaryPredicates.size());
+            Assertions.assertEquals(1, request.deletePredicate.inPredicates.size());
+        }
+        Assertions.assertEquals(new HashSet<>(tablets), sent);
+        Set<Long> withPredicate = new HashSet<>(sent);
+        withPredicate.removeAll(pruned);
+        Assertions.assertEquals(Set.of(tablets.get(bigintBucket(123457, 8))), withPredicate);
+
+        // IN on the distribution column keeps the union of the buckets.
+        requests = runAndCaptureRequests(lakeService, ctx, "DELETE FROM test.prune_table WHERE k IN (1, 123457);");
+        withPredicate = new HashSet<>(tablets);
+        for (DeleteDataRequest request : requests) {
+            withPredicate.removeAll(request.prunedTabletIds);
+        }
+        Assertions.assertEquals(Set.of(tablets.get(bigintBucket(1, 8)), tablets.get(bigintBucket(123457, 8))),
+                withPredicate);
+    }
+
+    @Test
+    public void testDeleteDataRequestNotPruned(@Mocked LakeService lakeService) throws Exception {
+        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+        ctx.setThreadLocalInfo();
+        StarRocksAssert starRocksAssert = new StarRocksAssert(ctx);
+        starRocksAssert.withDatabase("test").withTable(String.format(PRUNE_TABLE_SQL, "test.no_prune_table"));
+
+        // The distribution column is not bound by the conditions.
+        for (DeleteDataRequest request : runAndCaptureRequests(lakeService, ctx,
+                "DELETE FROM test.no_prune_table WHERE u = 1;")) {
+            Assertions.assertNull(request.prunedTabletIds);
+        }
+
+        // Pruning is disabled.
+        boolean saved = Config.lake_enable_delete_bucket_pruning;
+        Config.lake_enable_delete_bucket_pruning = false;
+        try {
+            for (DeleteDataRequest request : runAndCaptureRequests(lakeService, ctx,
+                    "DELETE FROM test.no_prune_table WHERE k = 1;")) {
+                Assertions.assertNull(request.prunedTabletIds);
+            }
+        } finally {
+            Config.lake_enable_delete_bucket_pruning = saved;
+        }
+    }
+
+    @Test
+    public void testCommitIncludesPrunedTablets(@Mocked LakeService lakeService) throws Exception {
+        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+        ctx.setThreadLocalInfo();
+        StarRocksAssert starRocksAssert = new StarRocksAssert(ctx);
+        starRocksAssert.withDatabase("test").withTable(String.format(PRUNE_TABLE_SQL, "test.prune_commit_table"));
+        List<Long> tablets = tabletsInBucketOrder(starRocksAssert, "test", "prune_commit_table");
+        DeleteStmt deleteStmt = (DeleteStmt) UtFrameUtils.parseStmtWithNewParser(
+                "DELETE FROM test.prune_commit_table WHERE k = 1;", ctx);
+
+        LakeServiceWithMetrics wrappedLakeService = new LakeServiceWithMetrics(lakeService);
+        new MockUp<LakeServiceWithMetrics>() {
+            @Mock
+            Future<DeleteDataResponse> deleteData(DeleteDataRequest request) {
+                return CompletableFuture.completedFuture(new DeleteDataResponse());
+            }
+        };
+        new MockUp<BrpcProxy>() {
+            @Mock
+            public LakeService getLakeService(String host, int port) throws RpcException {
+                return wrappedLakeService;
+            }
+        };
+        // A pruned tablet has a txn log too, so the commit must still report every tablet of the partition.
+        AtomicReference<List<TabletCommitInfo>> committed = new AtomicReference<>();
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public boolean commitAndPublishTransaction(Database db, long transactionId,
+                                                       List<TabletCommitInfo> tabletCommitInfos,
+                                                       List<TabletFailInfo> tabletFailInfos, long timeoutMillis) {
+                committed.set(tabletCommitInfos);
+                throw new IllegalStateException("stop after commit infos are captured");
+            }
+        };
+        Assertions.assertThrows(Exception.class,
+                () -> GlobalStateMgr.getCurrentState().getDeleteMgr().process(deleteStmt));
+        Assertions.assertNotNull(committed.get());
+        Set<Long> committedTablets = new HashSet<>();
+        for (TabletCommitInfo info : committed.get()) {
+            committedTablets.add(info.getTabletId());
+        }
+        Assertions.assertEquals(new HashSet<>(tablets), committedTablets);
     }
 }

@@ -1493,6 +1493,15 @@ public class Config extends ConfigBase {
             "is ever suspected of regressing.")
     public static boolean lake_enable_per_partition_coordinator_txn_log = true;
 
+    @ConfField(mutable = true, comment = "Shared-data only. When true, a DELETE on a hash-distributed " +
+            "Duplicate, Aggregate or Unique Key table whose conditions bind every distribution column with " +
+            "`=` or `IN` writes its delete predicate only to the tablets (buckets) that can hold matching rows. " +
+            "The other tablets of the partition get a txn log without the predicate, so queries and " +
+            "compactions on them do not pay for it. A BE that does not know this behaviour ignores the request " +
+            "field and writes the predicate to every tablet, as before. Set to false to write the predicate to " +
+            "every tablet.")
+    public static boolean lake_enable_delete_bucket_pruning = true;
+
     /**
      * @deprecated No effect. Whether the tablets of a shared-data partition share one version-1 tablet
      * metadata object is decided by the table property {@code file_bundling} alone, and the rollup and

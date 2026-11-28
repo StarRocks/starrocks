@@ -1,0 +1,57 @@
+-- name: test_lake_delete_bucket_pruning @cloud
+create database db_${uuid0};
+use db_${uuid0};
+CREATE TABLE t (
+    dt DATE NOT NULL,
+    k1 BIGINT NOT NULL,
+    user_id BIGINT NOT NULL,
+    v INT
+)
+DUPLICATE KEY(dt, k1, user_id)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(k1) BUCKETS 4;
+-- 2 days x 8 values of k1 (spread over the 4 buckets) x 4 users
+INSERT INTO t
+SELECT date_add('2024-01-01', x % 2), (x DIV 2) % 8 + 1, 100 + x DIV 16, x
+FROM (SELECT generate_series AS x FROM TABLE(generate_series(0, 63))) s;
+select count(*) from t;
+-- k1 is bound by =: only the bucket of k1 = 3 gets the delete predicate in each partition
+DELETE FROM t WHERE dt IN ('2024-01-01', '2024-01-02') AND k1 = 3 AND user_id IN (100, 101);
+select count(*) from t;
+select count(*) from t where k1 = 3;
+select k1, count(*) from t group by k1 order by k1;
+-- rows of the same users in the other buckets are kept
+select user_id, count(*) from t group by user_id order by user_id;
+-- k1 is bound by IN: the buckets of 1 and 6
+DELETE FROM t WHERE k1 IN (1, 6) AND user_id = 102;
+-- k1 is not bound: every tablet gets the delete predicate
+DELETE FROM t WHERE user_id = 103 AND k1 > 6;
+-- matches no row
+DELETE FROM t WHERE k1 = 5 AND v > 1000;
+-- a row written after the deletes is visible
+INSERT INTO t VALUES ('2024-01-01', 3, 100, 1000);
+select count(*) from t;
+select dt, k1, user_id, v from t order by dt, k1, user_id;
+show delete;
+drop database db_${uuid0} force;
+
+-- name: test_lake_delete_bucket_pruning_sync_mv @cloud
+create database db_${uuid0};
+use db_${uuid0};
+CREATE TABLE t (
+    k1 BIGINT NOT NULL,
+    user_id BIGINT NOT NULL,
+    v INT
+)
+DUPLICATE KEY(k1, user_id)
+DISTRIBUTED BY HASH(k1) BUCKETS 4;
+INSERT INTO t
+SELECT x % 8 + 1, 100 + x DIV 8, x
+FROM (SELECT generate_series AS x FROM TABLE(generate_series(0, 31))) s;
+-- the tablets of a synchronous materialized view follow the buckets of the base table
+CREATE MATERIALIZED VIEW mv_t AS SELECT user_id, k1 FROM t;
+function: wait_materialized_view_finish()
+DELETE FROM t WHERE k1 = 3 AND user_id IN (100, 101);
+select k1, user_id from t order by k1, user_id;
+select k1, user_id from mv_t [_SYNC_MV_] order by k1, user_id;
+drop database db_${uuid0} force;

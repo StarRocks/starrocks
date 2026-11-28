@@ -139,13 +139,16 @@ public:
     // Deletes data from the tablet based on the given delete predicate.
     //
     // @param txn_id The transaction ID for this delete operation.
-    // @param delete_predicate The predicate that specifies which rows to delete.
+    // @param delete_predicate The predicate that specifies which rows to delete. If nullptr, the txn log holds an
+    //                   empty rowset without a delete predicate: FE passes no predicate for a tablet that cannot
+    //                   hold matching rows, because the transaction still needs a txn log on every tablet of
+    //                   the partition, and publishing such a log only advances the tablet version.
     // @param schema_key Optional schema key for fast schema evolution v2. The delete predicate is generated
     //                   based on this schema. When provided, it will be persisted into the transaction log
     //                   and used during publishing to update the tablet metadata schema if needed.
     //                   If nullptr, the operation maintains backward compatibility with legacy delete operations.
     // @return Status::OK() on success, otherwise an error status.
-    Status delete_data(int64_t txn_id, const DeletePredicatePB& delete_predicate,
+    Status delete_data(int64_t txn_id, const DeletePredicatePB* delete_predicate,
                        const TableSchemaKeyPB* schema_key = nullptr);
 
     StatusOr<bool> has_delete_predicates(int64_t version);

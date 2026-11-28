@@ -1510,6 +1510,9 @@ void LakeServiceImpl::delete_data(::google::protobuf::RpcController* controller,
         return;
     }
 
+    // Tablets that FE has proven cannot hold rows matching the predicate: they get a txn log without it.
+    const std::unordered_set<int64_t> pruned_tablets(request->pruned_tablet_ids().begin(),
+                                                     request->pruned_tablet_ids().end());
     auto thread_pool = publish_version_thread_pool(_env);
     auto latch = BThreadCountDownLatch(request->tablet_ids_size());
     bthread::Mutex response_mtx;
@@ -1526,7 +1529,9 @@ void LakeServiceImpl::delete_data(::google::protobuf::RpcController* controller,
                     }
 
                     const TableSchemaKeyPB* schema_key = request->has_schema_key() ? &request->schema_key() : nullptr;
-                    auto res = tablet->delete_data(request->txn_id(), request->delete_predicate(), schema_key);
+                    const DeletePredicatePB* delete_predicate =
+                            pruned_tablets.count(tablet_id) > 0 ? nullptr : &request->delete_predicate();
+                    auto res = tablet->delete_data(request->txn_id(), delete_predicate, schema_key);
                     if (!res.ok()) {
                         LOG(WARNING) << "Fail to delete data. tablet_id: " << tablet_id
                                      << ", txn_id: " << request->txn_id() << ", error: " << res;
