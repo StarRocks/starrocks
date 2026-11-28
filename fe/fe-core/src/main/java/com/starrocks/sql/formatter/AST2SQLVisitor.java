@@ -401,7 +401,10 @@ public class AST2SQLVisitor extends AST2StringVisitor {
         StringBuilder sqlBuilder = new StringBuilder();
         sqlBuilder.append(node.getName().toSql());
 
-        if (StringUtils.isEmpty(node.getQueryPeriodString()) && node.getQueryPeriod() != null) {
+        if (StringUtils.isNotEmpty(node.getQueryPeriodString())) {
+            sqlBuilder.append(" ");
+            sqlBuilder.append(StringUtils.trim(node.getQueryPeriodString()));
+        } else if (node.getQueryPeriod() != null) {
             // The raw clause text is only recorded by the StarRocks parser (it is also what gets pushed
             // down to MySQL external tables). Other producers - the Trino dialect - build the typed period
             // alone, so render that here: without it a serialize/reparse round trip would drop the time
