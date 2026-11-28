@@ -121,9 +121,11 @@ public:
     // Most tests drive init() alone, so a stricter guard would reject them -- and would be a change
     // in behaviour, not just in strictness.
     //
-    // |base_metadata| goes to load_from_lake_tablet(); see there.
+    // |base_metadata| and |rebuilt| go to load_from_lake_tablet(); see there. |rebuilt| is set false
+    // when the index was already loaded.
     Status lake_load(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata, int64_t base_version,
-                     const MetaFileBuilder* builder, const TabletMetadataPtr& base_metadata = nullptr);
+                     const MetaFileBuilder* builder, const TabletMetadataPtr& base_metadata = nullptr,
+                     bool* rebuilt = nullptr);
 
     // Put this back to its just-constructed shape, so the next lake_load() rebuilds from scratch.
     // [thread-safe]
@@ -238,16 +240,21 @@ public:
 
     Status apply_opcompaction(const TabletMetadataPtr& metadata, const TxnLogPB_OpCompaction& op_compaction);
 
-    Status commit(MetaFileBuilder* builder, int64_t generation_version = 0);
+    // Write the sstables into |builder|'s metadata. |wait_inflight_flushes|: wait for the async flushes
+    // still running and persist them too; the publish passes true when its load rebuilt rows from
+    // segments, so those rows are not rebuilt again by the next load.
+    Status commit(MetaFileBuilder* builder, int64_t generation_version = 0, bool wait_inflight_flushes = false);
 
     // Every rebuilt segment reads its delete vector at |base_version|, from one tablet metadata at that
     // version that the rebuild resolves once. |base_metadata| is that metadata when the caller already holds
     // it, else null: when |metadata| is another version (publish passes the metadata it is building, already
     // stamped with the new version), the rebuild takes the delete vectors from |base_metadata| instead of
     // reading the base version back from storage, which it does once when it has neither. A |base_metadata|
-    // of another tablet or version is ignored.
+    // of another tablet or version is ignored. |rebuilt|, when given, is set to whether any file had to be
+    // rebuilt from segments or del files.
     Status load_from_lake_tablet(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata, int64_t base_version,
-                                 const MetaFileBuilder* builder, const TabletMetadataPtr& base_metadata = nullptr);
+                                 const MetaFileBuilder* builder, const TabletMetadataPtr& base_metadata = nullptr,
+                                 bool* rebuilt = nullptr);
 
     size_t memory_usage() const;
 
@@ -388,7 +395,7 @@ private:
     void _unload_without_lock();
 
     Status _do_lake_load(const TabletMetadataPtr& metadata, int64_t base_version, const MetaFileBuilder* builder,
-                         const TabletMetadataPtr& base_metadata);
+                         const TabletMetadataPtr& base_metadata, bool* rebuilt);
 
     // Open all SSTables in parallel using thread pool.
     // Returns opened SSTables in the same order as sstable_meta.sstables().
@@ -461,9 +468,6 @@ private:
     // Key range of a range-distribution tablet, set by load_from_lake_tablet; empty when the tablet
     // is unbounded (or not range-distributed).
     std::optional<SstSeekRange> _tablet_sst_range;
-    // Set by a load that rebuilt rows from segments: the next commit() waits for the async flushes
-    // still running, so the rebuilt rows reach the metadata instead of being rebuilt by the next load.
-    bool _wait_flush_on_commit{false};
     // Collection of sstable fileset, from old to new.
     std::vector<std::unique_ptr<PersistentIndexSstableFileset>> _sstable_filesets;
 

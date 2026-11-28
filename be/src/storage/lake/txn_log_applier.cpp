@@ -487,9 +487,9 @@ public:
             _metadata->clear_sstable_meta();
             _guard.reset(nullptr);
             _index_entry = nullptr;
-            ASSIGN_OR_RETURN(_index_entry,
-                             _tablet.primary_key_mgr()->rebuild_primary_index(_metadata, &_builder, _base_version,
-                                                                              _new_version, _guard, _base_metadata));
+            ASSIGN_OR_RETURN(_index_entry, _tablet.primary_key_mgr()->rebuild_primary_index(
+                                                   _metadata, &_builder, _base_version, _new_version, _guard,
+                                                   _base_metadata, &_index_rebuilt));
             _rebuild_pindex = false;
         }
         return Status::OK();
@@ -629,7 +629,8 @@ public:
         // because if `commit` or `finalize` fail, we can remove index in `handle_failure`.
         // if `_index_entry` is null, do nothing.
         if (_index_entry != nullptr) {
-            RETURN_IF_ERROR(_index_entry->value().commit(&_builder));
+            RETURN_IF_ERROR(_index_entry->value().commit(&_builder, /*generation_version=*/0,
+                                                         /*wait_inflight_flushes=*/_index_rebuilt));
             _tablet.primary_key_mgr()->update_index_cache_size(_index_entry);
             // Record publish-phase SST flush stats
             if (config::enable_tablet_write_log) {
@@ -694,9 +695,9 @@ private:
     // in `TxnLogApplier.init`, because we have to build primary index after apply `schema_change_log` finish.
     Status prepare_primary_index() {
         if (_index_entry == nullptr) {
-            ASSIGN_OR_RETURN(_index_entry,
-                             _tablet.primary_key_mgr()->prepare_primary_index(_metadata, &_builder, _base_version,
-                                                                              _new_version, _guard, _base_metadata));
+            ASSIGN_OR_RETURN(_index_entry, _tablet.primary_key_mgr()->prepare_primary_index(
+                                                   _metadata, &_builder, _base_version, _new_version, _guard,
+                                                   _base_metadata, &_index_rebuilt));
             // Reset publish SST stats so we only count SSTs flushed during this publish session
             _index_entry->value().reset_publish_sst_stats();
             _publish_begin_time = UnixMillis();
@@ -1106,6 +1107,9 @@ private:
     // True when finalize meta file success.
     bool _has_finalized = false;
     bool _rebuild_pindex = false;
+    // True when this publish loaded the primary index and rebuilt rows from segments; commit() then waits for
+    // the async flushes of that rebuild, so the next load does not rebuild the same rows.
+    bool _index_rebuilt = false;
     // True when the transaction is a lake replication type (has tablet_metadata in op_replication).
     bool _is_lake_replication = false;
     // Timestamp when prepare_primary_index was first called (for publish SST logging)
