@@ -50,7 +50,7 @@ public class ColumnBuilder {
                 columnDef.isAllowNull(),
                 effectiveDefault,
                 columnDef.getComment(),
-                Column.COLUMN_UNIQUE_ID_INIT_VALUE);
+                Column.COLUMN_UNIQUE_ID_INIT_VALUE, "", columnDef.isInternalGeneratedPartitionColumn());
         col.setIsAutoIncrement(columnDef.isAutoIncrement());
 
         Expr generatedColumnExpr = columnDef.getGeneratedColumnExpr();
