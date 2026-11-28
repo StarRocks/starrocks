@@ -35,48 +35,20 @@
 package com.starrocks.load.loadv2;
 
 import com.google.common.base.Preconditions;
-import com.google.common.base.Splitter;
-import com.google.common.base.Strings;
 import com.starrocks.common.Config;
-import org.apache.hadoop.yarn.api.records.FinalApplicationStatus;
 import org.apache.hadoop.yarn.api.records.YarnApplicationState;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.BufferedReader;
-import java.io.File;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
-import java.io.OutputStream;
-import java.util.List;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 public class SparkLauncherMonitor {
     private static final Logger LOG = LogManager.getLogger(SparkLauncherMonitor.class);
 
     public static LogMonitor createLogMonitor(SparkLoadAppHandle handle) {
         return new LogMonitor(handle);
-    }
-
-    private static SparkLoadAppHandle.State fromYarnState(YarnApplicationState yarnState) {
-        switch (yarnState) {
-            case SUBMITTED:
-            case ACCEPTED:
-                return SparkLoadAppHandle.State.SUBMITTED;
-            case RUNNING:
-                return SparkLoadAppHandle.State.RUNNING;
-            case FINISHED:
-                return SparkLoadAppHandle.State.FINISHED;
-            case FAILED:
-                return SparkLoadAppHandle.State.FAILED;
-            case KILLED:
-                return SparkLoadAppHandle.State.KILLED;
-            default:
-                // NEW NEW_SAVING
-                return SparkLoadAppHandle.State.UNKNOWN;
-        }
     }
 
     // This monitor is use for monitoring the spark launcher process.
@@ -87,14 +59,6 @@ public class SparkLauncherMonitor {
         private SparkLoadAppHandle handle;
         private long submitTimeoutMs  = Config.spark_load_submit_timeout_second * 1000;
         private boolean isStop;
-        private OutputStream outputStream;
-
-        private static final String STATE = "state";
-        private static final String QUEUE = "queue";
-        private static final String START_TIME = "start time";
-        private static final String FINAL_STATUS = "final status";
-        private static final String URL = "tracking URL";
-        private static final String USER = "user";
 
         public LogMonitor(SparkLoadAppHandle handle) {
             this.handle = handle;
@@ -107,10 +71,6 @@ public class SparkLauncherMonitor {
             this.submitTimeoutMs = submitTimeout * 1000;
         }
 
-        public void setRedirectLogPath(String redirectLogPath) throws IOException {
-            this.outputStream = new FileOutputStream(new File(redirectLogPath), false);
-            this.handle.setLogPath(redirectLogPath);
-        }
 
         // Normally, log monitor will automatically stop if the spark app state changes
         // to RUNNING.
@@ -125,30 +85,29 @@ public class SparkLauncherMonitor {
                 process.destroyForcibly();
                 return;
             }
+            // monitor spark client log
             BufferedReader outReader = null;
             String line = null;
             long startTime = System.currentTimeMillis();
             try {
+                // don't close out reader,spark client log need be persisted to local disk
                 outReader = new BufferedReader(new InputStreamReader(process.getInputStream()));
                 while (!isStop && (line = outReader.readLine()) != null) {
-                    if (outputStream != null) {
-                        outputStream.write((line + "\n").getBytes());
-                    }
                     SparkLoadAppHandle.State oldState = handle.getState();
                     SparkLoadAppHandle.State newState = oldState;
                     // parse state and appId
-                    if (line.contains(STATE)) {
+                    if (line.contains(SparkClientLogHelper.STATE)) {
                         // 1. state
-                        String state = regexGetState(line);
+                        String state = SparkClientLogHelper.regexGetState(line);
                         if (state != null) {
                             YarnApplicationState yarnState = YarnApplicationState.valueOf(state);
-                            newState = fromYarnState(yarnState);
+                            newState = SparkClientLogHelper.fromYarnState(yarnState);
                             if (newState != oldState) {
                                 handle.setState(newState);
                             }
                         }
                         // 2. appId
-                        String appId = regexGetAppId(line);
+                        String appId = SparkClientLogHelper.regexGetAppId(line);
                         if (appId != null) {
                             if (!appId.equals(handle.getAppId())) {
                                 handle.setAppId(appId);
@@ -186,79 +145,36 @@ public class SparkLauncherMonitor {
                             default:
                                 Preconditions.checkState(false, "wrong spark app state");
                         }
-                        // parse other values
-                    } else if (line.contains(QUEUE) || line.contains(START_TIME) || line.contains(FINAL_STATUS) ||
-                            line.contains(URL) || line.contains(USER)) {
-                        String value = getValue(line);
-                        if (!Strings.isNullOrEmpty(value)) {
-                            try {
-                                if (line.contains(QUEUE)) {
-                                    handle.setQueue(value);
-                                } else if (line.contains(START_TIME)) {
-                                    handle.setStartTime(Long.parseLong(value));
-                                } else if (line.contains(FINAL_STATUS)) {
-                                    handle.setFinalStatus(FinalApplicationStatus.valueOf(value));
-                                } else if (line.contains(URL)) {
-                                    handle.setUrl(value);
-                                } else if (line.contains(USER)) {
-                                    handle.setUser(value);
-                                }
-                            } catch (IllegalArgumentException e) {
-                                LOG.warn("parse log encounter an error, line: {}, msg: {}", line, e.getMessage());
-                            }
-                        }
                     }
+                    // parse other values
+                    SparkClientLogHelper.readLine4OtherValues(line, handle);
                 }
             } catch (Exception e) {
                 LOG.warn("Exception monitoring process.", e);
-            } finally {
-                try {
-                    if (outReader != null) {
-                        outReader.close();
+            }
+            // monitor finish
+            if (isStop) {
+                // if process is kill,close the buffer read
+                if (handle.getProcess() == null) {
+                    try {
+                        if (outReader != null) {
+                            outReader.close();
+                        }
+                    } catch (IOException e) {
+                        LOG.warn("close buffered reader error", e);
                     }
-                    if (outputStream != null) {
-                        outputStream.close();
+                } else {
+                    // When the monitor thread exits, the handle is handed over to SparkClientLogParser
+                    try {
+                        SparkClientLogParser sparkClientLogParser = SparkClientLogParser.createLogParser(handle);
+                        sparkClientLogParser.start();
+                    } catch (Exception e) {
+                        LOG.warn("rewrite spark client log fail.", e);
                     }
-                } catch (IOException e) {
-                    LOG.warn("close buffered reader error", e);
                 }
             }
         }
 
-        // e.g.
-        // input: "final status: SUCCEEDED"
-        // output: "SUCCEEDED"
-        private static String getValue(String line) {
-            String result = null;
-            List<String> entry = Splitter.onPattern(":").trimResults().limit(2).splitToList(line);
-            if (entry.size() == 2) {
-                result = entry.get(1);
-            }
-            return result;
-        }
 
-        // e.g.
-        // input: "Application report for application_1573630236805_6864759 (state: ACCEPTED)"
-        // output: "ACCEPTED"
-        private static String regexGetState(String line) {
-            String result = null;
-            Matcher stateMatcher = Pattern.compile("(?<=\\(state: )(.+?)(?=\\))").matcher(line);
-            if (stateMatcher.find()) {
-                result = stateMatcher.group();
-            }
-            return result;
-        }
-
-        // e.g.
-        // input: "Application report for application_1573630236805_6864759 (state: ACCEPTED)"
-        // output: "application_1573630236805_6864759"
-        private static String regexGetAppId(String line) {
-            String result = null;
-            Matcher appIdMatcher = Pattern.compile("application_[0-9]+_[0-9]+").matcher(line);
-            if (appIdMatcher.find()) {
-                result = appIdMatcher.group();
-            }
-            return result;
-        }
     }
 }
