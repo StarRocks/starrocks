@@ -57,26 +57,41 @@ void SegmentPrefetchWindow::disable() {
     _member.leave();
 }
 
-void SegmentPrefetchWindow::probe(rowid_t row, std::vector<std::shared_ptr<io::CacheWarmHandle>>* handles) {
+void SegmentPrefetchWindow::probe(rowid_t row, std::vector<ProbeWarm>* warms) {
     const std::vector<Column> columns = std::move(_probe_columns);
     _probe_columns.clear();
     bool asked = false;
+    // Counted as pages in the page cache if the window goes idle; otherwise submit() and warm_rows() count them when
+    // they leave them out.
+    int64_t cached_pages = 0;
     for (const Column& column : columns) {
         OrdinalPageIndexIterator it;
-        if (!column.reader->seek_at_or_before(row, &it).ok()) {
+        if (!column.reader->seek_at_or_before(row, &it).ok() || it.page().size == 0) {
             continue;
         }
         const PagePointer pp = it.page();
         asked = true;
         if (in_page_cache(column, pp)) {
+            cached_pages++;
             continue;
         }
+        // The page's first block tells whether it needs a fetch. Asking for it takes a block of the node's budget, as
+        // any read-ahead does: with none left, the probe cannot tell, and the window reads ahead.
+        ReadAheadBudget::Grant grant;
+        if (_budget != nullptr) {
+            grant = _budget->acquire(1, granted_blocks(), _ahead_limit);
+            if (grant.blocks() == 0) {
+                return;
+            }
+        }
+        const int64_t begin = column.object_offset + static_cast<int64_t>(pp.offset);
+        const int64_t size = std::min<int64_t>(pp.size, (begin / _block_size + 1) * _block_size - begin);
         std::shared_ptr<io::CacheWarmHandle> handle;
-        if (!warm(column.file, pp.offset, pp.size, false /* urgent */, &handle)) {
+        if (!warm(column.file, pp.offset, size, false /* urgent */, &handle)) {
             return;
         }
         const bool fetching = handle->submitted_blocks() > 0;
-        handles->push_back(std::move(handle));
+        warms->push_back(ProbeWarm{std::move(handle), std::move(grant)});
         if (fetching) {
             return;
         }
@@ -84,6 +99,7 @@ void SegmentPrefetchWindow::probe(rowid_t row, std::vector<std::shared_ptr<io::C
     if (asked) {
         set_idle();
         _stats->remote_prefetch_idle_windows++;
+        _stats->remote_prefetch_cached_pages += cached_pages;
     }
 }
 
@@ -249,7 +265,7 @@ void SegmentPrefetchWindow::advance(rowid_t row) {
     }
     // Held until the loop below has asked for the first pages of the columns read ahead again; the others, a page
     // asked for only to probe, are withdrawn when no read waits for them.
-    std::vector<std::shared_ptr<io::CacheWarmHandle>> probed;
+    std::vector<ProbeWarm> probed;
     if (!_probe_columns.empty()) {
         probe(row, &probed);
         if (_disabled || _idle) {

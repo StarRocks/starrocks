@@ -757,7 +757,9 @@ TEST_F(SegmentPrefetchWindowTest, window_idles_when_its_first_page_is_cached) {
     SparseRange<> range(0, kRows);
     auto window = make_window(&range, 0, 1024, 2.0, 0, kBlockSize, false, true);
     EXPECT_EQ(members + 1, budget->members());
+    EXPECT_TRUE(window->probing());
     window->advance(0);
+    EXPECT_FALSE(window->probing());
     EXPECT_EQ(members, budget->members());
     EXPECT_EQ(held, budget->held_blocks());
     ASSERT_EQ(1u, _stream.warms.size());
@@ -788,10 +790,12 @@ TEST_F(SegmentPrefetchWindowTest, window_reads_ahead_when_its_first_page_needs_a
     _stream.warms.clear();
     auto window = make_window(&range, 0, 8, 2.0, 0, kBlockSize, false, true);
     window->advance(0);
-    // The probe's warm-up of the first page, then the window's.
+    // The probe's warm-up of the first page's first block, then the window's.
     ASSERT_EQ(warms + 1, _stream.warms.size());
     ASSERT_GT(warms, 1u);
     EXPECT_EQ(_stream.warms[0].offset, _stream.warms[1].offset);
+    EXPECT_LE(_stream.warms[0].length, kBlockSize);
+    EXPECT_FALSE(window->probing());
     for (const auto& w : _stream.warms) {
         EXPECT_FALSE(w.urgent);
     }
@@ -814,6 +818,7 @@ TEST_F(SegmentPrefetchWindowTest, window_idles_when_its_first_page_is_in_the_pag
     window->advance(0);
     EXPECT_TRUE(_stream.warms.empty());
     EXPECT_TRUE(window->idle());
+    EXPECT_EQ(1, _stats.remote_prefetch_cached_pages);
 }
 
 // The window idles only when the first page of every column the reader reads needs no fetch. A column read ahead whose
@@ -836,10 +841,13 @@ TEST_F(SegmentPrefetchWindowTest, window_reads_ahead_when_any_column_needs_a_fet
     ASSERT_EQ(1u, cold.warms.size());
     EXPECT_EQ(static_cast<int64_t>(_pages[0].pointer.offset), cold.warms[0].offset);
     EXPECT_TRUE(cold.warms[0].handle.expired());
-    // The column read ahead is: from its second page on, the first being in the page cache.
+    // The column read ahead is: from its second page on, the first being in the page cache, which is counted once. The
+    // first page still takes its blocks in the window, so the second page is asked for from the block after them.
     ASSERT_FALSE(_stream.warms.empty());
-    EXPECT_EQ(static_cast<int64_t>(_pages[1].pointer.offset), _stream.warms[0].offset);
+    EXPECT_GE(_stream.warms[0].offset, static_cast<int64_t>(_pages[1].pointer.offset));
+    EXPECT_LT(_stream.warms[0].offset, static_cast<int64_t>(_pages[1].pointer.offset + _pages[1].pointer.size));
     EXPECT_FALSE(_stream.warms[0].handle.expired());
+    EXPECT_EQ(1, _stats.remote_prefetch_cached_pages);
 }
 
 // When the first page of every column needs no fetch, the window idles.
@@ -854,9 +862,39 @@ TEST_F(SegmentPrefetchWindowTest, window_idles_when_every_column_is_cached) {
     window.advance(0);
     EXPECT_TRUE(window.idle());
     EXPECT_EQ(1, _stats.remote_prefetch_idle_windows);
+    EXPECT_EQ(1, _stats.remote_prefetch_cached_pages);
     EXPECT_TRUE(_stream.warms.empty());
     ASSERT_EQ(1u, warm.warms.size());
     EXPECT_TRUE(warm.warms[0].handle.expired());
+}
+
+// The probe takes a block of the node's budget like any read-ahead: with none left, it asks for nothing and cannot
+// tell, and the window reads ahead once the node has room again.
+TEST_F(SegmentPrefetchWindowTest, probe_without_node_room_does_not_idle) {
+    auto& node = StorageMetrics::instance()->lake_scan_read_ahead_blocks;
+    const int64_t base = node.value();
+    const int64_t old_limit = config::lake_scan_read_ahead_max_blocks;
+    DeferOp restore([&] { config::lake_scan_read_ahead_max_blocks = old_limit; });
+    config::lake_scan_read_ahead_max_blocks = base + 4;
+    SparseRange<> range(0, kRows);
+    // Another window holds all of the node's blocks.
+    auto other = make_window(&range, 0, 4);
+    other->advance(0);
+    ASSERT_EQ(base + 4, node.value());
+    const size_t warms = _stream.warms.size();
+
+    auto window = make_window(&range, 0, 8, 2.0, 0, kBlockSize, false, true);
+    window->advance(0);
+    EXPECT_EQ(warms, _stream.warms.size());
+    EXPECT_FALSE(window->idle());
+    EXPECT_FALSE(window->probing());
+    EXPECT_EQ(base + 4, node.value());
+
+    other.reset();
+    window->advance(0);
+    EXPECT_GT(_stream.warms.size(), warms);
+    EXPECT_FALSE(window->idle());
+    EXPECT_GT(window->ahead_blocks(), 0u);
 }
 
 // A window with no column to read ahead probes the columns it reads late the same way: when their first page needs no

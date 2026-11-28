@@ -1285,10 +1285,11 @@ void SegmentIterator::_init_prefetch_window(rowid_t start_row) {
         _prefetch_late_columns.clear();
         return;
     }
-    // Only the first window of the reader tells whether the segment is cached. A window rebuilt on a context switch or
-    // a narrowed scan range does not: the switch has just read the pages at the reader's position, which, now in the
-    // page cache, would pass for a cached segment.
-    const bool rebuilt = _prefetch_window != nullptr;
+    // Only the reader's first window tells whether the segment is cached, probing at its first advance(). A window
+    // rebuilt after that, on a context switch or a narrowed scan range, does not: the switch has just read the pages at
+    // the reader's position, which, now in the page cache, would pass for a cached segment. One rebuilt before (a
+    // runtime filter narrowing the scan range as the read starts) still probes.
+    const bool probe = _prefetch_window == nullptr || _prefetch_window->probing();
     _reset_prefetch_window();
 #ifdef USE_STAROS
     const int32_t blocks = _read_ahead_blocks();
@@ -1348,7 +1349,7 @@ void SegmentIterator::_init_prefetch_window(rowid_t start_row) {
     // its own window bound.
     const bool query = _opts.lake_io_opts.remote_read.workload == RemoteReadContext::Workload::QUERY;
     std::vector<SegmentPrefetchWindow::Column> probe_columns;
-    if (query && !rebuilt) {
+    if (query && probe) {
         probe_columns = columns;
         probe_columns.insert(probe_columns.end(), _prefetch_late_columns.begin(), _prefetch_late_columns.end());
     }

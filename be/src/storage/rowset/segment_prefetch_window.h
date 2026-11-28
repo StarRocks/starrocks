@@ -92,6 +92,8 @@ public:
     // reads it, and the reader's own short key lookup reads the key columns' pages. A page whose read-ahead the
     // scheduler refused, its queue being full, counts as needing no fetch too: no more read-ahead would get in either.
     bool idle() const { return _idle; }
+    // Whether the window has yet to probe (see idle()): it does at its first advance().
+    bool probing() const { return !_probe_columns.empty(); }
 
     // Cache blocks asked for and not consumed yet.
     size_t ahead_blocks() const { return _ahead_blocks; }
@@ -135,9 +137,14 @@ private:
     size_t granted_blocks() const;
     // Stops reading ahead: drops every warm-up and leaves the budget.
     void disable();
+    // A warm-up the probe asked for, and the block of the node's budget it holds.
+    struct ProbeWarm {
+        std::shared_ptr<io::CacheWarmHandle> handle;
+        ReadAheadBudget::Grant grant;
+    };
     // Looks at the page holding `row` in each of the `probe_columns`, and goes idle if none needs a fetch (see idle()).
-    // The warm-ups it asked for go to `handles`.
-    void probe(rowid_t row, std::vector<std::shared_ptr<io::CacheWarmHandle>>* handles);
+    // The warm-ups it asked for go to `warms`.
+    void probe(rowid_t row, std::vector<ProbeWarm>* warms);
     // Goes idle (see idle()): drops every warm-up and leaves the budget.
     void set_idle();
     // Whether the read of `page` will find it in the memory page cache instead of reading the file.
