@@ -3862,8 +3862,8 @@ public class OlapTable extends Table {
      * Check if data cache is allowed for the specified partition's data:
      * - If the partition is NOT partitioned by DATE or DATETIME, data cache is allowed
      * - If the partition is partitioned by DATE or DATETIME:
-     * - if the partition's end value (of type DATE/DATETIME) is within the last "datacache.partition_duration"
-     * duration, allow data cache for the partition.
+     * - if the partition's range or values are after `now - datacache.partition_duration` (including
+     * future-dated partitions), allow data cache for the partition.
      * - otherwise, disallow the data cache for the partition
      *
      * @param partition the partition to check. the partition must belong to this table.
@@ -3901,13 +3901,11 @@ public class OlapTable extends Table {
         if (getPartitionInfo().isRangePartition()) {
             RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) getPartitionInfo();
             Range<PartitionKey> partitionRange = rangePartitionInfo.getRange(partition.getId());
-            Range<PartitionKey> dataCacheRange;
             if (rangePartitionInfo.isPartitionedBy(this, PrimitiveType.DATETIME) ||
                     rangePartitionInfo.isPartitionedBy(this, PrimitiveType.DATE)) {
                 try {
-                    LocalDateTime upper = LocalDateTime.now();
-                    LocalDateTime lower = upper.minus(cacheDuration);
-                    dataCacheRange = Range.openClosed(PartitionKey.ofDateTime(lower), PartitionKey.ofDateTime(upper));
+                    LocalDateTime lower = LocalDateTime.now().minus(cacheDuration);
+                    Range<PartitionKey> dataCacheRange = Range.greaterThan(PartitionKey.ofDateTime(lower));
                     return partitionRange.isConnected(dataCacheRange);
                 } catch (Exception e) {
                     LOG.warn("Table name: {}, Partition name: {}, Datacache.partiton_duration: {}, Failed to check the " +
@@ -3926,15 +3924,14 @@ public class OlapTable extends Table {
                 return true;
             }
 
-            LocalDateTime upper = LocalDateTime.now();
-            LocalDateTime lower = upper.minus(cacheDuration);
+            LocalDateTime lower = LocalDateTime.now().minus(cacheDuration);
             List<List<String>> multiValues = listPartitionInfo.getIdToMultiValues().get(partition.getId());
             List<String> values = listPartitionInfo.getIdToValues().get(partition.getId());
             try {
                 if (multiValues != null) {
                     for (List<String> multivalue : multiValues) {
                         LocalDateTime partitionTime = DateUtils.parseDatTimeString(multivalue.get(dateTypeColumnIdx));
-                        if (lower.isBefore(partitionTime) && (partitionTime.isBefore(upper) || partitionTime.isEqual(upper))) {
+                        if (lower.isBefore(partitionTime)) {
                             return true;
                         }
                     }
@@ -3942,7 +3939,7 @@ public class OlapTable extends Table {
                 if (values != null) {
                     for (String value : values) {
                         LocalDateTime partitionTime = DateUtils.parseDatTimeString(value);
-                        if (lower.isBefore(partitionTime) && (partitionTime.isBefore(upper) || partitionTime.isEqual(upper))) {
+                        if (lower.isBefore(partitionTime)) {
                             return true;
                         }
                     }

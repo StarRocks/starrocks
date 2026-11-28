@@ -460,11 +460,14 @@ public class LakeMaterializedViewTest extends StarRocksTestBase {
         long indexId = 3L;
         long partition1Id = 20L;
         long partition2Id = 21L;
+        long partition3Id = 24L;
         long physicalPartitionId1 = 22L;
         long physicalPartitionId2 = 23L;
+        long physicalPartitionId3 = 25L;
 
         long tablet1Id = 10L;
         long tablet2Id = 11L;
+        long tablet3Id = 12L;
 
         // schema
         List<Column> columns = Lists.newArrayList();
@@ -510,6 +513,19 @@ public class LakeMaterializedViewTest extends StarRocksTestBase {
         partitionInfo.addPartition(partition2Id, false, range2, DataProperty.DEFAULT_DATA_PROPERTY, (short) 1,
                 new DataCacheInfo(true, false));
 
+        // partition3
+        MaterializedIndex index3 = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL);
+        TabletMeta tabletMeta3 = new TabletMeta(dbId, mvId, partition3Id, indexId, TStorageMedium.HDD, true);
+        Tablet tablet3 = new LakeTablet(tablet3Id);
+        index3.addTablet(tablet3, tabletMeta3);
+        Partition partition3 = new Partition(partition3Id, physicalPartitionId3, "p3", index3, distributionInfo);
+
+        LocalDate lower3 = LocalDate.now().plus(duration);
+        LocalDate upper3 = lower3.plus(duration);
+        Range<PartitionKey> range3 = Range.closedOpen(PartitionKey.ofDate(lower3), PartitionKey.ofDate(upper3));
+        partitionInfo.addPartition(partition3Id, false, range3, DataProperty.DEFAULT_DATA_PROPERTY, (short) 1,
+                new DataCacheInfo(true, false));
+
         // refresh scheme
         MvRefreshScheme mvRefreshScheme = new MvRefreshScheme();
         mvRefreshScheme.setType(MaterializedViewRefreshType.SYNC);
@@ -520,12 +536,14 @@ public class LakeMaterializedViewTest extends StarRocksTestBase {
         Deencapsulation.setField(mv, "baseIndexMetaId", indexId);
         mv.addPartition(partition1);
         mv.addPartition(partition2);
+        mv.addPartition(partition3);
         mv.setIndexMeta(indexId, "mv1", columns, 0, 0, (short) 1, TStorageType.COLUMN, KeysType.AGG_KEYS);
         mv.setTableProperty(tableProperty);
 
         // Test
         Assertions.assertFalse(mv.isEnableFillDataCache(partition1));
         Assertions.assertTrue(mv.isEnableFillDataCache(partition2));
+        Assertions.assertTrue(mv.isEnableFillDataCache(partition3));
     }
 
     @Test
