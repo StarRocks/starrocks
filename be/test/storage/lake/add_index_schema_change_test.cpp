@@ -17,13 +17,17 @@
 #include <gtest/gtest.h>
 
 #include <memory>
+#include <roaring/roaring.hh>
 #include <string>
+#include <vector>
 
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
+#include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
 #include "column/binary_column.h"
 #include "column/chunk.h"
+#include "column/chunk_factory.h"
 #include "column/datum_tuple.h"
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
@@ -42,12 +46,14 @@
 #include "runtime/mem_tracker.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/delta_writer.h"
+#include "storage/lake/filenames.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/general_tablet_writer.h"
 #include "storage/lake/index_delta_group.h"
 #include "storage/lake/index_delta_group_loader.h"
 #include "storage/lake/index_file_writer.h"
 #include "storage/lake/join_path.h"
+#include "storage/lake/meta_file.h"
 #include "storage/lake/metacache.h"
 #include "storage/lake/primary_key_manager.h"
 #include "storage/lake/schema_change.h"
@@ -56,8 +62,10 @@
 #include "storage/lake/versioned_tablet.h"
 #include "storage/rowset/bitmap_index_reader.h"
 #include "storage/rowset/bloom_filter_index_writer.h"
+#include "storage/rowset/column_iterator.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/segment.h"
+#include "storage/rowset/segment_writer.h"
 #include "storage/storage_metrics.h"
 #include "storage/tablet_schema.h"
 #include "storage/types.h"
@@ -363,6 +371,232 @@ protected:
         return n;
     }
 
+    // Append one `.cols` file to the DCG layer of `rssid`, keeping
+    // column_files / unique_column_ids / column_file_sizes strictly 1:1 the way
+    // a real publish writes them.
+    void register_dcg_layer(const std::shared_ptr<TabletMetadata>& metadata, uint32_t rssid,
+                            const std::string& filename, const std::vector<ColumnUID>& uids, int64_t file_size) {
+        auto& dcgs = *metadata->mutable_dcg_meta()->mutable_dcgs();
+        auto& ver = dcgs[rssid];
+        ver.add_column_files(filename);
+        auto* ids = ver.add_unique_column_ids();
+        for (auto uid : uids) {
+            ids->add_column_ids(static_cast<uint32_t>(uid));
+        }
+        ver.add_versions(metadata->version());
+        ver.add_column_file_sizes(file_size);
+    }
+
+    // Write a standalone `.cols` overlay segment carrying `uids` for `nrows`
+    // rows and register it under `rssid`. This is the state a column-mode
+    // partial update leaves behind, built directly so the test controls both the
+    // overlay values and the layer layout. INT columns get `value_base + row`
+    // and string columns a per-row literal, both deliberately disjoint from what
+    // write_one_rowset puts in the base segment, so a read-back proves which
+    // copy the rewrite actually indexed. Returns the relative filename.
+    std::string write_dcg_overlay(const std::shared_ptr<TabletMetadata>& metadata, uint32_t rssid,
+                                  const std::vector<ColumnUID>& uids, int nrows, int value_base) {
+        auto full_schema = TabletSchema::create(metadata->schema());
+        auto partial_schema = TabletSchema::create_with_uid(full_schema, uids);
+        CHECK_EQ(uids.size(), partial_schema->num_columns());
+
+        auto vschema = std::make_shared<Schema>(ChunkHelper::convert_schema(partial_schema));
+        Columns columns;
+        for (size_t c = 0; c < partial_schema->num_columns(); ++c) {
+            const int32_t uid = partial_schema->column(c).unique_id();
+            if (uid == _c1_uid) {
+                auto col = Int32Column::create();
+                for (int i = 0; i < nrows; ++i) {
+                    col->append_datum(Datum(value_base + i));
+                }
+                columns.emplace_back(std::move(col));
+            } else if (uid == _c3_uid) {
+                auto col = NullableColumn::create(Int32Column::create(), NullColumn::create());
+                for (int i = 0; i < nrows; ++i) {
+                    if (i % 4 == 0) {
+                        col->append_default();
+                    } else {
+                        col->append_datum(Datum(value_base + i));
+                    }
+                }
+                columns.emplace_back(std::move(col));
+            } else {
+                // c2 VARCHAR / c4 CHAR: short, unpadded slices, exactly as
+                // write_one_rowset stores them -- the decoder trims trailing
+                // '\0' on read and the rewrite re-pads CHAR before handing the
+                // chunk to the writer.
+                auto col = BinaryColumn::create();
+                for (int i = 0; i < nrows; ++i) {
+                    col->append_datum(Datum(Slice("ov" + std::to_string(value_base + i))));
+                }
+                columns.emplace_back(std::move(col));
+            }
+        }
+        Chunk chunk(std::move(columns), vschema);
+
+        const std::string filename = gen_cols_filename(next_id());
+        const std::string path = _tablet_manager->segment_location(metadata->id(), filename);
+        WritableFileOptions wopts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+        ASSIGN_OR_ABORT(auto wfile, fs::new_writable_file(wopts, path));
+        SegmentWriterOptions writer_options;
+        auto writer = std::make_unique<SegmentWriter>(std::move(wfile), 0, partial_schema, writer_options);
+        CHECK_OK(writer->init(false));
+        CHECK_OK(writer->append_chunk(chunk));
+        uint64_t file_size = 0;
+        uint64_t index_size = 0;
+        uint64_t footer_position = 0;
+        CHECK_OK(writer->finalize(&file_size, &index_size, &footer_position));
+
+        register_dcg_layer(metadata, rssid, filename, uids, static_cast<int64_t>(file_size));
+        return filename;
+    }
+
+    // rssid of the `seg_idx`-th segment of the `rowset_idx`-th rowset.
+    uint32_t rssid_of(const TabletMetadata& metadata, int rowset_idx, int seg_idx) {
+        CHECK_LT(rowset_idx, metadata.rowsets_size());
+        return get_rssid(metadata.rowsets(rowset_idx), seg_idx);
+    }
+
+    // Re-publish `metadata` (carrying whatever dcg_meta the test injected) as a
+    // new version, so get_tablet() hands the rewrite a metadata that has the
+    // overlay. Returns the new version.
+    int64_t put_metadata_at_next_version(const std::shared_ptr<TabletMetadata>& metadata) {
+        const int64_t next_version = metadata->version() + 1;
+        metadata->set_version(next_version);
+        CHECK_OK(_tablet_manager->put_tablet_metadata(*metadata));
+        return next_version;
+    }
+
+    // Open a `.cols` written by the rewrite and return its segment, so a test can
+    // assert on the inlined index the footer carries.
+    std::shared_ptr<Segment> open_cols_segment(int64_t tablet_id, const std::string& filename,
+                                               const TabletSchemaCSPtr& schema) {
+        const std::string path = _tablet_manager->segment_location(tablet_id, filename);
+        auto fs_or = FileSystemFactory::CreateSharedFromString(path);
+        CHECK(fs_or.ok()) << fs_or.status();
+        FileInfo info{.path = path};
+        auto seg_or = Segment::open(*fs_or, info, 0, schema);
+        CHECK(seg_or.ok()) << seg_or.status();
+        return *seg_or;
+    }
+
+    // Read every row of `schema`'s columns back from the `.cols` `filename`,
+    // through Segment::new_column_iterator like a query does.
+    auto read_cols_chunk(int64_t tablet_id, const std::string& filename, const std::shared_ptr<Segment>& seg,
+                         const TabletSchemaCSPtr& schema) {
+        const std::string path = _tablet_manager->segment_location(tablet_id, filename);
+        ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(path));
+        FileInfo info{.path = path};
+        ASSIGN_OR_ABORT(auto rfile, fs->new_random_access_file(info));
+        Schema chunk_schema = ChunkHelper::convert_schema(schema);
+        const size_t nrows = seg->num_rows();
+        auto chunk = ChunkFactory::new_chunk(chunk_schema, nrows);
+        OlapReaderStatistics stats;
+        for (size_t i = 0; i < schema->num_columns(); i++) {
+            ASSIGN_OR_ABORT(auto iter, seg->new_column_iterator(schema->column(i), /*path=*/nullptr));
+            ColumnIteratorOptions opts;
+            opts.read_file = rfile.get();
+            opts.stats = &stats;
+            opts.use_page_cache = false;
+            opts.is_nullable = schema->column(i).is_nullable();
+            CHECK_OK(iter->init(opts));
+            CHECK_OK(iter->seek_to_first());
+            size_t remaining = nrows;
+            while (remaining > 0) {
+                size_t n = remaining;
+                CHECK_OK(iter->next_batch(&n, chunk->get_column_raw_ptr_by_index(i)));
+                CHECK_GT(n, 0u);
+                remaining -= n;
+            }
+        }
+        return chunk;
+    }
+
+    // Calls `fn` with an iterator over the bitmap index in the `.cols` footer
+    // for column `uid`.
+    template <typename Fn>
+    void visit_cols_bitmap(int64_t tablet_id, const std::string& filename, const std::shared_ptr<Segment>& seg,
+                           int32_t uid, Fn&& fn) {
+        const std::string path = _tablet_manager->segment_location(tablet_id, filename);
+        ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(path));
+        FileInfo info{.path = path};
+        ASSIGN_OR_ABORT(auto rfile, fs->new_random_access_file(info));
+        OlapReaderStatistics stats;
+        IndexReadOptions opts;
+        opts.read_file = rfile->stream().get();
+        opts.stats = &stats;
+        opts.use_page_cache = false;
+        auto* reader = const_cast<ColumnReader*>(seg->column_with_uid(uid));
+        CHECK(reader != nullptr);
+        BitmapIndexIterator* iter = nullptr;
+        CHECK_OK(reader->new_bitmap_index_iterator(opts, &iter));
+        CHECK(iter != nullptr);
+        std::unique_ptr<BitmapIndexIterator> owned(iter);
+        fn(owned.get());
+    }
+
+    static std::vector<uint32_t> bitmap_rows(const roaring::Roaring& bitmap) {
+        std::vector<uint32_t> rows(bitmap.cardinality());
+        bitmap.toUint32Array(rows.data());
+        return rows;
+    }
+
+    // The rows the bitmap in the `.cols` footer maps `value` to for column
+    // `uid`, ascending; empty when the dictionary has no exact entry for it.
+    // `value` points at the column's in-memory type: int32_t, int64_t, or a
+    // Slice (padded to the declared width for CHAR, whose dictionary keeps the
+    // padding).
+    std::vector<uint32_t> cols_bitmap_rows(int64_t tablet_id, const std::string& filename,
+                                           const std::shared_ptr<Segment>& seg, int32_t uid, const void* value) {
+        std::vector<uint32_t> rows;
+        visit_cols_bitmap(tablet_id, filename, seg, uid, [&](BitmapIndexIterator* iter) {
+            bool exact = false;
+            CHECK_OK(iter->seek_dictionary(value, &exact));
+            if (exact) {
+                roaring::Roaring bitmap;
+                CHECK_OK(iter->read_bitmap(iter->current_ordinal(), &bitmap));
+                rows = bitmap_rows(bitmap);
+            }
+        });
+        return rows;
+    }
+
+    // The rows that bitmap index marks NULL, which an `IS NULL` predicate
+    // reads, ascending; empty when it records no NULLs.
+    std::vector<uint32_t> cols_null_bitmap_rows(int64_t tablet_id, const std::string& filename,
+                                                const std::shared_ptr<Segment>& seg, int32_t uid) {
+        std::vector<uint32_t> rows;
+        visit_cols_bitmap(tablet_id, filename, seg, uid, [&](BitmapIndexIterator* iter) {
+            if (iter->has_null_bitmap()) {
+                roaring::Roaring bitmap;
+                CHECK_OK(iter->read_null_bitmap(&bitmap));
+                rows = bitmap_rows(bitmap);
+            }
+        });
+        return rows;
+    }
+
+    // Whether that bitmap has `value` as a dictionary entry at all.
+    bool cols_bitmap_has(int64_t tablet_id, const std::string& filename, const std::shared_ptr<Segment>& seg,
+                         int32_t uid, const void* value) {
+        return !cols_bitmap_rows(tablet_id, filename, seg, uid, value).empty();
+    }
+
+    // Tablet metadata `md` with column `uid` retyped, as FE's catalog sees it
+    // after a metadata-only MODIFY COLUMN (fast schema evolution) that tablet
+    // metadata has not caught up with yet.
+    TabletSchemaPtr catalog_schema_with_type(const TabletMetadata& md, int32_t uid, const std::string& type,
+                                             int32_t length) {
+        TabletSchemaPB pb = md.schema();
+        for (auto& col : *pb.mutable_column()) {
+            if (col.unique_id() == uid) {
+                col.set_type(type);
+                col.set_length(length);
+            }
+        }
+        return TabletSchema::create(pb);
+    }
+
     constexpr static const char* const kTestGroupPath = "test_lake_add_index_schema_change";
 
     // Stable column unique-ids (matches the ones generated for c0/c1/c2/c3).
@@ -470,8 +704,11 @@ TEST_F(AddIndexSchemaChangeTest, run_ngrambf_with_index_properties) {
     auto base_schema = TabletSchema::create(base_metadata->schema());
     int64_t version = write_one_rowset(base_tablet_id, 1, base_schema, /*nrows=*/6);
 
-    // index_properties JSON as produced by TabletIndex::to_schema_pb.
-    const std::string props = R"({"properties":{"bloom_filter_fpp":"0.05","gram_num":"3","case_sensitive":"true"}})";
+    // index_properties JSON as produced by TabletIndex::to_schema_pb: the group
+    // key is the literal "index_properties" (FILL_INDEX_TO_MAP stringifies the
+    // member name), and any other key parses fine but leaves the map empty.
+    const std::string props =
+            R"({"index_properties":{"bloom_filter_fpp":"0.05","gram_num":"3","case_sensitive":"true"}})";
     auto vt = versioned_at(base_tablet_id, version);
     std::vector<TabletIndexPB> indexes{make_index(IndexType::NGRAMBF, _c2_uid, /*index_id=*/0, props)};
     AddIndexSchemaChange sc(_tablet_manager.get(), next_id(), vt, vt, indexes, version, vt.get_schema());
@@ -2075,6 +2312,692 @@ TEST_F(AddIndexSchemaChangeTest, do_process_add_index_only_resolves_names_via_re
         }
     }
     EXPECT_TRUE(has_c5) << "new_schema must carry the ALTER-added column";
+}
+
+// =============================================================================
+// DCG-overlaid columns: the ADD INDEX fast path must NOT build a base `.idx`
+// for a column served from a delta column group (the read path ignores it
+// there). It rewrites the overlay into a new `.cols` whose footer carries an
+// inlined index over the same values, and reports it as a DcgEntry.
+// =============================================================================
+
+// The single overlaid column is indexed: no `.idx` is produced at all, and the
+// rewritten `.cols` carries the bitmap index over the OVERLAY values.
+TEST_F(AddIndexSchemaChangeTest, dcg_overlaid_column_rewrites_cols_with_inlined_bitmap) {
+    auto base_metadata = create_base_tablet_metadata();
+    auto tablet_id = base_metadata->id();
+    CHECK_OK(_tablet_manager->put_tablet_metadata(*base_metadata));
+    auto base_schema = TabletSchema::create(base_metadata->schema());
+    int64_t version = write_one_rowset(tablet_id, /*version=*/1, base_schema, /*nrows=*/5);
+
+    ASSIGN_OR_ABORT(auto ro_md, _tablet_manager->get_tablet_metadata(tablet_id, version, /*fill_cache=*/false));
+    auto md = std::make_shared<TabletMetadata>(*ro_md);
+    const uint32_t rssid = rssid_of(*md, 0, 0);
+    const std::string overlay = write_dcg_overlay(md, rssid, {_c1_uid}, /*nrows=*/5, /*value_base=*/1000);
+    version = put_metadata_at_next_version(md);
+
+    auto vt = versioned_at(tablet_id, version);
+    std::vector<TabletIndexPB> indexes{make_index(IndexType::BITMAP, _c1_uid)};
+    AddIndexSchemaChange sc(_tablet_manager.get(), next_id(), vt, vt, indexes, /*alter_version=*/version,
+                            vt.get_schema());
+
+    TxnLogPB_OpAddIndex op;
+    ASSERT_OK(sc.run(&op));
+
+    // Every indexed column is overlaid, so the segment gets no `.idx` whatsoever.
+    EXPECT_EQ(0, op.segment_entries_size());
+    EXPECT_EQ(0u, count_idx_files());
+    ASSERT_EQ(1, op.dcg_entries_size());
+
+    const auto& dcg_entry = op.dcg_entries(0);
+    EXPECT_EQ(rssid, dcg_entry.segment_id());
+    EXPECT_FALSE(dcg_entry.column_file().empty());
+    EXPECT_GT(dcg_entry.file_size(), 0);
+    ASSERT_EQ(1, dcg_entry.col_unique_ids_size());
+    EXPECT_EQ(static_cast<uint32_t>(_c1_uid), dcg_entry.col_unique_ids(0));
+    // Publish installs the column only while the file it was copied from still serves it.
+    ASSERT_EQ(1, dcg_entry.source_column_files_size());
+    EXPECT_EQ(overlay, dcg_entry.source_column_files(0));
+    EXPECT_FALSE(dcg_entry.shared()) << "a plain alter is not a cross-publish";
+
+    // The footer of the rewritten `.cols` must carry the bitmap index -- that is
+    // the whole point of the rewrite, and it is what the pre-fix overlay lacked.
+    auto partial_schema = TabletSchema::create_with_uid(vt.get_schema(), {_c1_uid});
+    auto seg = open_cols_segment(tablet_id, dcg_entry.column_file(), partial_schema);
+    EXPECT_EQ(5u, seg->num_rows());
+    const auto* reader = seg->column_with_uid(_c1_uid);
+    ASSERT_NE(nullptr, reader);
+    EXPECT_TRUE(reader->has_bitmap_index()) << "rewritten .cols must inline the bitmap index";
+}
+
+// An all-overlaid build bypasses the base index builders and their memory
+// checks. Charge the tracker after appending the first batch, so the failure
+// must come from the rewrite rather than an earlier page-read memory check.
+TEST_F(AddIndexSchemaChangeTest, dcg_overlay_pool_thread_trips_mem_limit_and_cleans_file) {
+    size_t expected_cols_files = 0;
+    // 100 rows exercise the final pre-finalize check; 5000 exercise the next
+    // loop iteration's check before another batch can be appended.
+    for (int nrows : {100, 5000}) {
+        SCOPED_TRACE(nrows);
+        auto base_metadata = create_base_tablet_metadata();
+        auto tablet_id = base_metadata->id();
+        CHECK_OK(_tablet_manager->put_tablet_metadata(*base_metadata));
+        auto base_schema = TabletSchema::create(base_metadata->schema());
+        int64_t version = write_one_rowset(tablet_id, /*version=*/1, base_schema, nrows);
+
+        ASSIGN_OR_ABORT(auto ro_md, _tablet_manager->get_tablet_metadata(tablet_id, version, /*fill_cache=*/false));
+        auto md = std::make_shared<TabletMetadata>(*ro_md);
+        const uint32_t rssid = rssid_of(*md, 0, 0);
+        const auto original_cols = write_dcg_overlay(md, rssid, {_c1_uid}, nrows, /*value_base=*/1000);
+        ++expected_cols_files;
+        version = put_metadata_at_next_version(md);
+
+        std::unique_ptr<ThreadPool> pool;
+        ASSERT_OK(ThreadPoolBuilder("dcg_sc_test").set_min_threads(0).set_max_threads(1).build(&pool));
+        auto vt = versioned_at(tablet_id, version);
+        std::vector<TabletIndexPB> indexes{make_index(IndexType::BITMAP, _c1_uid)};
+        AddIndexSchemaChange sc(_tablet_manager.get(), next_id(), vt, vt, indexes, version, vt.get_schema(),
+                                pool.get());
+
+        // BE_TEST does not account mallocs. Simulate the bitmap writer's growth
+        // only after a batch has been written and the output file exists.
+        MemTracker sc_tracker(MemTrackerType::SCHEMA_CHANGE_TASK, /*byte_limit=*/1024, "dcg_sc_test", nullptr);
+        int appended_batches = 0;
+        auto* sync = SyncPoint::GetInstance();
+        DeferOp clear_sync([&] {
+            sync->DisableProcessing();
+            sync->ClearAllCallBacks();
+        });
+        sync->SetCallBack("AddIndexSchemaChange::rewrite_dcg_for_segment:after_append", [&](void*) {
+            EXPECT_EQ(&sc_tracker, CurrentThread::mem_tracker());
+            if (++appended_batches == 1) {
+                sc_tracker.consume(sc_tracker.limit() + 1);
+            }
+        });
+        sync->EnableProcessing();
+
+        TxnLogPB_OpAddIndex op;
+        Status st;
+        {
+            SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(&sc_tracker);
+            st = sc.run(&op);
+        }
+        sc_tracker.release(sc_tracker.consumption());
+        EXPECT_EQ(1, appended_batches);
+        EXPECT_TRUE(st.is_mem_limit_exceeded()) << st;
+        EXPECT_NE(std::string::npos, st.to_string().find("AddIndexSchemaChange")) << st;
+        EXPECT_EQ(0, op.segment_entries_size());
+        EXPECT_EQ(0, op.dcg_entries_size());
+
+        const auto dir = lake::join_path(kTestGroupPath, lake::kSegmentDirectoryName);
+        ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(dir));
+        size_t cols_files = 0;
+        bool original_exists = false;
+        ASSERT_OK(fs->iterate_dir(dir, [&](std::string_view name) {
+            if (name.size() > 5 && name.substr(name.size() - 5) == ".cols") {
+                ++cols_files;
+                original_exists |= (name == original_cols);
+            }
+            return true;
+        }));
+        EXPECT_EQ(expected_cols_files, cols_files);
+        EXPECT_TRUE(original_exists);
+    }
+}
+
+// A metadata-only DROP followed by a write can leave an old rowset pinned to a
+// wider physical schema. Opening its base file to anchor the DCG rewrite must
+// not replace that physical schema with the tablet's current logical schema.
+TEST_F(AddIndexSchemaChangeTest, dcg_overlay_does_not_seed_metacache_with_current_schema) {
+    auto base_metadata = create_base_tablet_metadata();
+    auto tablet_id = base_metadata->id();
+    CHECK_OK(_tablet_manager->put_tablet_metadata(*base_metadata));
+    auto base_schema = TabletSchema::create(base_metadata->schema());
+    int64_t version = write_one_rowset(tablet_id, /*version=*/1, base_schema, /*nrows=*/6);
+
+    ASSIGN_OR_ABORT(auto ro_md, _tablet_manager->get_tablet_metadata(tablet_id, version, /*fill_cache=*/false));
+    auto md = std::make_shared<TabletMetadata>(*ro_md);
+    const uint32_t rssid = rssid_of(*md, 0, 0);
+    write_dcg_overlay(md, rssid, {_c1_uid}, /*nrows=*/6, /*value_base=*/1000);
+
+    const auto original_schema = md->schema();
+    (*md->mutable_historical_schemas())[original_schema.id()] = original_schema;
+    (*md->mutable_rowset_to_schema())[md->rowsets(0).id()] = original_schema.id();
+    auto* current_schema = md->mutable_schema();
+    current_schema->clear_column();
+    for (const auto& col : original_schema.column()) {
+        if (col.unique_id() != _c3_uid) {
+            current_schema->add_column()->CopyFrom(col);
+        }
+    }
+    current_schema->set_id(next_id());
+    current_schema->set_schema_version(original_schema.schema_version() + 1);
+    version = put_metadata_at_next_version(md);
+
+    auto vt = versioned_at(tablet_id, version);
+    const auto& segment_meta = vt.metadata()->rowsets(0).segment_metas(0);
+    FileInfo seg_fi{.path = _tablet_manager->segment_location(tablet_id, segment_meta.filename())};
+    if (segment_meta.has_bundle_file_offset()) {
+        seg_fi.bundle_file_offset = segment_meta.bundle_file_offset();
+    }
+    ASSERT_TRUE(_tablet_manager->metacache()->lookup_segment(MetacacheKey::segment(seg_fi)) == nullptr);
+
+    std::vector<TabletIndexPB> indexes{make_index(IndexType::BITMAP, _c1_uid)};
+    AddIndexSchemaChange sc(_tablet_manager.get(), next_id(), vt, vt, indexes, version, vt.get_schema());
+    TxnLogPB_OpAddIndex op;
+    ASSERT_OK(sc.run(&op));
+    ASSERT_EQ(1, op.dcg_entries_size());
+    EXPECT_TRUE(_tablet_manager->metacache()->lookup_segment(MetacacheKey::segment(seg_fi)) == nullptr);
+
+    // A reader using the original schema must still see c3's stored values,
+    // instead of receiving an already-cached Segment without its reader.
+    size_t footer_hint = 16 * 1024;
+    ASSIGN_OR_ABORT(auto reader_seg, _tablet_manager->load_segment(seg_fi, /*segment_id=*/0, &footer_hint,
+                                                                   LakeIOOptions{.fill_data_cache = false},
+                                                                   /*fill_meta_cache=*/true, base_schema));
+    EXPECT_TRUE(reader_seg->column_with_uid(_c3_uid) != nullptr);
+}
+
+// Same path through a bloom filter: build_dcg_write_schema must flip
+// is_bf_column (not has_bitmap_index) for BLOOM_FILTER so SegmentWriter emits a
+// bloom filter into the `.cols` footer.
+TEST_F(AddIndexSchemaChangeTest, dcg_overlaid_column_rewrites_cols_with_inlined_bloom) {
+    auto base_metadata = create_base_tablet_metadata();
+    auto tablet_id = base_metadata->id();
+    CHECK_OK(_tablet_manager->put_tablet_metadata(*base_metadata));
+    auto base_schema = TabletSchema::create(base_metadata->schema());
+    int64_t version = write_one_rowset(tablet_id, /*version=*/1, base_schema, /*nrows=*/6);
+
+    ASSIGN_OR_ABORT(auto ro_md, _tablet_manager->get_tablet_metadata(tablet_id, version, /*fill_cache=*/false));
+    auto md = std::make_shared<TabletMetadata>(*ro_md);
+    const uint32_t rssid = rssid_of(*md, 0, 0);
+    write_dcg_overlay(md, rssid, {_c2_uid}, /*nrows=*/6, /*value_base=*/500);
+    version = put_metadata_at_next_version(md);
+
+    auto vt = versioned_at(tablet_id, version);
+    std::vector<TabletIndexPB> indexes{make_index(IndexType::BLOOM_FILTER, _c2_uid)};
+    AddIndexSchemaChange sc(_tablet_manager.get(), next_id(), vt, vt, indexes, /*alter_version=*/version,
+                            vt.get_schema());
+
+    TxnLogPB_OpAddIndex op;
+    ASSERT_OK(sc.run(&op));
+    EXPECT_EQ(0, op.segment_entries_size());
+    ASSERT_EQ(1, op.dcg_entries_size());
+
+    auto partial_schema = TabletSchema::create_with_uid(vt.get_schema(), {_c2_uid});
+    auto seg = open_cols_segment(tablet_id, op.dcg_entries(0).column_file(), partial_schema);
+    const auto* reader = seg->column_with_uid(_c2_uid);
+    ASSERT_NE(nullptr, reader);
+    EXPECT_TRUE(reader->has_bloom_filter_index()) << "rewritten .cols must inline the bloom filter";
+}
+
+// NGRAMBF must carry its index_properties (gram_num / fpp / case_sensitive)
+// into the write schema; dropping them would build the index with wrong
+// defaults that never match the query-side ngrams.
+TEST_F(AddIndexSchemaChangeTest, dcg_overlaid_column_rewrites_cols_with_ngrambf_properties) {
+    auto base_metadata = create_base_tablet_metadata();
+    auto tablet_id = base_metadata->id();
+    CHECK_OK(_tablet_manager->put_tablet_metadata(*base_metadata));
+    auto base_schema = TabletSchema::create(base_metadata->schema());
+    int64_t version = write_one_rowset(tablet_id, /*version=*/1, base_schema, /*nrows=*/6);
+
+    ASSIGN_OR_ABORT(auto ro_md, _tablet_manager->get_tablet_metadata(tablet_id, version, /*fill_cache=*/false));
+    auto md = std::make_shared<TabletMetadata>(*ro_md);
+    const uint32_t rssid = rssid_of(*md, 0, 0);
+    write_dcg_overlay(md, rssid, {_c2_uid}, /*nrows=*/6, /*value_base=*/700);
+    version = put_metadata_at_next_version(md);
+
+    auto vt = versioned_at(tablet_id, version);
+    // index_properties JSON as produced by TabletIndex::to_schema_pb: a nested map
+    // whose group key is the literal "index_properties". Unlike the base `.idx`
+    // path, the DCG rewrite hands these straight to SegmentWriter, which rejects
+    // NGRAMBF outright when gram_num does not survive the parse.
+    const std::string props =
+            R"({"index_properties":{"bloom_filter_fpp":"0.05","gram_num":"3","case_sensitive":"true"}})";
+    std::vector<TabletIndexPB> indexes{make_index(IndexType::NGRAMBF, _c2_uid, /*index_id=*/0, props)};
+    AddIndexSchemaChange sc(_tablet_manager.get(), next_id(), vt, vt, indexes, /*alter_version=*/version,
+                            vt.get_schema());
+
+    TxnLogPB_OpAddIndex op;
+    ASSERT_OK(sc.run(&op));
+    ASSERT_EQ(1, op.dcg_entries_size());
+
+    auto partial_schema = TabletSchema::create_with_uid(vt.get_schema(), {_c2_uid});
+    auto seg = open_cols_segment(tablet_id, op.dcg_entries(0).column_file(), partial_schema);
+    const auto* reader = seg->column_with_uid(_c2_uid);
+    ASSERT_NE(nullptr, reader);
+    EXPECT_TRUE(reader->has_bloom_filter_index());
+}
+
+// One overlaid column and one base-served column in the SAME alter: the
+// overlaid one goes to a rewritten `.cols`, the base one to the usual `.idx`.
+TEST_F(AddIndexSchemaChangeTest, dcg_mixed_base_and_overlaid_indexes_split) {
+    auto base_metadata = create_base_tablet_metadata();
+    auto tablet_id = base_metadata->id();
+    CHECK_OK(_tablet_manager->put_tablet_metadata(*base_metadata));
+    auto base_schema = TabletSchema::create(base_metadata->schema());
+    int64_t version = write_one_rowset(tablet_id, /*version=*/1, base_schema, /*nrows=*/7);
+
+    ASSIGN_OR_ABORT(auto ro_md, _tablet_manager->get_tablet_metadata(tablet_id, version, /*fill_cache=*/false));
+    auto md = std::make_shared<TabletMetadata>(*ro_md);
+    const uint32_t rssid = rssid_of(*md, 0, 0);
+    // Only c1 is overlaid; c4 is still served by the base segment.
+    write_dcg_overlay(md, rssid, {_c1_uid}, /*nrows=*/7, /*value_base=*/2000);
+    version = put_metadata_at_next_version(md);
+
+    auto vt = versioned_at(tablet_id, version);
+    std::vector<TabletIndexPB> indexes{make_index(IndexType::BITMAP, _c1_uid), make_index(IndexType::BITMAP, _c4_uid)};
+    AddIndexSchemaChange sc(_tablet_manager.get(), next_id(), vt, vt, indexes, /*alter_version=*/version,
+                            vt.get_schema());
+
+    TxnLogPB_OpAddIndex op;
+    ASSERT_OK(sc.run(&op));
+
+    // c4 -> base `.idx`; c1 -> rewritten `.cols`.
+    ASSERT_EQ(1, op.segment_entries_size());
+    const auto& entry = op.segment_entries(0).entry();
+    ASSERT_EQ(1, entry.keys_size());
+    EXPECT_EQ(_c4_uid, entry.keys(0).col_unique_id());
+
+    ASSERT_EQ(1, op.dcg_entries_size());
+    ASSERT_EQ(1, op.dcg_entries(0).col_unique_ids_size());
+    EXPECT_EQ(static_cast<uint32_t>(_c1_uid), op.dcg_entries(0).col_unique_ids(0));
+}
+
+// More rows than the rewrite's 4096-row batch: the copy loop must run several
+// iterations and still produce exactly num_rows rows, since a DCG layer always
+// spans the whole segment.
+TEST_F(AddIndexSchemaChangeTest, dcg_overlay_rewrite_spans_multiple_batches) {
+    auto base_metadata = create_base_tablet_metadata();
+    auto tablet_id = base_metadata->id();
+    CHECK_OK(_tablet_manager->put_tablet_metadata(*base_metadata));
+    auto base_schema = TabletSchema::create(base_metadata->schema());
+    constexpr int kRows = 9000; // > 2 * kBatch (4096)
+    int64_t version = write_one_rowset(tablet_id, /*version=*/1, base_schema, kRows);
+
+    ASSIGN_OR_ABORT(auto ro_md, _tablet_manager->get_tablet_metadata(tablet_id, version, /*fill_cache=*/false));
+    auto md = std::make_shared<TabletMetadata>(*ro_md);
+    const uint32_t rssid = rssid_of(*md, 0, 0);
+    write_dcg_overlay(md, rssid, {_c1_uid}, kRows, /*value_base=*/10000);
+    version = put_metadata_at_next_version(md);
+
+    auto vt = versioned_at(tablet_id, version);
+    std::vector<TabletIndexPB> indexes{make_index(IndexType::BITMAP, _c1_uid)};
+    AddIndexSchemaChange sc(_tablet_manager.get(), next_id(), vt, vt, indexes, /*alter_version=*/version,
+                            vt.get_schema());
+
+    TxnLogPB_OpAddIndex op;
+    ASSERT_OK(sc.run(&op));
+    ASSERT_EQ(1, op.dcg_entries_size());
+
+    auto partial_schema = TabletSchema::create_with_uid(vt.get_schema(), {_c1_uid});
+    auto seg = open_cols_segment(tablet_id, op.dcg_entries(0).column_file(), partial_schema);
+    EXPECT_EQ(static_cast<uint32_t>(kRows), seg->num_rows())
+            << "the rewritten layer must cover every row of the segment";
+    const auto* reader = seg->column_with_uid(_c1_uid);
+    ASSERT_NE(nullptr, reader);
+    EXPECT_TRUE(reader->has_bitmap_index());
+
+    // Every row carries the overlay's value, in order across the batches.
+    auto chunk = read_cols_chunk(tablet_id, op.dcg_entries(0).column_file(), seg, partial_schema);
+    ASSERT_EQ(static_cast<size_t>(kRows), chunk->num_rows());
+    for (int i = 0; i < kRows; ++i) {
+        ASSERT_EQ(10000 + i, chunk->get_column_by_index(0)->get(i).get_int32()) << "row " << i;
+    }
+    // The bitmap is built over the overlay, not over the base values under it,
+    // and maps each value to the row holding it, in a later batch too.
+    const int32_t overlay_value = 10005;
+    const int32_t late_batch_value = 10000 + 8500;
+    const int32_t base_only_value = 3; // row 0 of the base segment: 0 * 7 + 3
+    EXPECT_EQ(std::vector<uint32_t>{5},
+              cols_bitmap_rows(tablet_id, op.dcg_entries(0).column_file(), seg, _c1_uid, &overlay_value));
+    EXPECT_EQ(std::vector<uint32_t>{8500},
+              cols_bitmap_rows(tablet_id, op.dcg_entries(0).column_file(), seg, _c1_uid, &late_batch_value));
+    EXPECT_FALSE(cols_bitmap_has(tablet_id, op.dcg_entries(0).column_file(), seg, _c1_uid, &base_only_value));
+}
+
+// The overlaid column lives in the SECOND `.cols` of the layer, so the rewrite
+// has to resolve the file by the index get_column_idx reports rather than
+// assuming file 0.
+TEST_F(AddIndexSchemaChangeTest, dcg_overlay_resolves_column_in_second_file) {
+    auto base_metadata = create_base_tablet_metadata();
+    auto tablet_id = base_metadata->id();
+    CHECK_OK(_tablet_manager->put_tablet_metadata(*base_metadata));
+    auto base_schema = TabletSchema::create(base_metadata->schema());
+    int64_t version = write_one_rowset(tablet_id, /*version=*/1, base_schema, /*nrows=*/5);
+
+    ASSIGN_OR_ABORT(auto ro_md, _tablet_manager->get_tablet_metadata(tablet_id, version, /*fill_cache=*/false));
+    auto md = std::make_shared<TabletMetadata>(*ro_md);
+    const uint32_t rssid = rssid_of(*md, 0, 0);
+    // File 0 carries c2; file 1 carries the column we index.
+    write_dcg_overlay(md, rssid, {_c2_uid}, /*nrows=*/5, /*value_base=*/10);
+    const std::string c1_overlay = write_dcg_overlay(md, rssid, {_c1_uid}, /*nrows=*/5, /*value_base=*/3000);
+    version = put_metadata_at_next_version(md);
+
+    ASSIGN_OR_ABORT(auto check_md, _tablet_manager->get_tablet_metadata(tablet_id, version, /*fill_cache=*/false));
+    ASSERT_EQ(2, check_md->dcg_meta().dcgs().at(rssid).column_files_size());
+
+    auto vt = versioned_at(tablet_id, version);
+    std::vector<TabletIndexPB> indexes{make_index(IndexType::BITMAP, _c1_uid)};
+    AddIndexSchemaChange sc(_tablet_manager.get(), next_id(), vt, vt, indexes, /*alter_version=*/version,
+                            vt.get_schema());
+
+    TxnLogPB_OpAddIndex op;
+    ASSERT_OK(sc.run(&op));
+    ASSERT_EQ(1, op.dcg_entries_size());
+
+    ASSERT_EQ(1, op.dcg_entries(0).source_column_files_size());
+    EXPECT_EQ(c1_overlay, op.dcg_entries(0).source_column_files(0));
+
+    auto partial_schema = TabletSchema::create_with_uid(vt.get_schema(), {_c1_uid});
+    auto seg = open_cols_segment(tablet_id, op.dcg_entries(0).column_file(), partial_schema);
+    EXPECT_EQ(5u, seg->num_rows());
+    const auto* reader = seg->column_with_uid(_c1_uid);
+    ASSERT_NE(nullptr, reader);
+    EXPECT_TRUE(reader->has_bitmap_index());
+}
+
+// A nullable overlaid column: the rewrite must carry the NULLs over at the same
+// rows and build the bitmap over the non-NULL overlay values.
+TEST_F(AddIndexSchemaChangeTest, dcg_overlay_rewrites_nullable_column) {
+    auto base_metadata = create_base_tablet_metadata();
+    auto tablet_id = base_metadata->id();
+    CHECK_OK(_tablet_manager->put_tablet_metadata(*base_metadata));
+    auto base_schema = TabletSchema::create(base_metadata->schema());
+    int64_t version = write_one_rowset(tablet_id, /*version=*/1, base_schema, /*nrows=*/8);
+
+    ASSIGN_OR_ABORT(auto ro_md, _tablet_manager->get_tablet_metadata(tablet_id, version, /*fill_cache=*/false));
+    auto md = std::make_shared<TabletMetadata>(*ro_md);
+    const uint32_t rssid = rssid_of(*md, 0, 0);
+    write_dcg_overlay(md, rssid, {_c3_uid}, /*nrows=*/8, /*value_base=*/4000);
+    version = put_metadata_at_next_version(md);
+
+    auto vt = versioned_at(tablet_id, version);
+    std::vector<TabletIndexPB> indexes{make_index(IndexType::BITMAP, _c3_uid)};
+    AddIndexSchemaChange sc(_tablet_manager.get(), next_id(), vt, vt, indexes, /*alter_version=*/version,
+                            vt.get_schema());
+
+    TxnLogPB_OpAddIndex op;
+    ASSERT_OK(sc.run(&op));
+    ASSERT_EQ(1, op.dcg_entries_size());
+
+    auto partial_schema = TabletSchema::create_with_uid(vt.get_schema(), {_c3_uid});
+    auto seg = open_cols_segment(tablet_id, op.dcg_entries(0).column_file(), partial_schema);
+    EXPECT_EQ(8u, seg->num_rows());
+    const auto* reader = seg->column_with_uid(_c3_uid);
+    ASSERT_NE(nullptr, reader);
+    EXPECT_TRUE(reader->has_bitmap_index());
+
+    // NULLs stay at the rows the overlay had them (every 4th), values elsewhere.
+    auto chunk = read_cols_chunk(tablet_id, op.dcg_entries(0).column_file(), seg, partial_schema);
+    ASSERT_EQ(8u, chunk->num_rows());
+    for (int i = 0; i < 8; ++i) {
+        const Datum d = chunk->get_column_by_index(0)->get(i);
+        if (i % 4 == 0) {
+            EXPECT_TRUE(d.is_null()) << "row " << i;
+        } else {
+            ASSERT_FALSE(d.is_null()) << "row " << i;
+            EXPECT_EQ(4000 + i, d.get_int32()) << "row " << i;
+        }
+    }
+    const int32_t overlay_value = 4001;
+    const int32_t base_only_value = 11; // row 1 of the base segment: 1 * 11
+    EXPECT_EQ(std::vector<uint32_t>{1},
+              cols_bitmap_rows(tablet_id, op.dcg_entries(0).column_file(), seg, _c3_uid, &overlay_value));
+    EXPECT_FALSE(cols_bitmap_has(tablet_id, op.dcg_entries(0).column_file(), seg, _c3_uid, &base_only_value));
+    // `IS NULL` reads the bitmap's NULL rows, not the column data.
+    EXPECT_EQ((std::vector<uint32_t>{0, 4}),
+              cols_null_bitmap_rows(tablet_id, op.dcg_entries(0).column_file(), seg, _c3_uid));
+}
+
+// CHAR is stored '\0'-padded and trimmed on read; the rewrite must re-pad
+// before appending or the writer would store short values and the index would
+// key on a different byte string than a query produces.
+TEST_F(AddIndexSchemaChangeTest, dcg_overlay_rewrites_char_column_with_repad) {
+    auto base_metadata = create_base_tablet_metadata();
+    auto tablet_id = base_metadata->id();
+    CHECK_OK(_tablet_manager->put_tablet_metadata(*base_metadata));
+    auto base_schema = TabletSchema::create(base_metadata->schema());
+    int64_t version = write_one_rowset(tablet_id, /*version=*/1, base_schema, /*nrows=*/8);
+
+    ASSIGN_OR_ABORT(auto ro_md, _tablet_manager->get_tablet_metadata(tablet_id, version, /*fill_cache=*/false));
+    auto md = std::make_shared<TabletMetadata>(*ro_md);
+    const uint32_t rssid = rssid_of(*md, 0, 0);
+    write_dcg_overlay(md, rssid, {_c4_uid}, /*nrows=*/8, /*value_base=*/20);
+    version = put_metadata_at_next_version(md);
+
+    auto vt = versioned_at(tablet_id, version);
+    std::vector<TabletIndexPB> indexes{make_index(IndexType::BITMAP, _c4_uid)};
+    AddIndexSchemaChange sc(_tablet_manager.get(), next_id(), vt, vt, indexes, /*alter_version=*/version,
+                            vt.get_schema());
+
+    TxnLogPB_OpAddIndex op;
+    ASSERT_OK(sc.run(&op));
+    ASSERT_EQ(1, op.dcg_entries_size());
+
+    auto partial_schema = TabletSchema::create_with_uid(vt.get_schema(), {_c4_uid});
+    auto seg = open_cols_segment(tablet_id, op.dcg_entries(0).column_file(), partial_schema);
+    EXPECT_EQ(8u, seg->num_rows());
+    const auto* reader = seg->column_with_uid(_c4_uid);
+    ASSERT_NE(nullptr, reader);
+    EXPECT_TRUE(reader->has_bitmap_index());
+
+    // Read back trimmed, like any CHAR column.
+    auto chunk = read_cols_chunk(tablet_id, op.dcg_entries(0).column_file(), seg, partial_schema);
+    ASSERT_EQ(8u, chunk->num_rows());
+    for (int i = 0; i < 8; ++i) {
+        EXPECT_EQ("ov" + std::to_string(20 + i), chunk->get_column_by_index(0)->get(i).get_slice().to_string())
+                << "row " << i;
+    }
+    // The dictionary holds the re-padded form, which is what a CHAR predicate
+    // probes with.
+    std::string overlay_key = "ov22";
+    overlay_key.resize(16, '\0');
+    std::string base_only_key = "ch1";
+    base_only_key.resize(16, '\0');
+    const Slice overlay_slice(overlay_key);
+    const Slice base_only_slice(base_only_key);
+    EXPECT_EQ(std::vector<uint32_t>{2},
+              cols_bitmap_rows(tablet_id, op.dcg_entries(0).column_file(), seg, _c4_uid, &overlay_slice));
+    EXPECT_FALSE(cols_bitmap_has(tablet_id, op.dcg_entries(0).column_file(), seg, _c4_uid, &base_only_slice));
+}
+
+// After a metadata-only CHAR -> VARCHAR, tablet metadata still says CHAR until
+// the next write while FE's catalog (the authoritative schema) says VARCHAR. The
+// rewrite must store the column as VARCHAR and key the bitmap on unpadded
+// values: a query probes with an unpadded VARCHAR literal, and a dictionary of
+// padded CHAR keys would miss it and prune the matching rows.
+TEST_F(AddIndexSchemaChangeTest, dcg_rewrite_uses_catalog_type_after_char_to_varchar) {
+    auto base_metadata = create_base_tablet_metadata();
+    auto tablet_id = base_metadata->id();
+    CHECK_OK(_tablet_manager->put_tablet_metadata(*base_metadata));
+    auto base_schema = TabletSchema::create(base_metadata->schema());
+    int64_t version = write_one_rowset(tablet_id, /*version=*/1, base_schema, /*nrows=*/8);
+
+    ASSIGN_OR_ABORT(auto ro_md, _tablet_manager->get_tablet_metadata(tablet_id, version, /*fill_cache=*/false));
+    auto md = std::make_shared<TabletMetadata>(*ro_md);
+    const uint32_t rssid = rssid_of(*md, 0, 0);
+    // Written while the column was CHAR(16).
+    write_dcg_overlay(md, rssid, {_c4_uid}, /*nrows=*/8, /*value_base=*/20);
+    version = put_metadata_at_next_version(md);
+
+    auto vt = versioned_at(tablet_id, version);
+    auto catalog_schema = catalog_schema_with_type(*md, _c4_uid, "VARCHAR", 16);
+    std::vector<TabletIndexPB> indexes{make_index(IndexType::BITMAP, _c4_uid)};
+    AddIndexSchemaChange sc(_tablet_manager.get(), next_id(), vt, vt, indexes, /*alter_version=*/version,
+                            catalog_schema);
+
+    TxnLogPB_OpAddIndex op;
+    ASSERT_OK(sc.run(&op));
+    ASSERT_EQ(1, op.dcg_entries_size());
+
+    auto partial_schema = TabletSchema::create_with_uid(catalog_schema, {_c4_uid});
+    auto seg = open_cols_segment(tablet_id, op.dcg_entries(0).column_file(), partial_schema);
+    const auto* reader = seg->column_with_uid(_c4_uid);
+    ASSERT_NE(nullptr, reader);
+    EXPECT_EQ(TYPE_VARCHAR, reader->column_type()) << "the rewrite must store the catalog type";
+    ASSERT_TRUE(reader->has_bitmap_index());
+
+    const Slice unpadded("ov22");
+    std::string padded_key = "ov22";
+    padded_key.resize(16, '\0');
+    const Slice padded(padded_key);
+    EXPECT_EQ(std::vector<uint32_t>{2},
+              cols_bitmap_rows(tablet_id, op.dcg_entries(0).column_file(), seg, _c4_uid, &unpadded));
+    EXPECT_FALSE(cols_bitmap_has(tablet_id, op.dcg_entries(0).column_file(), seg, _c4_uid, &padded));
+
+    auto chunk = read_cols_chunk(tablet_id, op.dcg_entries(0).column_file(), seg, partial_schema);
+    ASSERT_EQ(8u, chunk->num_rows());
+    for (int i = 0; i < 8; ++i) {
+        EXPECT_EQ("ov" + std::to_string(20 + i), chunk->get_column_by_index(0)->get(i).get_slice().to_string())
+                << "row " << i;
+    }
+}
+
+// Same for a widening numeric change: the overlay was written as INT, the
+// catalog now says BIGINT, and the bitmap must be keyed on BIGINT values.
+TEST_F(AddIndexSchemaChangeTest, dcg_rewrite_uses_catalog_type_after_int_to_bigint) {
+    auto base_metadata = create_base_tablet_metadata();
+    auto tablet_id = base_metadata->id();
+    CHECK_OK(_tablet_manager->put_tablet_metadata(*base_metadata));
+    auto base_schema = TabletSchema::create(base_metadata->schema());
+    int64_t version = write_one_rowset(tablet_id, /*version=*/1, base_schema, /*nrows=*/5);
+
+    ASSIGN_OR_ABORT(auto ro_md, _tablet_manager->get_tablet_metadata(tablet_id, version, /*fill_cache=*/false));
+    auto md = std::make_shared<TabletMetadata>(*ro_md);
+    const uint32_t rssid = rssid_of(*md, 0, 0);
+    write_dcg_overlay(md, rssid, {_c1_uid}, /*nrows=*/5, /*value_base=*/3000);
+    version = put_metadata_at_next_version(md);
+
+    auto vt = versioned_at(tablet_id, version);
+    auto catalog_schema = catalog_schema_with_type(*md, _c1_uid, "BIGINT", 8);
+    std::vector<TabletIndexPB> indexes{make_index(IndexType::BITMAP, _c1_uid)};
+    AddIndexSchemaChange sc(_tablet_manager.get(), next_id(), vt, vt, indexes, /*alter_version=*/version,
+                            catalog_schema);
+
+    TxnLogPB_OpAddIndex op;
+    ASSERT_OK(sc.run(&op));
+    ASSERT_EQ(1, op.dcg_entries_size());
+
+    auto partial_schema = TabletSchema::create_with_uid(catalog_schema, {_c1_uid});
+    auto seg = open_cols_segment(tablet_id, op.dcg_entries(0).column_file(), partial_schema);
+    const auto* reader = seg->column_with_uid(_c1_uid);
+    ASSERT_NE(nullptr, reader);
+    EXPECT_EQ(TYPE_BIGINT, reader->column_type()) << "the rewrite must store the catalog type";
+    ASSERT_TRUE(reader->has_bitmap_index());
+
+    const int64_t overlay_value = 3002;
+    EXPECT_EQ(std::vector<uint32_t>{2},
+              cols_bitmap_rows(tablet_id, op.dcg_entries(0).column_file(), seg, _c1_uid, &overlay_value));
+
+    auto chunk = read_cols_chunk(tablet_id, op.dcg_entries(0).column_file(), seg, partial_schema);
+    ASSERT_EQ(5u, chunk->num_rows());
+    for (int i = 0; i < 5; ++i) {
+        EXPECT_EQ(3000 + i, chunk->get_column_by_index(0)->get(i).get_int64()) << "row " << i;
+    }
+}
+
+// Two index types on the SAME overlaid column. The write schema must keep both
+// TabletIndexPBs -- deduping on index_name would collapse them, and FE names
+// every bloom_filter_columns entry with the empty string.
+TEST_F(AddIndexSchemaChangeTest, dcg_overlay_same_column_two_index_types) {
+    auto base_metadata = create_base_tablet_metadata();
+    auto tablet_id = base_metadata->id();
+    CHECK_OK(_tablet_manager->put_tablet_metadata(*base_metadata));
+    auto base_schema = TabletSchema::create(base_metadata->schema());
+    int64_t version = write_one_rowset(tablet_id, /*version=*/1, base_schema, /*nrows=*/6);
+
+    ASSIGN_OR_ABORT(auto ro_md, _tablet_manager->get_tablet_metadata(tablet_id, version, /*fill_cache=*/false));
+    auto md = std::make_shared<TabletMetadata>(*ro_md);
+    const uint32_t rssid = rssid_of(*md, 0, 0);
+    write_dcg_overlay(md, rssid, {_c2_uid}, /*nrows=*/6, /*value_base=*/900);
+    version = put_metadata_at_next_version(md);
+
+    auto vt = versioned_at(tablet_id, version);
+    // Both entries name the same column; FE gives bloom_filter_columns entries
+    // an empty index_name, so the dedup must key on (index_type, column).
+    auto bitmap_ix = make_index(IndexType::BITMAP, _c2_uid);
+    auto bloom_ix = make_index(IndexType::BLOOM_FILTER, _c2_uid);
+    bloom_ix.set_index_name("");
+    std::vector<TabletIndexPB> indexes{bitmap_ix, bloom_ix};
+    AddIndexSchemaChange sc(_tablet_manager.get(), next_id(), vt, vt, indexes, /*alter_version=*/version,
+                            vt.get_schema());
+
+    TxnLogPB_OpAddIndex op;
+    ASSERT_OK(sc.run(&op));
+    ASSERT_EQ(1, op.dcg_entries_size());
+    // One rewritten file covers the column once, whatever the index count.
+    ASSERT_EQ(1, op.dcg_entries(0).col_unique_ids_size());
+    EXPECT_EQ(static_cast<uint32_t>(_c2_uid), op.dcg_entries(0).col_unique_ids(0));
+
+    auto partial_schema = TabletSchema::create_with_uid(vt.get_schema(), {_c2_uid});
+    auto seg = open_cols_segment(tablet_id, op.dcg_entries(0).column_file(), partial_schema);
+    const auto* reader = seg->column_with_uid(_c2_uid);
+    ASSERT_NE(nullptr, reader);
+    EXPECT_TRUE(reader->has_bitmap_index()) << "both index types must survive the dedup";
+    EXPECT_TRUE(reader->has_bloom_filter_index()) << "both index types must survive the dedup";
+}
+
+// Two segments, only one overlaid: the overlaid one is rewritten, the untouched
+// one takes the ordinary `.idx` path.
+TEST_F(AddIndexSchemaChangeTest, dcg_overlay_on_one_of_two_segments) {
+    auto base_metadata = create_base_tablet_metadata();
+    auto tablet_id = base_metadata->id();
+    CHECK_OK(_tablet_manager->put_tablet_metadata(*base_metadata));
+    auto base_schema = TabletSchema::create(base_metadata->schema());
+    int64_t version = write_one_rowset(tablet_id, /*version=*/1, base_schema, /*nrows=*/5, "a");
+    version = write_one_rowset(tablet_id, version, base_schema, /*nrows=*/5, "b");
+
+    ASSIGN_OR_ABORT(auto ro_md, _tablet_manager->get_tablet_metadata(tablet_id, version, /*fill_cache=*/false));
+    auto md = std::make_shared<TabletMetadata>(*ro_md);
+    ASSERT_EQ(2, md->rowsets_size());
+    const uint32_t overlaid_rssid = rssid_of(*md, 0, 0);
+    const uint32_t plain_rssid = rssid_of(*md, 1, 0);
+    write_dcg_overlay(md, overlaid_rssid, {_c1_uid}, /*nrows=*/5, /*value_base=*/5000);
+    version = put_metadata_at_next_version(md);
+
+    auto vt = versioned_at(tablet_id, version);
+    std::vector<TabletIndexPB> indexes{make_index(IndexType::BITMAP, _c1_uid)};
+    AddIndexSchemaChange sc(_tablet_manager.get(), next_id(), vt, vt, indexes, /*alter_version=*/version,
+                            vt.get_schema());
+
+    TxnLogPB_OpAddIndex op;
+    ASSERT_OK(sc.run(&op));
+
+    ASSERT_EQ(1, op.segment_entries_size());
+    EXPECT_EQ(plain_rssid, op.segment_entries(0).segment_id());
+    ASSERT_EQ(1, op.dcg_entries_size());
+    EXPECT_EQ(overlaid_rssid, op.dcg_entries(0).segment_id());
+}
+
+// An index with no columns is a malformed request; on an overlaid tablet it has
+// to be rejected rather than silently indexing column 0.
+TEST_F(AddIndexSchemaChangeTest, dcg_index_without_columns_is_rejected) {
+    auto base_metadata = create_base_tablet_metadata();
+    auto tablet_id = base_metadata->id();
+    CHECK_OK(_tablet_manager->put_tablet_metadata(*base_metadata));
+    auto base_schema = TabletSchema::create(base_metadata->schema());
+    int64_t version = write_one_rowset(tablet_id, /*version=*/1, base_schema, /*nrows=*/5);
+
+    ASSIGN_OR_ABORT(auto ro_md, _tablet_manager->get_tablet_metadata(tablet_id, version, /*fill_cache=*/false));
+    auto md = std::make_shared<TabletMetadata>(*ro_md);
+    const uint32_t rssid = rssid_of(*md, 0, 0);
+    write_dcg_overlay(md, rssid, {_c1_uid}, /*nrows=*/5, /*value_base=*/6000);
+    version = put_metadata_at_next_version(md);
+
+    auto vt = versioned_at(tablet_id, version);
+    TabletIndexPB broken;
+    broken.set_index_id(next_id());
+    broken.set_index_name("no_columns");
+    broken.set_index_type(IndexType::BITMAP);
+    std::vector<TabletIndexPB> indexes{broken};
+    AddIndexSchemaChange sc(_tablet_manager.get(), next_id(), vt, vt, indexes, /*alter_version=*/version,
+                            vt.get_schema());
+
+    TxnLogPB_OpAddIndex op;
+    auto st = sc.run(&op);
+    EXPECT_TRUE(st.is_internal_error()) << st;
+    EXPECT_EQ(0, op.dcg_entries_size());
 }
 
 } // namespace starrocks::lake

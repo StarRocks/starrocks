@@ -21,6 +21,8 @@
 #include <map>
 #include <memory>
 #include <tuple>
+#include <unordered_map>
+#include <vector>
 
 #include "base/coding.h"
 #include "base/container/raw_container.h"
@@ -228,18 +230,22 @@ void MetaFileBuilder::append_delvec(const DelVectorPtr& delvec, uint32_t segment
 void MetaFileBuilder::append_dcg(uint32_t rssid,
                                  const std::vector<std::pair<std::string, std::string>>& file_with_encryption_metas,
                                  const std::vector<std::vector<ColumnUID>>& unique_column_id_list,
-                                 const std::vector<int64_t>& file_sizes) {
+                                 const std::vector<int64_t>& file_sizes, const std::vector<bool>& shared_files) {
     DeltaColumnGroupVerPB& dcg_ver = (*_tablet_meta->mutable_dcg_meta()->mutable_dcgs())[rssid];
     DeltaColumnGroupVerPB new_dcg_ver;
     std::unordered_set<ColumnUID> need_to_remove_cuids_filter;
-    // Keep shared_files 1:1 with column_files when the segment records it: a new file is private, and a kept file
-    // keeps its flag. After a range split a kept file can still be read by the sibling tablet, so losing the flag
-    // would let vacuum delete it once a later update orphans it.
-    const bool record_shared_files = dcg_ver.shared_files_size() > 0;
+    // Keep shared_files 1:1 with column_files when the segment records it: a new file is private unless the caller
+    // marks it shared, and a kept file keeps its flag. After a range split a kept file can still be read by the
+    // sibling tablet, so losing the flag would let vacuum delete it once a later update orphans it. A caller marks a
+    // new file shared when that one file is installed on several tablets (the ADD INDEX fast path's DCG rewrite on a
+    // split cross-publish); that also starts recording on a segment that did not record yet.
+    const bool record_shared_files = dcg_ver.shared_files_size() > 0 ||
+                                     std::find(shared_files.begin(), shared_files.end(), true) != shared_files.end();
 
     // 1. append new dcgs
     DCHECK(file_with_encryption_metas.size() == unique_column_id_list.size());
     DCHECK(file_with_encryption_metas.size() == file_sizes.size());
+    DCHECK(shared_files.empty() || shared_files.size() == file_with_encryption_metas.size());
     for (int i = 0; i < file_with_encryption_metas.size(); i++) {
         new_dcg_ver.add_column_files(file_with_encryption_metas[i].first);
         // Keep column_file_sizes strictly 1:1 with column_files so readers can index by position.
@@ -256,7 +262,7 @@ void MetaFileBuilder::append_dcg(uint32_t rssid,
         new_dcg_ver.add_unique_column_ids()->CopyFrom(unique_cids);
         new_dcg_ver.add_versions(_tablet_meta->version());
         if (record_shared_files) {
-            new_dcg_ver.add_shared_files(false);
+            new_dcg_ver.add_shared_files(i < shared_files.size() && shared_files[i]);
         }
     }
     // 2. remove old dcgs
@@ -442,6 +448,52 @@ void MetaFileBuilder::apply_column_mode_partial_update(const TxnLogPB_OpWrite& o
         file_meta.set_version(_tablet_meta->version());
         _tablet_meta->mutable_orphan_files()->Add(std::move(file_meta));
     }
+}
+
+// The columns of a rewrite entry that publish may install: those whose `.cols`
+// in the segment's current DCG (`dcg_ver`, nullptr when it has none) is still
+// the file the rewrite copied them from. A column whose source the log does not
+// record cannot be shown to be current, so it is left out. The DCG's column
+// lists are walked at most once, however many columns the entry has, and the
+// walk stops as soon as every column is placed; append_dcg keeps every column
+// in exactly one layer, and the newest layer usually serves the column.
+static std::vector<ColumnUID> columns_served_by_source(const DeltaColumnGroupVerPB* dcg_ver,
+                                                       const TxnLogPB_OpAddIndex_DcgEntry& entry) {
+    std::vector<ColumnUID> uids;
+    if (dcg_ver == nullptr) {
+        return uids;
+    }
+    // The layer serving each of the entry's columns, -1 while none is found.
+    std::unordered_map<uint32_t, int> layer_of;
+    layer_of.reserve(entry.col_unique_ids_size());
+    for (uint32_t uid : entry.col_unique_ids()) {
+        layer_of.emplace(uid, -1);
+    }
+    const int num_layers = std::min(dcg_ver->unique_column_ids_size(), dcg_ver->column_files_size());
+    size_t unplaced = layer_of.size();
+    for (int i = 0; i < num_layers && unplaced > 0; ++i) {
+        for (uint32_t uid : dcg_ver->unique_column_ids(i).column_ids()) {
+            auto it = layer_of.find(uid);
+            if (it != layer_of.end() && it->second < 0) {
+                it->second = i;
+                if (--unplaced == 0) {
+                    break;
+                }
+            }
+        }
+    }
+    uids.reserve(entry.col_unique_ids_size());
+    for (int i = 0; i < entry.col_unique_ids_size(); ++i) {
+        if (i >= entry.source_column_files_size() || entry.source_column_files(i).empty()) {
+            continue;
+        }
+        const auto it = layer_of.find(entry.col_unique_ids(i));
+        if (it != layer_of.end() && it->second >= 0 &&
+            dcg_ver->column_files(it->second) == entry.source_column_files(i)) {
+            uids.push_back(static_cast<ColumnUID>(entry.col_unique_ids(i)));
+        }
+    }
+    return uids;
 }
 
 Status MetaFileBuilder::apply_add_index(const TxnLogPB_OpAddIndex& op) {
@@ -706,6 +758,77 @@ Status MetaFileBuilder::apply_add_index(const TxnLogPB_OpAddIndex& op) {
                                           << _tablet_meta->id() << " schema_id " << schema->id() << ": " << st;
             }
         }
+    }
+
+    // 5. Install the `.cols` files the fast path rewrote for DCG-overlaid
+    //    columns. append_dcg puts the new layer in front, strips those
+    //    column ids from the older layers, and orphans any `.cols` left with
+    //    no columns — so the query path picks up the rewritten overlay (which
+    //    carries the index inlined) without any reader-side change.
+    //
+    //    The rewrite copied each column's values from one `.cols` of the
+    //    alter's read snapshot (DcgEntry.source_column_files), so it may only
+    //    replace a column that file still serves. Whatever changed the
+    //    column's data between that snapshot and this publish leaves another
+    //    file serving it, or none: a column-mode partial update writes a fresh
+    //    `.cols`, a full replication swaps the segment together with its DCGs,
+    //    and a segment can be gone. Installing the copy would then put stale
+    //    values on that data, so such a column keeps what it has and gets the
+    //    index from a later rewrite.
+    std::unordered_set<std::string> orphan_names;
+    bool orphan_names_loaded = false;
+    size_t stale_dcg_columns = 0;
+    for (const auto& dcg : op.dcg_entries()) {
+        if (!dcg.has_segment_id() || !dcg.has_column_file() || dcg.col_unique_ids_size() == 0) {
+            LOG(WARNING) << "apply_add_index: incomplete dcg entry, skipping. tablet=" << _tablet_meta->id();
+            continue;
+        }
+        const auto& dcg_map = _tablet_meta->dcg_meta().dcgs();
+        const auto it = dcg_map.find(dcg.segment_id());
+        const DeltaColumnGroupVerPB* current = it != dcg_map.end() ? &it->second : nullptr;
+        // Re-applying the same txn log must be a no-op. Unlike a partial
+        // update — which mints a fresh `.cols` name on every attempt — the
+        // filename here is fixed in the log, so a second append_dcg would
+        // strip the column ids off the identical older entry and orphan a
+        // file the newer entry still points at.
+        if (current != nullptr) {
+            const auto& files = current->column_files();
+            if (std::find(files.begin(), files.end(), dcg.column_file()) != files.end()) {
+                LOG(INFO) << "apply_add_index: dcg entry already applied, skipping. tablet=" << _tablet_meta->id()
+                          << " rssid=" << dcg.segment_id() << " file=" << dcg.column_file();
+                continue;
+            }
+        }
+        std::vector<ColumnUID> uids = columns_served_by_source(current, dcg);
+        stale_dcg_columns += dcg.col_unique_ids_size() - uids.size();
+        if (uids.empty()) {
+            // No rewritten column applies on this tablet. The file is unused
+            // here, but a cross-published sibling may still reference it.
+            // Preserve ownership and avoid duplicating the orphan when the
+            // same operation is applied again.
+            if (!orphan_names_loaded) {
+                for (const auto& file : _tablet_meta->orphan_files()) {
+                    orphan_names.insert(file.name());
+                }
+                orphan_names_loaded = true;
+            }
+            if (orphan_names.insert(dcg.column_file()).second) {
+                auto* orphan = _tablet_meta->add_orphan_files();
+                orphan->set_name(dcg.column_file());
+                orphan->set_size(dcg.file_size());
+                orphan->set_version(_tablet_meta->version());
+                orphan->set_shared(dcg.shared());
+            }
+            continue;
+        }
+        append_dcg(dcg.segment_id(), {{dcg.column_file(), dcg.encryption_meta()}}, {std::move(uids)}, {dcg.file_size()},
+                   {dcg.shared()});
+    }
+    if (stale_dcg_columns > 0) {
+        LOG(INFO) << "apply_add_index: kept " << stale_dcg_columns
+                  << " DCG columns whose data changed after the alter's snapshot on their current overlay;"
+                  << " their index coverage is unchanged. tablet=" << _tablet_meta->id()
+                  << " alter_version=" << op.alter_version();
     }
     return Status::OK();
 }
