@@ -132,13 +132,10 @@ public class DeriveRangeJoinPredicateRule extends TransformationRule {
                 continue;
             }
 
-            ColumnStatistic columnStatistic;
             ColumnRefOperator anchor = optional.get();
-            if (leftStatics.getColumnStatistic(anchor) != null) {
-                columnStatistic = leftStatics.getColumnStatistic(anchor);
-            } else if (rightStatics.getColumnStatistic(anchor) != null) {
-                columnStatistic = rightStatics.getColumnStatistic(anchor);
-            } else {
+            Statistics anchorStatistics = leftChildColumns.containsAll(refs) ? leftStatics : rightStatics;
+            ColumnStatistic columnStatistic = anchorStatistics.getColumnStatistics().get(anchor);
+            if (columnStatistic == null) {
                 continue;
             }
             if (StringUtils.isEmpty(columnStatistic.getMinString()) ||
