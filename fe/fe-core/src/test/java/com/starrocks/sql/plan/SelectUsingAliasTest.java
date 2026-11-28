@@ -70,14 +70,14 @@ public class SelectUsingAliasTest extends PlanTestBase {
         sql = "select trim(t1a) as a,count(*) as c from test_all_type group by a order by c";
         testSqlRewrite(sql, "SELECT trim(t1a) AS a, count(*) AS c\n" +
                 "FROM test.test_all_type\n" +
-                "GROUP BY a ORDER BY c ASC ");
+                "GROUP BY a ORDER BY c ASC NULLS FIRST ");
 
         // test alias in agg and in having
         sql = "select t1c as b, sum(b) as s from test_all_type group by b having s>1 order by s";
         testSqlRewrite(sql, "SELECT t1c AS b, sum(t1c) AS s\n" +
                 "FROM test.test_all_type\n" +
                 "GROUP BY b\n" +
-                "HAVING (sum(t1c)) > 1 ORDER BY s ASC ");
+                "HAVING (sum(t1c)) > 1 ORDER BY s ASC NULLS FIRST ");
 
         // test alias cascading referring
         sql = "select concat(a,',',b) as e,concat(t1a,cast(t1c as string)) as a, a as b,b as d from test_all_type";
