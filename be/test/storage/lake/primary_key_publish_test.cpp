@@ -3430,6 +3430,134 @@ TEST_P(LakePrimaryKeyPublishTest, test_cold_index_publish_reuses_base_metadata) 
     ASSERT_EQ(kChunkSize * 4, read_rows(tablet_id, version));
 }
 
+// RB-2077. A publish that finds the primary index cold rebuilds the rows no sstable in the metadata covers, and
+// the rebuild flushes the memtable once it is full. Those flushes run asynchronously, and their sstables used to
+// reach the metadata only when a later flush merged them: on a tablet written a few rows at a time no later
+// flush came, the index left the cache, and every following publish rebuilt -- and flushed -- the same rows
+// again. The publish that rebuilt the index now waits for those flushes, so a reload after it rebuilds nothing.
+TEST_P(LakePrimaryKeyPublishTest, test_cold_index_publish_persists_rebuild_flush) {
+    if (!GetParam().enable_persistent_index ||
+        GetParam().persistent_index_type != PersistentIndexTypePB::CLOUD_NATIVE) {
+        return;
+    }
+    const int64_t tablet_id = _tablet_metadata->id();
+    int64_t version = 1;
+    // Upserts keys [shift * n, (shift + 1) * n) and publishes them; |rebuilt_rows|, when given, gets the rows the
+    // publish rebuilt its primary index from.
+    auto write_and_publish = [&](int n, int shift, int64_t* rebuilt_rows = nullptr) -> TabletMetadataPtr {
+        auto [chunk, indexes] = gen_data_and_index(n, shift, true, true);
+        const int64_t txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
+                                                   .build());
+        CHECK_OK(delta_writer->open());
+        CHECK_OK(delta_writer->write(*chunk, indexes.data(), indexes.size()));
+        CHECK_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        scoped_refptr<Trace> trace(new Trace);
+        TabletMetadataPtr metadata;
+        {
+            ADOPT_TRACE(trace.get());
+            ASSIGN_OR_ABORT(metadata, publish_single_version(tablet_id, version + 1, txn_id));
+        }
+        version++;
+        if (rebuilt_rows != nullptr) {
+            *rebuilt_rows = 0;
+            for (const auto& [name, value] : trace->metrics()->Get()) {
+                if (std::string_view(name) == "rebuild_index_num_rows") {
+                    *rebuilt_rows = value;
+                }
+            }
+        }
+        return metadata;
+    };
+    const int64_t old_l0_max_mem_usage = config::l0_max_mem_usage;
+    const int32_t old_files_threshold = config::cloud_native_pk_index_rebuild_files_threshold;
+    DeferOp restore_config([&]() {
+        config::l0_max_mem_usage = old_l0_max_mem_usage;
+        config::cloud_native_pk_index_rebuild_files_threshold = old_files_threshold;
+    });
+
+    // 1. A first load whose commit flushes everything: the metadata gets its first sstables.
+    config::cloud_native_pk_index_rebuild_files_threshold = 1;
+    auto metadata = write_and_publish(kChunkSize, 0);
+    ASSERT_GT(metadata->sstable_meta().sstables_size(), 0);
+    config::cloud_native_pk_index_rebuild_files_threshold = old_files_threshold;
+    // 2. Loads that stay in the memtable, so a reload has to rebuild them.
+    write_and_publish(kChunkSize, 1);
+    metadata = write_and_publish(kChunkSize, 2);
+    const int sstables_before = metadata->sstable_meta().sstables_size();
+
+    // 3. Evict the index. The next publish rebuilds those rows, flushing as it goes, and persists what it flushed.
+    _primary_key_mgr->unload_and_remove_primary_index(tablet_id);
+    config::l0_max_mem_usage = 10;
+    int64_t rebuilt_rows = 0;
+    metadata = write_and_publish(kChunkSize, 3, &rebuilt_rows);
+    EXPECT_GE(rebuilt_rows, 2 * kChunkSize);
+    EXPECT_GT(metadata->sstable_meta().sstables_size(), sstables_before);
+
+    // 4. Evict again: the reload finds every row in the sstables. Before the fix the sstables the rebuild and the
+    // publish flushed last were lost, and it rebuilt at least the previous publish's rows again.
+    config::l0_max_mem_usage = old_l0_max_mem_usage;
+    _primary_key_mgr->unload_and_remove_primary_index(tablet_id);
+    write_and_publish(kChunkSize, 4, &rebuilt_rows);
+    EXPECT_LT(rebuilt_rows, kChunkSize);
+    ASSERT_EQ(kChunkSize * 5, read_rows(tablet_id, version));
+    // Overwrite every key once more from a cold index: a wrong index would leave duplicates behind.
+    _primary_key_mgr->unload_and_remove_primary_index(tablet_id);
+    for (int shift = 0; shift < 5; shift++) {
+        write_and_publish(kChunkSize, shift);
+    }
+    ASSERT_EQ(kChunkSize * 5, read_rows(tablet_id, version));
+}
+
+// Once a reload would rebuild too many files, commit flushes the memtable, and that flush reaches the metadata of
+// the same publish. It used to be asynchronous, so its sstable waited for the next flush to be merged, and the
+// rebuild count it was meant to cut stayed where it was.
+TEST_P(LakePrimaryKeyPublishTest, test_too_many_rebuild_files_flush_reaches_metadata) {
+    if (!GetParam().enable_persistent_index ||
+        GetParam().persistent_index_type != PersistentIndexTypePB::CLOUD_NATIVE) {
+        return;
+    }
+    const int64_t tablet_id = _tablet_metadata->id();
+    int64_t version = 1;
+    const int32_t old_files_threshold = config::cloud_native_pk_index_rebuild_files_threshold;
+    DeferOp restore_config([&]() { config::cloud_native_pk_index_rebuild_files_threshold = old_files_threshold; });
+    config::cloud_native_pk_index_rebuild_files_threshold = 2;
+    TabletMetadataPtr metadata;
+    for (int i = 0; i < 4; i++) {
+        auto [chunk, indexes] = gen_data_and_index(kChunkSize, i, true, true);
+        const int64_t txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(*chunk, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSIGN_OR_ABORT(metadata, publish_single_version(tablet_id, version + 1, txn_id));
+        version++;
+        // Never more than threshold - 1 files left to rebuild after a publish.
+        auto [file_cnt, row_cnt] = LakePersistentIndex::need_rebuild_counts(*metadata, metadata->sstable_meta());
+        EXPECT_LT(file_cnt, 2) << "publish " << i;
+    }
+    EXPECT_GT(metadata->sstable_meta().sstables_size(), 0);
+    _primary_key_mgr->unload_and_remove_primary_index(tablet_id);
+    ASSERT_EQ(kChunkSize * 4, read_rows(tablet_id, version));
+}
+
 // A publish that overwrites rows of old segments adds its deletes to each of those segments' delete vector
 // at the publish's base version. The publish has already read that version for itself, so the lookups take
 // it from the publish instead of reading it back from storage -- before RB-792 each old segment read it once
@@ -4102,11 +4230,18 @@ TEST_P(LakePrimaryKeyPublishTest, test_cloud_native_index_minor_compact_because_
         // Publish version
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
         version++;
-        if (i == config::cloud_native_pk_index_rebuild_files_threshold / 2 - 1) {
-            // last one, check need rebuilt file cnt
+        // Each publish adds a segment and a del file. The one that would leave threshold files to rebuild flushes.
+        if (i == config::cloud_native_pk_index_rebuild_files_threshold / 2 - 2) {
             ASSIGN_OR_ABORT(auto new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
             EXPECT_EQ(new_tablet_metadata->sstable_meta().sstables_size(), 0);
             EXPECT_EQ(
+                    LakePersistentIndex::need_rebuild_counts(*new_tablet_metadata, new_tablet_metadata->sstable_meta())
+                            .first,
+                    config::cloud_native_pk_index_rebuild_files_threshold - 2);
+        } else if (i == config::cloud_native_pk_index_rebuild_files_threshold / 2 - 1) {
+            ASSIGN_OR_ABORT(auto new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+            EXPECT_GT(new_tablet_metadata->sstable_meta().sstables_size(), 0);
+            EXPECT_LT(
                     LakePersistentIndex::need_rebuild_counts(*new_tablet_metadata, new_tablet_metadata->sstable_meta())
                             .first,
                     config::cloud_native_pk_index_rebuild_files_threshold);
@@ -4123,8 +4258,8 @@ TEST_P(LakePrimaryKeyPublishTest, test_cloud_native_index_minor_compact_because_
         GetParam().persistent_index_type != PersistentIndexTypePB::CLOUD_NATIVE) {
         GTEST_SKIP() << "this case only for cloud native index";
     }
-    // Set row threshold to kChunkSize * 2 rows: after 2 writes the pending row count equals
-    // the threshold, so the 3rd commit triggers an early flush.
+    // Set row threshold to kChunkSize * 2 rows: the 2nd write would leave that many rows to rebuild,
+    // so its commit flushes.
     ConfigResetGuard row_guard(&config::cloud_native_pk_index_rebuild_rows_threshold, (int64_t)kChunkSize * 2);
     ConfigResetGuard memtable_guard(&config::pk_index_memtable_max_count, 1);
 
@@ -4149,11 +4284,18 @@ TEST_P(LakePrimaryKeyPublishTest, test_cloud_native_index_minor_compact_because_
         delta_writer->close();
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
         version++;
-        if (i == 1) {
-            // After 2 writes, verify row count has reached the threshold and no SST yet.
-            ASSIGN_OR_ABORT(auto new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+        ASSIGN_OR_ABORT(auto new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+        if (i == 0) {
+            // One write is below the threshold: no sstable yet.
             EXPECT_EQ(new_tablet_metadata->sstable_meta().sstables_size(), 0);
             EXPECT_EQ(
+                    LakePersistentIndex::need_rebuild_counts(*new_tablet_metadata, new_tablet_metadata->sstable_meta())
+                            .second,
+                    kChunkSize);
+        } else if (i == 1) {
+            // The 2nd write reaches it, and its own commit flushes.
+            EXPECT_GT(new_tablet_metadata->sstable_meta().sstables_size(), 0);
+            EXPECT_LT(
                     LakePersistentIndex::need_rebuild_counts(*new_tablet_metadata, new_tablet_metadata->sstable_meta())
                             .second,
                     kChunkSize * 2);
@@ -4161,7 +4303,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_cloud_native_index_minor_compact_because_
     }
     ASSERT_EQ(kChunkSize, read_rows(tablet_id, version));
     ASSIGN_OR_ABORT(auto new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
-    // The 3rd commit must have triggered an early flush due to the row threshold.
+    // The row threshold must have triggered an early flush.
     EXPECT_TRUE(new_tablet_metadata->sstable_meta().sstables_size() > 0);
 }
 

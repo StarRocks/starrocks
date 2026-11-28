@@ -2678,16 +2678,16 @@ TEST_F(LakePersistentIndexTest, test_complete_checkpoint_gate_runs_after_rebuild
     auto preloaded = std::make_shared<TabletMetadata>(*md);
     MetaFileBuilder preload_builder(tablet, preloaded);
     ASSERT_OK(index->commit(&preload_builder));
-    ASSERT_EQ(0, preloaded->sstable_meta().sstables_size());
+    // The async flush has finished, so commit merges its sstable and the metadata gets it right away.
+    ASSERT_EQ(1, preloaded->sstable_meta().sstables_size());
 
     config::cloud_native_pk_index_rebuild_files_threshold = 1;
     ASSERT_OK(index->insert(1, &low_key, &low_value, 3));
     auto committed = std::make_shared<TabletMetadata>(*preloaded);
     MetaFileBuilder builder(tablet, committed);
     ASSERT_OK(index->commit(&builder));
-    ASSERT_GT(committed->sstable_meta().sstables_size(), 0);
-    // The pre-fix threshold path leaves the low tail in an asynchronous inactive memtable. Drain the
-    // test object's runtime state only after snapshotting |committed| so teardown cannot race its file.
+    ASSERT_EQ(2, committed->sstable_meta().sstables_size());
+    // The threshold flush is synchronous, so nothing is left in flight; drain anyway so teardown cannot race a file.
     ASSERT_OK(index->sync_flush_all_memtables(10'000'000));
     index.reset();
 

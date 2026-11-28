@@ -228,7 +228,8 @@ void RssidFileInfoContainer::add_pending_rowset(const MetaFileBuilder& builder, 
 
 StatusOr<IndexEntry*> PrimaryKeyManager::prepare_primary_index(
         const TabletMetadataPtr& metadata, MetaFileBuilder* builder, int64_t base_version, int64_t new_version,
-        std::unique_ptr<std::lock_guard<std::shared_timed_mutex>>& guard, const TabletMetadataPtr& base_metadata) {
+        std::unique_ptr<std::lock_guard<std::shared_timed_mutex>>& guard, const TabletMetadataPtr& base_metadata,
+        bool* index_rebuilt) {
     auto index_entry = _index_cache.get_or_create(metadata->id());
     index_entry->update_expire_time(MonotonicMillis() + get_cache_expire_ms());
     auto& index = index_entry->value();
@@ -240,7 +241,7 @@ StatusOr<IndexEntry*> PrimaryKeyManager::prepare_primary_index(
         TRACE_COUNTER_SCOPE_LATENCY_US("primary_index_lock_wait_us");
         guard = index.fetch_guard();
     }
-    Status st = index.lake_load(_tablet_mgr, metadata, base_version, builder, base_metadata);
+    Status st = index.lake_load(_tablet_mgr, metadata, base_version, builder, base_metadata, index_rebuilt);
     update_index_cache_size(index_entry);
     if (!st.ok()) {
         if (st.is_already_exist()) {
@@ -373,10 +374,11 @@ StatusOr<TabletMetadataPtr> PrimaryKeyManager::flush_pk_memtable(const TabletMet
 
 StatusOr<IndexEntry*> PrimaryKeyManager::rebuild_primary_index(
         const TabletMetadataPtr& metadata, MetaFileBuilder* builder, int64_t base_version, int64_t new_version,
-        std::unique_ptr<std::lock_guard<std::shared_timed_mutex>>& guard, const TabletMetadataPtr& base_metadata) {
+        std::unique_ptr<std::lock_guard<std::shared_timed_mutex>>& guard, const TabletMetadataPtr& base_metadata,
+        bool* index_rebuilt) {
     LOG(INFO) << "rebuild tablet: " << metadata->id() << " primary index, version: " << base_version;
     unload_and_remove_primary_index(metadata->id());
-    return prepare_primary_index(metadata, builder, base_version, new_version, guard, base_metadata);
+    return prepare_primary_index(metadata, builder, base_version, new_version, guard, base_metadata, index_rebuilt);
 }
 
 // Plan for interleaving del files with segments during a primary-key publish. Per del file:

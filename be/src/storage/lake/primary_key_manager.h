@@ -237,10 +237,13 @@ public:
     // |base_metadata| is the tablet's metadata at |base_version| when the caller already holds it, else null.
     // A cold index rebuilds with the delete vectors in it instead of reading the base version back from
     // storage; see LakePersistentIndex::load_from_lake_tablet().
+    // |index_rebuilt|, when given, is set to whether this call loaded the index and rebuilt rows from segments;
+    // pass it on to LakePersistentIndex::commit() as wait_inflight_flushes.
     StatusOr<IndexEntry*> prepare_primary_index(const TabletMetadataPtr& metadata, MetaFileBuilder* builder,
                                                 int64_t base_version, int64_t new_version,
                                                 std::unique_ptr<std::lock_guard<std::shared_timed_mutex>>& lock,
-                                                const TabletMetadataPtr& base_metadata = nullptr);
+                                                const TabletMetadataPtr& base_metadata = nullptr,
+                                                bool* index_rebuilt = nullptr);
 
     // Charge |index_entry| at its index's current memory_usage() and refresh the lake_pk_index_cache_* gauges.
     // Caller holds the index lock.
@@ -270,11 +273,12 @@ public:
     // during this call.
     StatusOr<TabletMetadataPtr> flush_pk_memtable(const TabletMetadataPtr& metadata, int64_t generation_version);
 
-    // |base_metadata|: as for prepare_primary_index().
+    // |base_metadata|, |index_rebuilt|: as for prepare_primary_index().
     StatusOr<IndexEntry*> rebuild_primary_index(const TabletMetadataPtr& metadata, MetaFileBuilder* builder,
                                                 int64_t base_version, int64_t new_version,
                                                 std::unique_ptr<std::lock_guard<std::shared_timed_mutex>>& lock,
-                                                const TabletMetadataPtr& base_metadata = nullptr);
+                                                const TabletMetadataPtr& base_metadata = nullptr,
+                                                bool* index_rebuilt = nullptr);
 
     DynamicCache<uint64_t, LakePersistentIndex>& index_cache() { return _index_cache; }
 

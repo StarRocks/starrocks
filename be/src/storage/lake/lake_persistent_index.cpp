@@ -101,8 +101,6 @@ void LakePersistentIndex::_reset_index_state() {
     // appends to _sstable_filesets rather than assigning, the rebuild and flush counters accumulate
     // across publishes, and _memtable being null is what _ensure_initialized() tests.
     _memtable.reset();
-    _need_rebuild_file_cnt = 0;
-    _need_rebuild_row_cnt = 0;
     _publish_sst_flush_count = 0;
     _publish_sst_flush_bytes = 0;
     _publish_version = 0;
@@ -208,14 +206,11 @@ bool LakePersistentIndex::is_memtable_full() const {
     return mem_size_exceed || mem_tracker_exceed;
 }
 
-bool LakePersistentIndex::too_many_rebuild_files() const {
-    return config::cloud_native_pk_index_rebuild_files_threshold > 0 &&
-           _need_rebuild_file_cnt >= config::cloud_native_pk_index_rebuild_files_threshold;
-}
-
-bool LakePersistentIndex::too_many_rebuild_rows() const {
-    return config::cloud_native_pk_index_rebuild_rows_threshold > 0 &&
-           _need_rebuild_row_cnt >= config::cloud_native_pk_index_rebuild_rows_threshold;
+bool LakePersistentIndex::too_many_rebuild(size_t file_cnt, int64_t row_cnt) {
+    return (config::cloud_native_pk_index_rebuild_files_threshold > 0 &&
+            file_cnt >= config::cloud_native_pk_index_rebuild_files_threshold) ||
+           (config::cloud_native_pk_index_rebuild_rows_threshold > 0 &&
+            row_cnt >= config::cloud_native_pk_index_rebuild_rows_threshold);
 }
 
 Status LakePersistentIndex::merge_sstable_into_fileset(std::unique_ptr<PersistentIndexSstable>& sstable) {
@@ -318,15 +313,7 @@ Status LakePersistentIndex::sync_flush_all_memtables(int64_t wait_timeout_us) {
     }
     TRACE_COUNTER_SCOPE_LATENCY_US("sync_flush_all_memtables_us");
     // 1. flush inactive memtables
-    for (auto& memtable : _inactive_memtables) {
-        RETURN_IF_ERROR(memtable->wait_for_flush(wait_timeout_us));
-        auto sstable = memtable->release_sstable();
-        if (sstable == nullptr) {
-            return Status::TimedOut(fmt::format("wait memtable flush timeout for tablet {}", _tablet_id));
-        }
-        RETURN_IF_ERROR(merge_sstable_into_fileset(sstable));
-    }
-    _inactive_memtables.clear();
+    RETURN_IF_ERROR(_wait_inactive_flushes(wait_timeout_us));
     // 2. flush current memtable
     if (_memtable && !_memtable->empty()) {
         RETURN_IF_ERROR(_memtable->flush());
@@ -336,9 +323,38 @@ Status LakePersistentIndex::sync_flush_all_memtables(int64_t wait_timeout_us) {
         const uint64_t next_max_rss_rowid = _memtable->max_rss_rowid();
         _memtable = std::make_shared<PersistentIndexMemtable>(_tablet_mgr, _tablet_id, next_max_rss_rowid);
     }
-    // Reset rebuild file/row count, avoid useless flush.
-    _need_rebuild_file_cnt = 0;
-    _need_rebuild_row_cnt = 0;
+    return Status::OK();
+}
+
+Status LakePersistentIndex::_wait_inactive_flushes(int64_t wait_timeout_us) {
+    for (auto& memtable : _inactive_memtables) {
+        RETURN_IF_ERROR(memtable->wait_for_flush(wait_timeout_us));
+        auto sstable = memtable->release_sstable();
+        if (sstable == nullptr) {
+            return Status::TimedOut(fmt::format("wait memtable flush timeout for tablet {}", _tablet_id));
+        }
+        RETURN_IF_ERROR(merge_sstable_into_fileset(sstable));
+    }
+    _inactive_memtables.clear();
+    return Status::OK();
+}
+
+Status LakePersistentIndex::_merge_finished_flushes() {
+    // Oldest first, and stop at the first one still flushing: filesets must stay ordered by
+    // max_rss_rowid, so a newer sstable may not overtake an older one that is not done yet.
+    int finish_point = -1;
+    for (int i = 0; i < _inactive_memtables.size(); i++) {
+        RETURN_IF_ERROR(_inactive_memtables[i]->flush_status());
+        auto sstable = _inactive_memtables[i]->release_sstable();
+        if (sstable == nullptr) {
+            break;
+        }
+        RETURN_IF_ERROR(merge_sstable_into_fileset(sstable));
+        finish_point = i;
+    }
+    if (finish_point >= 0) {
+        _inactive_memtables.erase(_inactive_memtables.begin(), _inactive_memtables.begin() + finish_point + 1);
+    }
     return Status::OK();
 }
 
@@ -366,24 +382,9 @@ Status LakePersistentIndex::flush_memtable(bool force) {
     if (!_memtable->empty() && (force || is_memtable_full())) {
         TRACE_COUNTER_INCREMENT("flush_times", 1);
         TRACE_COUNTER_SCOPE_LATENCY_US("flush_memtable_us");
-        // 1. check whether previous flush task finish.
-        int finish_point = -1;
-        for (int i = 0; i < _inactive_memtables.size(); i++) {
-            RETURN_IF_ERROR(_inactive_memtables[i]->flush_status());
-            auto sstable = _inactive_memtables[i]->release_sstable();
-            if (sstable != nullptr) {
-                // try to merge to a existing fileset
-                RETURN_IF_ERROR(merge_sstable_into_fileset(sstable));
-                finish_point = i;
-            } else {
-                break;
-            }
-        }
-        // 2. remove finished memtables
-        if (finish_point >= 0) {
-            _inactive_memtables.erase(_inactive_memtables.begin(), _inactive_memtables.begin() + finish_point + 1);
-        }
-        // 3. flush current memtable
+        // 1. merge the previous flushes that have finished.
+        RETURN_IF_ERROR(_merge_finished_flushes());
+        // 2. flush current memtable
         bool flush_async = false;
         if (_inactive_memtables.size() + 1 < config::pk_index_memtable_max_count) {
             // The flush thread runs without the context of the work flushing; carry it over.
@@ -406,9 +407,6 @@ Status LakePersistentIndex::flush_memtable(bool force) {
         }
         const uint64_t next_max_rss_rowid = _memtable->max_rss_rowid();
         _memtable = std::make_shared<PersistentIndexMemtable>(_tablet_mgr, _tablet_id, next_max_rss_rowid);
-        // Reset rebuild file/row count, avoid useless flush.
-        _need_rebuild_file_cnt = 0;
-        _need_rebuild_row_cnt = 0;
     }
     return Status::OK();
 }
@@ -953,25 +951,7 @@ void LakePersistentIndex::assign_generation_versions(PersistentIndexSstableMetaP
     }
 }
 
-Status LakePersistentIndex::commit(MetaFileBuilder* builder, int64_t generation_version) {
-    // Before the guard, as it was on the facade's forward: an early return still reports the (near
-    // zero) latency rather than leaving a publish trace with no commit entry at all.
-    TRACE_COUNTER_SCOPE_LATENCY_US("primary_index_commit_latency_us");
-    if (_memtable == nullptr) {
-        return Status::OK(); // nothing built yet; a no-op, as before the merge
-    }
-    if ((too_many_rebuild_files() || too_many_rebuild_rows()) && !_memtable->empty()) {
-        // If we have too many files or rows need to be rebuilt,
-        // we need to do flush to reduce index rebuild cost later.
-        RETURN_IF_ERROR(flush_memtable(true));
-    }
-    const bool first_nonempty_checkpoint =
-            builder->tablet_meta()->sstable_meta().sstables().empty() && !_sstable_filesets.empty();
-    const bool has_pending_memtable = !_inactive_memtables.empty() || (_memtable != nullptr && !_memtable->empty());
-    if (first_nonempty_checkpoint && has_pending_memtable) {
-        RETURN_IF_ERROR(sync_flush_all_memtables(config::pk_index_memtable_max_wait_flush_timeout_ms * 1000));
-    }
-    PersistentIndexSstableMetaPB sstable_meta;
+Status LakePersistentIndex::_dump_sstable_meta(PersistentIndexSstableMetaPB* sstable_meta) const {
     int64_t last_max_rss_rowid = 0;
     for (auto& sstable_fileset : _sstable_filesets) {
         PersistentIndexSstableMetaPB new_sstable_meta;
@@ -984,9 +964,47 @@ Status LakePersistentIndex::commit(MetaFileBuilder* builder, int64_t generation_
                                     last_max_rss_rowid, max_rss_rowid));
             }
             last_max_rss_rowid = max_rss_rowid;
-            auto* new_sstable_pb = sstable_meta.add_sstables();
+            auto* new_sstable_pb = sstable_meta->add_sstables();
             new_sstable_pb->CopyFrom(sstable_pb);
         }
+    }
+    return Status::OK();
+}
+
+Status LakePersistentIndex::commit(MetaFileBuilder* builder, int64_t generation_version, bool wait_inflight_flushes) {
+    // Before the guard, as it was on the facade's forward: an early return still reports the (near
+    // zero) latency rather than leaving a publish trace with no commit entry at all.
+    TRACE_COUNTER_SCOPE_LATENCY_US("primary_index_commit_latency_us");
+    if (_memtable == nullptr) {
+        return Status::OK(); // nothing built yet; a no-op, as before the merge
+    }
+    // Only the sstables in _sstable_filesets reach the metadata. An async flush parks its sstable on
+    // _inactive_memtables until the next flush_memtable(), which a tablet written a few rows at a time
+    // may never call again: once the index leaves the cache, that sstable is lost and the next load
+    // rebuilds the same rows -- and flushes them asynchronously again. So:
+    //  1. take every flush that has finished, without waiting;
+    //  2. when the caller asks (its load rebuilt rows from segments), wait for the flushes still
+    //     running, so what the rebuild flushed is persisted rather than rebuilt again by the next load;
+    //  3. if what a reload would rebuild is still too much, flush the memtable synchronously.
+    RETURN_IF_ERROR(_merge_finished_flushes());
+    const int64_t wait_timeout_us = config::pk_index_memtable_max_wait_flush_timeout_ms * 1000;
+    if (wait_inflight_flushes && !_inactive_memtables.empty()) {
+        TRACE_COUNTER_INCREMENT("commit_wait_rebuild_flush_times", 1);
+        RETURN_IF_ERROR(_wait_inactive_flushes(wait_timeout_us));
+    }
+    PersistentIndexSstableMetaPB sstable_meta;
+    RETURN_IF_ERROR(_dump_sstable_meta(&sstable_meta));
+    // What a reload right after this commit would rebuild: the rows that no sstable in the metadata
+    // covers, counted afresh rather than carried over from the load, which any flush in between would
+    // have made stale.
+    auto [file_cnt, row_cnt] = need_rebuild_counts(*builder->tablet_meta(), sstable_meta);
+    const bool has_pending_memtable = !_inactive_memtables.empty() || !_memtable->empty();
+    const bool first_nonempty_checkpoint =
+            builder->tablet_meta()->sstable_meta().sstables().empty() && !_sstable_filesets.empty();
+    if (has_pending_memtable && (too_many_rebuild(file_cnt, row_cnt) || first_nonempty_checkpoint)) {
+        RETURN_IF_ERROR(sync_flush_all_memtables(wait_timeout_us));
+        sstable_meta.Clear();
+        RETURN_IF_ERROR(_dump_sstable_meta(&sstable_meta));
     }
     // generation_version == 0 means "use this publish's version"; a non-zero override is passed by
     // the reshard flush (see PrimaryKeyManager::flush_pk_memtable). The builder still holds the
@@ -997,9 +1015,6 @@ Status LakePersistentIndex::commit(MetaFileBuilder* builder, int64_t generation_
     }
     assign_generation_versions(&sstable_meta, builder->tablet_meta()->sstable_meta(), generation_version);
     builder->finalize_sstable_meta(sstable_meta);
-    auto [file_cnt, row_cnt] = need_rebuild_counts(*builder->tablet_meta(), sstable_meta);
-    _need_rebuild_file_cnt = file_cnt;
-    _need_rebuild_row_cnt = row_cnt;
     return Status::OK();
 }
 
@@ -1632,7 +1647,7 @@ Status scan_one_rebuild_unit(const RebuildScanUnit& unit, const RebuildScanConte
 
 Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata,
                                                   int64_t base_version, const MetaFileBuilder* builder,
-                                                  const TabletMetadataPtr& base_metadata) {
+                                                  const TabletMetadataPtr& base_metadata, bool* rebuilt) {
     TRACE_COUNTER_SCOPE_LATENCY_US("pindex_load_from_lake_tablet_us");
     // 1. create and set key column schema
     std::shared_ptr<TabletSchema> tablet_schema = std::make_shared<TabletSchema>(metadata->schema());
@@ -1643,8 +1658,9 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
     auto pkey_schema = ChunkHelper::convert_schema(tablet_schema, pk_columns);
 
     auto [file_cnt, row_cnt] = need_rebuild_counts(*metadata, metadata->sstable_meta());
-    _need_rebuild_file_cnt = file_cnt;
-    _need_rebuild_row_cnt = row_cnt;
+    if (rebuilt != nullptr) {
+        *rebuilt = file_cnt > 0 || row_cnt > 0;
+    }
     ASSIGN_OR_RETURN(auto pk_encoding_type, tablet_schema->primary_key_encoding_type_or_error());
 
     // A range-distribution tablet owns only [seek_key, stop_key); delete keys outside it are dropped
@@ -2257,9 +2273,12 @@ Status LakePersistentIndex::parallel_upsert(ThreadPoolToken* token, uint32_t rss
 
 Status LakePersistentIndex::lake_load(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata,
                                       int64_t base_version, const MetaFileBuilder* builder,
-                                      const TabletMetadataPtr& base_metadata) {
+                                      const TabletMetadataPtr& base_metadata, bool* rebuilt) {
     TRACE_COUNTER_SCOPE_LATENCY_US("primary_index_load_latency_us");
     std::lock_guard<std::mutex> lg(_load_lock);
+    if (rebuilt != nullptr) {
+        *rebuilt = false;
+    }
     if (_loaded) {
         if (_status.ok()) {
             StorageMetrics::instance()->lake_pk_index_cache_hit_total.increment(1);
@@ -2271,7 +2290,7 @@ Status LakePersistentIndex::lake_load(TabletManager* tablet_mgr, const TabletMet
     _tablet_mgr = tablet_mgr;
     _tablet_id = metadata->id();
     const int64_t load_start_us = MonotonicMicros();
-    _status = _do_lake_load(metadata, base_version, builder, base_metadata);
+    _status = _do_lake_load(metadata, base_version, builder, base_metadata, rebuilt);
     StorageMetrics::instance()->lake_pk_index_load_total.increment(1);
     StorageMetrics::instance()->lake_pk_index_load_duration_us.increment(MonotonicMicros() - load_start_us);
     TEST_SYNC_POINT_CALLBACK("lake_index_load.1", &_status);
@@ -2290,7 +2309,8 @@ Status LakePersistentIndex::lake_load(TabletManager* tablet_mgr, const TabletMet
 }
 
 Status LakePersistentIndex::_do_lake_load(const TabletMetadataPtr& metadata, int64_t base_version,
-                                          const MetaFileBuilder* builder, const TabletMetadataPtr& base_metadata) {
+                                          const MetaFileBuilder* builder, const TabletMetadataPtr& base_metadata,
+                                          bool* rebuilt) {
     // init() appends to _sstable_filesets rather than assigning, so it has to start clean. That used
     // to be guaranteed by construction -- a load built a brand new index -- and is now the
     // responsibility of _reset_index_state(). Assert it rather than trust it: a reload that inherited
@@ -2298,7 +2318,7 @@ Status LakePersistentIndex::_do_lake_load(const TabletMetadataPtr& metadata, int
     DCHECK(_memtable == nullptr) << "lake_load on a non-reset index, tablet:" << _tablet_id;
     DCHECK(_sstable_filesets.empty()) << "lake_load on a non-reset index, tablet:" << _tablet_id;
     RETURN_IF_ERROR(init(metadata));
-    return load_from_lake_tablet(_tablet_mgr, metadata, base_version, builder, base_metadata);
+    return load_from_lake_tablet(_tablet_mgr, metadata, base_version, builder, base_metadata, rebuilt);
 }
 
 bool LakePersistentIndex::is_load(int64_t base_version) {
