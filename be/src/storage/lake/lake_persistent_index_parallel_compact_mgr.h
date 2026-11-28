@@ -15,6 +15,8 @@
 #pragma once
 
 #include <atomic>
+#include <condition_variable>
+#include <cstdint>
 #include <memory>
 #include <mutex>
 #include <utility>
@@ -33,6 +35,7 @@ namespace starrocks::lake {
 
 class TabletManager;
 class PersistentIndexSstable;
+class LakePersistentIndexParallelCompactTask;
 
 class AsyncCompactCB {
 public:
@@ -44,10 +47,18 @@ public:
 
     void update_status(const Status& status);
 
+    // Binds `task` to this callback and submits it through the token. A task submitted this way must call
+    // task_done() once it has run or been cancelled, so that wait_for() can tell when the pool dropped it.
+    Status submit(const std::shared_ptr<LakePersistentIndexParallelCompactTask>& task);
+
+    // Called by a task submitted through submit() after it has reported its result or its cancellation.
+    void task_done();
+
     // -1 means wait forever.
     // return true when all tasks are done before timeout.
     // return false when timeout happens.
     // It should be called in main thread to wait for compaction done.
+    // Returns Aborted if the pool was shut down before every task submitted through submit() ran or was cancelled.
     StatusOr<bool> wait_for(int timeout_ms = -1);
 
     ThreadPoolToken* thread_pool_token() { return _thread_pool_token.get(); }
@@ -64,6 +75,10 @@ private:
     std::vector<PersistentIndexSstablePB> _output_sstables;
     scoped_refptr<Trace> _trace_guard;
     int64_t _create_us;
+    // Tasks accepted through submit(), and how many of them have run or been cancelled. Guarded by _mutex.
+    int64_t _num_submitted = 0;
+    int64_t _num_done = 0;
+    std::condition_variable _all_done_cv;
 };
 
 using AsyncCompactCBPtr = std::unique_ptr<AsyncCompactCB>;

@@ -59,6 +59,16 @@ size_t LakePersistentIndexParallelCompactTask::input_sstable_file_cnt() const {
 
 void LakePersistentIndexParallelCompactTask::run() {
     DCHECK(_cb != nullptr);
+    bool reported = false;
+    // With enable_threadpool_catch_task_exception the pool catches an exception thrown below and unwinds through
+    // here. Report a failure in that case, so wait_for() does not apply a result without this task's output, and
+    // count the task as done either way, so ~AsyncCompactCB() does not wait for it forever.
+    DeferOp report_done([&]() {
+        if (!reported) {
+            _cb->update_status(Status::InternalError("LakePersistentIndexParallelCompactTask threw an exception"));
+        }
+        _cb->task_done();
+    });
     Status status = do_run();
     if (status.is_corruption()) {
         // Corrupted bytes usually come from the local cache copy of an input sstable.
@@ -74,6 +84,7 @@ void LakePersistentIndexParallelCompactTask::run() {
     if (status.ok()) {
         _cb->add_result(_output_sstables);
     }
+    reported = true;
 }
 
 void LakePersistentIndexParallelCompactTask::drop_input_sstable_cache() {
@@ -90,6 +101,8 @@ void LakePersistentIndexParallelCompactTask::drop_input_sstable_cache() {
 void LakePersistentIndexParallelCompactTask::cancel() {
     // When canceling, just update the status to cancelled.
     DCHECK(_cb != nullptr);
+    // Counted as done even if update_status() throws: the pool catches exceptions from cancel().
+    DeferOp report_done([&]() { _cb->task_done(); });
     _cb->update_status(Status::Cancelled("LakePersistentIndexParallelCompactTask cancelled"));
 }
 
@@ -269,10 +282,43 @@ AsyncCompactCB::~AsyncCompactCB() {
     // before the members those tasks touch are destroyed; as the first declared member, the token would otherwise be
     // destroyed last.
     _thread_pool_token.reset();
+    // ThreadPool::shutdown() takes queued tasks off the token and only cancels them after its workers exit, so a
+    // cancellation can still be on its way after the token is gone. Wait for it before the members it reports into
+    // are destroyed.
+    std::unique_lock<std::mutex> l(_mutex);
+    _all_done_cv.wait(l, [this]() { return _num_done >= _num_submitted; });
 }
 
 Trace* AsyncCompactCB::trace() {
     return _trace_guard.get();
+}
+
+Status AsyncCompactCB::submit(const std::shared_ptr<LakePersistentIndexParallelCompactTask>& task) {
+    task->set_cb(this);
+    {
+        // Counted before the submit so a worker that finishes the task first cannot make the done count overtake it.
+        std::lock_guard<std::mutex> lg(_mutex);
+        _num_submitted++;
+    }
+    bool accepted = false;
+    // Rolled back unless the token accepted the task, including when submit() throws, or ~AsyncCompactCB() would
+    // wait for a task that never reaches the pool.
+    DeferOp rollback([&]() {
+        if (!accepted) {
+            std::lock_guard<std::mutex> lg(_mutex);
+            _num_submitted--;
+        }
+    });
+    auto st = _thread_pool_token->submit(task);
+    accepted = st.ok();
+    return st;
+}
+
+void AsyncCompactCB::task_done() {
+    std::lock_guard<std::mutex> lg(_mutex);
+    _num_done++;
+    // Notified under the lock: once the destructor sees the last task done it destroys the condition variable.
+    _all_done_cv.notify_all();
 }
 
 StatusOr<bool> AsyncCompactCB::wait_for(int timeout_ms) {
@@ -287,7 +333,21 @@ StatusOr<bool> AsyncCompactCB::wait_for(int timeout_ms) {
     }
     if (succ) {
         ADOPT_TRACE(_trace_guard.get());
-        RETURN_IF_ERROR(_status);
+        Status status;
+        {
+            std::lock_guard<std::mutex> lg(_mutex);
+            if (_num_done < _num_submitted) {
+                // The token is idle but some tasks neither ran nor were cancelled yet: ThreadPool::shutdown() took
+                // them off the queue, and it wakes this waiter before it cancels them. Their output is missing, so
+                // the result must not be applied.
+                _status.update(Status::Aborted(
+                        strings::Substitute("$0 of $1 parallel compaction tasks did not run, the thread pool was shut "
+                                            "down",
+                                            _num_submitted - _num_done, _num_submitted)));
+            }
+            status = _status;
+        }
+        RETURN_IF_ERROR(status);
         std::sort(_output_sstables.begin(), _output_sstables.end(),
                   [&](const PersistentIndexSstablePB& a, const PersistentIndexSstablePB& b) {
                       return comparator->Compare(Slice(a.range().start_key()), Slice(b.range().start_key())) < 0;
@@ -329,9 +389,12 @@ Status LakePersistentIndexParallelCompactMgr::init() {
 }
 
 void LakePersistentIndexParallelCompactMgr::shutdown() {
+    // The pool is shut down but not destroyed. Lake compaction tasks and publishes can still be running when the
+    // process stops: they call async_compact() after this point, and their AsyncCompactCBs own tokens of this pool.
+    // A shut-down pool still hands out tokens and refuses their tasks, so those callers fail instead of
+    // dereferencing a destroyed pool, and the pool is destroyed with this manager, once they have finished.
     if (_thread_pool) {
         _thread_pool->shutdown();
-        _thread_pool.reset();
     }
 }
 
@@ -362,8 +425,7 @@ StatusOr<AsyncCompactCBPtr> LakePersistentIndexParallelCompactMgr::async_compact
         // run via thread pool
         cb = std::make_unique<AsyncCompactCB>(_thread_pool->new_token(ThreadPool::ExecutionMode::CONCURRENT), callback);
         for (auto& task : tasks) {
-            task->set_cb(cb.get());
-            auto submit_st = cb->thread_pool_token()->submit(task);
+            auto submit_st = cb->submit(task);
             if (!submit_st.ok()) {
                 LOG(ERROR) << "Failed to submit persistent index parallel compaction task to thread pool: "
                            << submit_st;
