@@ -228,21 +228,7 @@ Status ColumnReader::_init(ColumnMetaPB* meta, const TabletColumn* column) {
                 break;
             case BITMAP_INDEX:
                 _bitmap_index_meta.reset(index_meta->release_bitmap_index());
-                if (_bitmap_index_meta->dict_column().has_value_index_meta()) {
-                    const auto& index_meta = _bitmap_index_meta->dict_column().value_index_meta();
-                    _index_root_pages.bitmap_dict_value = PagePointer(index_meta.root_page());
-                    _index_root_pages.bitmap_dict_value_root_is_data = index_meta.is_root_data_page();
-                }
-                if (_bitmap_index_meta->dict_column().has_ordinal_index_meta()) {
-                    const auto& index_meta = _bitmap_index_meta->dict_column().ordinal_index_meta();
-                    _index_root_pages.bitmap_dict_ordinal = PagePointer(index_meta.root_page());
-                    _index_root_pages.bitmap_dict_ordinal_root_is_data = index_meta.is_root_data_page();
-                }
-                if (_bitmap_index_meta->bitmap_column().has_ordinal_index_meta()) {
-                    const auto& index_meta = _bitmap_index_meta->bitmap_column().ordinal_index_meta();
-                    _index_root_pages.bitmap_ordinal = PagePointer(index_meta.root_page());
-                    _index_root_pages.bitmap_ordinal_root_is_data = index_meta.is_root_data_page();
-                }
+                set_bitmap_index_root_pages(*_bitmap_index_meta, &_index_root_pages);
                 MEM_TRACKER_SAFE_CONSUME(RuntimeEnv::GetInstance()->bitmap_index_mem_tracker(),
                                          _bitmap_index_meta->SpaceUsedLong());
                 _meta_mem_usage.fetch_add(_bitmap_index_meta->SpaceUsedLong(), std::memory_order_relaxed);
@@ -413,6 +399,24 @@ Status ColumnReader::_init(ColumnMetaPB* meta, const TabletColumn* column) {
     }
 }
 
+void ColumnReader::set_bitmap_index_root_pages(const BitmapIndexPB& meta, IndexRootPages* roots) {
+    if (meta.dict_column().has_value_index_meta()) {
+        const auto& index_meta = meta.dict_column().value_index_meta();
+        roots->bitmap_dict_value = PagePointer(index_meta.root_page());
+        roots->bitmap_dict_value_root_is_data = index_meta.is_root_data_page();
+    }
+    if (meta.dict_column().has_ordinal_index_meta()) {
+        const auto& index_meta = meta.dict_column().ordinal_index_meta();
+        roots->bitmap_dict_ordinal = PagePointer(index_meta.root_page());
+        roots->bitmap_dict_ordinal_root_is_data = index_meta.is_root_data_page();
+    }
+    if (meta.bitmap_column().has_ordinal_index_meta()) {
+        const auto& index_meta = meta.bitmap_column().ordinal_index_meta();
+        roots->bitmap_ordinal = PagePointer(index_meta.root_page());
+        roots->bitmap_ordinal_root_is_data = index_meta.is_root_data_page();
+    }
+}
+
 // An IDG .idx file only accelerates the scan; the segment data is complete without it. One that tablet
 // metadata still references can be gone -- a vacuum racing a query on an old version, or a downgrade and
 // re-upgrade that reclaimed it -- so NotFound reads as "no IDG index" for this segment rather than failing
@@ -442,8 +446,8 @@ Status ColumnReader::new_bitmap_index_iterator(const IndexReadOptions& opts, Bit
             for (const auto& e : list) {
                 for (const auto& k : e.keys) {
                     if (k.col_unique_id == opts.col_unique_id && k.index_type == IndexType::BITMAP) {
-                        Status st =
-                                _new_idg_backed_bitmap_index_iterator(opts, e.index_file, e.encryption_meta, iterator);
+                        Status st = _new_idg_backed_bitmap_index_iterator(opts, e.index_file, e.encryption_meta,
+                                                                          e.file_size, iterator);
                         if (skip_missing_idg_index_file(st, e.index_file, opts)) {
                             // No iterator: the caller treats the column as having no bitmap index.
                             *iterator = nullptr;
@@ -470,7 +474,7 @@ Status ColumnReader::new_bitmap_index_iterator(const IndexReadOptions& opts, Bit
 
 Status ColumnReader::_new_idg_backed_bitmap_index_iterator(const IndexReadOptions& opts,
                                                            const std::string& idx_filename,
-                                                           const std::string& encryption_meta,
+                                                           const std::string& encryption_meta, int64_t file_size,
                                                            BitmapIndexIterator** iterator) {
     // Resolve the .idx file path. IDG entries store relative filenames
     // (matching the gen_idx_filename UUID-based scheme) under the same
@@ -490,7 +494,12 @@ Status ColumnReader::_new_idg_backed_bitmap_index_iterator(const IndexReadOption
         ASSIGN_OR_RETURN(raf_opts.encryption_info, KeyCache::instance().unwrap_encryption_meta(encryption_meta));
     }
     ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(idx_path));
-    ASSIGN_OR_RETURN(auto idx_file, fs->new_random_access_file(raf_opts, idx_path));
+    // The size from the entry spares the footer read a size request; entries without one leave it to the file.
+    FileInfo idx_info{.path = idx_path};
+    if (file_size > 0) {
+        idx_info.size = file_size;
+    }
+    ASSIGN_OR_RETURN(auto idx_file, fs->new_random_access_file(raf_opts, idx_info));
 
     // Parse the .idx footer and look up the bitmap meta for this column.
     lake::IndexFileReader idx_reader;
@@ -734,7 +743,11 @@ Status ColumnReader::bloom_filter(const std::vector<const ColumnPredicate*>& pre
                                          KeyCache::instance().unwrap_encryption_meta(e.encryption_meta));
                     }
                     ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(idx_path));
-                    ASSIGN_OR_RETURN(idg_file_holder, fs->new_random_access_file(raf_opts, idx_path));
+                    FileInfo idx_info{.path = idx_path};
+                    if (e.file_size > 0) {
+                        idx_info.size = e.file_size;
+                    }
+                    ASSIGN_OR_RETURN(idg_file_holder, fs->new_random_access_file(raf_opts, idx_info));
 
                     lake::IndexFileReader idx_reader;
                     RETURN_IF_ERROR(idx_reader.init(idg_file_holder.get()));
