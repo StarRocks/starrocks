@@ -20,6 +20,7 @@
 #include <atomic>
 #include <chrono>
 #include <filesystem>
+#include <functional>
 #include <future>
 #include <iomanip>
 #include <map>
@@ -35,6 +36,9 @@
 #include "base/testutil/scoped_updater.h"
 #include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
+#include "cache/datacache.h"
+#include "cache/mem_cache/lrucache_engine.h"
+#include "cache/mem_cache/page_cache.h"
 #include "column/chunk.h"
 #include "column/chunk_factory.h"
 #include "column/datum_tuple.h"
@@ -1671,7 +1675,7 @@ TEST_F(LakeDuplicateTabletReaderTest, test_read_ahead_starts_segment_windows) {
     ConfigResetGuard<int32_t> window_guard(&config::remote_prefetch_window_blocks, 128);
 
     auto scan = [&](bool scheduler, int32_t segments_ahead, OlapReaderStatistics* stats,
-                    ColumnPredicate* pred = nullptr) {
+                    ColumnPredicate* pred = nullptr, bool use_page_cache = false) {
         g_remote_io_scheduler_enabled.store(scheduler);
         ConfigResetGuard<int32_t> ahead_guard(&config::lake_scan_read_ahead_segments, segments_ahead);
         auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), _tablet_metadata, *_schema);
@@ -1681,6 +1685,7 @@ TEST_F(LakeDuplicateTabletReaderTest, test_read_ahead_starts_segment_windows) {
         params.lake_io_opts.fill_data_cache = true;
         params.lake_io_opts.fs = fs;
         params.lake_io_opts.remote_read = RemoteReadContext::for_query(1, 1, 0, 42);
+        params.use_page_cache = use_page_cache;
         if (pred != nullptr) {
             PredicateAndNode root;
             root.add_child(PredicateColumnNode(pred));
@@ -1742,6 +1747,37 @@ TEST_F(LakeDuplicateTabletReaderTest, test_read_ahead_starts_segment_windows) {
     EXPECT_EQ(3, stats.remote_prefetch_idle_windows);
     EXPECT_EQ(0, stats.segment_read_ahead_started);
     fs->submitted = 1;
+
+    // Runs `check` with a page cache of its own (standard UT initialization leaves the global one unavailable).
+    auto with_page_cache = [&](const std::function<void()>& check) {
+        auto previous_page_cache = DataCache::GetInstance()->page_cache_ptr();
+        auto engine = std::make_shared<LRUCacheEngine>();
+        ASSERT_OK(engine->init(MemCacheOptions{.mem_space_size = 64 * 1024 * 1024}));
+        DataCache::GetInstance()->set_page_cache(std::make_shared<StoragePageCache>(engine.get()));
+        DeferOp restore_page_cache([&] { DataCache::GetInstance()->set_page_cache(previous_page_cache); });
+        check();
+    };
+
+    // The same switch on files that are not cached, reading through a page cache: the switch reads the pages at the
+    // reader's position into the page cache before it rebuilds the window, which must not take the segment as cached.
+    with_page_cache([&] {
+        EXPECT_EQ(expected, scan(true, 16, &stats, all_rows.get(), true /* use_page_cache */));
+        EXPECT_GT(stats.late_materialize_rows, 0);
+        EXPECT_LT(stats.late_materialize_rows, static_cast<int64_t>(expected.size()));
+        EXPECT_EQ(0, stats.remote_prefetch_idle_windows);
+        EXPECT_EQ(2, stats.segment_read_ahead_started);
+    });
+
+    // A reader whose predicate column has its first page in the page cache, read there by another reader, while the
+    // column it reads late needs a fetch: the segment is not taken as cached.
+    with_page_cache([&] {
+        // Reads the first page of v in the first segment (the others hold no 1) and, no row passing, nothing of k.
+        std::unique_ptr<ColumnPredicate> no_row(new_column_eq_predicate(get_type_info(TYPE_INT), 1, "1"));
+        EXPECT_TRUE(scan(true, 16, &stats, no_row.get(), true /* use_page_cache */).empty());
+        EXPECT_EQ(expected, scan(true, 16, &stats, all_rows.get(), true /* use_page_cache */));
+        EXPECT_EQ(0, stats.remote_prefetch_idle_windows);
+        EXPECT_EQ(2, stats.segment_read_ahead_started);
+    });
 
     // Each segment still reads ahead at its own turn.
     int64_t warms = fs->warms.load();
