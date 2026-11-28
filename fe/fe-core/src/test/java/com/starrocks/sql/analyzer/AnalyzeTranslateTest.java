@@ -120,7 +120,7 @@ public class AnalyzeTranslateTest {
                 "(EXISTS (SELECT *\n" +
                 "FROM `lineitem`\n" +
                 "WHERE (`l_orderkey` = `o_orderkey`) AND (`l_commitdate` < `l_receiptdate`)))\n" +
-                "GROUP BY `o_orderpriority` ORDER BY `o_orderpriority` ASC ");
+                "GROUP BY `o_orderpriority` ORDER BY `o_orderpriority` ASC NULLS FIRST ");
 
     }
 
