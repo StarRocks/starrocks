@@ -223,6 +223,8 @@ Status ArrowScanner::next_batch() {
 
     if (_batch == nullptr) {
         _curr_file_reader.reset();
+        // The last stream has ended, which can happen before the producer finishes its pipe.
+        _read_to_format_end = _next_file >= _scan_range.ranges.size();
         return Status::EndOfFile("reach end of current file");
     }
 

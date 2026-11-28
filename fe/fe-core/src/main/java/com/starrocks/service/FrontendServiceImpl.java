@@ -1607,6 +1607,10 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 TabletCommitInfo.fromThrift(request.getCommitInfos()),
                 TabletFailInfo.fromThrift(request.getFailInfos()),
                 timeoutMs, attachment);
+        // The transaction is committed even when it does not become visible in time, so the counters the backend
+        // reported are final. Record them before returning a publish timeout: the task still turns FINISHED when
+        // the transaction becomes visible, and information_schema.loads would otherwise show -1 for its rows.
+        GlobalStateMgr.getCurrentState().getStreamLoadMgr().setSyncStreamLoadState(request.getTxnId(), attachment, "");
         if (!ret) {
             // committed success but not visible
             status.setStatus_code(TStatusCode.PUBLISH_TIMEOUT);
@@ -1621,15 +1625,6 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
         // if commit and publish is success, load can be regarded as success
         MetricRepo.COUNTER_LOAD_FINISHED.increase(1L);
-        if (null == attachment) {
-            return;
-        }
-        // collect table-level metrics
-        Table tbl = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), request.getTbl());
-        if (null == tbl) {
-            return;
-        }
-        GlobalStateMgr.getCurrentState().getStreamLoadMgr().setSyncStreamLoadState(request.getTxnId(), attachment, "");
     }
 
     @Override
@@ -1998,6 +1993,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             }
             streamLoadTask.setTUniqueId(request.getLoadId());
             streamLoadTask.setCoordinator(coord);
+            streamLoadTask.markLoadingStarted();
             try {
                 QeProcessorImpl.INSTANCE.registerQuery(streamLoadInfo.getId(), coord);
             } catch (AlreadyExistsException e) {

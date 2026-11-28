@@ -134,7 +134,7 @@ where db_name='db_${uuid0}'
   and load_start_time >= date_sub(now(), interval 1 hour) and load_start_time <= date_add(now(), interval 1 hour)
   and load_finish_time >= date_sub(now(), interval 1 hour) and load_finish_time <= date_add(now(), interval 1 hour);
 -- result:
-2
+3
 -- !result
 select count(1) from information_schema.loads where db_name='db_${uuid0}';
 -- result:
@@ -171,7 +171,7 @@ select count(1) from information_schema.loads where db_name='db_${uuid0}' and st
 select count(1) from information_schema.loads where table_name='t_stream_${uuid0}'
 and load_start_time >= date_sub(now(), interval 1 hour) and load_start_time <= date_add(now(), interval 1 hour);
 -- result:
-0
+1
 -- !result
 select count(1) from information_schema.loads where table_name='__no_such_table__'
 and load_start_time >= date_sub(now(), interval 1 hour) and load_start_time <= date_add(now(), interval 1 hour);
@@ -190,7 +190,7 @@ and load_start_time >= date_sub(now(), interval 1 hour) and load_start_time <= d
 -- !result
 select count(1) from information_schema.loads where db_name='db_${uuid0}' and create_time >= date_sub(now(), interval 1 hour) and create_time <= date_add(now(), interval 1 hour) and load_start_time >= date_sub(now(), interval 1 hour);
 -- result:
-3
+4
 -- !result
 select count(1) from information_schema.loads where db_name='db_${uuid0}' and create_time > date_add(now(), interval 1 hour) and load_start_time >= date_sub(now(), interval 1 hour);
 -- result:
@@ -198,7 +198,7 @@ select count(1) from information_schema.loads where db_name='db_${uuid0}' and cr
 -- !result
 select count(1) from information_schema.loads where db_name='db_${uuid0}' and load_start_time >= date_sub(now(), interval 1 hour) and load_start_time <= date_add(now(), interval 1 hour);
 -- result:
-3
+4
 -- !result
 select count(1) from information_schema.loads where db_name='db_${uuid0}' and load_start_time > date_add(now(), interval 1 hour);
 -- result:

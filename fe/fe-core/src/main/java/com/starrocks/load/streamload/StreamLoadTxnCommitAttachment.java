@@ -41,6 +41,9 @@ public class StreamLoadTxnCommitAttachment extends TxnCommitAttachment implement
     private long numRowsUnselected;
     @SerializedName(value = "numLoadBytesTotal")
     private long numLoadBytesTotal;
+    // -1 when the backends did not report it, also in an attachment written before the field existed
+    @SerializedName(value = "receivedBytes")
+    private long receivedBytes = -1;
 
     public StreamLoadTxnCommitAttachment() {
         super(TransactionState.LoadJobSourceType.FRONTEND_STREAMING);
@@ -103,6 +106,14 @@ public class StreamLoadTxnCommitAttachment extends TxnCommitAttachment implement
 
     public long getNumLoadBytesTotal() {
         return numLoadBytesTotal;
+    }
+
+    public long getReceivedBytes() {
+        return receivedBytes;
+    }
+
+    public void setReceivedBytes(long receivedBytes) {
+        this.receivedBytes = receivedBytes;
     }
 
 
