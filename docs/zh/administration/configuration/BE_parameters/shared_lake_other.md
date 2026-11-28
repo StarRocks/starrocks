@@ -525,7 +525,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 类型：Int
 - 单位：-
 - 是否动态：是
-- 描述：查询的 Segment Reader 最多提前请求多少个 Data Cache 缓存块，包括排队中、读取中以及已读取但尚未消费的缓存块。该参数限制 Reader 超前的距离，缓存块何时读取由调度器决定。导入等其他后台读取不预读，compaction 的预读由 `lake_compaction_prefetch_window_blocks` 控制。如果查询的 Segment Reader 读取的第一个页不需要从远端读取（该页已在缓存中，或远程 I/O 调度器因队列已满拒绝预读该页），就认为整个 Segment 都已缓存，不再预读，查询 profile 中的 RemotePrefetchIdleWindows 记录这类 Reader 的数量。设为 `0` 关闭预读。修改后对之后打开的 Segment Reader 生效。仅当 `remote_io_scheduler_enable` 为 `true` 时生效。
+- 描述：查询的 Segment Reader 最多提前请求多少个 Data Cache 缓存块，包括排队中、读取中以及已读取但尚未消费的缓存块。该参数限制 Reader 超前的距离，缓存块何时读取由调度器决定。导入等其他后台读取不预读，compaction 的预读由 `lake_compaction_prefetch_window_blocks` 控制。如果查询的 Segment Reader 开始读取时，其预读列和延迟物化列各自的第一个页都不需要从远端读取（页已在缓存中，或远程 I/O 调度器因队列已满拒绝预读），就认为整个 Segment 都已缓存，不再预读，查询 profile 中的 RemotePrefetchIdleWindows 记录这类 Reader 的数量。设为 `0` 关闭预读。修改后对之后打开的 Segment Reader 生效。仅当 `remote_io_scheduler_enable` 为 `true` 时生效。
 - 引入版本：-
 
 ### remote_read_adaptive_limit

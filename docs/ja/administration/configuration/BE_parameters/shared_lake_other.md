@@ -519,7 +519,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - タイプ: Int
 - 単位: -
 - 変更可能: はい
-- 説明: クエリの Segment Reader が、消費中の位置より先に要求する Data Cache ブロックの最大数。キュー中、取得中、取得済みで未読のブロックを含みます。Reader がどこまで先行するかを制限するもので、ブロックをいつ取得するかはスケジューラが決めます。ロードなどのその他のバックグラウンド読み取りは先読みしません。Compaction の先読みは `lake_compaction_prefetch_window_blocks` で制御します。最初のページの取得が不要なクエリの Segment Reader（そのページがすでにキャッシュにある場合、またはキューが満杯のためリモート I/O スケジューラがそのページの先読みを拒否した場合）は、Segment 全体がキャッシュ済みとみなして先読みしません。このような Reader の数はクエリプロファイルの RemotePrefetchIdleWindows に記録されます。`0` で先読みを無効にします。変更は以降に開かれる Segment Reader に反映されます。`remote_io_scheduler_enable` が `true` の場合にのみ有効です。
+- 説明: クエリの Segment Reader が、消費中の位置より先に要求する Data Cache ブロックの最大数。キュー中、取得中、取得済みで未読のブロックを含みます。Reader がどこまで先行するかを制限するもので、ブロックをいつ取得するかはスケジューラが決めます。ロードなどのその他のバックグラウンド読み取りは先読みしません。Compaction の先読みは `lake_compaction_prefetch_window_blocks` で制御します。クエリの Segment Reader は、読み取り開始時に、先読みする列と遅延マテリアライズする列のいずれも最初のページの取得が不要な場合（ページがすでにキャッシュにある場合、またはキューが満杯のためリモート I/O スケジューラが先読みを拒否した場合）、Segment 全体がキャッシュ済みとみなして先読みしません。このような Reader の数はクエリプロファイルの RemotePrefetchIdleWindows に記録されます。`0` で先読みを無効にします。変更は以降に開かれる Segment Reader に反映されます。`remote_io_scheduler_enable` が `true` の場合にのみ有効です。
 - 導入バージョン: -
 
 ### remote_read_adaptive_limit
