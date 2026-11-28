@@ -68,10 +68,13 @@ public:
     std::string client_id;
     std::string client_secret;
     std::string tenant_id;
+    std::string token_file;
+    std::string authority_host;
 
     bool operator==(const AzureCloudCredential& rhs) const {
         return shared_key == rhs.shared_key && sas_token == rhs.sas_token && client_id == rhs.client_id &&
-               client_secret == rhs.client_secret && tenant_id == rhs.tenant_id;
+               client_secret == rhs.client_secret && tenant_id == rhs.tenant_id && token_file == rhs.token_file &&
+               authority_host == rhs.authority_host;
     }
 };
 
