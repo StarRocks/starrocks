@@ -97,7 +97,8 @@ Status LambdaFunction::extract_outer_common_exprs(RuntimeState* state, ExprConte
                 DCHECK_NE(new_slot_id, slot_id) << "slot_id " << new_slot_id << " already exists in expr_ctx";
             });
 #endif
-            ColumnRef* column_ref = state->obj_pool()->add(new ColumnRef(child->type(), slot_id));
+            ObjectPool* pool = ctx->column_ref_pool != nullptr ? ctx->column_ref_pool : state->obj_pool();
+            ColumnRef* column_ref = pool->add(new ColumnRef(child->type(), slot_id));
             VLOG(2) << "add new common expr, slot_id: " << slot_id << ", new expr: " << column_ref->debug_string()
                     << ", old expr: " << child->debug_string();
             expr->_children[i] = column_ref;
