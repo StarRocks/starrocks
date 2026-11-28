@@ -28,7 +28,9 @@
 #include "gutil/strings/substitute.h"
 #include "testutil/assert.h"
 #include "testutil/parallel_test.h"
+#include "util/defer_op.h"
 #include "util/json.h"
+#include "util/raw_container.h"
 
 namespace starrocks::serde {
 
@@ -284,6 +286,45 @@ PARALLEL_TEST(ColumnArraySerdeTest, binary_column) {
             ASSERT_EQ(c1->get_slice(i), c2->get_slice(i));
         }
     }
+}
+
+// NOLINTNEXTLINE
+GROUP_SLOW_PARALLEL_TEST(ColumnArraySerdeTest, binary_column_byte_payload_limit) {
+    auto column = BinaryColumn::create();
+    auto& bytes = column->get_bytes();
+    DeferOp reset([&] { bytes.clear(); });
+    // Reserve virtual space without initializing the multi-GiB payload.
+    raw::make_room(&bytes, Column::MAX_CAPACITY_LIMIT);
+    bytes.resize(Column::MAX_CAPACITY_LIMIT - 1);
+    ASSERT_TRUE(column->is_payload_size_representable().ok());
+    bytes.resize(Column::MAX_CAPACITY_LIMIT);
+    ASSERT_TRUE(column->is_payload_size_representable().is_capacity_limit_exceeded());
+    std::vector<uint8_t> buffer(16);
+    auto result = ColumnArraySerde::serialize(*column, buffer.data());
+    ASSERT_FALSE(result.ok());
+    ASSERT_TRUE(result.status().is_capacity_limit_exceeded());
+    ASSERT_NE(std::string::npos, std::string(result.status().message()).find("byte payload size"));
+}
+
+// NOLINTNEXTLINE
+GROUP_SLOW_PARALLEL_TEST(ColumnArraySerdeTest, binary_column_offset_payload_limit) {
+    auto column = BinaryColumn::create();
+    auto& offsets = column->get_offset();
+    DeferOp reset([&] { offsets.clear(); });
+    const size_t limit_count = Column::MAX_CAPACITY_LIMIT / sizeof(BinaryColumn::Offset);
+    // Reserve virtual space without initializing the multi-GiB offset payload.
+    raw::make_room(&offsets, limit_count);
+    offsets.resize(limit_count - 1);
+    offsets.back() = 0;
+    ASSERT_TRUE(column->is_payload_size_representable().ok());
+    offsets.resize(limit_count);
+    offsets.back() = 0;
+    ASSERT_TRUE(column->is_payload_size_representable().is_capacity_limit_exceeded());
+    std::vector<uint8_t> buffer(16);
+    auto result = ColumnArraySerde::serialize(*column, buffer.data());
+    ASSERT_FALSE(result.ok());
+    ASSERT_TRUE(result.status().is_capacity_limit_exceeded());
+    ASSERT_NE(std::string::npos, std::string(result.status().message()).find("offset payload size"));
 }
 
 // NOLINTNEXTLINE
