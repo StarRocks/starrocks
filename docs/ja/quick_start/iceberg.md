@@ -241,6 +241,10 @@ MinIO のユーザー名とパスワードは docker-compose.yml ファイルに
 ![img](../_assets/quick-start/MinIO-Iceberg-data.png)
 :::
 
+:::tip
+運用データベース（MySQL、PostgreSQL、MongoDB など）から Iceberg テーブルにデータをレプリケートするには、CDC および増分同期で S3 上の Iceberg テーブルへの書き込みをサポートするオープンソースの取り込みエンジン [OLake Go](https://olake.io/docs/) を使用できます。データが Iceberg に書き込まれると、StarRocks は Iceberg カタログを通じて直接クエリできます。StarRocks のサポート状況については、[OLake クエリエンジン互換性ガイド](https://olake.io/docs/understanding/compatibility-engines/)を参照してください。
+:::
+
 ### 次のステップ
 
 #### StarRocks に Iceberg を追加

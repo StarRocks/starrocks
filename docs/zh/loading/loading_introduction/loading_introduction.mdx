@@ -197,6 +197,10 @@ StarRocks 提供以下各种导入方案供您选择：
 
 StarRocks 从 3.2 版本起支持 [Unified Catalog](../../data_source/catalog/unified_catalog.md)。通过 Unified Catalog，您无需执行数据导入即可统一管理存储在 Hive、Iceberg、Hudi、Delta Lake 数据源里的表数据。
 
+:::tip
+如需将运营数据库中的数据复制到 StarRocks 可查询的 Iceberg 表，可以使用 [OLake Go](https://olake.io/docs/)，一个支持 CDC 和增量同步到 S3 上 Iceberg 表的开源数据摄入引擎。详见 [OLake 查询引擎兼容性指南](https://olake.io/docs/understanding/compatibility-engines/)。
+:::
+
 ### 内外部数据库
 
 | **数据源**                                                   | **支持的导入方案**                                           |

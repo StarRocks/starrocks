@@ -243,6 +243,10 @@ MinIO 的用户名和密码在 docker-compose.yml 文件中。系统会提示您
 ![img](../_assets/quick-start/MinIO-Iceberg-data.png)
 :::
 
+:::tip
+如需将运营数据库（如 MySQL、PostgreSQL 或 MongoDB）中的数据复制到 Iceberg 表，可以使用 [OLake Go](https://olake.io/docs/)，一个支持 CDC 和增量同步到 S3 上 Iceberg 表的开源数据摄入引擎。数据写入 Iceberg 后，StarRocks 可通过 Iceberg 目录直接查询。详见 [OLake 查询引擎兼容性指南](https://olake.io/docs/understanding/compatibility-engines/)。
+:::
+
 ### 下一步
 
 #### 将 Iceberg 添加到 StarRocks
