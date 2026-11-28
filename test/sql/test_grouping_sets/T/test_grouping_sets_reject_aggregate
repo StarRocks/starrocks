@@ -1,0 +1,10 @@
+-- name: test_grouping_sets_reject_aggregate
+DROP TABLE IF EXISTS t_gs_reject_agg;
+CREATE TABLE t_gs_reject_agg (k INT, v INT)
+DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES('replication_num'='1');
+INSERT INTO t_gs_reject_agg VALUES (1, 10), (2, 20);
+SELECT DISTINCT ds_theta_count_distinct_merge(ds_theta_count_distinct_state(cast(1 as smallint))) FROM t_gs_reject_agg GROUP BY ROLLUP(ds_theta_count_distinct_merge(ds_theta_count_distinct_state(cast(1 as smallint))));
+SELECT sum(v) FROM t_gs_reject_agg GROUP BY ROLLUP(sum(v));
+SELECT k FROM t_gs_reject_agg GROUP BY CUBE(k, max(v));
+SELECT k FROM t_gs_reject_agg GROUP BY GROUPING SETS((k), (count(v)));
+SELECT k, sum(v) FROM t_gs_reject_agg GROUP BY ROLLUP(k) ORDER BY k;
