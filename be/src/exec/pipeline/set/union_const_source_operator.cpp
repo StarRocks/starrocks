@@ -16,6 +16,7 @@
 
 #include "column/column_helper.h"
 #include "exprs/expr_executor.h"
+#include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {
@@ -28,6 +29,9 @@ StatusOr<ChunkPtr> UnionConstSourceOperator::pull_chunk(starrocks::RuntimeState*
     size_t rows_count = std::min(static_cast<size_t>(state->chunk_size()), _rows_total - _next_processed_row_index);
     size_t columns_count = _dst_slots.size();
 
+    // The driver's exception guard does not check the memory limit: the constants (e.g. SPACE(n)) are evaluated, and
+    // copied into the chunk (move_column unfolds a constant, append copies it again), under it here.
+    TRY_CATCH_ALLOC_SCOPE_START();
     for (size_t col_i = 0; col_i < columns_count; col_i++) {
         const auto* dst_slot = _dst_slots[col_i];
 
@@ -49,6 +53,7 @@ StatusOr<ChunkPtr> UnionConstSourceOperator::pull_chunk(starrocks::RuntimeState*
 
         chunk->append_column(std::move(dst_column), dst_slot->id());
     }
+    TRY_CATCH_ALLOC_SCOPE_END()
 
     _next_processed_row_index += rows_count;
 
