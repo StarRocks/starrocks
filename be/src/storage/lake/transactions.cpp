@@ -80,6 +80,29 @@ void release_publish_tablet(int64_t tablet_id) {
     tablet_txns.erase(tablet_id);
 }
 
+// The stored PK index points at a segment the tablet no longer has. Retrying gives the same error
+// forever, so ask the next attempt to rebuild the index from segments, as DROP PERSISTENT INDEX does.
+static void request_pk_index_rebuild_if_stale(TabletManager* tablet_mgr, const TabletMetadata& metadata,
+                                              int64_t base_version, const Status& st) {
+    if (!config::lake_pk_index_auto_rebuild_on_missing_rssid || tablet_mgr->primary_key_mgr() == nullptr ||
+        !PrimaryKeyManager::is_missing_rssid_error(st) || metadata.schema().keys_type() != PRIMARY_KEYS ||
+        !metadata.enable_persistent_index() ||
+        metadata.persistent_index_type() != PersistentIndexTypePB::CLOUD_NATIVE) {
+        return;
+    }
+    if (!tablet_mgr->primary_key_mgr()->request_pk_index_rebuild(metadata.id(), base_version)) {
+        return;
+    }
+    // The rebuild turns these sstables into orphan files, and they hold the stale entry.
+    std::stringstream sstables;
+    for (const auto& sstable : metadata.sstable_meta().sstables()) {
+        sstables << " " << sstable.filename() << "(max_rss_rowid=" << (sstable.max_rss_rowid() >> 32) << ":"
+                 << (sstable.max_rss_rowid() & 0xffffffff) << ")";
+    }
+    LOG(WARNING) << "PK index of tablet " << metadata.id() << " will be rebuilt from base version " << base_version
+                 << " after: " << st << ". Its sstables:" << sstables.str();
+}
+
 static void clear_remote_snapshot_async(TabletManager* tablet_mgr, int64_t tablet_id, int64_t txn_id,
                                         std::vector<std::string>* files_to_delete) {
     auto slog_path = tablet_mgr->txn_slog_location(tablet_id, txn_id);
@@ -399,7 +422,7 @@ static StatusOr<TabletMetadataPtr> do_publish_version(TabletManager* tablet_mgr,
                                                       int64_t base_version, int64_t new_version,
                                                       std::span<const TxnInfoPB> txns, bool skip_write_tablet_metadata,
                                                       int64_t fe_built_version, InitialMetadataOrder base_version_order,
-                                                      bool is_retry_publish) {
+                                                      bool is_retry_publish, int64_t* auto_rebuild_base_version) {
     if (txns.size() == 1 && (txns[0].txn_id() == EMPTY_TXNLOG_TXNID || txns[0].txn_type() == TXN_TABLET_RESHARD)) {
         LOG(INFO) << "publish version tablet_info: " << tablet_info << ", txn: " << txns[0].DebugString()
                   << ", base_version: " << base_version << ", new_version: " << new_version;
@@ -622,12 +645,18 @@ static StatusOr<TabletMetadataPtr> do_publish_version(TabletManager* tablet_mgr,
             // init log_applier
             DCHECK_EQ(base_version, base_metadata->version());
             new_metadata = std::make_shared<TabletMetadataPB>(*base_metadata);
+            bool rebuild_pindex = txns[i].rebuild_pindex();
+            if (!rebuild_pindex && tablet_mgr->primary_key_mgr() != nullptr &&
+                tablet_mgr->primary_key_mgr()->take_pk_index_rebuild_request(tablet_info.get_tablet_id_in_metadata(),
+                                                                             base_version)) {
+                rebuild_pindex = true;
+                *auto_rebuild_base_version = base_version;
+            }
             // base_metadata goes along so that a primary key publish takes the base version's delete vectors
             // from it -- for the old segments it deletes rows from and for an index it rebuilds -- rather than
             // reading that version back from storage.
             log_applier = new_txn_log_applier(Tablet(tablet_mgr, tablet_info.get_tablet_id_in_metadata()), new_metadata,
-                                              new_version, txns[i].rebuild_pindex(), skip_write_tablet_metadata,
-                                              base_metadata);
+                                              new_version, rebuild_pindex, skip_write_tablet_metadata, base_metadata);
 
             if (new_metadata->compaction_inputs_size() > 0) {
                 new_metadata->mutable_compaction_inputs()->Clear();
@@ -687,6 +716,7 @@ static StatusOr<TabletMetadataPtr> do_publish_version(TabletManager* tablet_mgr,
                 if (!st.ok()) {
                     LOG(WARNING) << "Fail to apply txn log : " << st << " tablet_info=" << tablet_info
                                  << " txn=" << txns[i].DebugString();
+                    request_pk_index_rebuild_if_stale(tablet_mgr, *base_metadata, base_version, st);
                     return st;
                 }
                 for (const auto& load_id : txns[i].load_ids()) {
@@ -721,6 +751,7 @@ static StatusOr<TabletMetadataPtr> do_publish_version(TabletManager* tablet_mgr,
             if (!st.ok()) {
                 LOG(WARNING) << "Fail to apply txn log : " << st << " tablet_info=" << tablet_info
                              << " txn=" << txns[i].DebugString();
+                request_pk_index_rebuild_if_stale(tablet_mgr, *base_metadata, base_version, st);
                 return st;
             }
 
@@ -833,8 +864,13 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const Pub
     // completes -- is the remote I/O of a load, one flow per transaction whatever tablets it publishes. A batch reads as
     // its first transaction, except in the steps of one transaction (see do_publish_version).
     ScopedRemoteReadContext remote_read_scope(RemoteReadContext::for_load(txns.empty() ? 0 : txns[0].txn_id()));
+    int64_t auto_rebuild_base_version = -1;
     auto res = do_publish_version(tablet_mgr, tablet_info, base_version, new_version, txns, skip_write_tablet_metadata,
-                                  fe_built_version, base_version_order, is_retry_publish);
+                                  fe_built_version, base_version_order, is_retry_publish, &auto_rebuild_base_version);
+    if (auto_rebuild_base_version >= 0) {
+        tablet_mgr->primary_key_mgr()->end_pk_index_rebuild(tablet_info.get_tablet_id_in_metadata(),
+                                                            auto_rebuild_base_version, res.status());
+    }
     // A primary key publish fails with MemoryLimitExceeded when it runs past the update memory limit. Its failed
     // applier has already dropped this tablet's index from the cache; shrink the indexes other tablets keep so
     // that the retry has memory to load into. Any other publish only checks the urgent level: the background

@@ -293,6 +293,15 @@ Enable this option only after **all target CNs** support it. A normalized replic
 - Description: An override of the Primary Key compaction score gate. When a below-threshold level's total bytes exceed `ratio * largest_rowset_bytes * size_tiered_level_multiple` (that is, `ratio` times the natural next-tier promotion target), compaction is forced to bound long-tail mid-tier accumulation. The default `2.0` tolerates twice the natural promotion threshold before forcing a merge. Set to `0` to disable this override, so that there is no size cap.
 - Introduced in: v4.2
 
+### lake_pk_index_auto_rebuild_on_missing_rssid
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether a publish on a Primary Key table in a shared-data cluster rebuilds the cloud-native persistent index from the segments when an index entry points at a segment that the tablet no longer has. Such a stale entry makes every retry of the publish fail with an error that contains `rowset_segment_id ... no exist`, for example on partial updates and conditional updates. When this item is set to `true`, that error makes the next publish attempt from the same base version rebuild the index, as `ALTER TABLE ... DROP PERSISTENT INDEX ON TABLETS` does. The rebuild runs at most once per base version: if the publish still fails with the same error after the rebuild, the index is not rebuilt again from that version. If the publish that rebuilds the index fails for another reason, the next attempt rebuilds it again. Rebuilds are counted in the metric `primary_key_index_auto_rebuild_total`. It is disabled by default because the rebuild turns the old index SST files into orphan files, and those files hold the information needed to find out how the stale entry was created.
+- Introduced in: -
+
 ### lake_pk_partial_update_use_segment_cache
 
 - Default: true

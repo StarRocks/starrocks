@@ -113,6 +113,9 @@ static Status apply_opcompaction_to_metadata(const TabletMetadata& metadata, con
     return builder->apply_opcompaction(op_compaction, max_rowset_id, tablet_schema.id(), persist_index);
 }
 
+// is_missing_rssid_error matches on this text, so keep it in the error that get_column_values returns.
+static constexpr std::string_view kMissingRssidMessage = "no exist";
+
 PrimaryKeyManager::PrimaryKeyManager(std::shared_ptr<LocationProvider> location_provider, MemTracker* mem_tracker)
         : _index_cache(std::numeric_limits<size_t>::max()),
           _update_state_cache(std::numeric_limits<size_t>::max()),
@@ -377,6 +380,86 @@ StatusOr<IndexEntry*> PrimaryKeyManager::rebuild_primary_index(
     LOG(INFO) << "rebuild tablet: " << metadata->id() << " primary index, version: " << base_version;
     unload_and_remove_primary_index(metadata->id());
     return prepare_primary_index(metadata, builder, base_version, new_version, guard, base_metadata);
+}
+
+bool PrimaryKeyManager::is_missing_rssid_error(const Status& st) {
+    return st.is_cancelled() && st.message().find("rowset_segment_id") != std::string_view::npos &&
+           st.message().find(kMissingRssidMessage) != std::string_view::npos;
+}
+
+void PrimaryKeyManager::log_keys_at_missing_rssid(const Status& st, const RowsetUpdateStateParams& params,
+                                                  const Column& pk_column, const std::vector<uint64_t>& rss_rowids) {
+    if (!is_missing_rssid_error(st)) {
+        return;
+    }
+    constexpr size_t kMaxLoggedEntries = 10;
+    const auto& rssid_to_file = params.container.rssid_to_file();
+    std::stringstream entries;
+    size_t stale_keys = 0;
+    for (size_t i = 0; i < rss_rowids.size() && i < pk_column.size(); i++) {
+        const uint64_t rss_rowid = rss_rowids[i];
+        const auto rssid = static_cast<uint32_t>(rss_rowid >> 32);
+        if (rss_rowid == static_cast<uint64_t>(-1) || rssid_to_file.count(rssid) > 0) {
+            continue;
+        }
+        // Key values are user data and are never logged; the rssid/rowid pair identifies the index entry.
+        if (++stale_keys <= kMaxLoggedEntries) {
+            entries << " rssid=" << rssid << " rowid=" << static_cast<uint32_t>(rss_rowid & 0xffffffff);
+        }
+    }
+    LOG(WARNING) << "PK index of tablet " << params.metadata->id() << " version " << params.metadata->version()
+                 << " points " << stale_keys << " keys at missing segments, first " << kMaxLoggedEntries
+                 << " entries:" << entries.str();
+}
+
+bool PrimaryKeyManager::request_pk_index_rebuild(int64_t tablet_id, int64_t base_version) {
+    std::lock_guard<std::mutex> lg(_pk_index_rebuild_mutex);
+    auto it = _pk_index_auto_rebuilt.find(tablet_id);
+    if (it != _pk_index_auto_rebuilt.end() && it->second == base_version) {
+        LOG(WARNING) << "PK index of tablet " << tablet_id << " was already rebuilt from base version " << base_version
+                     << " and the publish still reads a missing segment, not rebuilding again";
+        return false;
+    }
+    if (_pk_index_rebuild_requests.insert_or_assign(tablet_id, base_version).second) {
+        LOG(WARNING) << "PK index of tablet " << tablet_id << " points at a missing segment, the next publish from base"
+                     << " version " << base_version << " rebuilds it";
+    }
+    return true;
+}
+
+bool PrimaryKeyManager::take_pk_index_rebuild_request(int64_t tablet_id, int64_t base_version) {
+    std::lock_guard<std::mutex> lg(_pk_index_rebuild_mutex);
+    auto it = _pk_index_rebuild_requests.find(tablet_id);
+    if (it == _pk_index_rebuild_requests.end()) {
+        return false;
+    }
+    const bool match = it->second == base_version;
+    // A request for another base version is stale: that version was published or abandoned.
+    _pk_index_rebuild_requests.erase(it);
+    if (!match) {
+        return false;
+    }
+    _pk_index_auto_rebuilt[tablet_id] = base_version;
+    LOG(WARNING) << "Rebuilding PK index of tablet " << tablet_id << " from base version " << base_version
+                 << " because a publish read a missing segment";
+    return true;
+}
+
+void PrimaryKeyManager::end_pk_index_rebuild(int64_t tablet_id, int64_t base_version, const Status& publish_st) {
+    // Only a publish that commits, or that rebuilt the index and still read a missing segment, tells whether
+    // the rebuild helped. Any other failure leaves the stale index in storage, so the retry rebuilds again.
+    if (!publish_st.ok() && !is_missing_rssid_error(publish_st)) {
+        std::lock_guard<std::mutex> lg(_pk_index_rebuild_mutex);
+        auto it = _pk_index_auto_rebuilt.find(tablet_id);
+        if (it != _pk_index_auto_rebuilt.end() && it->second == base_version) {
+            _pk_index_auto_rebuilt.erase(it);
+        }
+        _pk_index_rebuild_requests.insert_or_assign(tablet_id, base_version);
+        LOG(WARNING) << "Publish that rebuilt the PK index of tablet " << tablet_id << " from base version "
+                     << base_version << " failed: " << publish_st << ", the next publish rebuilds it again";
+        return;
+    }
+    StorageMetrics::instance()->primary_key_index_auto_rebuild_total.increment(1);
 }
 
 // Plan for interleaving del files with segments during a primary-key publish. Per del file:
@@ -1350,7 +1433,9 @@ Status PrimaryKeyManager::_process_single_chunk_update_with_condition(
                 ChunkFactory::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
         old_columns[0] = old_unordered_column->clone_empty();
         // Batch read condition values from all old row locations
-        RETURN_IF_ERROR(get_column_values(params, read_column_ids, num_default > 0, old_rowids_by_rssid, &old_columns));
+        auto st = get_column_values(params, read_column_ids, num_default > 0, old_rowids_by_rssid, &old_columns);
+        log_keys_at_missing_rssid(st, params, *pk_column, old_rowids);
+        RETURN_IF_ERROR(st);
         // Reorder values to match the order of PKs in current chunk (idxes provides mapping)
         auto old_column = ChunkFactory::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
         old_column->append_selective(*old_columns[0], idxes.data(), 0, idxes.size());
@@ -1516,8 +1601,9 @@ static Status process_single_chunk_update_with_condition_no_sst(
     MutableColumns old_columns(1);
     auto old_unordered_column = ChunkFactory::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
     old_columns[0] = old_unordered_column->clone_empty();
-    RETURN_IF_ERROR(
-            mgr->get_column_values(params, read_column_ids, num_default > 0, old_rowids_by_rssid, &old_columns));
+    auto st = mgr->get_column_values(params, read_column_ids, num_default > 0, old_rowids_by_rssid, &old_columns);
+    PrimaryKeyManager::log_keys_at_missing_rssid(st, params, *result->pk_column, old_rowids);
+    RETURN_IF_ERROR(st);
     auto old_column = ChunkFactory::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
     old_column->append_selective(*old_columns[0], idxes.data(), 0, idxes.size());
 
@@ -2101,8 +2187,9 @@ Status PrimaryKeyManager::get_column_values(const RowsetUpdateStateParams& param
 
         if (params.container.rssid_to_file().count(rssid) == 0) {
             // It may happen when partial update state was loaded with old tablet meta
-            return Status::Cancelled(fmt::format("tablet id {} version {} rowset_segment_id {} no exist",
-                                                 params.metadata->id(), params.metadata->version(), rssid));
+            return Status::Cancelled(fmt::format("tablet id {} version {} rowset_segment_id {} {}",
+                                                 params.metadata->id(), params.metadata->version(), rssid,
+                                                 kMissingRssidMessage));
         }
         // `rssid` addresses the segment across the whole tablet and is what the DCG bookkeeping above is
         // keyed by; `rssid - rowset_id` is its index inside its own rowset, which is what a Segment

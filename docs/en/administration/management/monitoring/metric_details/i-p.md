@@ -887,6 +887,12 @@ Latency metrics expose percentile series such as `merge_commit_request_latency_9
 - Unit: Count
 - Description: Number of currently running query plan fragments.
 
+## `primary_key_index_auto_rebuild_total`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Shared-data only. Number of times a publish on a Primary Key table rebuilt the cloud-native persistent index of a tablet because an index entry pointed at a segment that the tablet no longer has. Only counted when `lake_pk_index_auto_rebuild_on_missing_rssid` is set to `true`. A rebuild is counted when its publish succeeds or still fails with the same missing segment error. A rebuild whose publish fails for another reason is not counted, because the next attempt rebuilds the index again.
+
 ## `process_fd_num_limit_hard`
 
 - Unit: Count

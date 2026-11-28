@@ -293,6 +293,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: 主キーテーブルのコンパクションスコアゲートの例外条件の一つ。しきい値を下回る層の合計バイト数が `ratio * largest_rowset_bytes * size_tiered_level_multiple` (つまり自然な次階層への昇格目標の `ratio` 倍) を超えると、長期的な中間層の蓄積を抑えるためにコンパクションが強制されます。デフォルトの `2.0` は、強制マージの前に自然な昇格しきい値の 2 倍まで許容することを意味します。`0` に設定するとこの例外が無効になり、サイズの上限がなくなります。
 - 導入バージョン: v4.2
 
+### lake_pk_index_auto_rebuild_on_missing_rssid
+
+- デフォルト: false
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: 共有データクラスタの主キーテーブルの publish において、tablet に存在しなくなったセグメントをインデックスエントリが指している場合に、クラウドネイティブ永続インデックスをセグメントから再構築するかどうか。このような古いエントリがあると、publish のリトライはすべて `rowset_segment_id ... no exist` を含むエラーで失敗します（部分更新や条件更新など）。この項目が `true` に設定されている場合、このエラーが発生すると、同じベースバージョンからの次の publish 試行で、`ALTER TABLE ... DROP PERSISTENT INDEX ON TABLETS` と同様にインデックスが再構築されます。再構築は 1 つのベースバージョンにつき最大 1 回です。再構築後も publish が同じエラーで失敗する場合、そのバージョンからインデックスが再度再構築されることはありません。インデックスを再構築する publish が別の理由で失敗した場合は、次の試行で再び再構築されます。再構築の回数はメトリクス `primary_key_index_auto_rebuild_total` で計上されます。再構築によって古いインデックスの SST ファイルが孤立ファイルとなり、それらのファイルには古いエントリがどのように作成されたかを調査するための情報が含まれているため、デフォルトでは無効になっています。
+- 導入バージョン: -
+
 ### lake_pk_partial_update_use_segment_cache
 
 - デフォルト: true

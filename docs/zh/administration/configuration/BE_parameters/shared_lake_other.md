@@ -290,6 +290,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：主键表 Compaction 评分门控的一个豁免条件。当低于阈值的层的总字节数超过 `ratio * largest_rowset_bytes * size_tiered_level_multiple`（即自然的下一层晋升目标的 `ratio` 倍）时，强制执行 Compaction，以约束长尾的中间层堆积。默认值 `2.0` 表示在强制合并前容忍达到自然晋升阈值的两倍。设置为 `0` 可禁用该豁免，即不设置大小上限。
 - 引入版本：v4.2
 
+### lake_pk_index_auto_rebuild_on_missing_rssid
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：存算分离集群中主键表的 publish 在索引条目指向一个 tablet 中已不存在的 Segment 时，是否根据 Segment 重建云原生持久化索引。这类失效条目会使该 publish 的每次重试都失败，报错中包含 `rowset_segment_id ... no exist`，例如部分列更新和条件更新。将该项设置为 `true` 后，该报错会使下一次基于同一基础版本的 publish 重建索引，效果与 `ALTER TABLE ... DROP PERSISTENT INDEX ON TABLETS` 相同。每个基础版本最多重建一次：如果重建后 publish 仍然报同样的错误，不会再基于该版本重建索引。如果重建索引的 publish 因其他原因失败，下一次尝试会再次重建。重建次数计入指标 `primary_key_index_auto_rebuild_total`。默认关闭，因为重建会将旧的索引 SST 文件变为孤儿文件，而这些文件包含排查失效条目产生原因所需的信息。
+- 引入版本：-
+
 ### lake_pk_partial_update_use_segment_cache
 
 - 默认值：true

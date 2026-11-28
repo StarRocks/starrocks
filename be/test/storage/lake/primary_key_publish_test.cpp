@@ -197,6 +197,97 @@ public:
         return chunk.value()->num_rows();
     }
 
+    // Returns the id of the txn whose log was written, so a caller can publish it again.
+    StatusOr<int64_t> write_chunk_txn(int64_t tablet_id, const Chunk& chunk, const std::vector<uint32_t>& indexes,
+                                      const std::string& merge_condition = "") {
+        int64_t txn_id = next_id();
+        DeltaWriterBuilder builder;
+        builder.set_tablet_manager(_tablet_mgr.get())
+                .set_tablet_id(tablet_id)
+                .set_txn_id(txn_id)
+                .set_partition_id(_partition_id)
+                .set_mem_tracker(_mem_tracker.get())
+                .set_schema_id(_tablet_schema->id())
+                .set_slot_descriptors(&_slot_pointers)
+                .set_profile(&_dummy_runtime_profile);
+        if (!merge_condition.empty()) {
+            builder.set_merge_condition(merge_condition);
+        }
+        ASSIGN_OR_RETURN(auto delta_writer, builder.build());
+        RETURN_IF_ERROR(delta_writer->open());
+        RETURN_IF_ERROR(delta_writer->write(chunk, indexes.data(), indexes.size()));
+        RETURN_IF_ERROR(delta_writer->finish_with_txnlog().status());
+        delta_writer->close();
+        return txn_id;
+    }
+
+    // Upserts keys [0, 2 * kChunkSize) and makes them land in an index sstable at once.
+    void publish_upsert_into_index_sstable(int64_t tablet_id, int64_t* version) {
+        {
+            ConfigResetGuard<int64_t> mem_guard(&config::l0_max_mem_usage, 1);
+            ConfigResetGuard<int32_t> count_guard(&config::pk_index_memtable_max_count, 1);
+            auto [chunk, indexes] = gen_data_and_index(kChunkSize * 2, 0, false, true);
+            ASSIGN_OR_ABORT(auto txn_id, write_chunk_txn(tablet_id, *chunk, indexes));
+            ASSERT_OK(publish_single_version(tablet_id, *version + 1, txn_id).status());
+            (*version)++;
+        }
+        ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(tablet_id, *version));
+        ASSERT_GT(metadata->sstable_meta().sstables_size(), 0);
+    }
+
+    // Leaves an index sstable that maps keys [0, 2 * kChunkSize) to a rowset the tablet no longer has,
+    // the state behind "rowset_segment_id ... no exist", and evicts the in-memory index.
+    void prepare_stale_index_entries(int64_t tablet_id, int64_t* version) {
+        ASSERT_NO_FATAL_FAILURE(publish_upsert_into_index_sstable(tablet_id, version));
+        ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(tablet_id, *version));
+        auto stale = std::make_shared<TabletMetadataPB>(*metadata);
+        stale->mutable_rowsets()->Clear();
+        stale->set_version(*version + 1);
+        ASSERT_OK(_tablet_mgr->put_tablet_metadata(stale));
+        (*version)++;
+        EXPECT_TRUE(_primary_key_mgr->try_remove_primary_index_cache(tablet_id));
+    }
+
+    // publish_single_version wraps a failed publish in an InternalError, so match the text of the
+    // Cancelled status that PrimaryKeyManager::is_missing_rssid_error checks in publish_version.
+    static bool failed_on_missing_rssid(const Status& st) {
+        return st.message().find("rowset_segment_id") != std::string_view::npos &&
+               st.message().find("no exist") != std::string_view::npos;
+    }
+
+    // Leaves the tablet with one compacted rowset that holds keys [kChunkSize, 2 * kChunkSize), after
+    // deleting keys [0, kChunkSize) in a load whose deletes did not reach an index sstable.
+    void prepare_deletes_removed_by_compaction(int64_t tablet_id, int64_t* version) {
+        ASSERT_NO_FATAL_FAILURE(publish_upsert_into_index_sstable(tablet_id, version));
+        ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(tablet_id, *version));
+        const int sstables_after_upsert = metadata->sstable_meta().sstables_size();
+        {
+            auto [chunk, indexes] = gen_data_and_index(kChunkSize, 0, false, false);
+            ASSIGN_OR_ABORT(auto txn_id, write_chunk_txn(tablet_id, *chunk, indexes));
+            ASSERT_OK(publish_single_version(tablet_id, *version + 1, txn_id).status());
+            (*version)++;
+        }
+        ASSIGN_OR_ABORT(metadata, _tablet_mgr->get_tablet_metadata(tablet_id, *version));
+        // The deletes did not reach an sstable.
+        ASSERT_EQ(sstables_after_upsert, metadata->sstable_meta().sstables_size());
+        {
+            ConfigResetGuard<int64_t> segments_guard(&config::lake_pk_compaction_min_input_segments, 1);
+            int64_t txn_id = next_id();
+            auto task_context =
+                    std::make_unique<CompactionTaskContext>(txn_id, tablet_id, *version, false, false, nullptr);
+            ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(task_context.get()));
+            ASSERT_OK(task->execute(CompactionTask::kNoCancelFn));
+            ASSERT_OK(publish_single_version(tablet_id, *version + 1, txn_id).status());
+            (*version)++;
+        }
+        ASSIGN_OR_ABORT(metadata, _tablet_mgr->get_tablet_metadata(tablet_id, *version));
+        ASSERT_EQ(1, metadata->rowsets_size());
+        // MetaFileBuilder moves del files above the index rebuild point onto the output rowset, which
+        // keeps the deletes replayable on a cold index reload.
+        ASSERT_GT(metadata->rowsets(0).del_files_size(), 0);
+        ASSERT_EQ(kChunkSize, read_rows(tablet_id, *version));
+    }
+
     MutableTabletMetadataPtr new_cloud_native_pk_tablet() {
         auto metadata = std::make_shared<TabletMetadata>(*_tablet_metadata);
         metadata->set_id(next_id());
@@ -4936,6 +5027,121 @@ TEST_P(LakePrimaryKeyPublishTest, test_same_cache_second_upsert_preserves_old_ro
     EXPECT_EQ(visible.row_count, visible.distinct_keys.size());
     EXPECT_EQ(std::optional<int32_t>(kNewLowValue), visible.target_value);
     EXPECT_EQ(expected_new_value, cached_point_get(tablet_id, kLowKey));
+}
+
+// The "rowset_segment_id ... no exist" publish wedge: with the automatic rebuild off (the default),
+// every retry of a conditional update over stale index entries fails the same way.
+TEST_P(LakePrimaryKeyPublishTest, test_stale_index_wedges_condition_update) {
+    if (!GetParam().enable_persistent_index ||
+        GetParam().persistent_index_type != PersistentIndexTypePB::CLOUD_NATIVE) {
+        GTEST_SKIP() << "this case only for cloud native index";
+    }
+    ASSERT_FALSE(config::lake_pk_index_auto_rebuild_on_missing_rssid);
+    auto tablet_id = _tablet_metadata->id();
+    int64_t version = 1;
+    ASSERT_NO_FATAL_FAILURE(prepare_stale_index_entries(tablet_id, &version));
+
+    auto [chunk, indexes] = gen_data_and_index(kChunkSize, 0, false, true);
+    ASSIGN_OR_ABORT(auto txn_id, write_chunk_txn(tablet_id, *chunk, indexes, "c1"));
+    const int64_t rebuilds_before = StorageMetrics::instance()->primary_key_index_auto_rebuild_total.value();
+    for (int attempt = 0; attempt < 2; attempt++) {
+        auto res = publish_single_version(tablet_id, version + 1, txn_id);
+        ASSERT_FALSE(res.ok());
+        EXPECT_TRUE(failed_on_missing_rssid(res.status())) << res.status();
+    }
+    EXPECT_EQ(rebuilds_before, StorageMetrics::instance()->primary_key_index_auto_rebuild_total.value());
+    // What ALTER TABLE ... DROP PERSISTENT INDEX ON TABLETS does.
+    ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id, true /* rebuild_pindex */).status());
+    version++;
+    EXPECT_EQ(kChunkSize, read_rows(tablet_id, version));
+}
+
+TEST_P(LakePrimaryKeyPublishTest, test_auto_rebuild_index_on_missing_rssid) {
+    if (!GetParam().enable_persistent_index ||
+        GetParam().persistent_index_type != PersistentIndexTypePB::CLOUD_NATIVE) {
+        GTEST_SKIP() << "this case only for cloud native index";
+    }
+    ConfigResetGuard<bool> rebuild_guard(&config::lake_pk_index_auto_rebuild_on_missing_rssid, true);
+    auto tablet_id = _tablet_metadata->id();
+    int64_t version = 1;
+    ASSERT_NO_FATAL_FAILURE(prepare_stale_index_entries(tablet_id, &version));
+
+    auto [chunk, indexes] = gen_data_and_index(kChunkSize, 0, false, true);
+    ASSIGN_OR_ABORT(auto txn_id, write_chunk_txn(tablet_id, *chunk, indexes, "c1"));
+    const int64_t rebuilds_before = StorageMetrics::instance()->primary_key_index_auto_rebuild_total.value();
+    // The first attempt fails and asks for a rebuild, the retry rebuilds the index and goes through.
+    auto res = publish_single_version(tablet_id, version + 1, txn_id);
+    ASSERT_FALSE(res.ok());
+    EXPECT_TRUE(failed_on_missing_rssid(res.status())) << res.status();
+    ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+    version++;
+    EXPECT_EQ(rebuilds_before + 1, StorageMetrics::instance()->primary_key_index_auto_rebuild_total.value());
+    EXPECT_EQ(kChunkSize, read_rows(tablet_id, version));
+}
+
+// Why the compaction publish does not flush the index memtable: the deletes that never reached an
+// sstable stay replayable after the compaction, so a cold reload does not bring the keys back.
+TEST_P(LakePrimaryKeyPublishTest, test_cold_index_reload_keeps_deletes_across_compaction) {
+    if (!GetParam().enable_persistent_index ||
+        GetParam().persistent_index_type != PersistentIndexTypePB::CLOUD_NATIVE) {
+        GTEST_SKIP() << "this case only for cloud native index";
+    }
+    auto tablet_id = _tablet_metadata->id();
+    int64_t version = 1;
+    ASSERT_NO_FATAL_FAILURE(prepare_deletes_removed_by_compaction(tablet_id, &version));
+    EXPECT_TRUE(_primary_key_mgr->try_remove_primary_index_cache(tablet_id));
+
+    auto [chunk, indexes] = gen_data_and_index(kChunkSize, 0, false, true);
+    ASSIGN_OR_ABORT(auto txn_id, write_chunk_txn(tablet_id, *chunk, indexes, "c1"));
+    ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+    version++;
+    EXPECT_EQ(kChunkSize * 2, read_rows(tablet_id, version));
+}
+
+TEST_P(LakePrimaryKeyPublishTest, test_pk_index_rebuild_request_runs_once_per_base_version) {
+    const int64_t tablet_id = next_id();
+    EXPECT_FALSE(_primary_key_mgr->take_pk_index_rebuild_request(tablet_id, 5));
+    // A request for another base version is dropped.
+    EXPECT_TRUE(_primary_key_mgr->request_pk_index_rebuild(tablet_id, 5));
+    EXPECT_FALSE(_primary_key_mgr->take_pk_index_rebuild_request(tablet_id, 6));
+    EXPECT_FALSE(_primary_key_mgr->take_pk_index_rebuild_request(tablet_id, 5));
+    // A request is taken once.
+    EXPECT_TRUE(_primary_key_mgr->request_pk_index_rebuild(tablet_id, 5));
+    EXPECT_TRUE(_primary_key_mgr->take_pk_index_rebuild_request(tablet_id, 5));
+    EXPECT_FALSE(_primary_key_mgr->take_pk_index_rebuild_request(tablet_id, 5));
+    // After a rebuild from base version 5 did not help, do not rebuild from 5 again.
+    const int64_t rebuilds_before = StorageMetrics::instance()->primary_key_index_auto_rebuild_total.value();
+    const Status missing_rssid = Status::Cancelled("tablet id 1 version 5 rowset_segment_id 3 no exist");
+    ASSERT_TRUE(PrimaryKeyManager::is_missing_rssid_error(missing_rssid));
+    _primary_key_mgr->end_pk_index_rebuild(tablet_id, 5, missing_rssid);
+    EXPECT_EQ(rebuilds_before + 1, StorageMetrics::instance()->primary_key_index_auto_rebuild_total.value());
+    EXPECT_FALSE(_primary_key_mgr->request_pk_index_rebuild(tablet_id, 5));
+    EXPECT_FALSE(_primary_key_mgr->take_pk_index_rebuild_request(tablet_id, 5));
+    // A later base version may rebuild again.
+    EXPECT_TRUE(_primary_key_mgr->request_pk_index_rebuild(tablet_id, 6));
+    EXPECT_TRUE(_primary_key_mgr->take_pk_index_rebuild_request(tablet_id, 6));
+    _primary_key_mgr->end_pk_index_rebuild(tablet_id, 6, Status::OK());
+    EXPECT_EQ(rebuilds_before + 2, StorageMetrics::instance()->primary_key_index_auto_rebuild_total.value());
+}
+
+// A publish that took the rebuild request and failed for an unrelated reason did not show whether the
+// rebuild helps, so the next publish from the same base version rebuilds again.
+TEST_P(LakePrimaryKeyPublishTest, test_pk_index_rebuild_request_restored_after_failed_publish) {
+    const int64_t tablet_id = next_id();
+    const int64_t rebuilds_before = StorageMetrics::instance()->primary_key_index_auto_rebuild_total.value();
+    EXPECT_TRUE(_primary_key_mgr->request_pk_index_rebuild(tablet_id, 5));
+    EXPECT_TRUE(_primary_key_mgr->take_pk_index_rebuild_request(tablet_id, 5));
+    _primary_key_mgr->end_pk_index_rebuild(tablet_id, 5, Status::IOError("injected object storage error"));
+    EXPECT_EQ(rebuilds_before, StorageMetrics::instance()->primary_key_index_auto_rebuild_total.value());
+    // The retry takes the restored request without a new missing rssid error.
+    EXPECT_TRUE(_primary_key_mgr->take_pk_index_rebuild_request(tablet_id, 5));
+    const Status missing_rssid = Status::Cancelled("tablet id 1 version 5 rowset_segment_id 3 no exist");
+    ASSERT_TRUE(PrimaryKeyManager::is_missing_rssid_error(missing_rssid));
+    _primary_key_mgr->end_pk_index_rebuild(tablet_id, 5, missing_rssid);
+    EXPECT_EQ(rebuilds_before + 1, StorageMetrics::instance()->primary_key_index_auto_rebuild_total.value());
+    // That rebuild completed and still read a missing segment: no more rebuilds from base version 5.
+    EXPECT_FALSE(_primary_key_mgr->request_pk_index_rebuild(tablet_id, 5));
+    EXPECT_FALSE(_primary_key_mgr->take_pk_index_rebuild_request(tablet_id, 5));
 }
 
 INSTANTIATE_TEST_SUITE_P(LakePrimaryKeyPublishTest, LakePrimaryKeyPublishTest,
