@@ -235,6 +235,9 @@ public class LeaderImpl {
 
         AgentTask task = AgentTaskQueue.getTask(backendId, taskType, signature);
         if (task == null) {
+            if (taskType == TTaskType.ALTER && request.isSetAlter_job_id()) {
+                handleReportOfRemovedAlterTask(request, backendId, signature);
+            }
             if (taskType != TTaskType.DROP && taskType != TTaskType.STORAGE_MEDIUM_MIGRATE
                     && taskType != TTaskType.RELEASE_SNAPSHOT && taskType != TTaskType.CLEAR_TRANSACTION_TASK) {
                 String errMsg = "cannot find task. type: " + taskType + ", backendId: " + backendId
@@ -251,7 +254,8 @@ public class LeaderImpl {
                     && request.getAlter_job_id() != ((AlterReplicaTask) task).getJobId()) {
                 // The report of a copy left in the backend queue by another job that used the same signature. Leave
                 // the queued task alone: if the backend skipped it in favour of that copy, the next task report
-                // resends it.
+                // resends it. The job the copy belongs to no longer has it queued, so the report goes to that job.
+                handleReportOfRemovedAlterTask(request, backendId, signature);
                 String errMsg = "ignore finish report of alter job " + request.getAlter_job_id()
                         + ", the queued task belongs to alter job " + ((AlterReplicaTask) task).getJobId()
                         + ", backendId: " + backendId + ", signature: " + signature;
@@ -890,6 +894,21 @@ public class LeaderImpl {
                     (Strings.isNullOrEmpty(e.getMessage()) ? "leader lease invalidated" : e.getMessage())));
             result.setStatus(status);
             return result;
+        }
+    }
+
+    /**
+     * Hands the finish report of an ALTER task to its job ({@code alter_job_id}) when that job no longer has the task
+     * queued under the report's signature: a cancel removed it, and a later job may since have queued its own task
+     * under the same signature. An ALTER task's signature is the id of the tablet it altered.
+     */
+    private static void handleReportOfRemovedAlterTask(TFinishTaskRequest request, long backendId, long signature) {
+        try {
+            GlobalStateMgr.getCurrentState().getSchemaChangeHandler()
+                    .handleFinishReportOfRemovedAlterTask(request.getAlter_job_id(), signature, backendId);
+        } catch (Exception e) {
+            LOG.warn("fail to handle the finish report of removed alter task {} of job {}", signature,
+                    request.getAlter_job_id(), e);
         }
     }
 

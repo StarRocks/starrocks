@@ -32,6 +32,7 @@ import com.starrocks.common.NoAliveBackendException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.concurrent.lock.BlockingCallValidator;
 import com.starrocks.lake.vector.VectorIndexBuildScheduler;
+import com.starrocks.proto.AbortTxnRequest;
 import com.starrocks.proto.AggregatePublishVersionRequest;
 import com.starrocks.proto.ComputeNodePB;
 import com.starrocks.proto.ParentTabletPublishInfoPB;
@@ -63,6 +64,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.Future;
@@ -191,6 +193,88 @@ public class Utils {
             LOG.error("Fail to no-op publish for force-cancel of alter job {}: {}", jobId, e.getMessage());
             return false;
         }
+    }
+
+    /**
+     * Aborts the transaction {@code txnInfo} on {@code tabletIds} with cleanup: for each tablet, BE deletes the
+     * tablet's txn log of that transaction and the data files the log references. Only for a transaction that will
+     * never be published, since what it deletes is exactly what a publish would install.
+     *
+     * <p>Best effort: one request per node, responses not awaited. A tablet goes to its node in {@code nodeOfTablet}
+     * while that node is alive, which costs no lookup. The other tablets are looked up once, together, in batches
+     * ({@link WarehouseManager#getAllComputeNodeIdsAssignToTablets}). A tablet left without an alive node keeps its
+     * files, and so do the tablets of a batch that fails and of the batches after it: a cancel runs this on the alter
+     * scheduler thread under the job's lock, so it waits for one StarMgr timeout at most.
+     */
+    public static void abortTxnWithCleanup(Collection<Long> tabletIds, Map<Long, Long> nodeOfTablet,
+                                           TxnInfoPB txnInfo, ComputeResource computeResource) {
+        SystemInfoService clusterInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+        Map<ComputeNode, List<Long>> tabletsByNode = new HashMap<>();
+        List<Long> unplaced = new ArrayList<>();
+        for (Long tabletId : tabletIds) {
+            ComputeNode node = aliveNode(clusterInfo, nodeOfTablet.get(tabletId));
+            if (node != null) {
+                tabletsByNode.computeIfAbsent(node, k -> new ArrayList<>()).add(tabletId);
+            } else {
+                unplaced.add(tabletId);
+            }
+        }
+        int skipped = 0;
+        if (!unplaced.isEmpty()) {
+            Map<Long, List<Long>> assigned = null;
+            try {
+                assigned = GlobalStateMgr.getCurrentState().getWarehouseMgr()
+                        .getAllComputeNodeIdsAssignToTablets(computeResource, unplaced);
+            } catch (RuntimeException e) {
+                LOG.debug("fail to look up the nodes to abort txn {} on {} tablet(s)", txnInfo.txnId,
+                        unplaced.size(), e);
+            }
+            for (Long tabletId : unplaced) {
+                List<Long> nodeIds = assigned == null ? null : assigned.get(tabletId);
+                ComputeNode node = nodeIds == null ? null : nodeIds.stream()
+                        .map(nodeId -> aliveNode(clusterInfo, nodeId))
+                        .filter(Objects::nonNull)
+                        .findFirst()
+                        .orElse(null);
+                if (node == null) {
+                    skipped++;
+                } else {
+                    tabletsByNode.computeIfAbsent(node, k -> new ArrayList<>()).add(tabletId);
+                }
+            }
+        }
+        if (skipped > 0) {
+            LOG.warn("skip aborting txn {} on {} of {} tablet(s): no alive compute node is assigned to them",
+                    txnInfo.txnId, skipped, tabletIds.size());
+        }
+        for (Map.Entry<ComputeNode, List<Long>> entry : tabletsByNode.entrySet()) {
+            sendAbortTxnWithCleanup(entry.getKey(), entry.getValue(), txnInfo);
+        }
+    }
+
+    /**
+     * Sends {@code node} one request to abort {@code txnInfo} on {@code tabletIds} with cleanup; the response is not
+     * awaited. See {@link #abortTxnWithCleanup}.
+     */
+    public static void sendAbortTxnWithCleanup(ComputeNode node, List<Long> tabletIds, TxnInfoPB txnInfo) {
+        AbortTxnRequest request = new AbortTxnRequest();
+        request.tabletIds = tabletIds;
+        request.txnInfos = Lists.newArrayList(txnInfo);
+        request.skipCleanup = false;
+        try {
+            BrpcProxy.getLakeService(node.getHost(), node.getBrpcPort()).abortTxn(request);
+        } catch (Throwable e) {
+            LOG.warn("fail to send abort of txn {} for {} tablet(s) to node {}: {}", txnInfo.txnId,
+                    tabletIds.size(), node.getId(), e.getMessage());
+        }
+    }
+
+    private static ComputeNode aliveNode(SystemInfoService clusterInfo, Long nodeId) {
+        if (nodeId == null) {
+            return null;
+        }
+        ComputeNode node = clusterInfo.getBackendOrComputeNode(nodeId);
+        return node != null && node.isAlive() ? node : null;
     }
 
     public static void publishVersionBatch(@NotNull List<Tablet> tablets, List<TxnInfoPB> txnInfos,

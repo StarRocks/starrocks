@@ -33,6 +33,8 @@ import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
@@ -86,6 +88,21 @@ public class AlterHandlerTest {
 
         Assertions.assertDoesNotThrow(() -> handler.runAlterJobV2(List.of(bad, healthy)));
         Assertions.assertEquals(1, healthyRuns.get());
+    }
+
+    @Test
+    public void testFinishReportOfRemovedAlterTaskGoesToItsFastPathJob() {
+        LakeTableAddIndexJob fastPathJob = mock(LakeTableAddIndexJob.class);
+        when(fastPathJob.getJobId()).thenReturn(1L);
+        handler.addAlterJobV2(fastPathJob);
+        AlterJobV2 otherJob = createMockJob(2L, 100L, 1000L, AlterJobV2.JobState.CANCELLED);
+        handler.addAlterJobV2(otherJob);
+
+        handler.handleFinishReportOfRemovedAlterTask(1L, 13L, 21L);
+        handler.handleFinishReportOfRemovedAlterTask(2L, 13L, 21L);
+        handler.handleFinishReportOfRemovedAlterTask(3L, 13L, 21L);
+
+        verify(fastPathJob, times(1)).handleFinishReportOfRemovedTask(13L, 21L);
     }
 
     @Test

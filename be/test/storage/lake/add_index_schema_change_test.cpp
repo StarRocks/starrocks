@@ -14,13 +14,17 @@
 
 #include "storage/lake/add_index_schema_change.h"
 
+#include <fmt/format.h>
 #include <gtest/gtest.h>
 
 #include <memory>
+#include <set>
+#include <span>
 #include <string>
 
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
+#include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
 #include "column/binary_column.h"
 #include "column/chunk.h"
@@ -38,10 +42,12 @@
 #include "gen_cpp/lake_types.pb.h"
 #include "gen_cpp/tablet_schema.pb.h"
 #include "gen_cpp/types.pb.h"
+#include "gutil/strings/util.h"
 #include "runtime/current_thread.h"
 #include "runtime/mem_tracker.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/delta_writer.h"
+#include "storage/lake/filenames.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/general_tablet_writer.h"
 #include "storage/lake/index_delta_group.h"
@@ -53,11 +59,14 @@
 #include "storage/lake/schema_change.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/test_util.h"
+#include "storage/lake/transactions.h"
+#include "storage/lake/txn_log.h"
 #include "storage/lake/versioned_tablet.h"
 #include "storage/rowset/bitmap_index_reader.h"
 #include "storage/rowset/bloom_filter_index_writer.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/segment.h"
+#include "storage/storage_engine.h"
 #include "storage/storage_metrics.h"
 #include "storage/tablet_schema.h"
 #include "storage/types.h"
@@ -1002,6 +1011,212 @@ TEST_F(AddIndexSchemaChangeTest, do_process_add_index_only_unknown_column) {
     Status st = handler.process_alter_tablet(request);
     ASSERT_FALSE(st.ok());
     EXPECT_TRUE(st.is_internal_error()) << st.to_string();
+}
+
+// ---------------------------------------------------------------------------
+// Reclaiming what an ADD INDEX that never publishes wrote.
+//
+// Until publish, nothing but the alter's txn log references the .idx files the fast path wrote. FE aborts the txn of
+// a cancelled alter on every tablet of the job, and abort_txn deletes the files that log references; without that
+// they stay on object storage, since only full vacuum (off by default) would list them.
+
+// The request FE sends one tablet of an ADD INDEX fast path: a bitmap index on `column`.
+static TAlterTabletReqV2 add_index_request(int64_t tablet_id, int64_t alter_version, int64_t txn_id,
+                                           const std::string& column) {
+    TAlterTabletReqV2 request;
+    request.__set_base_tablet_id(tablet_id);
+    request.__set_new_tablet_id(tablet_id);
+    request.__set_alter_version(alter_version);
+    request.__set_txn_id(txn_id);
+    request.__set_only_add_index(true);
+    TOlapTableIndex ix;
+    ix.__set_index_id(next_id());
+    ix.__set_index_type(TIndexType::BITMAP);
+    ix.__set_columns({column});
+    request.__set_indexes_to_add({ix});
+    return request;
+}
+
+// The .idx files in `data_dir` written by transaction `txn_id`, found by the txn id their names start with.
+static std::set<std::string> idx_files_of_txn(const std::string& data_dir, int64_t txn_id) {
+    ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(data_dir));
+    const auto prefix = fmt::format("{:016x}_", txn_id);
+    std::set<std::string> files;
+    CHECK_OK(fs->iterate_dir(data_dir, [&](std::string_view name) {
+        if (is_idx(name) && HasPrefixString(name, prefix)) {
+            files.emplace(name);
+        }
+        return true;
+    }));
+    return files;
+}
+
+// What FE sends a tablet when it cancels the alter: abort the txn with cleanup. Waits for the async deletes.
+static void abort_alter_txn(TabletManager* tablet_mgr, int64_t tablet_id, int64_t txn_id) {
+    TxnInfoPB txn_info;
+    txn_info.set_txn_id(txn_id);
+    txn_info.set_txn_type(TXN_NORMAL);
+    txn_info.set_combined_txn_log(false);
+    abort_txn(tablet_mgr, tablet_id, std::span<const TxnInfoPB>(&txn_info, 1));
+    StorageEngine::instance()->wait_storage_cleanup_tasks();
+}
+
+// The tablet's task finished and wrote its txn log, then FE cancelled the alter: the abort deletes the log and the
+// .idx files it references, and leaves alone those of an earlier ADD INDEX that published.
+TEST_F(AddIndexSchemaChangeTest, abort_txn_deletes_files_of_unpublished_add_index) {
+    const std::string data_dir = lake::join_path(kTestGroupPath, lake::kSegmentDirectoryName);
+    auto base_metadata = create_base_tablet_metadata();
+    auto tablet_id = base_metadata->id();
+    CHECK_OK(_tablet_manager->put_tablet_metadata(*base_metadata));
+    auto base_schema = TabletSchema::create(base_metadata->schema());
+    int64_t version = write_one_rowset(tablet_id, /*version=*/1, base_schema, /*nrows=*/3);
+    version = write_one_rowset(tablet_id, version, base_schema, /*nrows=*/3);
+
+    SchemaChangeHandler handler(_tablet_manager.get());
+    const int64_t published_txn = next_id();
+    ASSERT_OK(handler.process_alter_tablet(add_index_request(tablet_id, version, published_txn, "c1")));
+    ASSIGN_OR_ABORT(auto published,
+                    TEST_publish_single_version(_tablet_manager.get(), tablet_id, version + 1, published_txn));
+    ++version;
+    const auto published_files = idx_files_of_txn(data_dir, published_txn);
+    ASSERT_EQ(2, published_files.size());
+    std::set<std::string> referenced;
+    for (const auto& segment_idgs : published->idg_meta().idgs()) {
+        for (const auto& entry : segment_idgs.second.entries()) {
+            referenced.insert(entry.index_file());
+        }
+    }
+    ASSERT_EQ(published_files, referenced);
+
+    const int64_t cancelled_txn = next_id();
+    ASSERT_OK(handler.process_alter_tablet(add_index_request(tablet_id, version, cancelled_txn, "c3")));
+    const auto log_path = _tablet_manager->txn_log_location(tablet_id, cancelled_txn);
+    ASSERT_TRUE(fs::path_exist(log_path));
+    ASSERT_EQ(2, idx_files_of_txn(data_dir, cancelled_txn).size());
+
+    abort_alter_txn(_tablet_manager.get(), tablet_id, cancelled_txn);
+
+    EXPECT_FALSE(fs::path_exist(log_path));
+    EXPECT_TRUE(idx_files_of_txn(data_dir, cancelled_txn).empty());
+    EXPECT_EQ(published_files, idx_files_of_txn(data_dir, published_txn));
+}
+
+// A file marked shared is referenced by other tablets as well (a split cross-publish marks the files of the logs it
+// applies to every child), so aborting the txn on one tablet must not delete it.
+TEST_F(AddIndexSchemaChangeTest, abort_txn_keeps_shared_add_index_file) {
+    const int64_t tablet_id = next_id();
+    const int64_t txn_id = next_id();
+    const std::string own_file = gen_idx_filename(txn_id);
+    const std::string shared_file = gen_idx_filename(txn_id);
+    for (const auto& name : {own_file, shared_file}) {
+        ASSIGN_OR_ABORT(auto wf, fs::new_writable_file(_tablet_manager->segment_location(tablet_id, name)));
+        ASSERT_OK(wf->append("idx"));
+        ASSERT_OK(wf->close());
+    }
+    TxnLog log;
+    log.set_tablet_id(tablet_id);
+    log.set_txn_id(txn_id);
+    auto* op = log.mutable_op_add_index();
+    op->set_alter_version(1);
+    auto* own_entry = op->add_segment_entries();
+    own_entry->set_segment_id(0);
+    own_entry->mutable_entry()->set_index_file(own_file);
+    auto* shared_entry = op->add_segment_entries();
+    shared_entry->set_segment_id(1);
+    shared_entry->mutable_entry()->set_index_file(shared_file);
+    shared_entry->mutable_entry()->set_shared_file(true);
+    ASSERT_OK(_tablet_manager->put_txn_log(log));
+
+    abort_alter_txn(_tablet_manager.get(), tablet_id, txn_id);
+
+    EXPECT_FALSE(fs::path_exist(_tablet_manager->segment_location(tablet_id, own_file)));
+    EXPECT_TRUE(fs::path_exist(_tablet_manager->segment_location(tablet_id, shared_file)));
+    EXPECT_FALSE(fs::path_exist(_tablet_manager->txn_log_location(tablet_id, txn_id)));
+}
+
+// One tablet of the alter finished and wrote its txn log, another failed building its index, and FE cancelled the
+// job. FE aborts the txn on every tablet the job dispatched to: the failed tablet has no log and the abort finds
+// nothing there, while the finished tablet's files go.
+TEST_F(AddIndexSchemaChangeTest, abort_txn_after_partly_failed_alter_deletes_finished_tablet_files) {
+    const std::string data_dir = lake::join_path(kTestGroupPath, lake::kSegmentDirectoryName);
+    SchemaChangeHandler handler(_tablet_manager.get());
+    const int64_t txn_id = next_id();
+    std::vector<int64_t> tablet_ids;
+    std::vector<TAlterTabletReqV2> requests;
+    for (int i = 0; i < 2; ++i) {
+        auto metadata = create_base_tablet_metadata();
+        CHECK_OK(_tablet_manager->put_tablet_metadata(*metadata));
+        int64_t version = write_one_rowset(metadata->id(), /*version=*/1, TabletSchema::create(metadata->schema()),
+                                           /*nrows=*/100);
+        tablet_ids.push_back(metadata->id());
+        requests.push_back(add_index_request(metadata->id(), version, txn_id, "c1"));
+    }
+
+    ASSERT_OK(handler.process_alter_tablet(requests[0]));
+    ASSERT_EQ(1, idx_files_of_txn(data_dir, txn_id).size());
+    {
+        // With the alter's mem tracker over its limit the build stops with MemoryLimitExceeded and deletes what it
+        // wrote itself (see run_bitmap_trips_clean_mem_limit_exceeded).
+        MemTracker sc_tracker(MemTrackerType::SCHEMA_CHANGE_TASK, /*byte_limit=*/1024, "sc_test", nullptr);
+        sc_tracker.consume(sc_tracker.limit() + 1);
+        Status st;
+        {
+            SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(&sc_tracker);
+            st = handler.process_alter_tablet(requests[1]);
+        }
+        sc_tracker.release(sc_tracker.consumption());
+        ASSERT_TRUE(st.is_mem_limit_exceeded()) << st.to_string();
+    }
+    ASSERT_FALSE(fs::path_exist(_tablet_manager->txn_log_location(tablet_ids[1], txn_id)));
+    ASSERT_EQ(1, idx_files_of_txn(data_dir, txn_id).size());
+
+    for (auto tablet_id : tablet_ids) {
+        abort_alter_txn(_tablet_manager.get(), tablet_id, txn_id);
+    }
+
+    EXPECT_TRUE(idx_files_of_txn(data_dir, txn_id).empty());
+    EXPECT_FALSE(fs::path_exist(_tablet_manager->txn_log_location(tablet_ids[0], txn_id)));
+}
+
+// The txn log landed but put_txn_log still reported an error, as when the request times out after the store kept
+// the object. The tablet keeps the files: the stored log can still be the one a publish reads, if another run of the
+// task reports success. FE's abort of the cancelled alter is what deletes them.
+TEST_F(AddIndexSchemaChangeTest, put_txn_log_error_keeps_files_of_a_stored_log_for_abort) {
+    const std::string data_dir = lake::join_path(kTestGroupPath, lake::kSegmentDirectoryName);
+    auto base_metadata = create_base_tablet_metadata();
+    auto tablet_id = base_metadata->id();
+    CHECK_OK(_tablet_manager->put_tablet_metadata(*base_metadata));
+    int64_t version =
+            write_one_rowset(tablet_id, /*version=*/1, TabletSchema::create(base_metadata->schema()), /*nrows=*/3);
+
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp restore([] {
+        SyncPoint::GetInstance()->ClearAllCallBacks();
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+    SyncPoint::GetInstance()->SetCallBack("SchemaChangeHandler::do_process_add_index_only:put_txn_log", [](void* arg) {
+        auto* st = static_cast<Status*>(arg);
+        if (st->ok()) {
+            *st = Status::IOError("injected: no response after the put");
+        }
+    });
+
+    const int64_t txn_id = next_id();
+    SchemaChangeHandler handler(_tablet_manager.get());
+    Status st = handler.process_alter_tablet(add_index_request(tablet_id, version, txn_id, "c1"));
+    ASSERT_TRUE(st.is_io_error()) << st.to_string();
+
+    const auto log_path = _tablet_manager->txn_log_location(tablet_id, txn_id);
+    ASSIGN_OR_ABORT(auto log, _tablet_manager->load_txn_log(log_path, /*fill_cache=*/false));
+    ASSERT_EQ(1, log->op_add_index().segment_entries_size());
+    const auto& idx_file = log->op_add_index().segment_entries(0).entry().index_file();
+    EXPECT_TRUE(fs::path_exist(_tablet_manager->segment_location(tablet_id, idx_file)));
+    EXPECT_EQ(std::set<std::string>{idx_file}, idx_files_of_txn(data_dir, txn_id));
+
+    abort_alter_txn(_tablet_manager.get(), tablet_id, txn_id);
+
+    EXPECT_FALSE(fs::path_exist(log_path));
+    EXPECT_TRUE(idx_files_of_txn(data_dir, txn_id).empty());
 }
 
 // Stub IDG loader returning a caller-provided list. Used by the read-side

@@ -301,6 +301,10 @@ public class LeaderImplTest {
             {
                 schemaChangeHandler.handleFinishAlterTask((AlterReplicaTask) any);
                 times = 0;
+                // The older job no longer has the copy queued, so it gets both reports: a cancelled fast-path job
+                // deletes what the copy wrote.
+                schemaChangeHandler.handleFinishReportOfRemovedAlterTask(OLD_JOB_ID, tabletId, ALTER_BE_ID);
+                times = 2;
             }
         };
     }
@@ -322,6 +326,8 @@ public class LeaderImplTest {
             {
                 schemaChangeHandler.handleFinishAlterTask(task);
                 times = 1;
+                schemaChangeHandler.handleFinishReportOfRemovedAlterTask(anyLong, anyLong, anyLong);
+                times = 0;
             }
         };
     }
@@ -344,6 +350,38 @@ public class LeaderImplTest {
             {
                 schemaChangeHandler.handleFinishAlterTask(task);
                 times = 1;
+            }
+        };
+    }
+
+    @Test
+    public void testAlterFinishOfRemovedTaskGoesToItsJob(@Mocked GlobalStateMgr globalStateMgr,
+                                                         @Mocked NodeMgr nodeMgr,
+                                                         @Mocked SystemInfoService clusterInfo,
+                                                         @Mocked SchemaChangeHandler schemaChangeHandler) {
+        expectLeaderAcceptingAlterFinish(globalStateMgr, nodeMgr, clusterInfo, schemaChangeHandler);
+
+        // Nothing is queued under the signature: the job dropped the task when it was cancelled, while the backend
+        // was still running it. Both a successful and a failed run report back.
+        for (TStatusCode statusCode : List.of(TStatusCode.OK, TStatusCode.INTERNAL_ERROR)) {
+            TMasterResult result = leader.finishTask(alterFinishRequest(statusCode, OLD_JOB_ID));
+            Assertions.assertEquals(TStatusCode.CANCELLED, result.getStatus().getStatus_code(), statusCode.toString());
+        }
+        // A backend that does not send alter_job_id names no job to hand the report to.
+        leader.finishTask(alterFinishRequest(TStatusCode.OK, null));
+
+        new Verifications() {
+            {
+                schemaChangeHandler.handleFinishReportOfRemovedAlterTask(OLD_JOB_ID, tabletId, ALTER_BE_ID);
+                times = 2;
+                schemaChangeHandler.handleFinishAlterTask((AlterReplicaTask) any);
+                times = 0;
+            }
+        };
+        new Verifications() {
+            {
+                schemaChangeHandler.handleFinishReportOfRemovedAlterTask(anyLong, anyLong, anyLong);
+                times = 2;
             }
         };
     }

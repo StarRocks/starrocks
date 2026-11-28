@@ -153,6 +153,10 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
     // leader demotion. Holds the partition object so a pin can be released after its table left the catalog.
     private final transient Map<Long, RetainPin> retainPins = new ConcurrentHashMap<>();
 
+    // Set once cancelImpl has accepted the cancel, before it removes the tasks from AgentTaskQueue. Volatile: finish
+    // reports read it on FE request threads without the job's monitor (handleFinishReportOfRemovedTask).
+    private transient volatile boolean cancelStarted = false;
+
     private record RetainPin(PhysicalPartition partition, long version) {
     }
 
@@ -195,6 +199,8 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
         batchTask = null;
         // The next leader dispatches again and pins the version it dispatches at; keep no stale pin here.
         releaseRetainPins();
+        // A cancel that did not get into the journal leaves the job running here.
+        cancelStarted = false;
     }
 
     protected LakeTableIndexFastPathJobBase(long jobId, JobType jobType, long dbId, long tableId, String tableName,
@@ -669,47 +675,157 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
             forceSkippedAtCommitted = true;
         }
 
-        if (batchTask != null) {
-            for (AgentTask task : batchTask.getAllTasks()) {
-                AgentTaskQueue.removeTask(task.getBackendId(), TTaskType.ALTER, task.getSignature());
+        // From here on a report that finds its task removed waits for this cancel to finish
+        // (handleFinishReportOfRemovedTask).
+        cancelStarted = true;
+        try {
+            if (batchTask != null) {
+                for (AgentTask task : batchTask.getAllTasks()) {
+                    AgentTaskQueue.removeTask(task.getBackendId(), TTaskType.ALTER, task.getSignature());
+                }
             }
-        }
-        this.errMsg = errMsg == null ? "" : errMsg;
-        this.finishedTimeMs = System.currentTimeMillis();
-        // Reset table state so subsequent alters are not blocked, and — for a
-        // force-cancel out of FINISHED_REWRITING — advance VisibleVersion to
-        // match the no-op publish. Both mutations are journaled atomically with
-        // the CANCELLED state (inside persistStateChange) so a replayed FE
-        // reproduces them identically via the CANCELLED replay branch.
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
-        if (db != null) {
-            Locker locker = new Locker();
-            locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tableId), LockType.WRITE);
-            try {
-                OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                        .getTable(db.getId(), tableId);
-                // Release before the table goes back to NORMAL: from then on compaction may pin these partitions.
+            this.errMsg = errMsg == null ? "" : errMsg;
+            this.finishedTimeMs = System.currentTimeMillis();
+            // Reset table state so subsequent alters are not blocked, and — for a
+            // force-cancel out of FINISHED_REWRITING — advance VisibleVersion to
+            // match the no-op publish. Both mutations are journaled atomically with
+            // the CANCELLED state (inside persistStateChange) so a replayed FE
+            // reproduces them identically via the CANCELLED replay branch.
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+            if (db != null) {
+                Locker locker = new Locker();
+                locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tableId), LockType.WRITE);
+                try {
+                    OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                            .getTable(db.getId(), tableId);
+                    // Release before the table goes back to NORMAL: from then on compaction may pin these partitions.
+                    releaseRetainPins();
+                    persistStateChange(this, JobState.CANCELLED, () -> {
+                        if (table != null) {
+                            if (advanceVersionForForce) {
+                                advanceVisibleVersionForForceSkip(table, commitVersionMap);
+                            }
+                            if (table.getState() == OlapTable.OlapTableState.SCHEMA_CHANGE) {
+                                table.setState(OlapTable.OlapTableState.NORMAL);
+                                GlobalStateMgr.getCurrentState().getCompactionMgr().resumeCompactionAfterAlter(dbId, table);
+                            }
+                        }
+                    });
+                } finally {
+                    locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tableId), LockType.WRITE);
+                }
+            } else {
                 releaseRetainPins();
-                persistStateChange(this, JobState.CANCELLED, () -> {
-                    if (table != null) {
-                        if (advanceVersionForForce) {
-                            advanceVisibleVersionForForceSkip(table, commitVersionMap);
-                        }
-                        if (table.getState() == OlapTable.OlapTableState.SCHEMA_CHANGE) {
-                            table.setState(OlapTable.OlapTableState.NORMAL);
-                            GlobalStateMgr.getCurrentState().getCompactionMgr().resumeCompactionAfterAlter(dbId, table);
-                        }
-                    }
-                });
-            } finally {
-                locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tableId), LockType.WRITE);
+                persistStateChange(this, JobState.CANCELLED);
             }
-        } else {
-            releaseRetainPins();
-            persistStateChange(this, JobState.CANCELLED);
+        } catch (RuntimeException | Error e) {
+            // The cancel did not happen and the job goes on: reports of its tasks need not wait for its monitor.
+            cancelStarted = false;
+            throw e;
+        }
+        // CANCELLED is in the journal now, so no leader will publish this txn. A task still running or queued on a
+        // node writes its txn log after this abort looked for it; its finish report aborts that tablet again
+        // (handleFinishReportOfRemovedTask).
+        if (txnAbortAllowed()) {
+            abortTxnOnTablets(allTabletIds(), dispatchedNodeOfTablet());
         }
         LOG.info("index fast-path job {} cancelled (force={}): {}", jobId, force, errMsg);
         return true;
+    }
+
+    /**
+     * Handles the finish report that node {@code backendId} sent for one of this job's AlterReplicaTasks after the task
+     * left AgentTaskQueue. A cancel removes every task from the queue, but a node may still be running or queueing
+     * some of them: such a node writes the task's txn log and files after the abort sent at the cancel looked for
+     * them, so the report is when they can be reclaimed. The abort goes to the node that sent the report, which needs
+     * no lookup and has just shown it is up, whatever its heartbeat state says.
+     */
+    public void handleFinishReportOfRemovedTask(long tabletId, long backendId) {
+        // Most of these reports belong to a job that is not cancelled: after a leader change, every task the previous
+        // leader sent reports to a job that no longer has it queued. Return for them without the monitor, which run()
+        // holds through a whole dispatch. A cancel on this FE sets the volatile cancelStarted before it removes the
+        // tasks, so a report of a task it removed waits for it to finish; a job loaded already cancelled reads
+        // CANCELLED from jobState.
+        if (!cancelStarted && jobState != JobState.CANCELLED) {
+            return;
+        }
+        TxnInfoPB txnInfo;
+        // Decide under the monitor that run() and cancel() hold while they write the state the decision reads.
+        synchronized (this) {
+            if (!txnAbortAllowed()) {
+                return;
+            }
+            txnInfo = abortTxnInfo();
+        }
+        try {
+            ComputeNode node = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
+                    .getBackendOrComputeNode(backendId);
+            if (node == null) {
+                LOG.warn("index fast-path job {} cannot abort txn {} on tablet {}: node {} is gone", jobId,
+                        watershedTxnId, tabletId, backendId);
+                return;
+            }
+            LOG.info("index fast-path job {} aborts txn {} on tablet {} reported by node {}", jobId, watershedTxnId,
+                    tabletId, backendId);
+            Utils.sendAbortTxnWithCleanup(node, List.of(tabletId), txnInfo);
+        } catch (Exception e) {
+            LOG.warn("index fast-path job {} fails to abort txn {} on tablet {}", jobId, watershedTxnId, tabletId, e);
+        }
+    }
+
+    /**
+     * Whether this job's txn may be aborted with cleanup, which deletes the txn log the tablet's AlterReplicaTask
+     * wrote under {@link #watershedTxnId} and the files it references, the .idx files of an ADD INDEX, which nothing
+     * else reclaims once the job is cancelled. Only for a cancelled job that never reserved its commit versions: a
+     * publish is sent only after they are reserved at the RUNNING -> FINISHED_REWRITING transition, and a job forced
+     * out of FINISHED_REWRITING may already have published on some tablets, whose files the cleanup would delete
+     * from under the published metadata.
+     */
+    private boolean txnAbortAllowed() {
+        boolean hasReservedVersion = commitVersionMap != null && !commitVersionMap.isEmpty();
+        return jobState == JobState.CANCELLED && !hasReservedVersion && watershedTxnId != -1;
+    }
+
+    /** The txn info this job's publish sends, so BE reads the same txn log a publish would. */
+    private TxnInfoPB abortTxnInfo() {
+        return TxnInfoHelper.forJobPublish(watershedTxnId, TxnTypePB.TXN_NORMAL, System.currentTimeMillis(),
+                commitGtid);
+    }
+
+    /**
+     * Aborts this job's txn on {@code tabletIds}, once {@link #txnAbortAllowed()} holds. {@code nodeOfTablet} names
+     * the node already known to have handled a tablet, so it needs no lookup.
+     */
+    private void abortTxnOnTablets(Collection<Long> tabletIds, Map<Long, Long> nodeOfTablet) {
+        if (tabletIds.isEmpty()) {
+            return;
+        }
+        LOG.info("index fast-path job {} aborts txn {} on {} tablet(s)", jobId, watershedTxnId, tabletIds.size());
+        try {
+            Utils.abortTxnWithCleanup(tabletIds, nodeOfTablet, abortTxnInfo(), computeResource);
+        } catch (Exception e) {
+            // Best effort: the cancel is already in the journal, and what is not deleted stays as before this cleanup.
+            LOG.warn("index fast-path job {} fails to abort txn {}", jobId, watershedTxnId, e);
+        }
+    }
+
+    private List<Long> allTabletIds() {
+        List<Long> tabletIds = new ArrayList<>();
+        if (partitionToTablets != null) {
+            partitionToTablets.values().forEach(tabletIds::addAll);
+        }
+        return tabletIds;
+    }
+
+    /** The node each task of this leader's dispatch went to, by tablet; empty when this leader dispatched none. */
+    private Map<Long, Long> dispatchedNodeOfTablet() {
+        Map<Long, Long> nodeOfTablet = new HashMap<>();
+        if (batchTask != null) {
+            for (AgentTask task : batchTask.getAllTasks()) {
+                nodeOfTablet.put(task.getTabletId(), task.getBackendId());
+            }
+        }
+        return nodeOfTablet;
     }
 
     /** True iff this job's database and table both still exist in the catalog. */
