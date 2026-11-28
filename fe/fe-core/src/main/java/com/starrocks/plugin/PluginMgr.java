@@ -133,6 +133,7 @@ public class PluginMgr implements Writable {
         }
 
         // other builtin plugins
+        ExtensionAuditPluginRegistrar.register(this);
     }
 
     // install a plugin from user's command.
