@@ -21,6 +21,7 @@ import com.starrocks.alter.reshard.presplit.PreSplitProfile;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
@@ -30,12 +31,17 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.Status;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.ProfileKeyDictionary;
 import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.ProfilingExecPlan;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.connector.iceberg.IcebergConnectorScanRangeSource;
+import com.starrocks.connector.iceberg.IcebergMORParams;
+import com.starrocks.connector.iceberg.IcebergMetadata;
+import com.starrocks.connector.iceberg.IcebergTableMORParams;
 import com.starrocks.lake.LakeMetaVersionNotFoundException;
 import com.starrocks.listener.GlobalLoadJobListenerBus;
 import com.starrocks.load.DeleteMgr;
@@ -48,6 +54,10 @@ import com.starrocks.metric.WarehouseMetricMgr;
 import com.starrocks.mysql.MysqlSerializer;
 import com.starrocks.planner.DataPartition;
 import com.starrocks.planner.DescriptorTable;
+import com.starrocks.planner.IcebergDeleteSink;
+import com.starrocks.planner.IcebergRowDeltaSink;
+import com.starrocks.planner.IcebergScanNode;
+import com.starrocks.planner.PartitionIdGenerator;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanFragmentId;
 import com.starrocks.planner.PlanNode;
@@ -55,6 +65,7 @@ import com.starrocks.planner.PlanNodeId;
 import com.starrocks.planner.RangeColocateUnalignedException;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.planner.TupleDescriptor;
+import com.starrocks.planner.TupleId;
 import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.qe.QueryDetail.QueryMemState;
 import com.starrocks.qe.QueryState.MysqlStateType;
@@ -76,11 +87,13 @@ import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.ShowFrontendsStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.TableRef;
+import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.ast.txn.BeginStmt;
 import com.starrocks.sql.ast.txn.CommitStmt;
 import com.starrocks.sql.ast.txn.RollbackStmt;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.LargeInPredicateException;
+import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.parser.AstBuilder;
 import com.starrocks.sql.parser.NodePosition;
@@ -88,7 +101,10 @@ import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.task.LoadEtlTask;
 import com.starrocks.thrift.TDescriptorTable;
+import com.starrocks.thrift.TIcebergDataFile;
+import com.starrocks.thrift.TIcebergFileContent;
 import com.starrocks.thrift.TPlanNode;
+import com.starrocks.thrift.TSinkCommitInfo;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.PlainInsertOnEmptyPartitionsConflictException;
@@ -107,13 +123,21 @@ import mockit.Invocation;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
+import org.apache.iceberg.DataFile;
+import org.apache.iceberg.DataFiles;
+import org.apache.iceberg.PartitionSpec;
+import org.apache.iceberg.Schema;
+import org.apache.iceberg.types.Types;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 
 import java.lang.reflect.Field;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
@@ -3155,5 +3179,272 @@ public class StmtExecutorTest {
         Assertions.assertEquals(1, DML_ATTEMPTS.get());
         Assertions.assertEquals(1, PLAN_COUNT.get());
         Assertions.assertTrue(ctx.getState().isError());
+    }
+
+    private static final AtomicReference<IcebergTable> ICEBERG_TARGET_TABLE = new AtomicReference<>();
+
+    private static IcebergScanNode buildIcebergScanNodeForDeleteTest(int id, IcebergTable icebergTable,
+                                                                     boolean usedForDelete,
+                                                                     Map<String, DataFile> recordedFiles) {
+        TupleDescriptor tupleDesc = new TupleDescriptor(new TupleId(id));
+        tupleDesc.setTable(icebergTable);
+        IcebergScanNode scanNode = new IcebergScanNode(new PlanNodeId(id), tupleDesc, "IcebergScanNode",
+                IcebergTableMORParams.EMPTY, IcebergMORParams.EMPTY, PartitionIdGenerator.of());
+        scanNode.setUsedForDelete(usedForDelete);
+        if (recordedFiles != null) {
+            IcebergConnectorScanRangeSource source = Mockito.mock(IcebergConnectorScanRangeSource.class);
+            for (Map.Entry<String, DataFile> entry : recordedFiles.entrySet()) {
+                Mockito.when(source.getDeleteReferencedDataFile(entry.getKey())).thenReturn(entry.getValue());
+            }
+            Deencapsulation.setField(scanNode, "scanRangeSource", source);
+        }
+        return scanNode;
+    }
+
+    @Test
+    public void testFillDeleteReferencedDataFiles() {
+        ConnectContext ctx = newInsertCtx();
+        StmtExecutor executor = new StmtExecutor(ctx, SqlParser.parseSingleStatement("SELECT 1", SqlModeHelper.MODE_DEFAULT));
+
+        Schema schema = new Schema(Types.NestedField.required(1, "id", Types.IntegerType.get()),
+                Types.NestedField.required(2, "p", Types.StringType.get()));
+        PartitionSpec spec = PartitionSpec.builderFor(schema).identity("p").build();
+        DataFile file1 = DataFiles.builder(spec)
+                .withPath("s3://bucket/table/data/p=a/file1.parquet")
+                .withFileSizeInBytes(100)
+                .withPartitionPath("p=a")
+                .withRecordCount(1)
+                .build();
+        DataFile file2 = DataFiles.builder(spec)
+                .withPath("s3://bucket/table/data/p=b/file2.parquet")
+                .withFileSizeInBytes(100)
+                .withPartitionPath("p=b")
+                .withRecordCount(1)
+                .build();
+
+        org.apache.iceberg.Table dummyNativeTable = Mockito.mock(org.apache.iceberg.Table.class);
+        IcebergTable icebergTable = new IcebergTable(1L, "t0", null, null, "db", "t0", "",
+                Lists.newArrayList(), dummyNativeTable, com.google.common.collect.Maps.newHashMap());
+        IcebergTable otherTable = new IcebergTable(2L, "src", null, null, "db", "src", "",
+                Lists.newArrayList(), dummyNativeTable, com.google.common.collect.Maps.newHashMap());
+        PartitionSpec wrongSpec = PartitionSpec.builderFor(schema).bucket("id", 4).build();
+        DataFile wrongFileFromOtherTableOrSnapshot = DataFiles.builder(wrongSpec)
+                .withPath(file1.location())
+                .withFileSizeInBytes(100)
+                .withPartitionPath("id_bucket=0")
+                .withRecordCount(1)
+                .build();
+
+        new MockUp<IcebergTable>() {
+            @Mock
+            public String getCatalogName() {
+                return null;
+            }
+        };
+
+        IcebergScanNode inactiveScan = buildIcebergScanNodeForDeleteTest(1, icebergTable, false,
+                Map.of(file1.location(), file1));
+        IcebergScanNode otherTableScan = buildIcebergScanNodeForDeleteTest(2, otherTable, true,
+                Map.of(file1.location(), wrongFileFromOtherTableOrSnapshot));
+        IcebergScanNode staleSnapshotScan = buildIcebergScanNodeForDeleteTest(3, icebergTable, true,
+                Map.of(file1.location(), wrongFileFromOtherTableOrSnapshot));
+        staleSnapshotScan.setTvrVersionRange(TvrTableSnapshot.of(Optional.of(100L)));
+        IcebergScanNode nullSourceScan = buildIcebergScanNodeForDeleteTest(4, icebergTable, true, null);
+        IcebergScanNode activeScan = buildIcebergScanNodeForDeleteTest(5, icebergTable, true,
+                Map.of(file1.location(), file1));
+        activeScan.setTvrVersionRange(TvrTableSnapshot.of(Optional.of(200L)));
+
+        ExecPlan execPlan = buildMinimalExecPlan(1);
+        PlanNode root = execPlan.getFragments().get(0).getPlanRoot();
+        root.addChild(inactiveScan);
+        root.addChild(otherTableScan);
+        root.addChild(staleSnapshotScan);
+        root.addChild(nullSourceScan);
+        root.addChild(activeScan);
+
+        IcebergMetadata.IcebergSinkExtra extra = new IcebergMetadata.IcebergSinkExtra();
+        extra.setBaseSnapshotId(200L);
+        executor.fillDeleteReferencedDataFiles(execPlan, Collections.emptyList(), null, icebergTable);
+        executor.fillDeleteReferencedDataFiles(null, Collections.emptyList(), extra, icebergTable);
+        executor.fillDeleteReferencedDataFiles(execPlan, null, extra, icebergTable);
+        executor.fillDeleteReferencedDataFiles(execPlan, Collections.emptyList(), extra, icebergTable);
+        Assertions.assertTrue(extra.getReferencedDataFiles().isEmpty());
+
+        TSinkCommitInfo dataCommitInfo = new TSinkCommitInfo();
+        TIcebergDataFile dataFileCommit = new TIcebergDataFile();
+        dataFileCommit.setFile_content(TIcebergFileContent.DATA);
+        dataCommitInfo.setIceberg_data_file(dataFileCommit);
+        executor.fillDeleteReferencedDataFiles(execPlan, List.of(new TSinkCommitInfo(), dataCommitInfo), extra,
+                icebergTable);
+        Assertions.assertTrue(extra.getReferencedDataFiles().isEmpty());
+
+        TIcebergDataFile posDelete1 = new TIcebergDataFile();
+        posDelete1.setFile_content(TIcebergFileContent.POSITION_DELETES);
+        posDelete1.setReferenced_data_file(file1.location());
+        TSinkCommitInfo delInfo1 = new TSinkCommitInfo();
+        delInfo1.setIceberg_data_file(posDelete1);
+
+        TIcebergDataFile posDelete2 = new TIcebergDataFile();
+        posDelete2.setFile_content(TIcebergFileContent.POSITION_DELETES);
+        posDelete2.setReferenced_data_file(file2.location());
+        TSinkCommitInfo delInfo2 = new TSinkCommitInfo();
+        delInfo2.setIceberg_data_file(posDelete2);
+
+        extra.putReferencedDataFile(file2.location(), file2);
+        executor.fillDeleteReferencedDataFiles(execPlan, List.of(delInfo1, delInfo2), extra, icebergTable);
+
+        Assertions.assertEquals(2, extra.getReferencedDataFiles().size());
+        Assertions.assertSame(file1, extra.getReferencedDataFiles().get(file1.location()));
+        Assertions.assertSame(file2, extra.getReferencedDataFiles().get(file2.location()));
+        Assertions.assertNull(nullSourceScan.getDeleteReferencedDataFile(file1.location()));
+        Assertions.assertSame(file1, activeScan.getDeleteReferencedDataFile(file1.location()));
+    }
+
+    @Test
+    public void testHandleIcebergDeleteAndRowDeltaSinkFillsReferencedDataFiles(
+            @Mocked DefaultCoordinator coordinator) throws Exception {
+        MetricRepo.init();
+        Schema schema = new Schema(Types.NestedField.required(1, "id", Types.IntegerType.get()),
+                Types.NestedField.required(2, "p", Types.StringType.get()));
+        PartitionSpec spec = PartitionSpec.builderFor(schema).identity("p").build();
+        DataFile file1 = DataFiles.builder(spec)
+                .withPath("s3://bucket/table/data/p=a/file1.parquet")
+                .withFileSizeInBytes(100)
+                .withPartitionPath("p=a")
+                .withRecordCount(1)
+                .build();
+        IcebergTable icebergTable = new IcebergTable(1L, "t0", null, null, "db", "t0", "",
+                Lists.newArrayList(), Mockito.mock(org.apache.iceberg.Table.class),
+                com.google.common.collect.Maps.newHashMap());
+        ICEBERG_TARGET_TABLE.set(icebergTable);
+
+        TIcebergDataFile posDelete = new TIcebergDataFile();
+        posDelete.setFile_content(TIcebergFileContent.POSITION_DELETES);
+        posDelete.setReferenced_data_file(file1.location());
+        TSinkCommitInfo delInfo = new TSinkCommitInfo();
+        delInfo.setIceberg_data_file(posDelete);
+
+        List<Object> capturedExtras = Lists.newArrayList();
+        new MockUp<MetadataMgr>() {
+            @Mock
+            public Database getDb(ConnectContext context, String catalogName, String dbName) {
+                return new Database(1L, "db");
+            }
+
+            @Mock
+            public void finishSink(String catalogName, String dbName, String tableName,
+                                   List<TSinkCommitInfo> commitInfos, String branch, Object extra,
+                                   ConnectContext context) {
+                capturedExtras.add(extra);
+            }
+        };
+        new MockUp<MetaUtils>() {
+            @Mock
+            public static Table getSessionAwareTable(ConnectContext session, Database database,
+                                                     com.starrocks.catalog.TableName tableName) {
+                return ICEBERG_TARGET_TABLE.get();
+            }
+        };
+        new MockUp<DefaultCoordinator.Factory>() {
+            @Mock
+            public DefaultCoordinator createInsertScheduler(ConnectContext context, List<PlanFragment> fragments,
+                                                            List<ScanNode> scanNodes,
+                                                            TDescriptorTable descTable, ExecPlan plan) {
+                return coordinator;
+            }
+        };
+        new MockUp<DefaultCoordinator>() {
+            @Mock
+            public void setLoadJobType(com.starrocks.thrift.TLoadJobType loadJobType) {
+            }
+
+            @Mock
+            public void setLoadJobId(Long jobId) {
+            }
+
+            @Mock
+            public void exec() {
+            }
+
+            @Mock
+            public boolean join(int timeoutSecond) {
+                return true;
+            }
+
+            @Mock
+            public boolean isDone() {
+                return true;
+            }
+
+            @Mock
+            public Status getExecStatus() {
+                return new Status();
+            }
+
+            @Mock
+            public java.util.Map<String, String> getLoadCounters() {
+                Map<String, String> counters = new HashMap<>();
+                counters.put(LoadEtlTask.DPP_NORMAL_ALL, "1");
+                return counters;
+            }
+
+            @Mock
+            public List<TSinkCommitInfo> getSinkCommitInfos() {
+                return List.of(delInfo);
+            }
+
+            @Mock
+            public String getTrackingUrl() {
+                return "";
+            }
+        };
+
+        // 1. IcebergDeleteSink path
+        new MockUp<IcebergTable>() {
+            @Mock
+            public String getCatalogName() {
+                return null;
+            }
+        };
+        ConnectContext delCtx = UtFrameUtils.createDefaultCtx();
+        ConnectContext.threadLocalInfo.set(delCtx);
+        UUID delQueryId = UUIDUtil.genUUID();
+        delCtx.setQueryId(delQueryId);
+        delCtx.setExecutionId(UUIDUtil.toTUniqueId(delQueryId));
+        DeleteStmt deleteStmt = new DeleteStmt(
+                new TableRef(QualifiedName.of(List.of("iceberg_catalog", "db", "t0")), null, NodePosition.ZERO),
+                null, null);
+        deleteStmt.setTable(icebergTable);
+        ExecPlan delPlan = buildMinimalExecPlan(1);
+        delPlan.getFragments().get(0).getPlanRoot()
+                .addChild(buildIcebergScanNodeForDeleteTest(10, icebergTable, true, Map.of(file1.location(), file1)));
+        IcebergDeleteSink deleteSink = Mockito.mock(IcebergDeleteSink.class);
+        IcebergMetadata.IcebergSinkExtra delExtra = new IcebergMetadata.IcebergSinkExtra();
+        Mockito.when(deleteSink.getSinkExtraInfo()).thenReturn(delExtra);
+        delPlan.getFragments().get(0).setSink(deleteSink);
+        new StmtExecutor(delCtx, deleteStmt).handleDMLStmt(delPlan, deleteStmt);
+
+        // 2. IcebergRowDeltaSink path
+        ConnectContext updCtx = UtFrameUtils.createDefaultCtx();
+        ConnectContext.threadLocalInfo.set(updCtx);
+        UUID updQueryId = UUIDUtil.genUUID();
+        updCtx.setQueryId(updQueryId);
+        updCtx.setExecutionId(UUIDUtil.toTUniqueId(updQueryId));
+        UpdateStmt updateStmt = (UpdateStmt) SqlParser.parseSingleStatement(
+                "UPDATE iceberg_catalog.db.t0 SET p = 'x' WHERE id = 1", SqlModeHelper.MODE_DEFAULT);
+        ExecPlan updPlan = buildMinimalExecPlan(1);
+        updPlan.getFragments().get(0).getPlanRoot()
+                .addChild(buildIcebergScanNodeForDeleteTest(11, icebergTable, true, Map.of(file1.location(), file1)));
+        IcebergRowDeltaSink rowDeltaSink = Mockito.mock(IcebergRowDeltaSink.class);
+        IcebergMetadata.IcebergSinkExtra updExtra = new IcebergMetadata.IcebergSinkExtra();
+        Mockito.when(rowDeltaSink.getSinkExtraInfo()).thenReturn(updExtra);
+        updPlan.getFragments().get(0).setSink(rowDeltaSink);
+        new StmtExecutor(updCtx, updateStmt).handleDMLStmt(updPlan, updateStmt);
+
+        Assertions.assertEquals(2, capturedExtras.size());
+        Assertions.assertSame(file1,
+                ((IcebergMetadata.IcebergSinkExtra) capturedExtras.get(0)).getReferencedDataFiles().get(file1.location()));
+        Assertions.assertSame(file1,
+                ((IcebergMetadata.IcebergSinkExtra) capturedExtras.get(1)).getReferencedDataFiles().get(file1.location()));
     }
 }

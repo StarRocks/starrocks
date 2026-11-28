@@ -144,7 +144,9 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
     private final Set<DataFile> scannedDataFiles;
     private final Set<DeleteFile> appliedPosDeleteFiles;
     private final Set<DeleteFile> appliedEqualDeleteFiles;
+    private final Map<String, DataFile> deleteReferencedDataFiles = new HashMap<>();
     private final boolean recordScanFiles;
+    private final boolean recordDeleteFilePartitions;
     private final boolean useMinMaxOpt;
     private final PartitionIdGenerator partitionIdGenerator;
     private final boolean usedForDelete;
@@ -187,12 +189,19 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
         this.partitionIdGenerator = partitionIdGenerator;
         this.useMinMaxOpt = useMinMaxOpt;
         this.usedForDelete = usedForDelete;
+        this.recordDeleteFilePartitions = usedForDelete && table.getNativeTable() != null
+                && table.getNativeTable().specs().values().stream().anyMatch(spec -> !spec.isUnpartitioned());
     }
 
     public void clearScannedFiles() {
         this.scannedDataFiles.clear();
         this.appliedPosDeleteFiles.clear();
         this.appliedEqualDeleteFiles.clear();
+        this.deleteReferencedDataFiles.clear();
+    }
+
+    public DataFile getDeleteReferencedDataFile(String location) {
+        return deleteReferencedDataFiles.get(location);
     }
 
     @Override
@@ -237,6 +246,10 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
                 FileScanTask fileScanTask = icebergRemoteFileInfo.getFileScanTask();
                 checkFileFormatSupportedDelete(fileScanTask, usedForDelete, usedForDelete && readsRowLineage());
                 res.addAll(toScanRanges(fileScanTask));
+                if (recordDeleteFilePartitions) {
+                    DataFile file = fileScanTask.file();
+                    deleteReferencedDataFiles.putIfAbsent(file.location(), file.copyWithoutStats());
+                }
                 if (recordScanFiles) {
                     scannedDataFiles.add(fileScanTask.file());
                     for (DeleteFile del : fileScanTask.deletes()) {

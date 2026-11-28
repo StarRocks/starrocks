@@ -279,6 +279,8 @@ import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.LoadEtlTask;
 import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.thrift.TIcebergDataFile;
+import com.starrocks.thrift.TIcebergFileContent;
 import com.starrocks.thrift.TLoadJobType;
 import com.starrocks.thrift.TQueryType;
 import com.starrocks.thrift.TResultBatch;
@@ -3645,6 +3647,49 @@ public class StmtExecutor {
         return extra;
     }
 
+    void fillDeleteReferencedDataFiles(ExecPlan execPlan, List<TSinkCommitInfo> commitInfos,
+                                       IcebergMetadata.IcebergSinkExtra extra, Table targetTable) {
+        if (extra == null || execPlan == null || commitInfos == null || commitInfos.isEmpty()) {
+            return;
+        }
+        Set<String> referenced = new HashSet<>();
+        for (TSinkCommitInfo info : commitInfos) {
+            if (info.isSetIceberg_data_file()) {
+                TIcebergDataFile df = info.getIceberg_data_file();
+                if (df.isSetFile_content() && df.getFile_content() == TIcebergFileContent.POSITION_DELETES
+                        && df.isSetReferenced_data_file()) {
+                    referenced.add(df.getReferenced_data_file());
+                }
+            }
+        }
+        if (referenced.isEmpty()) {
+            return;
+        }
+        Long baseSnapshotId = extra.getBaseSnapshotId();
+        for (PlanFragment fragment : execPlan.getFragments()) {
+            for (ScanNode scan : fragment.collectScanNodes().values()) {
+                if (!(scan instanceof IcebergScanNode icebergScan) || !icebergScan.isUsedForDelete()) {
+                    continue;
+                }
+                if (targetTable != null && !targetTable.equals(icebergScan.getIcebergTable())) {
+                    continue;
+                }
+                if (baseSnapshotId != null && icebergScan.getBaseSnapshotId().isPresent()
+                        && !baseSnapshotId.equals(icebergScan.getBaseSnapshotId().get())) {
+                    continue;
+                }
+                for (String location : referenced) {
+                    if (!extra.getReferencedDataFiles().containsKey(location)) {
+                        DataFile file = icebergScan.getDeleteReferencedDataFile(location);
+                        if (file != null) {
+                            extra.putReferencedDataFile(location, file);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     // A position delete is file scoped when it names the single data file it applies to; deletion vectors always
     // are. Such a file becomes dangling once that data file is rewritten, so it can be dropped with it. Position
     // deletes without a reference span the whole partition and would still apply to data files this rewrite left
@@ -4018,11 +4063,13 @@ public class StmtExecutor {
                     // with POSITION_DELETES into a single Iceberg RowDelta) is added in a follow-up PR;
                     // this PR only wires the FE planner / executor entry points.
                     IcebergMetadata.IcebergSinkExtra extra = rowDeltaSink.getSinkExtraInfo();
+                    fillDeleteReferencedDataFiles(execPlan, commitInfos, extra, targetTable);
                     context.getGlobalStateMgr().getMetadataMgr().finishSink(
                             catalogName, dbName, tableName, commitInfos, rowDeltaSink.getTargetBranch(), extra, context);
                 } else if (dataSink instanceof IcebergDeleteSink deleteSink) {
                     // This is a DELETE operation, use IcebergDeleteSink
                     IcebergMetadata.IcebergSinkExtra extra = deleteSink.getSinkExtraInfo();
+                    fillDeleteReferencedDataFiles(execPlan, commitInfos, extra, targetTable);
                     context.getGlobalStateMgr().getMetadataMgr().finishSink(
                             catalogName, dbName, tableName, commitInfos, deleteSink.getTargetBranch(), extra, context);
                 } else if (dataSink instanceof IcebergTableSink) {

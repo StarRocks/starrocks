@@ -5236,6 +5236,187 @@ public class IcebergMetadataTest extends TableTestBase {
         Assertions.assertEquals(FILE_A.specId(), Iterables.getOnlyElement(oldFileTask.deletes()).specId());
     }
 
+    @Test
+    public void testPositionDeleteUsesReferencedDataFilePartitionWithinSameSpec() throws Exception {
+        // Reproduces the timestamptz month-boundary mismatch (and any legacy mispartitioned file)
+        // within a single partition spec: the data file lives in month 2026-02 (673), while BE
+        // recomputed the delete file path into month 2026-03 (674). Commit must bind the delete
+        // file to the referenced data file's own partition (673) so all engines (including Iceberg
+        // 1.4.3 that indexes deletes by (spec_id, partition)) apply it.
+        org.apache.iceberg.Schema tsSchema = new org.apache.iceberg.Schema(
+                Types.NestedField.required(1, "id", Types.IntegerType.get()),
+                Types.NestedField.optional(2, "visit_start_time", Types.TimestampType.withZone())
+        );
+        PartitionSpec monthSpec = PartitionSpec.builderFor(tsSchema).month("visit_start_time").build();
+        TestTables.TestTable table = create(tsSchema, monthSpec, "ta_v2_timestamptz_pos_delete", 2);
+
+        DataFile febDataFile = DataFiles.builder(monthSpec)
+                .withPath(table.location() + "/data/visit_start_time_month=2026-02/data.parquet")
+                .withFileSizeInBytes(100)
+                .withPartition(IcebergPartitionData.partitionDataFromPath(
+                        "visit_start_time_month=2026-02", "0", monthSpec))
+                .withRecordCount(2)
+                .build();
+        table.newFastAppend().appendFile(febDataFile).commit();
+
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT,
+                new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG),
+                Executors.newSingleThreadExecutor(), DEFAULT_CATALOG_PROPERTIES);
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "iceberg_db",
+                "iceberg_table", "", Lists.newArrayList(), table, Maps.newHashMap());
+        new Expectations(metadata) {
+            {
+                metadata.getTable((ConnectContext) any, anyString, anyString);
+                result = icebergTable;
+                minTimes = 0;
+            }
+        };
+        new MockUp<NodeMgr>() {
+            @Mock
+            public Frontend getMySelf() {
+                return new Frontend(FrontendNodeType.LEADER, "test-fe", "127.0.0.1", 9010);
+            }
+        };
+        new MockUp<Frontend>() {
+            @Mock
+            public String getFeVersion() {
+                return "test-version";
+            }
+        };
+
+        String wrongMarchDir = table.location() + "/data/visit_start_time_month=2026-03/";
+        TIcebergDataFile deleteFile = new TIcebergDataFile();
+        deleteFile.setPath(wrongMarchDir + "delete.parquet");
+        deleteFile.setFormat("parquet");
+        deleteFile.setRecord_count(1);
+        deleteFile.setFile_size_in_bytes(100);
+        deleteFile.setPartition_path(wrongMarchDir);
+        deleteFile.setPartition_null_fingerprint("0");
+        deleteFile.setFile_content(TIcebergFileContent.POSITION_DELETES);
+        deleteFile.setReferenced_data_file(febDataFile.location());
+        deleteFile.setColumn_stats(new TIcebergColumnStats());
+
+        TSinkCommitInfo commitInfo = new TSinkCommitInfo();
+        commitInfo.setIceberg_data_file(deleteFile);
+        IcebergMetadata.IcebergSinkExtra extra = new IcebergMetadata.IcebergSinkExtra();
+        extra.setWriteSpecId(monthSpec.specId());
+        extra.setBaseSnapshotId(table.currentSnapshot().snapshotId());
+
+        metadata.finishSink("iceberg_db", "iceberg_table", Lists.newArrayList(commitInfo), null, extra, connectContext);
+        table.refresh();
+
+        FileScanTask task = Iterables.getOnlyElement(table.newScan().planFiles());
+        DeleteFile committed = Iterables.getOnlyElement(task.deletes());
+        Assertions.assertEquals(febDataFile.specId(), committed.specId());
+        Assertions.assertEquals(febDataFile.partition(), committed.partition());
+    }
+
+    @Test
+    public void testRowDeltaPositionDeleteUsesReferencedDataFilePartitionWhenPartitionUpdated() throws Exception {
+        // Simulates an UPDATE/MERGE that moves a row from data_bucket=0 to data_bucket=2:
+        // BE's row-delta sink emits the delete file with the new partition path (data_bucket=2),
+        // but the committed delete file must stay in FILE_A's original partition (data_bucket=0).
+        TestTables.TestTable table = create(SCHEMA_A, SPEC_A, "ta_v2_update_partition_col", 2);
+        table.newFastAppend().appendFile(FILE_A).commit();
+
+        TIcebergDataFile newDataFile = new TIcebergDataFile();
+        newDataFile.setPath(table.location() + "/data/data_bucket=2/updated.parquet");
+        newDataFile.setFormat("parquet");
+        newDataFile.setRecord_count(1);
+        newDataFile.setSplit_offsets(Lists.newArrayList(4L));
+        newDataFile.setPartition_path(table.location() + "/data/data_bucket=2/");
+        newDataFile.setFile_size_in_bytes(100);
+        newDataFile.setPartition_null_fingerprint("0");
+        newDataFile.setColumn_stats(new TIcebergColumnStats());
+
+        commitPositionDeleteOfFileA(table, table.spec().specId(), "data_bucket=2/", "0", newDataFile);
+
+        FileScanTask oldFileTask = Iterables.getOnlyElement(Iterables.filter(table.newScan().planFiles(),
+                task -> task.file().location().equals(FILE_A.location())));
+        DeleteFile committedDelete = Iterables.getOnlyElement(oldFileTask.deletes());
+        Assertions.assertEquals(FILE_A.specId(), committedDelete.specId());
+        Assertions.assertEquals(FILE_A.partition(), committedDelete.partition());
+
+        FileScanTask newFileTask = Iterables.getOnlyElement(Iterables.filter(table.newScan().planFiles(),
+                task -> task.file().location().equals(newDataFile.getPath())));
+        Assertions.assertEquals(2, newFileTask.file().partition().get(0, Integer.class));
+        Assertions.assertTrue(newFileTask.deletes().isEmpty());
+    }
+
+    @Test
+    public void testPositionDeleteUsesPreResolvedReferencedDataFileWithoutManifestRead() throws Exception {
+        // When the DML scan populates IcebergSinkExtra.referencedDataFiles, commit must resolve the
+        // referenced data file's (spec_id, partition) directly without reading any data manifests.
+        org.apache.iceberg.Schema tsSchema = new org.apache.iceberg.Schema(
+                Types.NestedField.required(1, "id", Types.IntegerType.get()),
+                Types.NestedField.optional(2, "visit_start_time", Types.TimestampType.withZone())
+        );
+        PartitionSpec monthSpec = PartitionSpec.builderFor(tsSchema).month("visit_start_time").build();
+        TestTables.TestTable table = create(tsSchema, monthSpec, "ta_v2_preresolved_pos_delete", 2);
+
+        DataFile febDataFile = DataFiles.builder(monthSpec)
+                .withPath(table.location() + "/data/visit_start_time_month=2026-02/data.parquet")
+                .withFileSizeInBytes(100)
+                .withPartition(IcebergPartitionData.partitionDataFromPath(
+                        "visit_start_time_month=2026-02", "0", monthSpec))
+                .withRecordCount(2)
+                .build();
+        table.newFastAppend().appendFile(febDataFile).commit();
+
+        CachingIcebergCatalog cachingCatalog = Mockito.mock(CachingIcebergCatalog.class);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT,
+                cachingCatalog, Executors.newSingleThreadExecutor(), DEFAULT_CATALOG_PROPERTIES);
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "iceberg_db",
+                "iceberg_table", "", Lists.newArrayList(), table, Maps.newHashMap());
+        new Expectations(metadata) {
+            {
+                metadata.getTable((ConnectContext) any, anyString, anyString);
+                result = icebergTable;
+                minTimes = 0;
+            }
+        };
+        new MockUp<NodeMgr>() {
+            @Mock
+            public Frontend getMySelf() {
+                return new Frontend(FrontendNodeType.LEADER, "test-fe", "127.0.0.1", 9010);
+            }
+        };
+        new MockUp<Frontend>() {
+            @Mock
+            public String getFeVersion() {
+                return "test-version";
+            }
+        };
+
+        String wrongMarchDir = table.location() + "/data/visit_start_time_month=2026-03/";
+        TIcebergDataFile deleteFile = new TIcebergDataFile();
+        deleteFile.setPath(wrongMarchDir + "delete.parquet");
+        deleteFile.setFormat("parquet");
+        deleteFile.setRecord_count(1);
+        deleteFile.setFile_size_in_bytes(100);
+        deleteFile.setPartition_path(wrongMarchDir);
+        deleteFile.setPartition_null_fingerprint("0");
+        deleteFile.setFile_content(TIcebergFileContent.POSITION_DELETES);
+        deleteFile.setReferenced_data_file(febDataFile.location());
+        deleteFile.setColumn_stats(new TIcebergColumnStats());
+
+        TSinkCommitInfo commitInfo = new TSinkCommitInfo();
+        commitInfo.setIceberg_data_file(deleteFile);
+        IcebergMetadata.IcebergSinkExtra extra = new IcebergMetadata.IcebergSinkExtra();
+        extra.setWriteSpecId(monthSpec.specId());
+        extra.setBaseSnapshotId(table.currentSnapshot().snapshotId());
+        extra.putReferencedDataFile(febDataFile.location(), febDataFile.copyWithoutStats());
+
+        metadata.finishSink("iceberg_db", "iceberg_table", Lists.newArrayList(commitInfo), null, extra, connectContext);
+        Mockito.verify(cachingCatalog, Mockito.never()).findCachedDataFiles(Mockito.any(), Mockito.any());
+        table.refresh();
+
+        FileScanTask task = Iterables.getOnlyElement(table.newScan().planFiles());
+        DeleteFile committed = Iterables.getOnlyElement(task.deletes());
+        Assertions.assertEquals(febDataFile.specId(), committed.specId());
+        Assertions.assertEquals(febDataFile.partition(), committed.partition());
+    }
+
     private void commitPositionDeleteOfFileA(TestTables.TestTable table, int writeSpecId, String relativePartitionPath,
                                              String nullFingerprint, TIcebergDataFile... newDataFiles)
             throws Exception {
