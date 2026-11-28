@@ -978,7 +978,9 @@ public class PaimonMetadata implements ConnectorMetadata {
         // withLimit stops at the first splits that pass the pushed filter, so it is only safe when every
         // partition conjunct was converted: one left to the BE (e.g. LIKE 'a_c%') would let Paimon pick
         // splits the BE then filters out entirely, while splits that match are never scanned.
-        boolean pruneManifestsByLimit = params.getLimit() != -1 && params.getLimit() < Integer.MAX_VALUE
+        boolean hasAnnQuery = evaluateIndex && params instanceof PaimonScanRangeParams scanParams
+                && scanParams.getAnnQuery() != null;
+        boolean pruneManifestsByLimit = !hasAnnQuery && params.getLimit() != -1 && params.getLimit() < Integer.MAX_VALUE
                 && onlyHasPartitionPredicate(paimonTable, params.getPredicate())
                 && predicates.size() == Utils.extractConjuncts(params.getPredicate()).size();
         readBuilder = readBuilder.withFilter(predicates).withProjection(projected);
@@ -998,7 +1000,8 @@ public class PaimonMetadata implements ConnectorMetadata {
                     SimpleExecutor.checkInternalQueryState(caller);
                     splits = planDataSplits(readBuilder, paimonMetricRegistry, result);
                 } else {
-                    Tracers.record(EXTERNAL, "PaimonGlobalIndex.Result", "no supported indexed scalar predicate");
+                    Tracers.record(EXTERNAL, "PaimonGlobalIndex.Result",
+                            hasAnnQuery ? "no eligible ANN snapshot" : "no supported indexed scalar predicate");
                 }
             } catch (RuntimeException e) {
                 if (mode != PaimonGlobalIndexMode.AUTO) {
@@ -1015,6 +1018,9 @@ public class PaimonMetadata implements ConnectorMetadata {
         }
         if (splits != null) {
             Tracers.record(EXTERNAL, "PaimonGlobalIndex.Result", "applied");
+            if (hasAnnQuery) {
+                Tracers.record(EXTERNAL, "PaimonGlobalIndex.ANN", "applied");
+            }
         } else {
             if (indexFailure != null) {
                 paimonMetricRegistry = new PaimonMetricRegistry();
@@ -1044,8 +1050,10 @@ public class PaimonMetadata implements ConnectorMetadata {
                                                          PaimonScanRangeParams params, long snapshotId,
                                                          ConnectContext caller) {
         try (Timer ignored = Tracers.watchScope(EXTERNAL, "PaimonGlobalIndex.Evaluate")) {
-            PaimonGlobalIndexRequest request = PaimonGlobalIndexPlanner.request(
-                    fileStore, snapshotId, params.getPredicate(), params.getColumnNames());
+            PaimonAnnQuery annQuery = params.getPredicate() == null ? params.getAnnQuery() : null;
+            PaimonGlobalIndexRequest request = annQuery == null
+                    ? PaimonGlobalIndexPlanner.request(fileStore, snapshotId, params.getPredicate(), params.getColumnNames())
+                    : PaimonGlobalIndexPlanner.annRequest(fileStore, snapshotId, annQuery);
             if (request == null) {
                 return null;
             }

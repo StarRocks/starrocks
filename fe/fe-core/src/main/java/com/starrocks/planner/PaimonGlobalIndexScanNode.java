@@ -69,7 +69,7 @@ public final class PaimonGlobalIndexScanNode extends MetadataScanNode {
         for (var split : metadata.getSplits()) {
             var shard = (PaimonGlobalIndexPlanner.Shard) split;
             TPaimonGlobalIndexScanRange task = new TPaimonGlobalIndexScanRange();
-            task.setProtocol_version(PaimonGlobalIndexRequest.CURRENT_VERSION);
+            task.setProtocol_version(binding.getVersion());
             task.setShard_id(shard.id());
             task.setRange_from(shard.from());
             task.setRange_to(shard.to());

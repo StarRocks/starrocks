@@ -520,6 +520,9 @@ if (${WITH_PAIMON_CPP} STREQUAL "ON")
         paimon_file_index
         paimon_global_index
         paimon_local_file_system)
+    if (PAIMON_ENABLE_LUMINA)
+        list(APPEND PAIMON_CPP_PLUGINS paimon_lumina_index lumina)
+    endif()
     foreach(PAIMON_PLUGIN ${PAIMON_CPP_PLUGINS})
         find_library(${PAIMON_PLUGIN}_SHARED_LIBRARY NAMES ${PAIMON_PLUGIN}
                      PATHS ${PAIMON_CPP_DIR}/lib NO_DEFAULT_PATH)
@@ -530,6 +533,11 @@ if (${WITH_PAIMON_CPP} STREQUAL "ON")
         add_library(${PAIMON_PLUGIN} SHARED IMPORTED GLOBAL)
         set_target_properties(${PAIMON_PLUGIN} PROPERTIES
             IMPORTED_LOCATION ${${PAIMON_PLUGIN}_SHARED_LIBRARY})
+        if (PAIMON_PLUGIN STREQUAL "lumina")
+            # The published runtime may have no ELF SONAME. Link by library name
+            # so the shim's DT_NEEDED does not contain the build directory.
+            set_target_properties(lumina PROPERTIES IMPORTED_NO_SONAME TRUE)
+        endif()
     endforeach()
     add_library(paimon SHARED IMPORTED GLOBAL)
     # Headers install under <prefix>/include/paimon/..., so consumers write

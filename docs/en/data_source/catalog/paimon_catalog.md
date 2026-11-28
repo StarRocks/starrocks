@@ -926,6 +926,21 @@ You can use one of the following syntaxes to view the schema of a Paimon table:
    SELECT count(*) FROM <table_name> LIMIT 10;
    ```
 
+### Search a Paimon vector index
+
+On Linux x86-64, a BE build with `PAIMON_ENABLE_LUMINA=ON` can use an existing Paimon Lumina index for a single-table vector Top-N query. Build the Paimon C++ dependency with the same option before building the BE. The default build leaves the optional runtime disabled.
+
+This path supports `APPROX_L2_DISTANCE` in ascending order, and `APPROX_COSINE_SIMILARITY` or `APPROX_INNER_PRODUCT` in descending order. Use a constant vector and an explicit `LIMIT`. The table must use append-only Data Evolution with row tracking. A `rawf32` Lumina index must cover the point snapshot on the main branch. The indexed column must be a non-null `ARRAY<FLOAT>` with non-null elements.
+
+```SQL
+SELECT id, APPROX_L2_DISTANCE(embedding, CAST([1, 2, 3, 4] AS ARRAY<FLOAT>)) AS distance
+FROM documents
+ORDER BY distance
+LIMIT 10;
+```
+
+Queries with filters use the ordinary query path. In `auto` mode, recoverable distributed index errors fall back to an ordinary scan of the same snapshot. Explicit `distributed` mode returns the error. Queries still compute the original score and order the returned candidates.
+
 ### Inspect the planned scan size
 
 `EXPLAIN VERBOSE` and `EXPLAIN COSTS` include candidate file metrics for each

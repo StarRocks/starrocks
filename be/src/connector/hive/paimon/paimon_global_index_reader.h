@@ -59,12 +59,27 @@ inline paimon::Result<std::shared_ptr<paimon::GlobalIndexReader>> create_segment
         const std::shared_ptr<paimon::GlobalIndexFileReader>& file_reader,
         const std::vector<paimon::GlobalIndexIOMeta>& files, const std::shared_ptr<paimon::MemoryPool>& pool) {
     // Only Arrow's C data interface crosses into the lazily loaded SDK.
+    ArrowSchema item{};
+    item.format = "f";
+    item.name = "item";
+    item.flags = ARROW_FLAG_NULLABLE;
+    item.release = [](ArrowSchema* value) { value->release = nullptr; };
+    ArrowSchema* item_child = &item;
     ArrowSchema field{};
-    field.format = arrow_key_format(field_type);
-    if (field.format == nullptr) return paimon::Status::Invalid("Unsupported BTree key type");
+    field.format = field_type == "array<float>" ? "+l" : arrow_key_format(field_type);
+    if (field.format == nullptr) return paimon::Status::Invalid("Unsupported global index field type");
+    if (field_type == "array<float>") {
+        field.n_children = 1;
+        field.children = &item_child;
+    }
     field.name = field_name.c_str();
     field.flags = ARROW_FLAG_NULLABLE;
-    field.release = [](ArrowSchema* value) { value->release = nullptr; };
+    field.release = [](ArrowSchema* value) {
+        if (value->n_children != 0 && value->children[0]->release != nullptr) {
+            value->children[0]->release(value->children[0]);
+        }
+        value->release = nullptr;
+    };
     ArrowSchema* child = &field;
     ArrowSchema schema{};
     schema.format = "+s";

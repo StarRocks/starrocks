@@ -55,7 +55,44 @@ public:
 private:
     bool _fail_offset;
 };
+
+class SchemaCheckingIndexer final : public paimon::GlobalIndexer {
+public:
+    paimon::Result<std::optional<std::vector<std::string>>> GetExtraFieldNames() const override {
+        return std::optional<std::vector<std::string>>();
+    }
+    paimon::Result<std::shared_ptr<paimon::GlobalIndexWriter>> CreateWriter(
+            const std::string&, ArrowSchema*, const std::shared_ptr<paimon::GlobalIndexFileWriter>&,
+            const std::shared_ptr<paimon::MemoryPool>&) const override {
+        return paimon::Status::Invalid("unused writer");
+    }
+    paimon::Result<std::shared_ptr<paimon::GlobalIndexReader>> CreateReader(
+            ArrowSchema* schema, const std::shared_ptr<paimon::GlobalIndexFileReader>&,
+            const std::vector<paimon::GlobalIndexIOMeta>&, const std::shared_ptr<paimon::MemoryPool>&) const override {
+        auto imported = arrow::ImportSchema(schema);
+        EXPECT_TRUE(imported.ok()) << imported.status().ToString();
+        if (!imported.ok()) return paimon::Status::Invalid("invalid Arrow C layout");
+        imported_schema = imported.ValueOrDie();
+        EXPECT_EQ(nullptr, schema->release);
+        return std::shared_ptr<paimon::GlobalIndexReader>();
+    }
+    mutable std::shared_ptr<arrow::Schema> imported_schema;
+};
 } // namespace
+
+TEST(PaimonGlobalIndexReaderTest, VectorSchemaUsesOnlyArrowCListFloatAndConsumesReleaseOnce) {
+    SchemaCheckingIndexer indexer;
+    auto reader = create_segment_reader(indexer, "vec", "array<float>", nullptr, {}, paimon::GetDefaultPool());
+    ASSERT_TRUE(reader.ok());
+    ASSERT_NE(nullptr, indexer.imported_schema);
+    ASSERT_EQ(1, indexer.imported_schema->num_fields());
+    EXPECT_EQ("vec", indexer.imported_schema->field(0)->name());
+    EXPECT_TRUE(indexer.imported_schema->field(0)->type()->Equals(arrow::list(arrow::float32())));
+    reader = create_segment_reader(indexer, "key", "int", nullptr, {}, paimon::GetDefaultPool());
+    ASSERT_TRUE(reader.ok());
+    EXPECT_EQ("key", indexer.imported_schema->field(0)->name());
+    EXPECT_TRUE(indexer.imported_schema->field(0)->type()->Equals(arrow::int32()));
+}
 
 TEST(PaimonGlobalIndexReaderTest, OffsetsLocalIdsBeforeUnionAndColumnIntersection) {
     SegmentedIndexReader first;
