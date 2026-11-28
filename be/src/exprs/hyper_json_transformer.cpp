@@ -93,10 +93,16 @@ void HyperJsonTransformer::init_read_task(const std::vector<std::string>& paths,
             }
         } else if (!merges.empty() || (_dst_paths[i].empty() && has_remain)) {
             // the root is rebuilt from every flat path and the remain, even when only the remain was read
-            check_dst.emplace(i);
             if (_dst_types[i] != TYPE_JSON && !is_string_type(_dst_types[i])) {
+                // The paths below hold objects, which read as NULL in this type. The path can hold a value of
+                // another kind in other rows, which the remain keeps (a compaction can flatten the paths below
+                // a key that another input kept in its remain): extract it from the remain below.
+                if (!has_remain || _dst_paths[i].empty()) {
+                    check_dst.emplace(i);
+                }
                 continue;
             }
+            check_dst.emplace(i);
             auto& mk = _merge_tasks.emplace_back();
             mk.is_merge = true;
             mk.src_index = merges;
