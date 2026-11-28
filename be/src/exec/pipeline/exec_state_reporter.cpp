@@ -19,6 +19,7 @@
 
 #include <memory>
 #include <sstream>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -35,6 +36,7 @@
 #include "common/util/thrift_client_cache.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/query_context.h"
+#include "exec/runtime/pipeline.h"
 #include "exec/runtime_compat/runtime_state_helper.h"
 #include "exec_primitive/pipeline/primitives/pipeline_metrics.h"
 #include "gen_cpp/FrontendService.h"
@@ -51,11 +53,20 @@ DEFINE_FAIL_POINT(report_exec_state_failed_status);
 namespace {
 
 RuntimeProfile* build_merged_instance_profile(QueryRuntimeState* query_runtime_state, FragmentContext* fragment_ctx,
-                                              ObjectPool* obj_pool) {
+                                              ObjectPool* obj_pool, bool done) {
     auto* instance_profile = fragment_ctx->runtime_state()->runtime_profile();
 
     if (query_runtime_state->profile_level() >= TPipelineProfileLevel::type::DETAIL) {
         return instance_profile;
+    }
+
+    std::unordered_set<const RuntimeProfile*> unprepared_pipeline_profiles;
+    if (!done) {
+        fragment_ctx->iterate_pipeline([&unprepared_pipeline_profiles](Pipeline* pipeline) {
+            if (!pipeline->is_drivers_prepared()) {
+                unprepared_pipeline_profiles.insert(pipeline->runtime_profile());
+            }
+        });
     }
 
     RuntimeProfile* new_instance_profile = nullptr;
@@ -73,6 +84,9 @@ RuntimeProfile* build_merged_instance_profile(QueryRuntimeState* query_runtime_s
 
     std::vector<RuntimeProfile*> merged_driver_profiles;
     for (auto* pipeline_profile : pipeline_profiles) {
+        if (!unprepared_pipeline_profiles.empty() && unprepared_pipeline_profiles.contains(pipeline_profile)) {
+            continue;
+        }
         std::vector<RuntimeProfile*> driver_profiles;
         pipeline_profile->get_children(&driver_profiles);
 
@@ -269,7 +283,7 @@ void ExecStateReporter::report_exec_state(QueryContext* query_ctx, FragmentConte
     DCHECK(query_runtime_state != nullptr);
     ObjectPool obj_pool;
     if (query_runtime_state->enable_profile()) {
-        profile = build_merged_instance_profile(query_runtime_state, fragment_ctx, &obj_pool);
+        profile = build_merged_instance_profile(query_runtime_state, fragment_ctx, &obj_pool, done);
 
         // Add counters for query level memory and cpu usage, these two metrics will be specially handled at the frontend
         auto* query_peak_memory = profile->add_counter(

@@ -344,7 +344,7 @@ Status PipelineDriver::prepare_local_state(RuntimeState* runtime_state) {
         op->set_local_prepare_time(time_spent);
     }
 
-    _local_prepare_is_done = true;
+    _local_prepare_is_done.store(true, std::memory_order_release);
 
     return Status::OK();
 }
@@ -663,7 +663,7 @@ bool PipelineDriver::dependencies_block() {
 }
 
 void PipelineDriver::runtime_report_action() {
-    if (is_finished()) {
+    if (is_finished() || !local_prepare_is_done()) {
         return;
     }
 

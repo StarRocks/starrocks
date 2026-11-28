@@ -61,11 +61,11 @@ template <DriverPtrCallable Callable>
 auto for_each_active_driver(PipelineRawPtrs& pipelines, Callable call) {
     using ReturnType = std::invoke_result_t<Callable, const DriverPtr&>;
     for (auto& pipeline : pipelines) {
+        auto* source_op = pipeline->source_operator_factory();
+        if (!source_op->is_adaptive_group_initial_active()) {
+            continue;
+        }
         for (auto& driver : pipeline->drivers()) {
-            auto* source_op = pipeline->source_operator_factory();
-            if (!source_op->is_adaptive_group_initial_active()) {
-                continue;
-            }
             if constexpr (std::same_as<ReturnType, Status>) {
                 RETURN_IF_ERROR(call(driver));
             } else {

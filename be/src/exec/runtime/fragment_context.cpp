@@ -239,21 +239,12 @@ void FragmentContext::report_exec_state_if_necessary() {
         normalized_report_ns = last_report_ns + interval_ns;
     }
 
-    // only report after prepare successfully
-    bool allPrepared = true;
-    iterate_pipeline([&allPrepared](const Pipeline* pipeline) {
-        if (!allPrepared) return;
-        for (const auto& driver : pipeline->drivers()) {
-            if (!driver->local_prepare_is_done()) {
-                allPrepared = false;
-                break;
-            }
-        }
-    });
-
-    if (allPrepared && _fragment_runtime_state._last_report_exec_state_ns.compare_exchange_strong(
-                               last_report_ns, normalized_report_ns)) {
+    if (_fragment_runtime_state._last_report_exec_state_ns.compare_exchange_strong(last_report_ns,
+                                                                                   normalized_report_ns)) {
         iterate_pipeline([](const Pipeline* pipeline) {
+            if (!pipeline->is_drivers_prepared()) {
+                return;
+            }
             for (const auto& driver : pipeline->drivers()) {
                 driver->runtime_report_action();
             }
@@ -426,6 +417,9 @@ Status FragmentContext::iterate_pipeline(const std::function<Status(Pipeline*)>&
 
 void FragmentContext::iterate_drivers(const std::function<void(const DriverPtr&)>& call) {
     iterate_pipeline([&](const Pipeline* pipeline) {
+        if (!pipeline->is_drivers_prepared()) {
+            return;
+        }
         for (const auto& driver : pipeline->drivers()) {
             call(driver);
         }
@@ -463,33 +457,35 @@ Status FragmentContext::prepare_active_drivers() {
         for (auto& group : _execution_groups) {
             RETURN_IF_ERROR(group->prepare_active_drivers_sequentially(_runtime_state.get()));
         }
-        if (_pipeline_timer_context != nullptr) {
-            RETURN_IF_ERROR(_pipeline_timer_context->submit_rf_timeout_tasks());
+    } else {
+        // prepare pipeline-driver parallelly
+        // only do prepare operation that is thread safe in prepare_operators_local_state
+        // Use shared_ptr to manage sync context lifecycle to avoid use-after-free
+        auto sync_ctx = std::make_shared<DriverPrepareSyncContext>();
+        sync_ctx->pending_tasks = total_active_driver_size;
+
+        for (auto& group : _execution_groups) {
+            group->prepare_active_drivers_parallel(_runtime_state, pipeline_prepare_pool, sync_ctx);
         }
-        return Status::OK();
+
+        // wait for all the tasks finished
+        {
+            std::unique_lock<std::mutex> lock(sync_ctx->mutex);
+            sync_ctx->cv.wait(lock, [&sync_ctx] { return sync_ctx->pending_tasks.load() == 0; });
+        }
+
+        Status* error = sync_ctx->first_error.load();
+        if (error != nullptr) {
+            Status ret = *error;
+            return ret;
+        }
     }
 
-    // prepare pipeline-driver parallelly
-    // only do prepare operation that is thread safe in prepare_operators_local_state
-    // Use shared_ptr to manage sync context lifecycle to avoid use-after-free
-    auto sync_ctx = std::make_shared<DriverPrepareSyncContext>();
-    sync_ctx->pending_tasks = total_active_driver_size;
-
-    for (auto& group : _execution_groups) {
-        group->prepare_active_drivers_parallel(_runtime_state, pipeline_prepare_pool, sync_ctx);
-    }
-
-    // wait for all the tasks finished
-    {
-        std::unique_lock<std::mutex> lock(sync_ctx->mutex);
-        sync_ctx->cv.wait(lock, [&sync_ctx] { return sync_ctx->pending_tasks.load() == 0; });
-    }
-
-    Status* error = sync_ctx->first_error.load();
-    if (error != nullptr) {
-        Status ret = *error;
-        return ret;
-    }
+    iterate_pipeline([](Pipeline* pipeline) {
+        if (!pipeline->drivers().empty() && pipeline->source_operator_factory()->is_adaptive_group_initial_active()) {
+            pipeline->set_drivers_prepared(true);
+        }
+    });
 
     if (_pipeline_timer_context != nullptr) {
         RETURN_IF_ERROR(_pipeline_timer_context->submit_rf_timeout_tasks());

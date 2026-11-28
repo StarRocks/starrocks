@@ -160,7 +160,7 @@ protected:
     std::vector<TBucketProperty> _bucket_properties;
 
     std::vector<SourceOperatorFactory*> _upstream_sources;
-    mutable SourceOperatorFactory* _group_parent = this;
+    SourceOperatorFactory* _group_parent = this;
     std::vector<const Pipeline*> _group_dependent_pipelines;
     EventPtr _group_initialize_event = nullptr;
     EventPtr _adaptive_blocking_event = nullptr;

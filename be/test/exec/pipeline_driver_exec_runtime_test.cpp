@@ -180,4 +180,21 @@ TEST(PipelineDriverExecRuntimeTest, TicketedQueuePolicyControlsAttachmentWithout
     EXPECT_EQ(harness.source->ticket_checker(), morsel_queue.attached_ticket_checker);
 }
 
+TEST(PipelineDriverExecRuntimeTest, RuntimeReportActionSkipsUnpreparedDriver) {
+    DriverPrepareHarness harness(false);
+    ASSERT_FALSE(harness.driver->local_prepare_is_done());
+
+    // Must not dereference uninitialized timers or counters before prepare_local_state completes.
+    harness.driver->runtime_report_action();
+
+    ASSERT_TRUE(harness.driver->prepare(&harness.runtime_state).ok());
+    ASSERT_FALSE(harness.driver->local_prepare_is_done());
+    harness.driver->runtime_report_action();
+
+    ASSERT_TRUE(harness.driver->prepare_local_state(&harness.runtime_state).ok());
+    ASSERT_TRUE(harness.driver->local_prepare_is_done());
+    harness.driver->runtime_report_action();
+    EXPECT_NE(nullptr, harness.driver->runtime_profile()->get_counter("DriverTotalTime"));
+}
+
 } // namespace starrocks::pipeline

@@ -1073,8 +1073,9 @@ RuntimeProfile* RuntimeProfile::merge_isomorphic_profiles(ObjectPool* obj_pool, 
         size_t max_child_size = 0;
         RuntimeProfile* profile_with_full_child = nullptr;
         for (auto* profile : profiles) {
-            if (profile->num_children() > max_child_size) {
-                max_child_size = profile->_children.size();
+            const size_t child_size = profile->num_children();
+            if (child_size > max_child_size) {
+                max_child_size = child_size;
                 profile_with_full_child = profile;
             }
         }

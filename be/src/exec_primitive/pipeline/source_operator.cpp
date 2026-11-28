@@ -44,10 +44,11 @@ void SourceOperatorFactory::add_upstream_source(SourceOperatorFactory* parent) {
 }
 
 SourceOperatorFactory* SourceOperatorFactory::group_leader() const {
-    if (_group_parent != this) {
-        _group_parent = _group_parent->group_leader();
+    auto* leader = _group_parent;
+    while (leader != leader->_group_parent) {
+        leader = leader->_group_parent;
     }
-    return _group_parent;
+    return leader;
 }
 
 void SourceOperatorFactory::union_group(SourceOperatorFactory* other_group) {
