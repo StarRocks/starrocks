@@ -43,6 +43,7 @@
 
 #include "base/failpoint/fail_point.h"
 #include "exprs/expr_context.h"
+#include "runtime/current_thread.h"
 
 #pragma clang diagnostic push
 #pragma ide diagnostic ignored "EndlessLoop"
@@ -361,8 +362,17 @@ StatusOr<ColumnPtr> Expr::evaluate_const(ExprContext* context) {
     }
 
     // prevent _constant_column from being assigned by multiple threads in pipeline engine.
-    std::call_once(_constant_column_evaluate_once,
-                   [this, context] { this->_constant_column = context->evaluate(this, nullptr); });
+    std::call_once(_constant_column_evaluate_once, [this, context] {
+        // Constants are folded from prepare / open paths (scan conjuncts, function prepare) that run outside every
+        // TRY_CATCH_ALLOC_SCOPE, where the memory hook does not check the query / process limit.
+        Status st = [&]() -> Status {
+            TRY_CATCH_BAD_ALLOC(this->_constant_column = context->evaluate(this, nullptr));
+            return Status::OK();
+        }();
+        if (!st.ok()) {
+            this->_constant_column = std::move(st);
+        }
+    });
     return _constant_column;
 }
 
