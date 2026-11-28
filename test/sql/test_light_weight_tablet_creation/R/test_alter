@@ -91,7 +91,7 @@ DISTRIBUTED BY HASH(c0) BUCKETS 4
 PROPERTIES("light_weight_tablet_creation" = "true");
 -- result:
 -- !result
-INSERT INTO t_schema_change VALUES (1, 'a'), (2, 'b');
+INSERT INTO t_schema_change VALUES (1, '10'), (2, '20');
 -- result:
 -- !result
 ALTER TABLE t_schema_change MODIFY COLUMN c1 INT;
@@ -108,16 +108,16 @@ c1	int	YES	false	None
 -- !result
 SELECT * FROM t_schema_change ORDER BY c0;
 -- result:
-1	0
-2	0
+1	10
+2	20
 -- !result
 INSERT INTO t_schema_change VALUES (3, 30), (4, 40);
 -- result:
 -- !result
 SELECT * FROM t_schema_change ORDER BY c0;
 -- result:
-1	0
-2	0
+1	10
+2	20
 3	30
 4	40
 -- !result
