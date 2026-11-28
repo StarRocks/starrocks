@@ -2772,4 +2772,30 @@ public class LowCardinalityTest2 extends PlanTestBase {
         Assertions.assertTrue(d2.getInputStringColumns().isEmpty());
         Assertions.assertTrue(d2.getDecodeStringColumns().isEmpty());
     }
+
+    @Test
+    void testPredicateOnlyDictDecodeWithProjection() throws Exception {
+        // The HAVING predicate is the only user of the dict column max(c_user), and the projection
+        // above the aggregation drops it. Its DictDefine must still reach the fragment.
+        String sql = "SELECT C_DEPT FROM (SELECT C_DEPT, MAX(C_USER) mu FROM low_card_t1 GROUP BY C_DEPT) t " +
+                "WHERE mu = 'abc'";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "  Global Dict Exprs:\n" +
+                "    15: DictDefine(13: c_user, [<place-holder>])\n" +
+                "\n" +
+                "  3:Decode\n" +
+                "  |  <dict id 14> : <string id 3>\n" +
+                "  |  cardinality: 1\n" +
+                "  |  \n" +
+                "  2:Project\n" +
+                "  |  output columns:\n" +
+                "  |  14 <-> [14: c_dept, INT, true]\n" +
+                "  |  cardinality: 1\n" +
+                "  |  \n" +
+                "  1:AGGREGATE (update finalize)\n" +
+                "  |  aggregate: max[([13: c_user, INT, true]); args: INT; result: INT; " +
+                "args nullable: true; result nullable: true]\n" +
+                "  |  group by: [14: c_dept, INT, true]\n" +
+                "  |  having: DictDecode(15: max, [<place-holder> = 'abc'])", plan);
+    }
 }
