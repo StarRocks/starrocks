@@ -1931,6 +1931,90 @@ public class IcebergMetadataTest extends TableTestBase {
         Assertions.assertEquals(0, invalidations.get());
     }
 
+    // What a statement tells the other FEs, in order: the background refresh and the drop it waits for
+    private static List<String> recordOtherFeNotifications() {
+        List<String> told = new ArrayList<>();
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public Future<?> refreshOthersFeTableAsync(TableName tableName, List<String> partitions) {
+                told.add("refresh " + tableName.getCatalog() + "." + tableName.getDb() + "." + tableName.getTbl());
+                return CompletableFuture.completedFuture(null);
+            }
+
+            @Mock
+            public void invalidateOthersFeTable(TableName tableName, int timeoutMs) {
+                told.add("drop " + tableName.getCatalog() + "." + tableName.getDb() + "." + tableName.getTbl() + "@"
+                        + timeoutMs);
+            }
+        };
+        return told;
+    }
+
+    private static List<String> notificationsOf(String dbName, String tableName) {
+        return List.of("refresh " + CATALOG_NAME + "." + dbName + "." + tableName,
+                "drop " + CATALOG_NAME + "." + dbName + "." + tableName + "@"
+                        + Config.iceberg_commit_invalidate_other_fe_timeout_ms);
+    }
+
+    @Test
+    public void testFinishSinkTellsOtherFesWhenCommitStateIsUnknown() {
+        // The commit may have landed although it reported an unknown state: tell the other FEs, as on success
+        TestTables.TestTable stateUnknownTable = TestTables.tableWithCommitSucceedButStateUnknown(tableDir, "tj");
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), null);
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "iceberg_db",
+                "iceberg_table", "", Lists.newArrayList(), stateUnknownTable, Maps.newHashMap());
+        new Expectations(metadata) {
+            {
+                metadata.getTable((ConnectContext) any, anyString, anyString);
+                result = icebergTable;
+                minTimes = 0;
+            }
+        };
+        List<String> told = recordOtherFeNotifications();
+
+        StarRocksConnectorException exception = Assertions.assertThrows(StarRocksConnectorException.class,
+                () -> metadata.finishSink("iceberg_db", "iceberg_table",
+                        Lists.newArrayList(appendCommitInfo(stateUnknownTable, "ts_month=2022-01")), null));
+
+        stateUnknownTable.refresh();
+        Assertions.assertAll(
+                () -> Assertions.assertNotNull(stateUnknownTable.currentSnapshot(), "the commit landed"),
+                () -> Assertions.assertTrue(exception.getCause() instanceof CommitStateUnknownException,
+                        String.valueOf(exception.getCause())),
+                () -> Assertions.assertEquals(notificationsOf("iceberg_db", "iceberg_table"), told));
+    }
+
+    @Test
+    public void testFinishSinkTellsOtherFesWhenTheCommitQueueLosesTheCommit() {
+        // The queue reports an unknown state when it stops waiting (timeout, interrupt) while the commit may still land
+        IcebergCommitQueueManager queue = Mockito.mock(IcebergCommitQueueManager.class);
+        Mockito.when(queue.isEnabled()).thenReturn(true);
+        Mockito.doThrow(new CommitStateUnknownException(new RuntimeException("Commit timeout after 30 seconds")))
+                .when(queue).submitCommitAndRethrow(Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any());
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), null, new ConnectorProperties(ConnectorType.ICEBERG),
+                new IcebergProcedureRegistry(), queue);
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "iceberg_db",
+                "iceberg_table", "", Lists.newArrayList(), mockedNativeTableJ, Maps.newHashMap());
+        new Expectations(metadata) {
+            {
+                metadata.getTable((ConnectContext) any, anyString, anyString);
+                result = icebergTable;
+                minTimes = 0;
+            }
+        };
+        List<String> told = recordOtherFeNotifications();
+
+        Assertions.assertThrows(CommitStateUnknownException.class,
+                () -> metadata.finishSink("iceberg_db", "iceberg_table",
+                        Lists.newArrayList(appendCommitInfo(mockedNativeTableJ, "ts_month=2022-01")), null));
+
+        Assertions.assertEquals(notificationsOf("iceberg_db", "iceberg_table"), told);
+    }
+
     @Test
     public void testInvalidateCachedTableDropsTheCachedTable() {
         String dbName = "iceberg_db";
