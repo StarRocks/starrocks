@@ -2780,4 +2780,29 @@ public class LowCardinalityTest2 extends PlanTestBase {
         Assertions.assertTrue(d2.getInputStringColumns().isEmpty());
         Assertions.assertTrue(d2.getDecodeStringColumns().isEmpty());
     }
+
+    @Test
+    void testPredicateOnlyDictDecodeWithProjection() throws Exception {
+        // max(c_user) is only used in the HAVING predicate and the aggregate's projection drops it;
+        // its DictDefine must still be propagated to the fragment's global dict exprs.
+        String sql = """
+              SELECT c_dept FROM (SELECT c_dept, max(c_user) m FROM low_card_t1 GROUP BY c_dept) t
+              WHERE m != 'abc'
+                """;
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "Global Dict Exprs:\n" +
+                "    15: DictDefine(13: c_user, [<place-holder>])\n" +
+                "\n" +
+                "  3:Decode\n" +
+                "  |  <dict id 14> : <string id 3>\n" +
+                "  |  cardinality: 1\n" +
+                "  |  \n" +
+                "  2:Project\n" +
+                "  |  output columns:\n" +
+                "  |  14 <-> [14: c_dept, INT, true]\n" +
+                "  |  cardinality: 1\n" +
+                "  |  \n" +
+                "  1:AGGREGATE (update finalize)", plan);
+        assertContains(plan, "  |  having: DictDecode([15: max, INT, true], [<place-holder> != 'abc'])", plan);
+    }
 }
