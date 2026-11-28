@@ -1,0 +1,31 @@
+-- name: test_lead_lag_varbinary
+CREATE TABLE tb (k INT, b VARBINARY(32)) DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO tb VALUES (1, x'61'), (2, x'62'), (3, NULL), (4, x'64');
+-- result:
+-- !result
+SELECT k, hex(LAG(b) OVER (ORDER BY k)) FROM tb ORDER BY k;
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 14 to line 1, column 19. Detail message: No matching function with signature: lag(varbinary(32)).')
+-- !result
+SELECT k, hex(LEAD(b, 1, NULL) OVER (ORDER BY k)) FROM tb ORDER BY k;
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 14 to line 1, column 29. Detail message: No matching function with signature: lead(varbinary(32), tinyint(4), NULL_TYPE).')
+-- !result
+SELECT k, hex(LAG(b, 1, x'7a') OVER (ORDER BY k)) FROM tb ORDER BY k;
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 14 to line 1, column 29. Detail message: No matching function with signature: lag(varbinary(32), tinyint(4), varbinary).')
+-- !result
+SELECT k, LAG(timediff('2020-01-01 00:00:10', '2020-01-01 00:00:00')) OVER (ORDER BY k) FROM tb ORDER BY k;
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 10 to line 1, column 68. Detail message: No matching function with signature: lag(TIME).')
+-- !result
+SELECT k, hex(FIRST_VALUE(b) OVER (ORDER BY k)), hex(LAST_VALUE(b) OVER (ORDER BY k)) FROM tb ORDER BY k;
+-- result:
+1	61	61
+2	61	62
+3	61	None
+4	61	64
+-- !result

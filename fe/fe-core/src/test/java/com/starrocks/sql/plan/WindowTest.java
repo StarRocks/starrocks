@@ -57,6 +57,26 @@ public class WindowTest extends PlanTestBase {
                 ");");
     }
 
+    // StarRocks/starrocks#84288: LAG / LEAD on VARBINARY or TIME failed with a NullPointerException ("No assignment
+    // from VARBINARY(32) to BITMAP") while the lookup tried the BITMAP signature. There is no such signature and
+    // LAG / LEAD never cast their first argument, so the lookup has to end in "No matching function".
+    @Test
+    public void testLeadLagOnVarbinaryOrTime() throws Exception {
+        starRocksAssert.withTable("create table t84288 (k int, b varbinary(32)) duplicate key(k) " +
+                "distributed by hash(k) buckets 1 properties ('replication_num' = '1')");
+        String time = "timediff('2020-01-01 00:00:10', '2020-01-01 00:00:00')";
+        for (String fn : List.of("lag(b)", "lag(b, 1)", "lag(b, 1, NULL)", "lag(b, 1, x'00')",
+                "lead(b)", "lead(b, 1)", "lead(b, 1, NULL)", "lead(b, 1, x'00')",
+                "lag(" + time + ")", "lead(" + time + ", 1, NULL)")) {
+            String sql = "select k, " + fn + " over (order by k) from t84288";
+            SemanticException e = assertThrows(SemanticException.class, () -> getVerboseExplain(sql), sql);
+            assertContains(e.getMessage(), "No matching function with signature: " + fn.substring(0, 4));
+        }
+        // FIRST_VALUE casts its argument and keeps working
+        assertContains(getVerboseExplain("select k, first_value(b) over (order by k) from t84288"), "result: VARCHAR");
+        starRocksAssert.dropTable("t84288");
+    }
+
     @Test
     public void testLagWindowFunction() throws Exception {
         String sql = "select lag(id_datetime, 1, '2020-01-01') over(partition by t1c) from test_all_type;";

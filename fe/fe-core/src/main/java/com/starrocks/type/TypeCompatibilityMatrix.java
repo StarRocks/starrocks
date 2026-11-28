@@ -383,6 +383,14 @@ public class TypeCompatibilityMatrix {
             ScalarType scalar = TypeFactory.createType(type);
             COMPATIBILITY_MATRIX[scalar.ordinal()][VarbinaryType.VARBINARY.ordinal()] = PrimitiveType.INVALID_TYPE;
         }
+        // TypeManager reads [lower ordinal][higher ordinal]. A missing entry there is not "incompatible" but a
+        // NullPointerException, raised even when a function lookup only tries a candidate signature: LAG(VARBINARY)
+        // and LAG(TIME) tried LAG(BITMAP). TypeCompatibilityMatrixTest asks for every pair.
+        for (PrimitiveType type : Arrays.asList(PrimitiveType.BITMAP, PrimitiveType.PERCENTILE, PrimitiveType.JSON)) {
+            COMPATIBILITY_MATRIX[type.ordinal()][VarbinaryType.VARBINARY.ordinal()] = PrimitiveType.INVALID_TYPE;
+        }
+        COMPATIBILITY_MATRIX[DateType.TIME.ordinal()][BitmapType.BITMAP.ordinal()] = PrimitiveType.INVALID_TYPE;
+        COMPATIBILITY_MATRIX[DateType.TIME.ordinal()][PercentileType.PERCENTILE.ordinal()] = PrimitiveType.INVALID_TYPE;
 
         // Check all the necessary entries that should be filled.
         for (int i = 0; i < PrimitiveType.values().length - 2; ++i) {
