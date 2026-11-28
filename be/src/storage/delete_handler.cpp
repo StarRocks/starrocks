@@ -253,6 +253,45 @@ bool DeleteHandler::parse_condition(const std::string& condition_str, TCondition
     return true;
 }
 
+std::vector<TCondition> DeleteHandler::lake_delete_conditions(const DeletePredicatePB& delete_predicate) {
+    std::vector<TCondition> conds;
+    conds.reserve(delete_predicate.binary_predicates_size() + delete_predicate.is_null_predicates_size() +
+                  delete_predicate.in_predicates_size());
+    for (const auto& binary_predicate : delete_predicate.binary_predicates()) {
+        TCondition cond;
+        cond.__set_column_name(binary_predicate.column_name());
+        const auto& op = binary_predicate.op();
+        if (op == "<") {
+            cond.__set_condition_op("<<");
+        } else if (op == ">") {
+            cond.__set_condition_op(">>");
+        } else {
+            cond.__set_condition_op(op);
+        }
+        cond.condition_values.emplace_back(binary_predicate.value());
+        conds.emplace_back(std::move(cond));
+    }
+
+    for (const auto& is_null_predicate : delete_predicate.is_null_predicates()) {
+        TCondition cond;
+        cond.__set_column_name(is_null_predicate.column_name());
+        cond.__set_condition_op("IS");
+        cond.condition_values.emplace_back(is_null_predicate.is_not_null() ? "NOT NULL" : "NULL");
+        conds.emplace_back(std::move(cond));
+    }
+
+    for (const auto& in_predicate : delete_predicate.in_predicates()) {
+        TCondition cond;
+        cond.__set_column_name(in_predicate.column_name());
+        cond.__set_condition_op(in_predicate.is_not_in() ? "!*=" : "*=");
+        for (const auto& value : in_predicate.values()) {
+            cond.condition_values.push_back(value);
+        }
+        conds.emplace_back(std::move(cond));
+    }
+    return conds;
+}
+
 bool DeleteHandler::is_delete_condition_evaluated(const TabletSchema& schema, const std::string& column_name) {
     return schema.field_index(column_name) < schema.num_key_columns() || schema.keys_type() == DUP_KEYS;
 }

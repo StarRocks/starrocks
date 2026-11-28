@@ -96,6 +96,10 @@ public:
     // Use regular expression to extract 'column_name', 'op' and 'operands'
     static bool parse_condition(const std::string& condition_str, TCondition* condition);
 
+    // The conditions of a cloud-native tablet's delete predicate, which keeps them as binary, is-null and in
+    // predicates rather than as the condition strings parse_condition() reads.
+    static std::vector<TCondition> lake_delete_conditions(const DeletePredicatePB& delete_predicate);
+
     // A non-key column's delete condition is dropped on non-DUP tables, so the reader never evaluates it.
     static bool is_delete_condition_evaluated(const TabletSchema& schema, const std::string& column_name);
 

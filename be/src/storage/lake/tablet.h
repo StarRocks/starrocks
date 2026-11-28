@@ -144,7 +144,8 @@ public:
     //                   based on this schema. When provided, it will be persisted into the transaction log
     //                   and used during publishing to update the tablet metadata schema if needed.
     //                   If nullptr, the operation maintains backward compatibility with legacy delete operations.
-    // @return Status::OK() on success, otherwise an error status.
+    // @return Status::OK() on success, otherwise an error status. A predicate with a condition that is not a valid
+    //         delete condition on that schema is rejected with InvalidArgument and nothing is written.
     Status delete_data(int64_t txn_id, const DeletePredicatePB& delete_predicate,
                        const TableSchemaKeyPB* schema_key = nullptr);
 
@@ -185,6 +186,10 @@ public:
     bool belonged_to_cloud_native() const override { return true; }
 
 private:
+    // Checks every condition of |delete_predicate| with DeleteConditionHandler::check_condition_valid().
+    Status check_delete_predicate(int64_t txn_id, const DeletePredicatePB& delete_predicate,
+                                  const TableSchemaKeyPB* schema_key);
+
     TabletManager* _mgr;
     int64_t _id;
     int64_t _version_hint = 0;
