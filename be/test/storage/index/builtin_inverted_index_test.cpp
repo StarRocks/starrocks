@@ -15,9 +15,17 @@
 #include <gtest/gtest.h>
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
+<<<<<<< HEAD
+=======
+#include "base/string/slice.h"
+#include "base/testutil/assert.h"
+#include "column/chunk_factory.h"
+#include "exec/exec_env.h"
+>>>>>>> 4272262 ([BugFix] Drop NULL rows when an inverted index answers <> or NOT IN (#84686))
 #include "fs/fs_memory.h"
 #include "gen_cpp/segment.pb.h"
 #include "roaring/roaring.hh"
@@ -31,8 +39,13 @@
 #include "storage/rowset/bitmap_index_reader.h"
 #include "storage/tablet_index.h"
 #include "storage/types.h"
+<<<<<<< HEAD
 #include "testutil/assert.h"
 #include "util/slice.h"
+=======
+#include "storage_primitive/column_predicate.h"
+#include "storage_primitive/column_predicate_factory.h"
+>>>>>>> 4272262 ([BugFix] Drop NULL rows when an inverted index answers <> or NOT IN (#84686))
 
 namespace starrocks {
 
@@ -1316,6 +1329,136 @@ TEST_F(BuiltinInvertedIndexTest, test_is_builtin_inverted_index) {
         TabletIndex tablet_index;
         tablet_index.add_common_properties(INVERTED_IMP_KEY, "invalid");
         ASSERT_FALSE(is_builtin_inverted_index(tablet_index));
+    }
+}
+
+// Seeks `pred` from all rows and expects the rows `pred->evaluate()` keeps on the column data.
+static void expect_seek_keeps_evaluated_rows(const ColumnPredicate& pred, const Column& column,
+                                             InvertedIndexIterator* iter) {
+    SCOPED_TRACE(pred.debug_string());
+    const size_t num_rows = column.size();
+    std::vector<uint8_t> selection(num_rows);
+    ASSERT_OK(pred.evaluate(&column, selection.data(), 0, num_rows));
+    roaring::Roaring expected;
+    for (uint32_t i = 0; i < num_rows; i++) {
+        if (selection[i]) {
+            expected.add(i);
+        }
+    }
+    roaring::Roaring got;
+    got.addRange(0, num_rows);
+    ASSERT_OK(pred.seek_inverted_index("c0", iter, &got));
+    EXPECT_EQ(expected, got) << "expected " << expected.toString() << ", got " << got.toString();
+}
+
+// Answers equal queries and NULL lookups on an INT column straight from its data.
+class Int32ColumnInvertedIndexIterator final : public InvertedIndexIterator {
+public:
+    explicit Int32ColumnInvertedIndexIterator(const Column* column) : _column(column) {}
+
+    Status read_from_inverted_index(std::string_view column_name, const void* query_value,
+                                    InvertedIndexQueryType query_type, roaring::Roaring* bit_map) override {
+        if (query_type != InvertedIndexQueryType::EQUAL_QUERY) {
+            return Status::NotSupported("only equal queries");
+        }
+        const int32_t value = *static_cast<const int32_t*>(query_value);
+        for (uint32_t i = 0; i < _column->size(); i++) {
+            if (!_column->is_null(i) && _column->get(i).get_int32() == value) {
+                bit_map->add(i);
+            }
+        }
+        return Status::OK();
+    }
+
+    Status read_null(std::string_view column_name, roaring::Roaring* bit_map) override {
+        for (uint32_t i = 0; i < _column->size(); i++) {
+            if (_column->is_null(i)) {
+                bit_map->add(i);
+            }
+        }
+        return Status::OK();
+    }
+
+    bool is_untokenized() const override { return true; }
+
+private:
+    const Column* _column;
+};
+
+// `<>` and NOT IN answered by a parser=none index must keep what the predicate keeps on the column data: the
+// predicate is dropped from the scan after the seek, so a NULL row left in the bitmap would be returned.
+TEST_F(BuiltinInvertedIndexTest, test_ne_and_not_in_seek_drop_null_rows) {
+    const std::vector<std::optional<std::string>> rows = {"x", std::nullopt, "y", "z", std::nullopt, "x"};
+
+    TabletIndex tablet_index;
+    tablet_index.add_index_properties(INVERTED_INDEX_PARSER_KEY, INVERTED_INDEX_PARSER_NONE);
+    TypeInfoPtr type_info = get_type_info(TYPE_VARCHAR);
+    std::string file_name = kTestDir + "/ne_not_in_nulls";
+    ColumnMetaPB meta;
+    auto column = ChunkFactory::column_from_field_type(TYPE_VARCHAR, true);
+    {
+        ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(file_name));
+        std::unique_ptr<InvertedWriter> writer;
+        ASSERT_OK(BuiltinInvertedWriter::create(type_info, &tablet_index, &writer));
+        ASSERT_OK(writer->init());
+        for (const auto& row : rows) {
+            if (row.has_value()) {
+                Slice value(*row);
+                writer->add_values(&value, 1);
+                column->append_datum(Datum(value));
+            } else {
+                writer->add_nulls(1);
+                column->append_nulls(1);
+            }
+        }
+        ASSERT_OK(writer->finish(wfile.get(), &meta));
+        ASSERT_TRUE(wfile->close().ok());
+    }
+
+    ASSIGN_OR_ABORT(auto rfile, _fs->new_random_access_file(file_name));
+    _opts.read_file = rfile.get();
+    _opts.segment_rows = rows.size();
+    auto tablet_index_sp = std::make_shared<TabletIndex>(tablet_index);
+    std::unique_ptr<InvertedReader> reader;
+    ASSERT_OK(BuiltinInvertedReader::create(tablet_index_sp, TYPE_VARCHAR, &reader));
+    BuiltinInvertedIndexPB builtin_meta_copy = meta.indexes(0).builtin_inverted_index();
+    ASSERT_OK(reader->load(_opts, &builtin_meta_copy));
+    InvertedIndexIterator* iter = nullptr;
+    ASSERT_OK(reader->new_iterator(tablet_index_sp, &iter, _opts));
+    std::unique_ptr<InvertedIndexIterator> iter_guard(iter);
+
+    std::vector<std::unique_ptr<ColumnPredicate>> preds;
+    preds.emplace_back(new_column_ne_predicate(type_info, 0, Slice("x")));
+    preds.emplace_back(new_column_ne_predicate(type_info, 0, Slice("nope")));
+    preds.emplace_back(new_column_not_in_predicate(type_info, 0, {"x", "y"}));
+    preds.emplace_back(new_column_not_in_predicate(type_info, 0, {"nope"}));
+    for (const auto& pred : preds) {
+        expect_seek_keeps_evaluated_rows(*pred, *column, iter);
+    }
+}
+
+// The same for the predicates of non-string columns (ColumnNePredicate / ColumnNotInPredicate). No on-disk
+// inverted index takes such a column, so the seek reads an iterator backed by the column data.
+TEST_F(BuiltinInvertedIndexTest, test_numeric_ne_and_not_in_seek_drop_null_rows) {
+    const std::vector<std::optional<int32_t>> rows = {1, std::nullopt, 2, 3, std::nullopt, 1};
+    auto column = ChunkFactory::column_from_field_type(TYPE_INT, true);
+    for (const auto& row : rows) {
+        if (row.has_value()) {
+            column->append_datum(Datum(*row));
+        } else {
+            column->append_nulls(1);
+        }
+    }
+    Int32ColumnInvertedIndexIterator iter(column.get());
+
+    TypeInfoPtr type_info = get_type_info(TYPE_INT);
+    std::vector<std::unique_ptr<ColumnPredicate>> preds;
+    preds.emplace_back(new_column_ne_predicate(type_info, 0, Slice("1")));
+    preds.emplace_back(new_column_ne_predicate(type_info, 0, Slice("9")));
+    preds.emplace_back(new_column_not_in_predicate(type_info, 0, {"1", "2"}));
+    preds.emplace_back(new_column_not_in_predicate(type_info, 0, {"9"}));
+    for (const auto& pred : preds) {
+        expect_seek_keeps_evaluated_rows(*pred, *column, &iter);
     }
 }
 
