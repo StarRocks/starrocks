@@ -1063,6 +1063,68 @@ TEST_F(SpillTest, partition_yield_with_failed) {
     }
 }
 
+// Runs a flush task the way an IO thread does when the query is cancelled while the task waits in the queue.
+struct CancelBeforeRunExecutor {
+    static spill::Spiller* spiller;
+    static Status submit(workgroup::ScanTask task) {
+        spiller->cancel();
+        do {
+            task.run();
+        } while (!task.is_finished());
+        return Status::OK();
+    }
+    static void force_submit(workgroup::ScanTask task) { (void)submit(std::move(task)); }
+};
+spill::Spiller* CancelBeforeRunExecutor::spiller = nullptr;
+
+// https://github.com/StarRocks/starrocks/issues/84725
+// The partition-wise aggregate spiller is not splittable, so a flush compacts the mem tables it chose and drops their
+// hash column before the flush task writes them. A flush task that finds the spiller cancelled returns without
+// writing, which leaves those mem tables full. The sink, still inside one push_chunk, keeps spilling; the next flush
+// must not compact the same mem tables again, because their last column is an aggregate column by then.
+TEST_F(SpillTest, partitioned_spill_after_cancelled_flush_does_not_compact_again) {
+    constexpr size_t kRowsPerChunk = 1024;
+    constexpr uint32_t kHotHash = 7;
+
+    SpilledOptions options(4);
+    options.mem_table_pool_size = 1;
+    options.spill_mem_table_bytes_size = 16 * 1024;
+    options.spill_type = spill::SpillFormaterType::SPILL_BY_COLUMN;
+    options.block_manager = dummy_block_mgr.get();
+    options.splittable = false;
+    size_t compactions = 0;
+    size_t chunks_without_hash_column = 0;
+    options.skew_chunk_compactor = [&](std::vector<ChunkPtr>& chunks, const spill::SpillSkewChunkCompactContext&) {
+        ++compactions;
+        for (const auto& chunk : chunks) {
+            chunks_without_hash_column += !chunk->is_slot_exist(Chunk::HASH_AGG_SPILL_HASH_SLOT_ID);
+        }
+        return Status::OK();
+    };
+    auto spiller = spill::make_spilled_factory()->create(options);
+    spiller->set_metrics(metrics);
+    ASSERT_OK(spiller->prepare(&dummy_rt_st));
+    CancelBeforeRunExecutor::spiller = spiller.get();
+
+    // Every row has the same hash, so all rows go to one partition and its mem table is skewed. The value column
+    // holds that same number, so a flush that took it for the hash column would find the mem table skewed too.
+    Status st;
+    for (int i = 0; i < 64 && st.ok(); ++i) {
+        auto chunk = std::make_shared<Chunk>();
+        auto value = Int32Column::create();
+        value->get_data().resize(kRowsPerChunk, kHotHash);
+        chunk->append_column(std::move(value), 0);
+        chunk->append_column(spill::SpillHashColumn::create(kRowsPerChunk, kHotHash),
+                             Chunk::HASH_AGG_SPILL_HASH_SLOT_ID);
+        st = spiller->spill<CancelBeforeRunExecutor>(&dummy_rt_st, chunk, EmptyMemGuard{});
+    }
+    ASSERT_TRUE(spiller->is_cancel()) << "no flush was submitted";
+    ASSERT_TRUE(st.is_cancelled()) << st;
+    EXPECT_EQ(1, compactions);
+    EXPECT_EQ(0, chunks_without_hash_column);
+    EXPECT_EQ(0, spiller->_writer->running_flush_tasks());
+}
+
 // Submit failure on the raw-writer flush choke point must fully compensate:
 // in-flight aggregate and per-writer counter back to zero, the mem-table back in
 // the pool, the error published, and both observer lists woken.
@@ -1815,7 +1877,7 @@ protected:
     static ChunkPtr make_chunk_with_n_rows(size_t n) {
         auto chunk = std::make_shared<Chunk>();
         auto hash_col = spill::SpillHashColumn::create(n);
-        chunk->append_column(std::move(hash_col), 0);
+        chunk->append_column(std::move(hash_col), Chunk::HASH_AGG_SPILL_HASH_SLOT_ID);
         return chunk;
     }
     static ChunkPtr make_empty_chunk() { return std::make_shared<Chunk>(); }
@@ -1858,6 +1920,22 @@ TEST_F(SpillCompactSkewChunksCheckTest, null_chunk_in_frequency_pass_aborts) {
 
 TEST_F(SpillCompactSkewChunksCheckTest, empty_chunk_in_frequency_pass_aborts) {
     EXPECT_DEATH(invoke({make_chunk_with_n_rows(50), make_empty_chunk()}, 50), "empty chunk in frequency pass");
+}
+
+// A chunk whose hash column was dropped by an earlier compaction must not be compacted again: its last column is an
+// aggregate column. Here that column holds one value, so reading it as the hash column would find the chunk skewed
+// and call the compactor through the writer's (null) spiller.
+TEST_F(SpillCompactSkewChunksCheckTest, chunk_without_hash_column_is_left_alone) {
+    auto chunk = std::make_shared<Chunk>();
+    auto value = Int32Column::create();
+    value->get_data().resize(50, 7);
+    chunk->append_column(std::move(value), 0);
+    std::vector<ChunkPtr> chunks{chunk, make_chunk_with_n_rows(50)};
+    RuntimeState rt_st;
+    spill::PartitionedSpillerWriter writer(nullptr, &rt_st);
+    ASSERT_OK(writer._compact_skew_chunks(100, chunks));
+    EXPECT_EQ(50, chunks[0]->num_rows());
+    EXPECT_EQ(50, chunks[1]->num_rows());
 }
 
 } // namespace starrocks::vectorized
