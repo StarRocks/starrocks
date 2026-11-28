@@ -14,12 +14,8 @@
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
-<<<<<<< HEAD
-import com.google.common.base.Preconditions;
-=======
-import com.google.common.collect.BoundType;
->>>>>>> c606a95 ([BugFix] Stop reading MIN/MAX of a LIST partition column off partition values the data may not hold (#80558))
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FunctionSet;
@@ -43,9 +39,9 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
+import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang3.NotImplementedException;
 
@@ -159,17 +155,9 @@ public class PartitionColumnMinMaxRewriteRule extends TransformationRule {
             // Each form declines (null) when it cannot prove its answer, and the next, cheaper-to-prove
             // form is tried instead.
             if (checkRewritePartitionValues(aggregationOperator, scanOperator, table)) {
-<<<<<<< HEAD
-                result = optimizeWithPartitionValues(aggregationOperator, table, minMax);
-            } else if (checkPartitionPrune(aggregationOperator, scanOperator, table)) {
-=======
                 result = optimizeWithListPartitionValues(aggregationOperator, table);
-            } else if (checkRewriteDayRangePartition(aggregationOperator, scanOperator, table)) {
-                result = optimizeWithPartitionValues(aggregationOperator, table,
-                        Pair.create(this::getRangePartitionValue, this::getRangePartitionValue));
             }
             if (result == null && checkPartitionPrune(aggregationOperator, scanOperator, table)) {
->>>>>>> c606a95 ([BugFix] Stop reading MIN/MAX of a LIST partition column off partition values the data may not hold (#80558))
                 result = optimizeWithPartitionPrune(input, aggregationOperator, scanOperator, table, minMax);
             }
             if (result == null && checkRewriteTopN(aggregationOperator, scanOperator, table, minMax)) {
@@ -307,54 +295,6 @@ public class PartitionColumnMinMaxRewriteRule extends TransformationRule {
     }
 
     /**
-     * For List Partition, we can evaluate the MAX(pt) based on the partition values
-     */
-    private OptExpression optimizeWithPartitionValues(LogicalAggregationOperator aggregationOperator,
-                                                      OlapTable table,
-                                                      Pair<Boolean, Boolean> hasMinMax) {
-        ListPartitionInfo partitionInfo = (ListPartitionInfo) table.getPartitionInfo();
-        List<Partition> nonEmpty = table.getNonEmptyPartitions();
-        Set<Long> nonEmptyPartitionIds = nonEmpty.stream().map(Partition::getId).collect(Collectors.toSet());
-
-        List<ScalarOperator> valueRow = Lists.newArrayList();
-        List<ColumnRefOperator> columns = Lists.newArrayList();
-        for (var entry : aggregationOperator.getAggregations().entrySet()) {
-            if (isMin(entry.getValue())) {
-                List<Long> sorted = partitionInfo.getSortedPartitions(true);
-                sorted.retainAll(nonEmptyPartitionIds);
-                if (CollectionUtils.isEmpty(sorted)) {
-                    return null;
-                }
-                long minPartition = sorted.get(0);
-                ListPartitionInfo.ListPartitionCell partitionValues = partitionInfo.getPartitionListExpr(minPartition);
-                Preconditions.checkState(!partitionValues.isEmpty());
-                ConstantOperator minValue = partitionValues.minValue().toConstant();
-                valueRow.add(minValue);
-                columns.add(entry.getKey());
-            } else if (isMax(entry.getValue())) {
-                List<Long> sorted = partitionInfo.getSortedPartitions(false);
-                sorted.retainAll(nonEmptyPartitionIds);
-                if (CollectionUtils.isEmpty(sorted)) {
-                    return null;
-                }
-                long maxPartition = sorted.get(0);
-                ListPartitionInfo.ListPartitionCell partitionValues = partitionInfo.getPartitionListExpr(maxPartition);
-                Preconditions.checkState(!partitionValues.isEmpty());
-                ConstantOperator maxValue = partitionValues.maxValue().toConstant();
-                valueRow.add(maxValue);
-                columns.add(entry.getKey());
-            }
-        }
-        LogicalValuesOperator values = new LogicalValuesOperator.Builder()
-                .setRows(List.of(valueRow))
-                .setColumnRefSet(columns)
-                .build();
-        return OptExpression.create(values);
-    }
-
-<<<<<<< HEAD
-=======
-    /**
      * For LIST partitions, MIN/MAX(pt) is a partition's value only when that partition holds exactly one value. A
      * partition's definition says which values its rows may take, not which ones they do: with
      * {@code p VALUES IN ('5', '6')} holding only 5, MAX is 5, not 6. Returns null when the extreme partition is
@@ -463,114 +403,6 @@ public class PartitionColumnMinMaxRewriteRule extends TransformationRule {
         return values.stream().filter(v -> !v.isConstantNull()).collect(Collectors.toList());
     }
 
-    public ScalarOperator getRangePartitionValue(long partitionId, PartitionInfo partitionInfo) {
-        LiteralExpr partitionValue =
-                ((RangePartitionInfo) partitionInfo).getRange(partitionId).lowerEndpoint().getKeys().get(0);
-        return SqlToScalarOperatorTranslator.translate(partitionValue);
-    }
-
-    private boolean isRangePartitionValues(LogicalAggregationOperator aggregationOperator,
-                                           LogicalScanOperator scanOperator,
-                                           OlapTable olapTable) {
-        if (!checkPartitionPrune(aggregationOperator, scanOperator, olapTable)) {
-            return false;
-        }
-        if (!olapTable.getPartitionInfo().isRangePartition()) {
-            return false;
-        }
-        RangePartitionInfo partitionInfo = (RangePartitionInfo) olapTable.getPartitionInfo();
-        if (partitionInfo.getPartitionColumnsSize() > 1) {
-            return false;
-        }
-        return partitionInfo.isPartitionedBy(olapTable, PrimitiveType.DATE);
-    }
-
-    /**
-     * Apply this optimization if:
-     * 1. DUPLICATED TABLE, no delete and no filter
-     * 2. RANGE-EXPRESSION-PARTITIONED table and Partition by date_trunc('day', column) and column is date type
-     * 3. Or RANGE-PARTITIONED table and Partition by date column and the min/max partition range size is 86400s
-     */
-    public boolean checkRewriteDayRangePartition(LogicalAggregationOperator aggregationOperator,
-                                                 LogicalScanOperator scanOperator,
-                                                 OlapTable olapTable) {
-        if (!isRangePartitionValues(aggregationOperator, scanOperator, olapTable)) {
-            return false;
-        }
-        RangePartitionInfo partitionInfo = (RangePartitionInfo) olapTable.getPartitionInfo();
-        if (partitionInfo.getType() != PartitionType.EXPR_RANGE &&
-                partitionInfo.getType() != PartitionType.EXPR_RANGE_V2) {
-            // check if day range partition
-            return partitionInfo.getIdToRange(false).values().stream().allMatch(this::isDayRange);
-        }
-
-        List<Expr> partitionExprs;
-        if (partitionInfo instanceof ExpressionRangePartitionInfoV2) {
-            ExpressionRangePartitionInfoV2 rangePartitionInfoV2 = (ExpressionRangePartitionInfoV2) partitionInfo;
-            partitionExprs = rangePartitionInfoV2.getPartitionExprs(olapTable.getIdToColumn());
-        } else {
-            ExpressionRangePartitionInfo rangePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
-            partitionExprs = rangePartitionInfo.getPartitionExprs(olapTable.getIdToColumn());
-        }
-
-        if (partitionExprs.size() != 1) {
-            return false;
-        }
-
-        Expr partitionExpr = partitionExprs.get(0);
-
-        // should be date_trunc('day', column)
-        if (partitionExpr instanceof FunctionCallExpr) {
-            FunctionCallExpr funcCall = (FunctionCallExpr) partitionExpr;
-            if (FunctionSet.DATE_TRUNC.equalsIgnoreCase(funcCall.getFunctionName())) {
-                List<Expr> args = funcCall.getChildren();
-                if (args.size() == 2) {
-                    Expr timeUnit = args.get(0);
-                    Expr partitionColumn = args.get(1);
-
-                    if (timeUnit instanceof StringLiteral) {
-                        if ("day".equalsIgnoreCase(((StringLiteral) timeUnit).getValue())) {
-                            if (!(partitionColumn instanceof SlotRef
-                                    && partitionColumn.getType().getPrimitiveType() == PrimitiveType.DATE)) {
-                                return false;
-                            }
-                            return partitionInfo.getIdToRange(false).values().stream()
-                                    .allMatch(this::isDayRange);
-                        }
-                    }
-                }
-            }
-        }
-
-        return false;
-    }
-
-    private boolean isDayRange(Range<PartitionKey> range) {
-        if (range.lowerBoundType() != BoundType.CLOSED
-                || range.upperBoundType() != BoundType.OPEN) {
-            return false;
-        }
-
-        PartitionKey lowerEndpoint = range.lowerEndpoint();
-        PartitionKey upperEndpoint = range.upperEndpoint();
-
-        if (lowerEndpoint.getKeys().size() != 1 || upperEndpoint.getKeys().size() != 1) {
-            return false;
-        }
-        LiteralExpr lowerBound = lowerEndpoint.getKeys().get(0);
-        LiteralExpr upperBound = upperEndpoint.getKeys().get(0);
-        if (!(lowerBound instanceof DateLiteral lowerDate) || !(upperBound instanceof DateLiteral upperDate)) {
-            return false;
-        }
-        // ignore shadow partition
-        if (PartitionKey.isShadowDateLiteral(lowerDate)) {
-            return true;
-        }
-        return upperDate.toLocalDateTime().toEpochSecond(ZoneOffset.UTC) ==
-                lowerDate.toLocalDateTime().toEpochSecond(ZoneOffset.UTC) + 86400;
-    }
-
->>>>>>> c606a95 ([BugFix] Stop reading MIN/MAX of a LIST partition column off partition values the data may not hold (#80558))
     private static boolean isMax(CallOperator call) {
         return call.getFunction().functionName().equalsIgnoreCase(FunctionSet.MAX);
     }
