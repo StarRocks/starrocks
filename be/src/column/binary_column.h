@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <fmt/format.h>
+
 #include "column/bytes.h"
 #include "column/column.h"
 #include "column/datum.h"
@@ -357,6 +359,35 @@ public:
     }
 
     Status capacity_limit_reached() const override;
+
+    // Whether the byte payload size and offset payload byte size fit the size
+    // representation used by this BinaryColumnBase instance.
+    // Wire format stores both sizes as uint32_t, so a column that does not fit must be
+    // rejected here instead of being silently truncated by BinaryColumnSerde.
+    Status is_payload_size_representable() const {
+        if constexpr (std::is_same_v<T, uint32_t>) {
+            const auto bytes_size = get_bytes().size();
+            if (bytes_size >= Column::MAX_CAPACITY_LIMIT) {
+                return Status::CapacityLimitExceed(fmt::format(
+                        "Binary column byte payload size is not representable with legacy u32 format, bytes_size: {}, "
+                        "limit: {}",
+                        bytes_size, Column::MAX_CAPACITY_LIMIT));
+            }
+
+            const auto offset_bytes_size = static_cast<uint64_t>(_offsets.size()) * sizeof(uint32_t);
+            if (offset_bytes_size >= Column::MAX_CAPACITY_LIMIT) {
+                return Status::CapacityLimitExceed(
+                        fmt::format("Binary column offset payload size is not representable with legacy u32 format, "
+                                    "offset_bytes_size: {}, limit: {}",
+                                    offset_bytes_size, Column::MAX_CAPACITY_LIMIT));
+            }
+
+            return Status::OK();
+        } else {
+            static_assert(std::is_same_v<T, uint64_t>);
+            return Status::OK();
+        }
+    }
 
 private:
     void _build_slices() const;
