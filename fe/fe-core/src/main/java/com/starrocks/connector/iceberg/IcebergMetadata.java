@@ -3273,23 +3273,37 @@ public class IcebergMetadata implements ConnectorMetadata {
             }
         };
 
-        // Use commit queue if available and enabled, otherwise execute directly (original logic)
-        if (commitQueueManager != null && commitQueueManager.isEnabled()) {
-            // Use commit queue to serialize commits to the same table and avoid optimistic locking conflicts
-            commitQueueManager.submitCommitAndRethrow(catalogName, queueDbName, queueTableName, commitTask);
-        } else {
-            // Direct execution without queueing (original logic)
-            // The commit task internally uses commitWithCleanup which already handles exceptions
-            // and converts them to RuntimeException. We need to catch Exception due to the
-            // CommitTask.execute() signature, but RuntimeException and Error will propagate as-is.
-            try {
-                commitTask.execute();
-            } catch (RuntimeException | Error e) {
-                throw e;
-            } catch (Exception e) {
-                // Should not reach here as commitWithCleanup already handles all exceptions
-                throw new RuntimeException(e);
+        try {
+            // Use commit queue if available and enabled, otherwise execute directly (original logic)
+            if (commitQueueManager != null && commitQueueManager.isEnabled()) {
+                // Use commit queue to serialize commits to the same table and avoid optimistic locking conflicts
+                commitQueueManager.submitCommitAndRethrow(catalogName, queueDbName, queueTableName, commitTask);
+            } else {
+                // Direct execution without queueing (original logic)
+                // The commit task internally uses commitWithCleanup which already handles exceptions
+                // and converts them to RuntimeException. We need to catch Exception due to the
+                // CommitTask.execute() signature, but RuntimeException and Error will propagate as-is.
+                try {
+                    commitTask.execute();
+                } catch (RuntimeException | Error e) {
+                    throw e;
+                } catch (Exception e) {
+                    // Should not reach here as commitWithCleanup already handles all exceptions
+                    throw new RuntimeException(e);
+                }
             }
+        } catch (RuntimeException e) {
+            // The commit may have landed although its state is unknown, so tell the other FEs as on success (this
+            // FE's copy is dropped by the cleanup of commitWithCleanup, on the commit thread once the commit ends).
+            // The commit queue throws the unknown state itself when it stops waiting; commitWithCleanup wraps
+            // Iceberg's one, so one cause level is enough.
+            if (e instanceof CommitStateUnknownException || e.getCause() instanceof CommitStateUnknownException) {
+                LOG.warn("Commit state of {}.{}.{} is unknown, telling the other FEs to drop the table",
+                        catalogName, dbName, tableName);
+                asyncRefreshOthersFeMetadataCache(dbName, tableName);
+                invalidateOthersFeTable(dbName, tableName);
+            }
+            throw e;
         }
 
         // Outside the commit queue, so a slow peer does not hold up the next commit to the table.
@@ -3328,7 +3342,10 @@ public class IcebergMetadata implements ConnectorMetadata {
                         catalogName, dbName, tableName);
             }
             LOG.error("Failed to commit iceberg transaction on {}.{}", dbName, tableName, e);
-            throw new StarRocksConnectorException(commitFailureMessage(e, catalogName, dbName, tableName));
+            String message = commitFailureMessage(e, catalogName, dbName, tableName);
+            // finishSink must still see an unknown state, to tell the other FEs
+            throw isCommitStateUnknown ? new StarRocksConnectorException(message, e)
+                    : new StarRocksConnectorException(message);
         } finally {
             cleanupAction.run();
         }
