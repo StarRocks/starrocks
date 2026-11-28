@@ -1,0 +1,25 @@
+-- name: test_view_null_order_sql_mode
+create database db_${uuid0};
+use db_${uuid0};
+create table tn (k int, v int) duplicate key(k) distributed by hash(k) buckets 1 properties ("replication_num" = "1");
+insert into tn values (2, 20), (null, 0), (1, 10);
+set sql_mode = 'SORT_NULLS_LAST';
+-- a view keeps an explicit NULLS FIRST / NULLS LAST written under SORT_NULLS_LAST
+select k from tn order by k nulls first limit 1;
+create view v_asc_nf as select k from tn order by k nulls first limit 1;
+select * from v_asc_nf;
+create view v_desc_nl as select k from tn order by k desc nulls last limit 1;
+select * from v_desc_nl;
+create view v_asc as select k from tn order by k limit 1;
+select * from v_asc;
+create view v_win as select k, row_number() over (order by k nulls first) as rn from tn;
+select * from v_win order by rn;
+create view v_concat as select group_concat(k order by k nulls first) as s from tn;
+select * from v_concat;
+-- the view keeps the ordering it was created with in another sql_mode
+set sql_mode = DEFAULT;
+select * from v_asc_nf;
+select * from v_desc_nl;
+select * from v_asc;
+select * from v_win order by rn;
+select * from v_concat;
