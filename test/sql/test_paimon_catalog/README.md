@@ -26,6 +26,7 @@ These cases read fixed tables from
 | `append_avro_v1` | Avro append-only rows, including NULL values |
 | `pk_{deduplicate,first_row,partial_update,aggregation}_{parquet,orc,avro}_v1` | Three write commits per table; first-row is compacted, other engines retain unmerged files |
 | `global_index_v1` | Two rows with a B-tree global index and one later row outside index coverage |
+| `global_index_full_v1` | Nine rows in three partitions, with complete BTree indexes on `id` and `tag` |
 | `pk_dv_{parquet,orc,avro}_v1` | 1,000 initial rows followed by update/delete/insert; actual deletion vectors retained |
 
 The reader-boundary cases additionally use these fixed tables:
@@ -119,6 +120,64 @@ Cases skip if neither local storage nor OSS credentials are configured. CLEANUP
 blocks drop the temporary SQL objects even after an assertion fails. Empty warehouse
 directories or OSS directory markers may remain after SQL cleanup.
 Run `python3 run.py -d sql/test_paimon_catalog/R/test_paimon_catalog_ddl -v`.
+
+## Distributed Global Index fixture
+
+`test_paimon_global_index_distributed` uses the immutable `global_index_full_v1`
+fixture. Its Paimon 2.0.0 snapshot 5/schema 0 has nine rows, three data commits,
+and six BTree files for `id` and `tag`. Both fields cover the row-ID ranges
+`[0,2]`, `[3,5]`, `[6,8]`. The generator verifies the data and index manifests,
+actual BTree candidates, residual filtering, empty matches and partition pruning.
+The existing `global_index_v1` remains the partial-coverage fallback fixture.
+
+Generate and verify the complete table locally with JDK 17 or later and a Paimon
+2.0.0 bundle plus its dependencies. Set `FIXTURE_JDK` to the JDK installation
+directory, `PAIMON_FIXTURE_CLASSPATH` to the Java classpath, and `FIXTURE_ARTIFACT`
+to a new local directory outside the repo.
+
+```bash
+python3 test/sql/test_paimon_catalog/datagen/run_global_index_fixture.py \
+  --classpath "$PAIMON_FIXTURE_CLASSPATH" --output "$FIXTURE_ARTIFACT" \
+  --java-home "$FIXTURE_JDK"
+```
+
+The driver compiles the committed Java source and starts separate JVMs to generate
+and verify `warehouse/`, then verifies a copy in `relocated-warehouse/`. Every
+verification must preserve all relative file names, sizes and SHA-256 hashes.
+`fixture-manifest.json` records the fixture name, SDK version, snapshot, schema and
+file inventory alongside the two warehouses. Keep the manifest with the published
+artifact for provenance. Upload the complete table directory under
+`warehouse/paimon_test.db/global_index_full_v1/`, preserving its layout.
+
+The lifecycle driver also accepts `--java-source` and `--java-class`. Future ANN
+fixtures can use a dedicated generator/verifier with the same `generate` and
+`verify` commands. A successful verifier emits exactly one tab-separated line
+`FIXTURE_MANIFEST`, fixture name, Paimon version, snapshot ID and schema ID.
+Fixture-specific index counts, shard layout and query oracles belong to that Java
+verifier. SQL cases can share `assert_paimon_global_index_trace(query, required,
+forbidden)` to check path evidence from a single planning run. ANN cases must
+require `PaimonGlobalIndex.ANN: applied` and validate score ordering, limit/offset
+and filtering semantics with their own expected results.
+
+Before enabling or merging the distributed SQL case, a maintainer with publication
+authority must upload the complete immutable fixture into the community CI OSS
+warehouse and verify its checksums. The CI identity must then read it from both
+FE and Linux BE/CN using the same StarRocks build. The selected test fails if the
+fixture is missing or unreadable. Run both result and path checks after publication.
+
+```bash
+cd test
+python3 run.py -d sql/test_paimon_catalog -l \
+  --file_filter 'test_paimon_global_index(_distributed)?$'
+python3 run.py -d sql/test_paimon_catalog -v \
+  --file_filter 'test_paimon_global_index(_distributed)?$'
+```
+
+Offline verification proves the Java fixture and its relocation. The release gate
+also requires actual distributed TRACE evidence, Native/JNI routing, Native BE
+Profile, final partition-limit behavior and SQL results on the community cluster.
+The SQL cases create UUID Catalogs and clean up only those Catalogs, while restoring
+changed session settings. Their fixture data stays read-only.
 
 ## Reader assertions
 

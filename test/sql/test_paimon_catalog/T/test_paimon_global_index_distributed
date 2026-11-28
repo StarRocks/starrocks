@@ -1,0 +1,73 @@
+-- name: test_paimon_global_index_distributed
+[UC]saved_paimon_global_index_mode=select @@paimon_global_index_mode;
+[UC]saved_paimon_reader_mode=select @@paimon_reader_mode;
+[UC]saved_paimon_force_jni_reader=select @@paimon_force_jni_reader;
+[UC]saved_scan_lake_partition_num_limit=select @@scan_lake_partition_num_limit;
+create external catalog paimon_gi_${uuid0}
+properties (
+"type" = "paimon",
+"paimon.catalog.type" = "filesystem",
+"paimon.catalog.warehouse" = "oss://${oss_bucket}/ci_catalog_test_data/paimon/",
+"aws.s3.access_key" = "${oss_ak}",
+"aws.s3.secret_key" = "${oss_sk}",
+"aws.s3.endpoint" = "${oss_endpoint}"
+);
+set paimon_force_jni_reader = false;
+set paimon_reader_mode = 'auto';
+set scan_lake_partition_num_limit = 0;
+set paimon_global_index_mode = 'off';
+[ORDER]select part, id, tag, amount from paimon_gi_${uuid0}.paimon_test.global_index_full_v1 order by part, id, amount;
+[ORDER]select part, id, tag, amount from paimon_gi_${uuid0}.paimon_test.global_index_full_v1 where id in (2, 14) order by part, id, amount;
+set paimon_global_index_mode = 'local';
+[ORDER]select part, id, tag, amount from paimon_gi_${uuid0}.paimon_test.global_index_full_v1 where id in (2, 14) order by part, id, amount;
+set paimon_global_index_mode = default;
+[ORDER]select part, id, tag, amount from paimon_gi_${uuid0}.paimon_test.global_index_full_v1 where id in (2, 14) order by part, id, amount;
+function: assert_paimon_global_index_trace("select part, id, tag, amount from paimon_gi_${uuid0}.paimon_test.global_index_full_v1 where id in (2, 14) order by part, id, amount", ["PaimonGlobalIndex.Mode: auto", "PaimonGlobalIndex.Result: applied"], ["PaimonGlobalIndex.Fallback", "PLAN NOT AVAILABLE"])
+set paimon_global_index_mode = 'distributed';
+[ORDER]select part, id, tag, amount from paimon_gi_${uuid0}.paimon_test.global_index_full_v1 where id in (2, 14) order by part, id, amount;
+function: assert_paimon_global_index_trace("select part, id, tag, amount from paimon_gi_${uuid0}.paimon_test.global_index_full_v1 where id in (2, 14) order by part, id, amount", ["PaimonGlobalIndex.Mode: distributed", "PaimonGlobalIndex.Result: applied"], ["PaimonGlobalIndex.Fallback", "PLAN NOT AVAILABLE"])
+[ORDER]select part, id, tag, amount from paimon_gi_${uuid0}.paimon_test.global_index_full_v1 where id = 6 order by part, id, amount;
+function: assert_paimon_global_index_trace("select part, id, tag, amount from paimon_gi_${uuid0}.paimon_test.global_index_full_v1 where id = 6 order by part, id, amount", ["PaimonGlobalIndex.Mode: distributed", "PaimonGlobalIndex.Result: applied"], ["PaimonGlobalIndex.Fallback", "PLAN NOT AVAILABLE"])
+[ORDER]select part, id, tag, amount from paimon_gi_${uuid0}.paimon_test.global_index_full_v1 where id >= 8 and id < 15 order by part, id, amount;
+function: assert_paimon_global_index_trace("select part, id, tag, amount from paimon_gi_${uuid0}.paimon_test.global_index_full_v1 where id >= 8 and id < 15 order by part, id, amount", ["PaimonGlobalIndex.Mode: distributed", "PaimonGlobalIndex.Result: applied"], ["PaimonGlobalIndex.Fallback", "PLAN NOT AVAILABLE"])
+[ORDER]select part, id, tag, amount from paimon_gi_${uuid0}.paimon_test.global_index_full_v1 where id in (2, 14) and tag = 'y' order by part, id, amount;
+function: assert_paimon_global_index_trace("select part, id, tag, amount from paimon_gi_${uuid0}.paimon_test.global_index_full_v1 where id in (2, 14) and tag = 'y' order by part, id, amount", ["PaimonGlobalIndex.Mode: distributed", "PaimonGlobalIndex.Result: applied"], ["PaimonGlobalIndex.Fallback", "PLAN NOT AVAILABLE"])
+[ORDER]select part, id, tag, amount from paimon_gi_${uuid0}.paimon_test.global_index_full_v1 where id = 2 or tag = 'z' order by part, id, amount;
+function: assert_paimon_global_index_trace("select part, id, tag, amount from paimon_gi_${uuid0}.paimon_test.global_index_full_v1 where id = 2 or tag = 'z' order by part, id, amount", ["PaimonGlobalIndex.Mode: distributed", "PaimonGlobalIndex.Result: applied"], ["PaimonGlobalIndex.Fallback", "PLAN NOT AVAILABLE"])
+[ORDER]select part, id, tag, amount from paimon_gi_${uuid0}.paimon_test.global_index_full_v1 where id in (2, 14) and amount >= 50 order by part, id, amount;
+function: assert_paimon_global_index_trace("select part, id, tag, amount from paimon_gi_${uuid0}.paimon_test.global_index_full_v1 where id in (2, 14) and amount >= 50 order by part, id, amount", ["PaimonGlobalIndex.Mode: distributed", "PaimonGlobalIndex.Result: applied"], ["PaimonGlobalIndex.Fallback", "PLAN NOT AVAILABLE"])
+[ORDER]select part, id, tag, amount from paimon_gi_${uuid0}.paimon_test.global_index_full_v1 where id = 2 or amount = 70 order by part, id, amount;
+function: assert_paimon_global_index_trace("select part, id, tag, amount from paimon_gi_${uuid0}.paimon_test.global_index_full_v1 where id = 2 or amount = 70 order by part, id, amount", ["PaimonGlobalIndex.Mode: distributed", "PaimonGlobalIndex.Result: no supported indexed scalar predicate"], ["PaimonGlobalIndex.Fallback", "PLAN NOT AVAILABLE"])
+[ORDER]select part, id, tag, amount from paimon_gi_${uuid0}.paimon_test.global_index_full_v1 where id = 5 order by part, id, amount;
+function: assert_paimon_global_index_trace("select part, id, tag, amount from paimon_gi_${uuid0}.paimon_test.global_index_full_v1 where id = 5 order by part, id, amount", ["PaimonGlobalIndex.Mode: distributed", "PaimonGlobalIndex.Result: applied"], ["PaimonGlobalIndex.Fallback", "PLAN NOT AVAILABLE"])
+function: assert_paimon_readers("select part, id, tag, amount from paimon_gi_${uuid0}.paimon_test.global_index_full_v1 where id in (2, 14) order by part, id, amount", "global_index_full_v1", "native", "INDEXED_SPLIT")
+function: assert_paimon_native_profile("select part, id, tag, amount from paimon_gi_${uuid0}.paimon_test.global_index_full_v1 where id in (2, 14) order by part, id, amount")
+set paimon_reader_mode = 'native';
+[ORDER]select part, id, tag, amount from paimon_gi_${uuid0}.paimon_test.global_index_full_v1 where id in (2, 14) order by part, id, amount;
+function: assert_paimon_readers("select part, id, tag, amount from paimon_gi_${uuid0}.paimon_test.global_index_full_v1 where id in (2, 14) order by part, id, amount", "global_index_full_v1", "native", "INDEXED_SPLIT")
+set paimon_reader_mode = 'jni';
+[ORDER]select part, id, tag, amount from paimon_gi_${uuid0}.paimon_test.global_index_full_v1 where id in (2, 14) order by part, id, amount;
+function: assert_paimon_reader("select part, id, tag, amount from paimon_gi_${uuid0}.paimon_test.global_index_full_v1 where id in (2, 14) order by part, id, amount", "global_index_full_v1", "jni")
+set paimon_reader_mode = 'auto';
+set paimon_global_index_mode = 'off';
+function: assert_explain_contains("select part, id, tag, amount from paimon_gi_${uuid0}.paimon_test.global_index_full_v1 where id = 6 order by part, id, amount", "partitions=2/3")
+set scan_lake_partition_num_limit = 1;
+function: assert_query_error_contains("select part, id, tag, amount from paimon_gi_${uuid0}.paimon_test.global_index_full_v1 where id = 6 order by part, id, amount", "Number of partitions allowed: 1", "number of partitions to be scanned: 2")
+set paimon_global_index_mode = 'auto';
+[ORDER]select part, id, tag, amount from paimon_gi_${uuid0}.paimon_test.global_index_full_v1 where id = 6 order by part, id, amount;
+function: assert_paimon_global_index_trace("select part, id, tag, amount from paimon_gi_${uuid0}.paimon_test.global_index_full_v1 where id = 6 order by part, id, amount", ["PaimonGlobalIndex.Mode: auto", "PaimonGlobalIndex.Result: applied"], ["PaimonGlobalIndex.Fallback", "PLAN NOT AVAILABLE"])
+function: assert_explain_contains("select part, id, tag, amount from paimon_gi_${uuid0}.paimon_test.global_index_full_v1 where id = 6 order by part, id, amount", "partitions=1/3")
+function: assert_paimon_readers("select part, id, tag, amount from paimon_gi_${uuid0}.paimon_test.global_index_full_v1 where id = 6 order by part, id, amount", "global_index_full_v1", "native", "INDEXED_SPLIT")
+set paimon_global_index_mode = 'distributed';
+[ORDER]select part, id, tag, amount from paimon_gi_${uuid0}.paimon_test.global_index_full_v1 where id = 6 order by part, id, amount;
+function: assert_paimon_global_index_trace("select part, id, tag, amount from paimon_gi_${uuid0}.paimon_test.global_index_full_v1 where id = 6 order by part, id, amount", ["PaimonGlobalIndex.Mode: distributed", "PaimonGlobalIndex.Result: applied"], ["PaimonGlobalIndex.Fallback", "PLAN NOT AVAILABLE"])
+function: assert_explain_contains("select part, id, tag, amount from paimon_gi_${uuid0}.paimon_test.global_index_full_v1 where id = 6 order by part, id, amount", "partitions=1/3")
+function: assert_paimon_readers("select part, id, tag, amount from paimon_gi_${uuid0}.paimon_test.global_index_full_v1 where id = 6 order by part, id, amount", "global_index_full_v1", "native", "INDEXED_SPLIT")
+CLEANUP {
+  set scan_lake_partition_num_limit = '${saved_scan_lake_partition_num_limit}';
+  set paimon_force_jni_reader = '${saved_paimon_force_jni_reader}';
+  set paimon_reader_mode = '${saved_paimon_reader_mode}';
+  set paimon_global_index_mode = '${saved_paimon_global_index_mode}';
+  set catalog default_catalog;
+  drop catalog if exists paimon_gi_${uuid0};
+} END CLEANUP

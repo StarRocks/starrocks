@@ -35,6 +35,7 @@ set paimon_force_jni_reader = false;
 set paimon_reader_mode = 'auto';
 set paimon_global_index_mode = default;
 [ORDER]select id, amount, score from paimon_matrix_${uuid0}.paimon_test.global_index_v1 where id in (1, 3) order by id;
+function: assert_paimon_global_index_trace("select id, amount, score from paimon_matrix_${uuid0}.paimon_test.global_index_v1 where id in (1, 3) order by id", ["PaimonGlobalIndex.Mode: auto", "PaimonGlobalIndex.Fallback", "does not completely cover the snapshot"], ["PaimonGlobalIndex.Result: applied", "PLAN NOT AVAILABLE"])
 set paimon_global_index_mode = 'off';
 [ORDER]select id, amount, score from paimon_matrix_${uuid0}.paimon_test.global_index_v1 where id in (1, 3) order by id;
 set paimon_global_index_mode = 'distributed';
