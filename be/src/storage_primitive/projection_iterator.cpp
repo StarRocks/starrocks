@@ -33,6 +33,7 @@ public:
 
     size_t merged_rows() const override { return _child->merged_rows(); }
 
+    OlapReaderStatistics* set_read_stats(OlapReaderStatistics* stats) override { return _child->set_read_stats(stats); }
     Status start_read_ahead(bool* started) override { return _child->start_read_ahead(started); }
     size_t read_ahead_blocks() const override { return _child->read_ahead_blocks(); }
     bool read_ahead_done() const override { return _child->read_ahead_done(); }

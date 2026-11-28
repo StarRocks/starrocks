@@ -32,6 +32,7 @@ class Status;
 namespace starrocks {
 
 class Chunk;
+struct OlapReaderStatistics;
 
 class ChunkIterator {
 public:
@@ -85,6 +86,12 @@ public:
         DCHECK_CHUNK(chunk);
         return st;
     }
+
+    // Redirect a not-yet-read iterator tree's counters. Returns the previous destination, or
+    // nullptr if the tree has no reader counters. Parallel merges give each child a private
+    // destination, then fold it into the original destination on the consuming thread.
+    // All statistics-bearing leaves in a tree must share the same original destination.
+    virtual OlapReaderStatistics* set_read_stats(OlapReaderStatistics* stats) { return nullptr; }
 
     // Release resources associated with this iterator, e.g, deallocate memory.
     // This routine can be called at most once.

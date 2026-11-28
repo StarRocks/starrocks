@@ -161,6 +161,11 @@ public:
     bool read_ahead_done() const override { return _prefetch_window == nullptr || _prefetch_window->exhausted(); }
     bool read_ahead_cached() const override { return _prefetch_window != nullptr && _prefetch_window->idle(); }
 
+    OlapReaderStatistics* set_read_stats(OlapReaderStatistics* stats) override {
+        DCHECK(!_inited);
+        return std::exchange(_opts.stats, stats);
+    }
+
     // Public entry point used by the segment_seek_range_to_rowid_range() /
     // segment_seek_ranges_to_rowid_ranges() free functions. The caller
     // must ensure the segment's short-key index has already been loaded; this

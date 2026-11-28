@@ -47,6 +47,18 @@ public:
 
     size_t merged_rows() const override { return _merged_rows; }
 
+    OlapReaderStatistics* set_read_stats(OlapReaderStatistics* stats) override {
+        DCHECK_EQ(_cur_idx, 0);
+        OlapReaderStatistics* previous = nullptr;
+        for (auto& child : _children) {
+            if (auto* original = child->set_read_stats(stats); original != nullptr) {
+                DCHECK(previous == nullptr || previous == original);
+                previous = original;
+            }
+        }
+        return previous;
+    }
+
     // A union read ahead as a whole (nested in another union) reads ahead its current child.
     Status start_read_ahead(bool* started) override {
         if (_cur_idx >= _children.size()) {
