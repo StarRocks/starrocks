@@ -76,19 +76,23 @@ import org.apache.arrow.vector.ipc.message.MessageSerializer;
 import org.apache.arrow.vector.types.pojo.Field;
 import org.apache.arrow.vector.types.pojo.Schema;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.net.ConnectException;
+import java.net.NoRouteToHostException;
 import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
+import java.nio.channels.UnresolvedAddressException;
 import java.util.Collections;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Function;
 
 public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseable {
     private static final Logger LOG = LogManager.getLogger(ArrowFlightSqlServiceImpl.class);
@@ -641,10 +645,16 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
     }
 
     private FlightClient getOrCreateClient(String key, String host, int port) throws Exception {
-        return clientCache.get(key, () -> {
-            Location location = Location.forGrpcInsecure(host, port);
-            return FlightClient.builder().allocator(rootAllocator).location(location).build();
-        });
+        return clientCache.get(key, () -> createClient(host, port));
+    }
+
+    /**
+     * Factory method to create the client of a remote node. Override in tests to provide a custom client.
+     */
+    @VisibleForTesting
+    protected FlightClient createClient(String host, int port) {
+        Location location = Location.forGrpcInsecure(host, port);
+        return FlightClient.builder().allocator(rootAllocator).location(location).build();
     }
 
     private FlightStream getStreamWithRetry(FlightClient client, Ticket ticket,
@@ -659,7 +669,7 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
         } catch (Exception e) {
             LOG.warn("[ARROW] Failed to get stream from {}:{}, retrying with new client", host, port, e);
 
-            clientCache.invalidate(key);
+            removeFailedClient(key, client);
             FlightClient freshClient = getOrCreateClient(key, host, port);
             if (bearerToken != null) {
                 CredentialCallOption authOption = new CredentialCallOption(new BearerCredentialWriter(bearerToken));
@@ -667,6 +677,44 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
             }
             return freshClient.getStream(ticket);
         }
+    }
+
+    /**
+     * Run a call on the cached client of a remote FE. If no connection to the FE could be established, replace the
+     * cached client and run the call once more. A client resolves the FE's host name only when it is built, so a
+     * cached client keeps dialing the old address after the FE has come back on a new one.
+     *
+     * <p>Only connection failures are retried. The request never reached the FE then, so the retry cannot execute a
+     * statement twice.
+     */
+    private <T> T callRemoteFEWithRetry(String feHost, int fePort, Function<FlightClient, T> call) throws Exception {
+        String nodeKey = feHost + ":" + fePort;
+        FlightClient client = getOrCreateClient(nodeKey, feHost, fePort);
+        try {
+            return call.apply(client);
+        } catch (Exception e) {
+            if (!isConnectFailure(e)) {
+                throw e;
+            }
+            LOG.warn("[ARROW] Failed to connect to remote FE {}:{}, retrying with new client", feHost, fePort, e);
+
+            removeFailedClient(nodeKey, client);
+            return call.apply(getOrCreateClient(nodeKey, feHost, fePort));
+        }
+    }
+
+    /**
+     * Remove a client from the cache after a call on it failed. The entry is removed only while it still holds that
+     * client, so that concurrent callers share one replacement instead of closing each other's.
+     */
+    private void removeFailedClient(String key, FlightClient client) {
+        clientCache.asMap().remove(key, client);
+    }
+
+    private static boolean isConnectFailure(Throwable e) {
+        return ExceptionUtils.getThrowableList(e).stream().anyMatch(t -> t instanceof ConnectException
+                || t instanceof NoRouteToHostException
+                || t instanceof UnresolvedAddressException);
     }
 
     private void getStreamResultFromFE(String token, String queryId, ServerStreamListener listener) {
@@ -700,14 +748,12 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
         }
 
         int fePort = Config.arrow_flight_port;
-        String nodeKey = feHost + ":" + fePort;
 
         try {
-            FlightClient client = getOrCreateClient(nodeKey, feHost, fePort);
             FlightDescriptor descriptor = FlightDescriptor.command(Any.pack(command).toByteArray());
             CredentialCallOption authOption = new CredentialCallOption(new BearerCredentialWriter(token));
 
-            FlightInfo remoteInfo = client.getInfo(descriptor, authOption);
+            FlightInfo remoteInfo = callRemoteFEWithRetry(feHost, fePort, client -> client.getInfo(descriptor, authOption));
             LOG.info("[ARROW] Forwarded getFlightInfo to remote FE {}:{}", feHost, fePort);
             return remoteInfo;
 
@@ -743,17 +789,18 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
         }
 
         int fePort = Config.arrow_flight_port;
-        String nodeKey = feHost + ":" + fePort;
 
         try {
-            FlightClient client = getOrCreateClient(nodeKey, feHost, fePort);
             CredentialCallOption authOption = new CredentialCallOption(new BearerCredentialWriter(token));
 
             Action action = new Action(actionType, Any.pack(request).toByteArray());
 
-            Iterator<Result> results = client.doAction(action, authOption);
-            while (results.hasNext()) {
-                listener.onNext(results.next());
+            // doAction() reports a connection failure when its iterator is read, not when it is called, so read the
+            // results inside the retried call.
+            List<Result> results = callRemoteFEWithRetry(feHost, fePort,
+                    client -> Lists.newArrayList(client.doAction(action, authOption)));
+            for (Result result : results) {
+                listener.onNext(result);
             }
             listener.onCompleted();
 
@@ -782,13 +829,12 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
         }
 
         int fePort = Config.arrow_flight_port;
-        String nodeKey = feHost + ":" + fePort;
 
         try {
-            FlightClient client = getOrCreateClient(nodeKey, feHost, fePort);
             CredentialCallOption authOption = new CredentialCallOption(new BearerCredentialWriter(token));
 
-            SetSessionOptionsResult result = client.setSessionOptions(request, authOption);
+            SetSessionOptionsResult result = callRemoteFEWithRetry(feHost, fePort,
+                    client -> client.setSessionOptions(request, authOption));
             listener.onNext(result);
             listener.onCompleted();
 
@@ -816,13 +862,12 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
         }
 
         int fePort = Config.arrow_flight_port;
-        String nodeKey = feHost + ":" + fePort;
 
         try {
-            FlightClient client = getOrCreateClient(nodeKey, feHost, fePort);
             CredentialCallOption authOption = new CredentialCallOption(new BearerCredentialWriter(token));
 
-            CloseSessionResult result = client.closeSession(new CloseSessionRequest(), authOption);
+            CloseSessionResult result = callRemoteFEWithRetry(feHost, fePort,
+                    client -> client.closeSession(new CloseSessionRequest(), authOption));
             listener.onNext(result);
             listener.onCompleted();
 
