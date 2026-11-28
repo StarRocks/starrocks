@@ -173,7 +173,9 @@ class PaimonGlobalIndexCollectJobTest {
         sliced.position(5);
         sliced.put(first.duplicate()).flip().position(5);
         var job = collectingJob(3, batch(sliced, row(0, result(1, 3))), batch(row(1, result())));
-        var aggregate = job.collect(caller).results();
+        var collected = job.collect(caller);
+        assertEquals(new PaimonGlobalIndexPlanInfo.Details("btree", List.of("k"), 42, 3, 3), collected.details());
+        var aggregate = collected.result().results();
         assertEquals(3, aggregate.getLongCardinality());
         assertTrue(aggregate.contains(1) && aggregate.contains(3) && aggregate.contains((1L << 32) + 7));
         assertEquals(5, sliced.position());
@@ -218,12 +220,14 @@ class PaimonGlobalIndexCollectJobTest {
         // BE paimon-cpp fixture: inclusive ranges [7, 9] and [20, 20].
         byte[] cpp = HexFormat.of().parseHex(
                 "000000010000001f0100000000000000000000003b30000001000003000200070002001400000000000000");
-        var merged = collectingJob(2, batch(row(0, cpp), row(1, result(20, 30)))).collect(caller).results();
+        var merged = collectingJob(2, batch(row(0, cpp), row(1, result(20, 30)))).collect(caller).result().results();
         assertEquals(5, merged.getLongCardinality());
         for (long id : new long[] {7, 8, 9, 20, 30}) {
             assertTrue(merged.contains(id));
         }
-        assertEquals(0, collectingJob(1, batch(row(0, result()))).collect(caller).results().getLongCardinality());
+        var empty = collectingJob(1, batch(row(0, result()))).collect(caller);
+        assertEquals(0, empty.details().candidateRowIds());
+        assertEquals(0, empty.result().results().getLongCardinality());
     }
 
     @Test
@@ -232,7 +236,7 @@ class PaimonGlobalIndexCollectJobTest {
         for (int i = 0; i < ids.length; i++) {
             ids[i] = ((long) i << 32) + (1L << 16);
         }
-        var merged = collectingJob(1, batch(row(0, result(ids)))).collect(caller).results();
+        var merged = collectingJob(1, batch(row(0, result(ids)))).collect(caller).result().results();
         assertEquals(ids.length, merged.getLongCardinality());
         for (long id : ids) {
             assertTrue(merged.contains(id));

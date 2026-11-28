@@ -28,6 +28,7 @@ import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -155,6 +156,10 @@ public final class PaimonGlobalIndexRequest {
             }
         }
         return Math.max(1, budget);
+    }
+
+    List<String> getIndexedColumns() {
+        return indexes.keySet().stream().sorted().toList();
     }
 
     public long getSnapshotId() {

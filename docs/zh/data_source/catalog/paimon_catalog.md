@@ -960,6 +960,25 @@ FE 发布 Paimon 原生快照后，数据才对读取可见。空输入的 INSER
 字节数统计整个候选数据文件，不包含删除文件或索引文件，也不考虑列投影、页裁剪、缓存命中或提前结束执行。
 它反映候选扫描数据量，不表示实际 I/O、输出大小或执行限制。因此，即使 `LIMIT` 很小，仍可能选中很大的文件。
 
+### 查看全局索引决策
+
+物理 `EXPLAIN` 会为每个 Paimon 数据扫描显示全局索引配置模式、所选路径和规划结果。
+分布式索引成功应用后，`EXPLAIN VERBOSE` 和 `EXPLAIN COSTS` 还会显示索引详情。
+
+```text
+0:PaimonScanNode
+   Paimon Global Index: mode=auto, path=distributed, result=applied
+     index_type=btree, indexed_columns=[id], snapshot_id=5
+     shards=3/3, candidate_row_ids=1
+```
+
+`shards` 显示已校验和预期的 shard 数。`candidate_row_ids` 是分布式索引返回的去重行 ID 数，取值在剩余谓词过滤之前。
+空索引结果也可显示为 `applied`，候选数为零。`Paimon Scan Metrics` 显示候选文件的元数据汇总。
+
+`sdk_managed` 表示 `local` 模式将索引选择交给 Paimon SDK。`skipped` 表示扫描没有发起分布式索引请求。
+`auto` 模式下的 `fallback` 表示分布式尝试失败，随后在 SDK 索引求值关闭的情况下完成普通 Paimon split 规划。
+详细计划会显示跳过或回退的原因，`TRACE VALUES EXTERNAL` 提供底层错误的更多信息。
+
 ## 从 Paimon 导入数据
 
 假设您有一个名为 `olap_tbl` 的 OLAP 表，您可以按如下方式转换和导入数据：

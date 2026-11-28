@@ -960,6 +960,25 @@ Paimon テーブルのスキーマを表示するには、次のいずれかの�
 バイト数は候補データファイル全体のサイズを表し、削除ファイルとインデックスファイルを含みません。また、列の射影、ページのプルーニング、キャッシュヒット、実行の早期終了は考慮しません。
 スキャンサイズの目安であり、実測 I/O、出力サイズ、実行制限ではありません。そのため、小さな `LIMIT` でも大きなファイルが選択される場合があります。
 
+### グローバルインデックスの適用状況の確認
+
+物理 `EXPLAIN` は、Paimon のデータスキャンごとにグローバルインデックスの設定モード、選択された経路、計画結果を表示します。
+分散インデックスを適用した場合は、`EXPLAIN VERBOSE` と `EXPLAIN COSTS` でインデックスの詳細も確認できます。
+
+```text
+0:PaimonScanNode
+   Paimon Global Index: mode=auto, path=distributed, result=applied
+     index_type=btree, indexed_columns=[id], snapshot_id=5
+     shards=3/3, candidate_row_ids=1
+```
+
+`shards` は検証済みのシャード結果数と期待される結果数を示します。`candidate_row_ids` は分散インデックスが返した、残余述語での絞り込み前の一意な行 ID 数です。
+候補が空の場合も `applied` と表示され、候補数はゼロです。`Paimon Scan Metrics` は候補ファイルのメタデータを集計します。
+
+`sdk_managed` は `local` モードでインデックスの選択を Paimon SDK に委ねたことを示します。`skipped` は分散リクエストを発行せずにスキャンを計画したことを示します。
+`auto` モードの `fallback` は分散インデックスの処理に失敗し、SDK によるインデックス評価を無効にした状態で通常の Paimon split の計画が成功したことを示します。
+詳細な実行計画にはスキップまたはフォールバックの理由が表示されます。エラーの詳細は `TRACE VALUES EXTERNAL` で確認できます。
+
 ## Paimon からデータをロード
 
 OLAP テーブル `olap_tbl` があると仮定し、以下のようにデータを変換してロードできます。

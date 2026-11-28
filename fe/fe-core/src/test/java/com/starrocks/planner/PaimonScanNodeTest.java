@@ -22,6 +22,10 @@ import com.starrocks.connector.CatalogConnector;
 import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.paimon.PaimonGlobalIndexMode;
+import com.starrocks.connector.paimon.PaimonGlobalIndexPlanInfo;
+import com.starrocks.connector.paimon.PaimonGlobalIndexPlanInfo.Reason;
+import com.starrocks.connector.paimon.PaimonGlobalIndexPlanInfo.Result;
 import com.starrocks.connector.paimon.PaimonReaderSelector.Reader;
 import com.starrocks.connector.paimon.PaimonRemoteFileDesc;
 import com.starrocks.connector.paimon.PaimonScanRangeParams;
@@ -152,6 +156,54 @@ public class PaimonScanNodeTest {
         } finally {
             ConnectContext.remove();
         }
+    }
+
+    @Test
+    public void testExplainGlobalIndexDecisionsPerScan(@Mocked GlobalStateMgr globalStateMgr,
+                                                      @Mocked MetadataMgr metadataMgr,
+                                                      @Mocked PaimonTable table) {
+        var applied = new PaimonGlobalIndexPlanInfo(PaimonGlobalIndexMode.AUTO, Result.APPLIED, null,
+                new PaimonGlobalIndexPlanInfo.Details("btree", List.of("id"), 5, 3, 0));
+        var fallback = new PaimonGlobalIndexPlanInfo(
+                PaimonGlobalIndexMode.AUTO, Result.FALLBACK, Reason.INDEX_EVALUATION_FAILED, null);
+        List<RemoteFileInfo> indexedFiles = createRemoteFiles(new PaimonSplitsInfo(List.of(), List.of(), null, applied));
+        List<RemoteFileInfo> ordinaryFiles = createRemoteFiles(new PaimonSplitsInfo(List.of(), List.of(), null, fallback));
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState().getMetadataMgr();
+                result = metadataMgr;
+                metadataMgr.getRemoteFiles(table, (GetRemoteFilesParams) any);
+                returns(indexedFiles, ordinaryFiles);
+                times = 2;
+            }
+        };
+        TupleDescriptor indexedDesc = new TupleDescriptor(new TupleId(0));
+        indexedDesc.setTable(table);
+        TupleDescriptor ordinaryDesc = new TupleDescriptor(new TupleId(1));
+        ordinaryDesc.setTable(table);
+        PaimonScanNode indexedScan = new PaimonScanNode(new PlanNodeId(0), indexedDesc, "PaimonScanNode");
+        PaimonScanNode ordinaryScan = new PaimonScanNode(new PlanNodeId(1), ordinaryDesc, "PaimonScanNode");
+        Assertions.assertFalse(indexedScan.getVerboseExplain("", "  ").contains("Paimon Global Index:"));
+
+        indexedScan.setupScanRangeLocations(indexedDesc, null, -1);
+        ordinaryScan.setupScanRangeLocations(ordinaryDesc, null, -1);
+
+        String appliedSummary = "Paimon Global Index: mode=auto, path=distributed, result=applied";
+        String fallbackSummary = "Paimon Global Index: mode=auto, path=ordinary, result=fallback";
+        String normal = indexedScan.getExplainString("", "  ", TExplainLevel.NORMAL);
+        Assertions.assertTrue(normal.contains(appliedSummary), normal);
+        Assertions.assertFalse(normal.contains("candidate_row_ids"), normal);
+        for (String explain : List.of(indexedScan.getVerboseExplain("", "  "), indexedScan.getCostExplain("", "  "))) {
+            Assertions.assertTrue(explain.contains(appliedSummary), explain);
+            Assertions.assertTrue(explain.contains("index_type=btree, indexed_columns=[id], snapshot_id=5"), explain);
+            Assertions.assertTrue(explain.contains("shards=3/3, candidate_row_ids=0"), explain);
+            Assertions.assertTrue(explain.contains("splits=0"), explain);
+            Assertions.assertFalse(explain.contains("reason="), explain);
+        }
+        String ordinary = ordinaryScan.getVerboseExplain("", "  ");
+        Assertions.assertTrue(ordinary.contains(fallbackSummary), ordinary);
+        Assertions.assertTrue(ordinary.contains("reason=index_evaluation_failed"), ordinary);
+        Assertions.assertFalse(ordinary.contains("candidate_row_ids"), ordinary);
     }
 
     private static PaimonScanNode planScan(PaimonTable table, MetadataMgr metadataMgr, List<Split> splits) {
@@ -656,7 +708,10 @@ public class PaimonScanNodeTest {
     }
 
     private static List<RemoteFileInfo> createRemoteFiles(Split... splits) {
-        PaimonSplitsInfo splitsInfo = new PaimonSplitsInfo(List.of(), List.of(splits));
+        return createRemoteFiles(new PaimonSplitsInfo(List.of(), List.of(splits)));
+    }
+
+    private static List<RemoteFileInfo> createRemoteFiles(PaimonSplitsInfo splitsInfo) {
         return List.of(RemoteFileInfo.builder()
                 .setFiles(List.of(PaimonRemoteFileDesc.createPaimonRemoteFileDesc(splitsInfo)))
                 .build());

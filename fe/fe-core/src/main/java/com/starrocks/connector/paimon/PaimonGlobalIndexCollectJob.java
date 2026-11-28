@@ -71,7 +71,10 @@ public final class PaimonGlobalIndexCollectJob extends MetadataCollectJob {
         return this::consume;
     }
 
-    public GlobalIndexResult collect(ConnectContext caller) {
+    record CollectedIndex(GlobalIndexResult result, PaimonGlobalIndexPlanInfo.Details details) {
+    }
+
+    CollectedIndex collect(ConnectContext caller) {
         SimpleExecutor.checkInternalQueryState(caller);
         // Check policies in the user's context before creating the trusted internal task.
         TableName name = new TableName(getCatalogName(), getDbName(), getTableName());
@@ -102,7 +105,9 @@ public final class PaimonGlobalIndexCollectJob extends MetadataCollectJob {
         if (expected == 0 || received.cardinality() != expected || received.length() != expected) {
             throw new IllegalStateException("Incomplete Paimon Global Index shard results");
         }
-        return GlobalIndexResult.create(aggregate);
+        var details = new PaimonGlobalIndexPlanInfo.Details("btree", request.getIndexedColumns(),
+                request.getSnapshotId(), expected, aggregate.getLongCardinality());
+        return new CollectedIndex(GlobalIndexResult.create(aggregate), details);
     }
 
     private void consume(TResultBatch batch) {

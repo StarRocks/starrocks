@@ -48,6 +48,9 @@ import com.starrocks.connector.PointerType;
 import com.starrocks.connector.PredicateSearchKey;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.paimon.PaimonGlobalIndexCollectJob.CollectedIndex;
+import com.starrocks.connector.paimon.PaimonGlobalIndexPlanInfo.Reason;
+import com.starrocks.connector.paimon.PaimonGlobalIndexPlanInfo.Result;
 import com.starrocks.connector.statistics.ConnectorNdvEstimator;
 import com.starrocks.connector.statistics.StatisticsUtils;
 import com.starrocks.credential.CloudConfiguration;
@@ -962,10 +965,26 @@ public class PaimonMetadata implements ConnectorMetadata {
                     List.copyOf(params.getFieldNames()), params.getLimit());
             splitsInfo = paimonSplits.computeIfAbsent(splitKey, unused ->
                     planSplits(paimonTable, paimonNativeTable, params, mode, false, snapshotId, caller));
+            if (forScan && fileStore != null) {
+                splitsInfo = splitsInfo.withGlobalIndexPlanInfo(planWithoutDistributedIndex(mode, indexEnabled));
+            }
         }
         remoteFileInfo.setFiles(ImmutableList.of(PaimonRemoteFileDesc.createPaimonRemoteFileDesc(splitsInfo)));
 
         return Lists.newArrayList(remoteFileInfo);
+    }
+
+    private static PaimonGlobalIndexPlanInfo planWithoutDistributedIndex(PaimonGlobalIndexMode mode, boolean indexEnabled) {
+        if (mode == PaimonGlobalIndexMode.OFF) {
+            return new PaimonGlobalIndexPlanInfo(mode, Result.DISABLED, null, null);
+        }
+        if (!indexEnabled) {
+            return new PaimonGlobalIndexPlanInfo(mode, Result.SKIPPED, Reason.TABLE_INDEX_DISABLED, null);
+        }
+        if (mode == PaimonGlobalIndexMode.LOCAL) {
+            return new PaimonGlobalIndexPlanInfo(mode, Result.SDK_MANAGED, null, null);
+        }
+        return new PaimonGlobalIndexPlanInfo(mode, Result.SKIPPED, Reason.UNSUPPORTED_SCAN_SCOPE, null);
     }
 
     private PaimonSplitsInfo planSplits(PaimonTable paimonTable, org.apache.paimon.table.Table paimonNativeTable,
@@ -989,14 +1008,15 @@ public class PaimonMetadata implements ConnectorMetadata {
         PaimonMetricRegistry paimonMetricRegistry = new PaimonMetricRegistry();
         List<Split> splits = null;
         RuntimeException indexFailure = null;
+        CollectedIndex collectedIndex = null;
         if (evaluateIndex && paimonNativeTable instanceof FileStoreTable fileStore) {
             SimpleExecutor.checkInternalQueryState(caller);
             try {
-                GlobalIndexResult result = evaluateGlobalIndex(
+                collectedIndex = evaluateGlobalIndex(
                         paimonTable, fileStore, (PaimonScanRangeParams) params, snapshotId, caller);
-                if (result != null) {
+                if (collectedIndex != null) {
                     SimpleExecutor.checkInternalQueryState(caller);
-                    splits = planDataSplits(readBuilder, paimonMetricRegistry, result);
+                    splits = planDataSplits(readBuilder, paimonMetricRegistry, collectedIndex.result());
                 } else {
                     Tracers.record(EXTERNAL, "PaimonGlobalIndex.Result", "no supported indexed scalar predicate");
                 }
@@ -1013,7 +1033,8 @@ public class PaimonMetadata implements ConnectorMetadata {
                         paimonTable.getCatalogTableName(), e);
             }
         }
-        if (splits != null) {
+        boolean applied = splits != null;
+        if (applied) {
             Tracers.record(EXTERNAL, "PaimonGlobalIndex.Result", "applied");
         } else {
             if (indexFailure != null) {
@@ -1032,17 +1053,27 @@ public class PaimonMetadata implements ConnectorMetadata {
                 throw e;
             }
         }
+        PaimonGlobalIndexPlanInfo planInfo = null;
         if (evaluateIndex) {
             SimpleExecutor.checkInternalQueryState(caller);
+            if (applied) {
+                planInfo = new PaimonGlobalIndexPlanInfo(mode, Result.APPLIED, null, collectedIndex.details());
+            } else if (indexFailure != null) {
+                Reason reason = collectedIndex == null
+                        ? Reason.INDEX_EVALUATION_FAILED : Reason.INDEXED_SPLIT_PLANNING_FAILED;
+                planInfo = new PaimonGlobalIndexPlanInfo(mode, Result.FALLBACK, reason, null);
+            } else {
+                planInfo = new PaimonGlobalIndexPlanInfo(mode, Result.SKIPPED, Reason.NO_INDEX_REQUEST, null);
+            }
         }
         traceScanMetrics(paimonMetricRegistry, splits, paimonTable.getCatalogTableName(), predicates);
 
-        return new PaimonSplitsInfo(predicates, splits, paimonNativeTable);
+        return new PaimonSplitsInfo(predicates, splits, paimonNativeTable, planInfo);
     }
 
-    private static GlobalIndexResult evaluateGlobalIndex(PaimonTable paimonTable, FileStoreTable fileStore,
-                                                         PaimonScanRangeParams params, long snapshotId,
-                                                         ConnectContext caller) {
+    private static CollectedIndex evaluateGlobalIndex(PaimonTable paimonTable, FileStoreTable fileStore,
+                                                      PaimonScanRangeParams params, long snapshotId,
+                                                      ConnectContext caller) {
         try (Timer ignored = Tracers.watchScope(EXTERNAL, "PaimonGlobalIndex.Evaluate")) {
             PaimonGlobalIndexRequest request = PaimonGlobalIndexPlanner.request(
                     fileStore, snapshotId, params.getPredicate(), params.getColumnNames());
