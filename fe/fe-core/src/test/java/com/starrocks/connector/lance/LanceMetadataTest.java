@@ -21,6 +21,7 @@ import com.starrocks.catalog.LanceTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -33,6 +34,8 @@ import static com.starrocks.type.FloatType.DOUBLE;
 import static com.starrocks.type.FloatType.FLOAT;
 import static com.starrocks.type.IntegerType.BIGINT;
 import static com.starrocks.type.IntegerType.INT;
+import static com.starrocks.type.IntegerType.SMALLINT;
+import static com.starrocks.type.VarbinaryType.VARBINARY;
 import static com.starrocks.type.VarcharType.VARCHAR;
 
 public class LanceMetadataTest {
@@ -48,6 +51,14 @@ public class LanceMetadataTest {
         Assertions.assertEquals(VARCHAR, LanceApiConverter.parseType("string"));
         Assertions.assertEquals(DATETIME, LanceApiConverter.parseType("timestamp[us]"));
         Assertions.assertEquals(DATETIME, LanceApiConverter.parseType("timestamp[us, tz=UTC]"));
+
+        Assertions.assertEquals(SMALLINT, LanceApiConverter.parseType("uint8"));
+        Assertions.assertEquals(INT, LanceApiConverter.parseType("uint16"));
+        Assertions.assertEquals(BIGINT, LanceApiConverter.parseType("uint32"));
+        Assertions.assertEquals(TypeFactory.createUnifiedDecimalType(20, 0), LanceApiConverter.parseType("uint64"));
+        Assertions.assertEquals(VARCHAR, LanceApiConverter.parseType("large_string"));
+        Assertions.assertEquals(VARCHAR, LanceApiConverter.parseType("large_utf8"));
+        Assertions.assertEquals(VARBINARY, LanceApiConverter.parseType("large_binary"));
 
         // Nested types
         Type arrayType = LanceApiConverter.parseType("list<float32>");
