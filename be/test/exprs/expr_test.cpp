@@ -18,7 +18,10 @@
 
 #include "column/column_helper.h"
 #include "common/object_pool.h"
+#include "exprs/column_ref.h"
 #include "exprs/expr_context.h"
+#include "exprs/in_const_predicate.hpp"
+#include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {
@@ -48,6 +51,25 @@ public:
 
 private:
     bool _is_constant = true;
+};
+
+// Throws like an allocation the memory hook refuses, and records whether the memory limit was being checked.
+class BadAllocExpr final : public Expr {
+public:
+    explicit BadAllocExpr(TypeDescriptor type) : Expr(std::move(type)) {}
+
+    Expr* clone(ObjectPool* pool) const override { return pool->add(new BadAllocExpr(*this)); }
+
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext*, Chunk*) override {
+        ++evaluate_calls;
+        limit_checked = CurrentThread::is_catched();
+        throw std::bad_alloc();
+    }
+
+    bool is_constant() const override { return true; }
+
+    int evaluate_calls = 0;
+    bool limit_checked = false;
 };
 
 } // namespace
@@ -102,6 +124,50 @@ TEST(ExprTest, EvaluateConstCachesResult) {
     ASSERT_TRUE(second.ok());
     EXPECT_EQ(1, expr.evaluate_calls);
     EXPECT_EQ(first.value().get(), second.value().get());
+}
+
+// Folding a constant checks the memory limit and turns a refused allocation into an error.
+TEST(ExprTest, EvaluateConstChecksMemoryLimit) {
+    BadAllocExpr expr{TYPE_INT_DESC};
+    RuntimeState state;
+    ExprContext context(&expr);
+    ASSERT_TRUE(context.prepare(&state).ok());
+    ASSERT_TRUE(context.open(&state).ok());
+
+    StatusOr<ColumnPtr> first = Status::OK();
+    EXPECT_NO_THROW(first = expr.evaluate_const(&context));
+    EXPECT_TRUE(expr.limit_checked);
+    ASSERT_FALSE(first.ok());
+    EXPECT_TRUE(first.status().is_mem_limit_exceeded()) << first.status();
+
+    // the error is kept, the constant is not evaluated again
+    auto second = expr.evaluate_const(&context);
+    EXPECT_FALSE(second.ok());
+    EXPECT_EQ(1, expr.evaluate_calls);
+}
+
+// The values of an IN list are evaluated in open() under the memory limit too.
+TEST(ExprTest, InConstPredicateOpenChecksMemoryLimit) {
+    TExprNode node;
+    node.node_type = TExprNodeType::IN_PRED;
+    node.type = TYPE_BOOLEAN_DESC.to_thrift();
+    node.__set_opcode(TExprOpcode::FILTER_IN);
+    node.__set_child_type(TPrimitiveType::INT);
+    node.in_predicate.__set_is_not_in(false);
+
+    ObjectPool pool;
+    auto* in_pred = pool.add(new VectorizedInConstPredicate<TYPE_INT>(node));
+    in_pred->add_child(pool.add(new ColumnRef(TYPE_INT_DESC, 1)));
+    auto* value = pool.add(new BadAllocExpr(TYPE_INT_DESC));
+    in_pred->add_child(value);
+
+    RuntimeState state;
+    ExprContext context(in_pred);
+    ASSERT_TRUE(context.prepare(&state).ok());
+    Status st = Status::OK();
+    EXPECT_NO_THROW(st = context.open(&state));
+    EXPECT_TRUE(value->limit_checked);
+    EXPECT_TRUE(st.is_mem_limit_exceeded()) << st;
 }
 
 } // namespace starrocks
