@@ -46,7 +46,7 @@ TEST(GeoStorageFieldTest, rejects_comparison_predicates_and_zone_maps) {
         Slice output;
         EXPECT_TRUE(info->from_string(&output, "value").is_not_supported());
         EXPECT_THROW(info->to_string(&value), std::runtime_error);
-        EXPECT_THROW(info->size(), std::runtime_error);
+        EXPECT_EQ(sizeof(Slice), info->size());
         EXPECT_THROW(info->shallow_copy(&output, &value), std::runtime_error);
         EXPECT_THROW(info->deep_copy(&output, &value, nullptr), std::runtime_error);
         EXPECT_THROW(info->direct_copy(&output, &value), std::runtime_error);

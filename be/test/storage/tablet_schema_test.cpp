@@ -25,6 +25,8 @@
 #include "column/schema.h"
 #include "storage/tablet_schema_helper.h"
 #include "storage/tablet_schema_map.h"
+#include "storage/types.h"
+#include "types/geo_type_info.h"
 
 namespace starrocks {
 
@@ -101,6 +103,34 @@ TEST(TabletSchemaTest, compares_geo_descriptor_values) {
     TabletSchema different_crs;
     append_geo(different_crs, other_crs);
     EXPECT_NE(without_srid, different_crs);
+}
+
+TEST(TabletSchemaTest, geo_tablet_column_type_info_carries_descriptor) {
+    const GeoTypeDescriptor descriptor{GEO_LOGICAL_TYPE_GEOMETRY, GEO_EDGE_ALGORITHM_PLANAR, "EPSG:3857", 3857};
+    TabletColumn geo(STORAGE_AGGREGATE_NONE, TYPE_GEOMETRY, true, 11, 0);
+    geo.set_name("shape");
+    geo.set_geo_descriptor(descriptor);
+
+    auto type_info = get_type_info(geo);
+    ASSERT_NE(nullptr, type_info);
+    EXPECT_EQ(TYPE_GEOMETRY, type_info->type());
+    const auto* actual = get_geo_type_descriptor(type_info.get());
+    ASSERT_NE(nullptr, actual);
+    EXPECT_EQ(descriptor, *actual);
+
+    // A nested GEO child goes through the same path rather than a TYPE_NONE placeholder.
+    TabletColumn array(STORAGE_AGGREGATE_NONE, TYPE_ARRAY, true, 12, 0);
+    array.set_name("shapes");
+    array.add_sub_column(geo);
+    auto array_type_info = get_type_info(array);
+    ASSERT_NE(nullptr, array_type_info);
+    ASSERT_EQ(TYPE_ARRAY, array_type_info->type());
+    const auto& item_type_info = get_item_type_info(array_type_info.get());
+    ASSERT_NE(nullptr, item_type_info);
+    EXPECT_EQ(TYPE_GEOMETRY, item_type_info->type());
+    const auto* item_descriptor = get_geo_type_descriptor(item_type_info.get());
+    ASSERT_NE(nullptr, item_descriptor);
+    EXPECT_EQ(descriptor, *item_descriptor);
 }
 
 // NOLINTNEXTLINE
