@@ -18,11 +18,16 @@
 
 #include <memory>
 
+#include "column/binary_column.h"
 #include "column/chunk.h"
 #include "column/datum.h"
+#include "column/fixed_length_column.h"
+#include "column/nullable_column.h"
 #include "column/schema.h"
 #include "gutil/stringprintf.h"
 #include "storage/chunk_helper.h"
+#include "util/defer_op.h"
+#include "util/raw_container.h"
 
 using namespace std;
 
@@ -197,6 +202,49 @@ TEST(PrimaryKeyEncoderTest, testEncodeVarcharLimit) {
         pchunk->columns()[0]->append_datum(tmp);
         EXPECT_FALSE(PrimaryKeyEncoder::encode_exceed_limit(*sc, *pchunk, 0, n, 128));
     }
+}
+
+TEST(PrimaryKeyEncoderTest, testDeleteFileBinaryColumnSizeCheck) {
+    std::vector<Slice> strings{{"a"}, {"bb"}, {"ccc"}};
+
+    // A regular BinaryColumn is representable.
+    auto binary = BinaryColumn::create();
+    binary->append_strings(strings.data(), strings.size());
+    ASSERT_TRUE(PrimaryKeyEncoder::check_delete_file_binary_column_size(*binary).ok());
+
+    // A NullableColumn wrapping a BinaryColumn is unwrapped before the check.
+    auto nullable_data = BinaryColumn::create();
+    nullable_data->append_strings(strings.data(), strings.size());
+    auto null_col = NullColumn::create();
+    null_col->resize(strings.size());
+    auto nullable = NullableColumn::create(std::move(nullable_data), std::move(null_col));
+    ASSERT_TRUE(PrimaryKeyEncoder::check_delete_file_binary_column_size(*nullable).ok());
+
+    // LargeBinaryColumn cannot be persisted with the legacy BinaryColumn format.
+    auto large_binary = LargeBinaryColumn::create();
+    large_binary->append_strings(strings.data(), strings.size());
+    ASSERT_FALSE(PrimaryKeyEncoder::check_delete_file_binary_column_size(*large_binary).ok());
+
+#ifdef NDEBUG
+    // A BinaryColumn whose byte payload does not fit u32 is rejected.
+    // This case reserves a lot of memory and runs slowly, so it is release-only.
+    // Reserve virtual space without initializing the multi-GiB payload.
+    auto overlimit_binary = BinaryColumn::create();
+    auto& bytes = overlimit_binary->get_bytes();
+    DeferOp reset([&] { bytes.clear(); });
+    raw::make_room(&bytes, Column::MAX_CAPACITY_LIMIT);
+    bytes.resize(Column::MAX_CAPACITY_LIMIT);
+    auto overlimit_status = PrimaryKeyEncoder::check_delete_file_binary_column_size(*overlimit_binary);
+    ASSERT_FALSE(overlimit_status.ok());
+    ASSERT_TRUE(overlimit_status.is_capacity_limit_exceeded()) << overlimit_status;
+    ASSERT_NE(std::string::npos, std::string(overlimit_status.message()).find("byte payload size")) << overlimit_status;
+#endif
+
+    // Non-binary columns pass without any check.
+    auto fixed = Int32Column::create();
+    int32_t value = 1;
+    fixed->append_numbers(&value, sizeof(value));
+    ASSERT_TRUE(PrimaryKeyEncoder::check_delete_file_binary_column_size(*fixed).ok());
 }
 
 } // namespace starrocks

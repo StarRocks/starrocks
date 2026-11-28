@@ -42,6 +42,7 @@
 
 #include "column/binary_column.h"
 #include "column/chunk.h"
+#include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
 #include "gutil/endian.h"
@@ -309,6 +310,19 @@ size_t PrimaryKeyEncoder::get_encoded_fixed_size(const Schema& schema) {
         ret += TabletColumn::get_field_length_by_type(t, 0);
     }
     return ret;
+}
+
+Status PrimaryKeyEncoder::check_delete_file_binary_column_size(const Column& column) {
+    const auto* data_column = ColumnHelper::get_data_column(&column);
+    if (data_column->is_large_binary()) {
+        return Status::NotSupported("LargeBinaryColumn cannot be serialized with legacy BinaryColumn format");
+    }
+    if (!data_column->is_binary()) {
+        return Status::OK();
+    }
+
+    const auto* binary_column = down_cast<const BinaryColumn*>(data_column);
+    return binary_column->is_payload_size_representable();
 }
 
 Status PrimaryKeyEncoder::create_column(const Schema& schema, MutableColumnPtr* pcolumn, bool large_column) {
