@@ -4,6 +4,8 @@
 
 #include "storage/sstable/table_builder.h"
 
+#include <algorithm>
+
 #include "base/compression/compression_headers.h"
 #include "base/hash/crc32c.h"
 #include "base/string/slice.h"
@@ -16,8 +18,12 @@
 #include "storage/sstable/filter_block.h"
 #include "storage/sstable/filter_policy.h"
 #include "storage/sstable/format.h"
+#include "storage/sstable/key_dict.h"
 
 namespace starrocks::sstable {
+
+// Smallest data block a table with a key dictionary is cut into.
+static constexpr size_t kMinKeyDictBlockSize = 256;
 
 struct TableBuilder::Rep {
     Rep(const Options& opt, WritableFile* f)
@@ -28,6 +34,10 @@ struct TableBuilder::Rep {
               index_block(&index_block_options),
               filter_block(opt.filter_policy == nullptr ? nullptr : new FilterBlockBuilder(opt.filter_policy)) {
         index_block_options.block_restart_interval = 1;
+        if (opt.key_dict_options != nullptr && !opt.key_dict_options->layout.empty()) {
+            key_dict = opt.key_dict_options->dict;
+            sampling = key_dict == nullptr;
+        }
     }
 
     Options options;
@@ -58,6 +68,19 @@ struct TableBuilder::Rep {
     // key range of the table
     std::string start_key;
     std::string end_key;
+
+    // Dictionary the keys are stored with, if any. With a dictionary, index keys are full stored keys
+    // rather than shortened separators, so that they can be decoded.
+    std::shared_ptr<const KeyDict> key_dict;
+    std::string encoded_key;
+    uint64_t num_stored{0};
+    // Bytes of the entries as given and as stored, to scale the data block size by.
+    uint64_t logical_entry_bytes{0};
+    uint64_t stored_entry_bytes{0};
+    // The entries held back while the dictionary is not chosen yet: key and value lengths, and their bytes.
+    bool sampling{false};
+    std::vector<std::pair<uint32_t, uint32_t>> sample_sizes;
+    std::string sample_data;
 };
 
 TableBuilder::TableBuilder(const Options& options, WritableFile* file) : rep_(new Rep(options, file)) {
@@ -92,7 +115,7 @@ Status TableBuilder::Add(const Slice& key, const Slice& value) {
     RETURN_ERROR_IF_FALSE(!r->closed);
     if (!ok()) return Status::InternalError("TableBuilder has encountered a previous error");
     if (r->num_entries > 0) {
-        RETURN_ERROR_IF_FALSE(r->options.comparator->Compare(key, Slice(r->last_key)) > 0,
+        RETURN_ERROR_IF_FALSE(r->options.comparator->Compare(key, Slice(r->end_key)) > 0,
                               "Key must be greater than the previously added key according to comparator");
     } else {
         // record start key
@@ -100,10 +123,78 @@ Status TableBuilder::Add(const Slice& key, const Slice& value) {
     }
     // record end key
     r->end_key.assign(key.get_data(), key.get_size());
+    r->num_entries++;
+
+    if (r->sampling) {
+        r->sample_sizes.emplace_back(key.get_size(), value.get_size());
+        r->sample_data.append(key.get_data(), key.get_size());
+        r->sample_data.append(value.get_data(), value.get_size());
+        if (r->sample_sizes.size() >= r->options.key_dict_options->sample_entries) {
+            return ChooseKeyDict(false);
+        }
+        return Status::OK();
+    }
+    return AddStored(key, value);
+}
+
+// Choose the dictionary from the entries held back so far, then add them. A failure is final for the builder.
+Status TableBuilder::ChooseKeyDict(bool complete) {
+    Rep* r = rep_;
+    DCHECK(r->sampling);
+    const KeyDictOptions& opts = *r->options.key_dict_options;
+    KeyDictCollector collector(opts.layout, opts.max_cardinality);
+    for (const auto& seed : opts.seeds) {
+        if (seed != nullptr) {
+            collector.add_seed(*seed);
+        }
+    }
+    size_t offset = 0;
+    for (const auto& [key_size, value_size] : r->sample_sizes) {
+        if (collector.exhausted()) {
+            break;
+        }
+        collector.add(Slice(r->sample_data.data() + offset, key_size));
+        offset += key_size + value_size;
+    }
+    auto dict_or = collector.finish(complete);
+    if (!dict_or.ok()) {
+        r->status = dict_or.status();
+        return r->status;
+    }
+    r->key_dict = std::move(dict_or).value();
+    r->sampling = false;
+    offset = 0;
+    for (const auto& [key_size, value_size] : r->sample_sizes) {
+        auto st = AddStored(Slice(r->sample_data.data() + offset, key_size),
+                            Slice(r->sample_data.data() + offset + key_size, value_size));
+        if (!st.ok()) {
+            r->status = st;
+            return st;
+        }
+        offset += key_size + value_size;
+    }
+    std::vector<std::pair<uint32_t, uint32_t>>().swap(r->sample_sizes);
+    std::string().swap(r->sample_data);
+    return Status::OK();
+}
+
+Status TableBuilder::AddStored(const Slice& logical_key, const Slice& value) {
+    Rep* r = rep_;
+    Slice key = logical_key;
+    if (r->key_dict != nullptr) {
+        r->key_dict->encode(logical_key, &r->encoded_key);
+        key = Slice(r->encoded_key);
+        // The encoding preserves the order of well-formed keys; refuse to write an unsorted table otherwise.
+        RETURN_ERROR_IF_FALSE(r->num_stored == 0 || r->options.comparator->Compare(key, Slice(r->last_key)) > 0,
+                              "Dictionary encoded key must be greater than the previously added key");
+    }
+    r->num_stored++;
 
     if (r->pending_index_entry) {
         RETURN_ERROR_IF_FALSE(r->data_block.empty(), "Data block must be empty when pending index entry exists");
-        r->options.comparator->FindShortestSeparator(&r->last_key, key);
+        if (r->key_dict == nullptr) {
+            r->options.comparator->FindShortestSeparator(&r->last_key, key);
+        }
         std::string handle_encoding;
         r->pending_handle.EncodeTo(&handle_encoding);
         r->index_block.Add(r->last_key, Slice(handle_encoding));
@@ -115,11 +206,20 @@ Status TableBuilder::Add(const Slice& key, const Slice& value) {
     }
 
     r->last_key.assign(key.get_data(), key.get_size());
-    r->num_entries++;
     r->data_block.Add(key, value);
 
     const size_t estimated_block_size = r->data_block.CurrentSizeEstimate();
-    if (estimated_block_size >= r->options.block_size) {
+    size_t block_size = r->options.block_size;
+    if (r->key_dict != nullptr) {
+        // Keep about as many entries in a block as without the dictionary. A point lookup reads a whole block, and
+        // with block_size bytes of shorter entries it would read more bytes than before: shorter entries also
+        // compress less.
+        r->logical_entry_bytes += logical_key.get_size() + value.get_size();
+        r->stored_entry_bytes += key.get_size() + value.get_size();
+        block_size = std::max<size_t>(kMinKeyDictBlockSize,
+                                      r->options.block_size * r->stored_entry_bytes / r->logical_entry_bytes);
+    }
+    if (estimated_block_size >= block_size) {
         Flush();
     }
     return Status::OK();
@@ -210,6 +310,10 @@ Status TableBuilder::status() const {
 
 Status TableBuilder::Finish() {
     Rep* r = rep_;
+    if (r->sampling && ok()) {
+        // Every key is known now, so the dictionary is exact. A failure is kept in r->status.
+        (void)ChooseKeyDict(true);
+    }
     Flush();
     assert(!r->closed);
     r->closed = true;
@@ -219,6 +323,14 @@ Status TableBuilder::Finish() {
     // Write filter block
     if (ok() && r->filter_block != nullptr) {
         WriteRawBlock(r->filter_block->Finish(), kNoCompression, &filter_block_handle);
+    }
+
+    // Write key dictionary block
+    BlockHandle key_dict_block_handle;
+    if (ok() && r->key_dict != nullptr) {
+        std::string key_dict_data;
+        r->key_dict->serialize(&key_dict_data);
+        WriteRawBlock(Slice(key_dict_data), kNoCompression, &key_dict_block_handle);
     }
 
     // Write metaindex block
@@ -232,6 +344,12 @@ Status TableBuilder::Finish() {
             filter_block_handle.EncodeTo(&handle_encoding);
             meta_index_block.Add(key, handle_encoding);
         }
+        if (r->key_dict != nullptr) {
+            // Sorts after "filter.*", as the block requires.
+            std::string handle_encoding;
+            key_dict_block_handle.EncodeTo(&handle_encoding);
+            meta_index_block.Add(Slice(kKeyDictMetaBlockName), handle_encoding);
+        }
 
         // TODO(postrelease): Add stats and other meta blocks
         WriteBlock(&meta_index_block, &metaindex_block_handle);
@@ -240,7 +358,9 @@ Status TableBuilder::Finish() {
     // Write index block
     if (ok()) {
         if (r->pending_index_entry) {
-            r->options.comparator->FindShortSuccessor(&r->last_key);
+            if (r->key_dict == nullptr) {
+                r->options.comparator->FindShortSuccessor(&r->last_key);
+            }
             std::string handle_encoding;
             r->pending_handle.EncodeTo(&handle_encoding);
             r->index_block.Add(r->last_key, Slice(handle_encoding));
@@ -256,6 +376,7 @@ Status TableBuilder::Finish() {
         Footer footer;
         footer.set_metaindex_handle(metaindex_block_handle);
         footer.set_index_handle(index_block_handle);
+        footer.set_has_key_dict(r->key_dict != nullptr);
         std::string footer_encoding;
         footer.EncodeTo(&footer_encoding);
         r->status = r->file->append(footer_encoding);

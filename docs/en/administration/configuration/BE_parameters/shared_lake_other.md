@@ -1019,6 +1019,24 @@ Enable this option only after **all target CNs** support it. A normalized replic
 - Description: Whether to verify sstable block checksums when reading the cloud-native Primary Key index (point lookups and compaction merges) in a shared-data cluster. When enabled, corrupted bytes (usually from a corrupted local cache copy) deterministically fail as a Corruption error and trigger the corrupted-cache cleanup, instead of being misparsed or silently returning wrong index values. Note that the automatic cleanup of the corrupted cache additionally requires `lake_clear_corrupted_cache_data` to be enabled.
 - Introduced in: v4.1
 
+### lake_enable_pk_index_sst_dict_encoding
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to dictionary encode the low-cardinality columns of a composite primary key in the cloud-native Primary Key index sstables of a shared-data cluster. For example, with `PRIMARY KEY(id, type)` where `type` has only a few distinct values, an sstable stores `type` as a 1-byte or 2-byte code instead of repeating the value in every key, which makes the sstables smaller in storage and in the index block cache. The setting applies to the sstables written after it is enabled, and each sstable carries its own dictionary. Versions that do not support this feature cannot read these sstables, so do not enable it while the cluster may still be downgraded to such a version.
+- Introduced in: -
+
+### lake_pk_index_sst_dict_max_cardinality
+
+- Default: 256
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: A primary key column is dictionary encoded in a cloud-native Primary Key index sstable only if it has at most this many distinct values in that sstable. The maximum value is 32767. Columns with up to 127 distinct values are encoded in 1 byte, and columns with more values in 2 bytes. This item takes effect only when `lake_enable_pk_index_sst_dict_encoding` is `true`.
+- Introduced in: -
+
 ### lake_clear_corrupted_cache_meta
 
 - Default: true

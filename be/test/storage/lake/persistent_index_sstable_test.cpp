@@ -30,6 +30,9 @@
 #include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
 #include "cache/scan/shared_buffered_input_stream.h"
+#include "column/chunk.h"
+#include "column/chunk_factory.h"
+#include "column/schema.h"
 #include "common/config_primary_key_fwd.h"
 #include "common/config_starlet_fwd.h"
 #include "fs/bundle_file.h"
@@ -49,6 +52,11 @@
 #include "storage/sstable/table.h"
 #include "storage/sstable/table_builder.h"
 #include "storage/storage_metrics.h"
+#include "storage/tablet_schema.h"
+#include "storage_primitive/primary_key_encoder.h"
+#include "types/date_value.h"
+#include "types/datum.h"
+#include "types/timestamp_value.h"
 
 namespace starrocks::lake {
 
@@ -1660,6 +1668,301 @@ TEST_F(PersistentIndexSstableTest, test_multi_get_times_sampled_keys_only) {
     timed.clear();
     ASSERT_EQ(0, multi_get(absent, nullptr));
     EXPECT_TRUE(timed.empty());
+}
+
+namespace {
+
+// A composite key PRIMARY KEY(id BIGINT, type VARCHAR), as PrimaryKeyEncoder encodes it.
+std::string make_id_type_key(int64_t id, const std::string& type) {
+    uint64_t u = static_cast<uint64_t>(id) ^ (1ULL << 63);
+    std::string key;
+    for (int i = 7; i >= 0; --i) key.push_back(static_cast<char>((u >> (i * 8)) & 0xff));
+    return key + type;
+}
+
+const sstable::KeyLayout kIdTypeLayout = {{8}, {0}};
+const std::vector<std::string> kEventTypes = {"order_created", "order_paid", "order_shipped", "order_cancelled"};
+
+// Turns sstable dictionary encoding on for the scope of a test.
+struct ScopedKeyDictEncoding {
+    explicit ScopedKeyDictEncoding(bool enable) : _old(config::lake_enable_pk_index_sst_dict_encoding) {
+        config::lake_enable_pk_index_sst_dict_encoding = enable;
+    }
+    ~ScopedKeyDictEncoding() { config::lake_enable_pk_index_sst_dict_encoding = _old; }
+    bool _old;
+};
+
+} // namespace
+
+TEST_F(PersistentIndexSstableTest, test_pk_index_key_layout_matches_encoder) {
+    // PRIMARY KEY(id BIGINT, type VARCHAR, level SMALLINT, day DATE, ts DATETIME, tag VARCHAR)
+    const std::vector<LogicalType> types = {TYPE_BIGINT, TYPE_VARCHAR,  TYPE_SMALLINT,
+                                            TYPE_DATE,   TYPE_DATETIME, TYPE_VARCHAR};
+    Fields fields;
+    std::vector<ColumnId> sort_key_idxes;
+    for (size_t i = 0; i < types.size(); ++i) {
+        auto field = std::make_shared<Field>(i, fmt::format("c{}", i), types[i], false);
+        field->set_is_key(true);
+        field->set_aggregate_method(STORAGE_AGGREGATE_NONE);
+        field->set_uid(i);
+        fields.emplace_back(std::move(field));
+        sort_key_idxes.push_back(i);
+    }
+    Schema schema(std::move(fields), PRIMARY_KEYS, sort_key_idxes);
+    const auto layout = pk_index_key_layout(schema);
+    ASSERT_EQ(types.size(), layout.size());
+    const std::vector<uint32_t> expected_widths = {8, 0, 2, 4, 8, 0};
+    for (size_t i = 0; i < layout.size(); ++i) {
+        ASSERT_EQ(expected_widths[i], layout[i].fixed_width) << i;
+    }
+
+    // Encode keys with the real encoder: a layout that disagreed with it would cut the keys in the wrong places.
+    const std::vector<std::string> type_values = {"login", std::string("pay\0ment", 8), "logout"};
+    const int n = 3000;
+    auto chunk = ChunkFactory::new_chunk(schema, n);
+    for (int i = 0; i < n; ++i) {
+        Datum id, type, level, day, ts, tag;
+        id.set_int64(i);
+        type.set_slice(Slice(type_values[i % 3]));
+        level.set_int16(static_cast<int16_t>(i % 4));
+        day.set_date(DateValue::create(2026, 1 + i % 2, 1));
+        ts.set_timestamp(TimestampValue::create(2026, 11, 24, i % 24, (i / 24) % 60, i % 60, 0));
+        const std::string tag_value = fmt::format("tag_{}", i % 5);
+        tag.set_slice(Slice(tag_value));
+        chunk->columns()[0]->as_mutable_ptr()->append_datum(id);
+        chunk->columns()[1]->as_mutable_ptr()->append_datum(type);
+        chunk->columns()[2]->as_mutable_ptr()->append_datum(level);
+        chunk->columns()[3]->as_mutable_ptr()->append_datum(day);
+        chunk->columns()[4]->as_mutable_ptr()->append_datum(ts);
+        chunk->columns()[5]->as_mutable_ptr()->append_datum(tag);
+    }
+    MutableColumnPtr encoded;
+    ASSERT_OK(PrimaryKeyEncoder::create_column(schema, &encoded, PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2));
+    PrimaryKeyEncoder::encode(schema, *chunk, 0, n, encoded.get(), PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2);
+    std::vector<std::string> keys;
+    for (int i = 0; i < n; ++i) {
+        keys.push_back(encoded->get(i).get_slice().to_string());
+    }
+    std::sort(keys.begin(), keys.end());
+
+    sstable::KeyDictCollector collector(layout, 256);
+    for (const auto& key : keys) {
+        collector.add(Slice(key));
+    }
+    ASSIGN_OR_ABORT(auto dict, collector.finish(true));
+    ASSERT_NE(nullptr, dict);
+    // type, level, day and tag; ts has too many values.
+    std::vector<uint32_t> dict_columns;
+    for (const auto& column : dict->columns()) {
+        dict_columns.push_back(column.column);
+    }
+    ASSERT_EQ(std::vector<uint32_t>({1, 2, 3, 5}), dict_columns);
+    std::string middle_type;
+    encoding_utils::encode_slice(Slice(type_values[1]), &middle_type, false);
+    ASSERT_TRUE(std::binary_search(dict->columns()[0].values.begin(), dict->columns()[0].values.end(), middle_type));
+    ASSERT_EQ(3, dict->columns()[0].values.size());
+    ASSERT_EQ(5, dict->columns()[3].values.size());
+
+    std::string stored;
+    std::string prev;
+    std::string decoded;
+    for (const auto& key : keys) {
+        dict->encode(Slice(key), &stored);
+        ASSERT_LT(stored.size(), key.size());
+        ASSERT_LT(prev, stored);
+        prev = stored;
+        ASSERT_OK(dict->decode(Slice(stored), &decoded));
+        ASSERT_EQ(key, decoded);
+    }
+
+    // A single-column key has nothing to share.
+    Fields single;
+    auto field = std::make_shared<Field>(0, "c0", TYPE_VARCHAR, false);
+    field->set_is_key(true);
+    single.emplace_back(std::move(field));
+    ASSERT_TRUE(pk_index_key_layout(Schema(std::move(single), PRIMARY_KEYS, {0})).empty());
+}
+
+TEST_F(PersistentIndexSstableTest, test_pk_index_key_layout_from_tablet_schema) {
+    TabletSchemaPB schema_pb;
+    schema_pb.set_keys_type(PRIMARY_KEYS);
+    schema_pb.set_num_short_key_columns(2);
+    auto add_column = [&](const std::string& name, const std::string& type, bool is_key) {
+        auto* column = schema_pb.add_column();
+        column->set_unique_id(schema_pb.column_size());
+        column->set_name(name);
+        column->set_type(type);
+        column->set_is_key(is_key);
+        column->set_is_nullable(false);
+        column->set_length(type == "VARCHAR" ? 64 : 8);
+        if (!is_key) column->set_aggregation("REPLACE");
+    };
+    add_column("id", "BIGINT", true);
+    add_column("type", "VARCHAR", true);
+    add_column("v", "INT", false);
+    const auto layout = pk_index_key_layout(TabletSchema::create(schema_pb));
+    ASSERT_EQ(2, layout.size());
+    ASSERT_EQ(8, layout[0].fixed_width);
+    ASSERT_EQ(0, layout[1].fixed_width);
+
+    // Off by default: no options, so builders write sstables exactly as before.
+    ASSERT_EQ(nullptr, pk_index_key_dict_options(layout));
+    ScopedKeyDictEncoding enable(true);
+    auto options = pk_index_key_dict_options(layout);
+    ASSERT_NE(nullptr, options);
+    ASSERT_EQ(static_cast<uint32_t>(config::lake_pk_index_sst_dict_max_cardinality), options->max_cardinality);
+    ASSERT_EQ(nullptr, pk_index_key_dict_options({}));
+}
+
+TEST_F(PersistentIndexSstableTest, test_build_sstable_with_key_dict) {
+    phmap::btree_map<std::string, IndexValueWithVer, std::less<>> map;
+    for (int64_t id = 0; id < 5000; ++id) {
+        map.emplace(make_id_type_key(id * 3, kEventTypes[id % kEventTypes.size()]),
+                    std::make_pair(100 + id % 7, IndexValue(static_cast<uint64_t>(id))));
+    }
+    auto build = [&](const std::string& filename, std::unique_ptr<PersistentIndexSstable>* sst) {
+        ASSIGN_OR_ABORT(auto file, fs::new_writable_file(lake::join_path(kTestDir, filename)));
+        uint64_t filesize = 0;
+        PersistentIndexSstableRangePB range_pb;
+        ASSERT_OK(PersistentIndexSstable::build_sstable(map, file.get(), &filesize, &range_pb, kIdTypeLayout));
+        ASSERT_OK(file->close());
+        ASSERT_EQ(map.begin()->first, range_pb.start_key());
+        ASSERT_EQ(map.rbegin()->first, range_pb.end_key());
+        PersistentIndexSstablePB sstable_pb;
+        sstable_pb.set_filename(filename);
+        sstable_pb.set_filesize(filesize);
+        sstable_pb.mutable_range()->CopyFrom(range_pb);
+        ASSIGN_OR_ABORT(auto read_file, fs::new_random_access_file(lake::join_path(kTestDir, filename)));
+        *sst = std::make_unique<PersistentIndexSstable>();
+        ASSERT_OK((*sst)->init(std::move(read_file), sstable_pb, nullptr));
+    };
+    std::unique_ptr<PersistentIndexSstable> plain;
+    build("test_build_sstable_without_key_dict.sst", &plain);
+    ASSERT_EQ(nullptr, plain->key_dict());
+
+    ScopedKeyDictEncoding enable(true);
+    std::unique_ptr<PersistentIndexSstable> sst;
+    build("test_build_sstable_with_key_dict.sst", &sst);
+    ASSERT_NE(nullptr, sst->key_dict());
+    ASSERT_EQ(1, sst->key_dict()->columns().size());
+    ASSERT_EQ(kEventTypes.size(), sst->key_dict()->columns()[0].values.size());
+    ASSERT_LT(sst->sstable_pb().filesize(), plain->sstable_pb().filesize());
+
+    // Every key is found with its value, and keys the sstable does not have, including ones whose type is
+    // not in its dictionary, are not.
+    std::vector<std::string> keys_str;
+    for (int64_t id = 0; id < 5000; ++id) {
+        keys_str.push_back(make_id_type_key(id * 3, kEventTypes[id % kEventTypes.size()]));
+        keys_str.push_back(make_id_type_key(id * 3 + 1, kEventTypes[id % kEventTypes.size()]));
+        keys_str.push_back(make_id_type_key(id * 3, "order_refunded"));
+    }
+    std::vector<Slice> keys(keys_str.begin(), keys_str.end());
+    KeyIndexSet key_indexes;
+    for (size_t i = 0; i < keys.size(); ++i) {
+        key_indexes.insert(i);
+    }
+    for (int64_t version : {int64_t(-1), int64_t(100)}) {
+        std::vector<IndexValue> values(keys.size(), IndexValue(NullIndexValue));
+        KeyIndexSet found;
+        ASSERT_OK(sst->multi_get(keys.data(), key_indexes, version, values.data(), &found));
+        for (size_t i = 0; i < keys.size(); ++i) {
+            const int64_t id = static_cast<int64_t>(i / 3);
+            const bool present = i % 3 == 0 && (version < 0 || 100 + id % 7 == version);
+            ASSERT_EQ(present, found.count(i) > 0) << i;
+            if (present) {
+                ASSERT_EQ(IndexValue(static_cast<uint64_t>(id)), values[i]);
+            }
+        }
+    }
+
+    // Iterators hand out the keys as they were added.
+    sstable::ReadOptions read_options;
+    std::unique_ptr<sstable::Iterator> iter(sst->new_iterator(read_options));
+    auto it = map.begin();
+    for (iter->SeekToFirst(); iter->Valid(); iter->Next(), ++it) {
+        ASSERT_EQ(it->first, iter->key().to_string());
+    }
+    ASSERT_OK(iter->status());
+    ASSERT_TRUE(it == map.end());
+
+    std::vector<std::string> samples;
+    ASSERT_OK(sst->sample_data_keys(&samples, Slice(), Slice(), 10));
+    ASSERT_FALSE(samples.empty());
+    for (const auto& sample : samples) {
+        ASSERT_TRUE(map.find(sample) != map.end());
+    }
+}
+
+TEST_F(PersistentIndexSstableTest, test_stream_and_tombstone_builders_with_key_dict) {
+    ScopedKeyDictEncoding enable(true);
+    // More keys than a builder samples before it chooses the dictionary.
+    const int n = 40000;
+    std::vector<std::string> keys;
+    for (int64_t id = 0; id < n / 4; ++id) {
+        for (const auto& type : kEventTypes) {
+            keys.push_back(make_id_type_key(id, type));
+        }
+    }
+    std::sort(keys.begin(), keys.end());
+
+    const std::string filename = "test_stream_builder_with_key_dict.sst";
+    ASSIGN_OR_ABORT(auto file, fs::new_writable_file(lake::join_path(kTestDir, filename)));
+    PersistentIndexSstableStreamBuilder builder(std::move(file), "", kIdTypeLayout);
+    for (const auto& key : keys) {
+        ASSERT_OK(builder.add(Slice(key)));
+    }
+    uint64_t file_size = 0;
+    ASSERT_OK(builder.finish(&file_size));
+    ASSERT_EQ(keys.size(), builder.num_entries());
+    ASSERT_EQ(keys.front(), builder.key_range().first.to_string());
+    ASSERT_EQ(keys.back(), builder.key_range().second.to_string());
+
+    PersistentIndexSstablePB sstable_pb;
+    sstable_pb.set_filename(filename);
+    sstable_pb.set_filesize(file_size);
+    sstable_pb.set_shared_rssid(9);
+    sstable_pb.set_shared_version(5);
+    ASSIGN_OR_ABORT(auto read_file, fs::new_random_access_file(lake::join_path(kTestDir, filename)));
+    PersistentIndexSstable sst;
+    ASSERT_OK(sst.init(std::move(read_file), sstable_pb, nullptr));
+    ASSERT_NE(nullptr, sst.key_dict());
+    std::vector<Slice> slices(keys.begin(), keys.end());
+    KeyIndexSet key_indexes;
+    for (size_t i = 0; i < slices.size(); ++i) {
+        key_indexes.insert(i);
+    }
+    std::vector<IndexValue> values(slices.size(), IndexValue(NullIndexValue));
+    KeyIndexSet found;
+    ASSERT_OK(sst.multi_get(slices.data(), key_indexes, 5, values.data(), &found));
+    ASSERT_EQ(key_indexes, found);
+    for (size_t i = 0; i < slices.size(); ++i) {
+        ASSERT_EQ(IndexValue((uint64_t(9) << 32) | i), values[i]) << i;
+    }
+
+    // A tombstone sstable over the same keys.
+    const std::string tomb_filename = "test_tombstone_with_key_dict.sst";
+    ASSIGN_OR_ABORT(auto tomb_file, fs::new_writable_file(lake::join_path(kTestDir, tomb_filename)));
+    uint64_t tomb_size = 0;
+    PersistentIndexSstableRangePB range_pb;
+    ASSERT_OK(PersistentIndexSstable::build_tombstone_sstable(slices.data(), slices.size(), 7, tomb_file.get(),
+                                                              &tomb_size, &range_pb, kIdTypeLayout));
+    ASSERT_OK(tomb_file->close());
+    ASSERT_EQ(keys.front(), range_pb.start_key());
+    ASSERT_EQ(keys.back(), range_pb.end_key());
+    PersistentIndexSstablePB tomb_pb;
+    tomb_pb.set_filename(tomb_filename);
+    tomb_pb.set_filesize(tomb_size);
+    ASSIGN_OR_ABORT(auto tomb_read_file, fs::new_random_access_file(lake::join_path(kTestDir, tomb_filename)));
+    PersistentIndexSstable tomb;
+    ASSERT_OK(tomb.init(std::move(tomb_read_file), tomb_pb, nullptr));
+    ASSERT_NE(nullptr, tomb.key_dict());
+    std::vector<IndexValue> tomb_values(slices.size(), IndexValue(0));
+    KeyIndexSet tomb_found;
+    ASSERT_OK(tomb.multi_get(slices.data(), key_indexes, 7, tomb_values.data(), &tomb_found));
+    ASSERT_EQ(key_indexes, tomb_found);
+    for (const auto& value : tomb_values) {
+        ASSERT_EQ(IndexValue(NullIndexValue), value);
+    }
 }
 
 } // namespace starrocks::lake

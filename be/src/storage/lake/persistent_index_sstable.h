@@ -24,12 +24,14 @@
 #include "storage/lake/types_fwd.h"
 #include "storage/persistent_index.h"
 #include "storage/sstable/filter_policy.h"
+#include "storage/sstable/key_dict.h"
 #include "storage/sstable/table.h"
 #include "storage/storage_engine.h"
 
 namespace starrocks {
 
 class Cache;
+class Schema;
 class WritableFile;
 class PersistentIndexSstablePB;
 
@@ -42,6 +44,18 @@ namespace lake {
 // <version, IndexValue>
 using IndexValueWithVer = std::pair<int64_t, IndexValue>;
 class PersistentIndexBlockCache;
+
+// Layout of the encoded primary keys of |pkey_schema|, the primary key columns as PrimaryKeyEncoder sees them, for
+// dictionary encoding the keys of index sstables (see sstable/key_dict.h). Empty when the key has a single
+// column, which a dictionary cannot shrink, or a column whose layout is unknown.
+sstable::KeyLayout pk_index_key_layout(const Schema& pkey_schema);
+sstable::KeyLayout pk_index_key_layout(const TabletSchemaCSPtr& tablet_schema);
+
+// Options that make an index sstable builder dictionary encode keys laid out as |layout|, choosing each
+// sstable's dictionary from its leading entries and |seeds|. Null when config::lake_enable_pk_index_sst_dict_encoding
+// is off or |layout| is empty.
+std::shared_ptr<const sstable::KeyDictOptions> pk_index_key_dict_options(
+        const sstable::KeyLayout& layout, std::vector<std::shared_ptr<const sstable::KeyDict>> seeds = {});
 
 // Drop the local cache copy of `path` so subsequent reads go to remote storage.
 // Gated by config::lake_clear_corrupted_cache_data; no-op outside shared-data mode.
@@ -56,8 +70,10 @@ public:
                 bool need_filter = true, DelVectorPtr delvec = nullptr, const TabletMetadataPtr& metadata = nullptr,
                 TabletManager* tablet_mgr = nullptr);
 
+    // |key_layout|: layout of the keys, to dictionary encode them when that is enabled; see pk_index_key_layout().
     static Status build_sstable(const phmap::btree_map<std::string, IndexValueWithVer, std::less<>>& map,
-                                WritableFile* wf, uint64_t* filesz, PersistentIndexSstableRangePB* range_pb);
+                                WritableFile* wf, uint64_t* filesz, PersistentIndexSstableRangePB* range_pb,
+                                const sstable::KeyLayout& key_layout = {});
 
     // Build an sstable that contains only tombstone entries (NullIndexValue) for the given keys, all at
     // |version|. Used to apply a large pure-delete without accumulating tombstones in the memtable and
@@ -65,7 +81,8 @@ public:
     // by TableBuilder. Each entry is encoded exactly like a memtable-flushed tombstone
     // (rssid == rowid == UINT32_MAX), so reads and compaction treat it identically.
     static Status build_tombstone_sstable(const Slice* sorted_keys, size_t n, int64_t version, WritableFile* wf,
-                                          uint64_t* filesz, PersistentIndexSstableRangePB* range_pb);
+                                          uint64_t* filesz, PersistentIndexSstableRangePB* range_pb,
+                                          const sstable::KeyLayout& key_layout = {});
 
     // multi_get can get multi keys at onces
     // |keys| : Address point to first element of key array.
@@ -73,12 +90,17 @@ public:
     // |version| : when < 0, means we want the latest version.
     // |values| : result array of get, should have some count as keys.
     // |found_key_indexes| : the index of key array that we found, it should be the subset of key_indexes_info
+    // |key_encode_cache| : optional; when the sstable dictionary encodes its keys, the stored forms of |keys| are
+    //                      kept there and reused by the other sstables of the same lookup with the same dictionary.
     Status multi_get(const Slice* keys, const KeyIndexSet& key_indexes, int64_t version, IndexValue* values,
-                     KeyIndexSet* found_key_indexes) const;
+                     KeyIndexSet* found_key_indexes, sstable::KeyEncodeCache* key_encode_cache = nullptr) const;
 
     sstable::Iterator* new_iterator(const sstable::ReadOptions& options) { return _sst->NewIterator(options); }
 
     const PersistentIndexSstablePB& sstable_pb() const { return _sstable_pb; }
+
+    // Dictionary the sstable's keys are stored with, or null. See sstable::Table::key_dict().
+    std::shared_ptr<const sstable::KeyDict> key_dict() const;
 
     // Full path of the underlying sstable file. Only valid after a successful init().
     std::string filename() const { return _rf->filename(); }
@@ -136,7 +158,9 @@ private:
 
 class PersistentIndexSstableStreamBuilder {
 public:
-    explicit PersistentIndexSstableStreamBuilder(std::unique_ptr<WritableFile> wf, std::string encryption_meta);
+    // |key_layout|: layout of the keys, to dictionary encode them when that is enabled; see pk_index_key_layout().
+    explicit PersistentIndexSstableStreamBuilder(std::unique_ptr<WritableFile> wf, std::string encryption_meta,
+                                                 const sstable::KeyLayout& key_layout = {});
 
     Status add(const Slice& key);
     Status finish(uint64_t* file_size = nullptr);

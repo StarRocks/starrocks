@@ -22,6 +22,7 @@
 #include "fs/remote_read_context.h"
 #include "storage/lake/types_fwd.h"
 #include "storage/persistent_index.h"
+#include "storage/sstable/key_dict.h"
 
 namespace starrocks::lake {
 
@@ -93,6 +94,10 @@ public:
 
     std::unique_ptr<PersistentIndexSstable> release_sstable();
 
+    // Layout of the keys, so that the flushed sstable can dictionary encode them (see pk_index_key_layout()).
+    // Set before the memtable is flushed.
+    void set_key_layout(std::shared_ptr<const sstable::KeyLayout> key_layout) { _key_layout = std::move(key_layout); }
+
     // Remote read context of an async flush (run()), which runs on a thread of its own. Set before submitting.
     void set_flush_remote_read(const RemoteReadContext& ctx) { _flush_remote_read = ctx; }
 
@@ -126,6 +131,7 @@ private:
     mutable std::mutex _flush_mutex;
     std::condition_variable _flush_cv;
     RemoteReadContext _flush_remote_read;
+    std::shared_ptr<const sstable::KeyLayout> _key_layout;
 };
 
 } // namespace starrocks::lake

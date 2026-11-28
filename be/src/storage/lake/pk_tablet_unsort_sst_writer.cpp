@@ -344,6 +344,9 @@ StatusOr<std::pair<FileInfo, PersistentIndexSstableRangePB>> PkTabletUnsortSSTWr
     filter_policy.reset(const_cast<sstable::FilterPolicy*>(sstable::NewBloomFilterPolicy(10)));
     sstable::Options options;
     options.filter_policy = filter_policy.get();
+    if (config::lake_enable_pk_index_sst_dict_encoding) {
+        options.key_dict_options = pk_index_key_dict_options(pk_index_key_layout(_tablet_schema_ptr));
+    }
     sstable::TableBuilder builder(options, _wf.get());
     if (_intermediate_ssts.empty()) {
         // Whole segment fit in memory: write the sorted map directly. Keys are added in encoded-PK

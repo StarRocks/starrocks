@@ -27,6 +27,7 @@
 #include "gen_cpp/types.pb.h"
 #include "io/input_stream.h"
 #include "platform/key_cache.h"
+#include "storage/chunk_helper.h"
 #include "storage/lake/lake_delvec_loader.h"
 #include "storage/lake/utils.h"
 #include "storage/sstable/comparator.h"
@@ -47,6 +48,88 @@ namespace {
 io::IoStatsSnapshot take_sstable_io_snapshot(RandomAccessFile* rf) {
     auto stream = rf->stream();
     return stream ? stream->get_io_stats_snapshot() : io::IoStatsSnapshot{};
+}
+
+} // namespace
+
+sstable::KeyLayout pk_index_key_layout(const Schema& pkey_schema) {
+    const size_t num_columns = pkey_schema.num_key_fields();
+    if (num_columns < 2) {
+        return {};
+    }
+    sstable::KeyLayout layout(num_columns);
+    for (size_t i = 0; i < num_columns; ++i) {
+        // Widths as PrimaryKeyEncoder::encode writes the column of a composite key.
+        switch (pkey_schema.field(i)->type()->type()) {
+        case TYPE_BOOLEAN:
+        case TYPE_TINYINT:
+            layout[i].fixed_width = 1;
+            break;
+        case TYPE_SMALLINT:
+            layout[i].fixed_width = 2;
+            break;
+        case TYPE_INT:
+        case TYPE_DATE:
+            layout[i].fixed_width = 4;
+            break;
+        case TYPE_BIGINT:
+        case TYPE_DATETIME:
+            layout[i].fixed_width = 8;
+            break;
+        case TYPE_LARGEINT:
+            layout[i].fixed_width = 16;
+            break;
+        case TYPE_VARCHAR:
+            layout[i].fixed_width = 0;
+            break;
+        default:
+            return {};
+        }
+    }
+    return layout;
+}
+
+sstable::KeyLayout pk_index_key_layout(const TabletSchemaCSPtr& tablet_schema) {
+    std::vector<ColumnId> pk_columns(tablet_schema->num_key_columns());
+    for (size_t i = 0; i < pk_columns.size(); ++i) {
+        pk_columns[i] = static_cast<ColumnId>(i);
+    }
+    return pk_index_key_layout(ChunkHelper::convert_schema(tablet_schema, pk_columns));
+}
+
+std::shared_ptr<const sstable::KeyDictOptions> pk_index_key_dict_options(
+        const sstable::KeyLayout& layout, std::vector<std::shared_ptr<const sstable::KeyDict>> seeds) {
+    if (!config::lake_enable_pk_index_sst_dict_encoding || layout.empty() ||
+        config::lake_pk_index_sst_dict_max_cardinality <= 0) {
+        return nullptr;
+    }
+    auto options = std::make_shared<sstable::KeyDictOptions>();
+    options->layout = layout;
+    options->max_cardinality = static_cast<uint32_t>(config::lake_pk_index_sst_dict_max_cardinality);
+    options->seeds = std::move(seeds);
+    return options;
+}
+
+namespace {
+
+// Options with the dictionary chosen from all the keys a builder is about to be given, so that it neither
+// samples nor holds entries back. |add_keys| feeds the keys, in order, to the collector it is passed.
+template <typename AddKeys>
+StatusOr<std::shared_ptr<const sstable::KeyDictOptions>> exact_key_dict_options(const sstable::KeyLayout& layout,
+                                                                                AddKeys&& add_keys) {
+    auto options = pk_index_key_dict_options(layout);
+    if (options == nullptr) {
+        return nullptr;
+    }
+    sstable::KeyDictCollector collector(options->layout, options->max_cardinality);
+    add_keys(&collector);
+    ASSIGN_OR_RETURN(auto dict, collector.finish(true));
+    if (dict == nullptr) {
+        return nullptr;
+    }
+    auto exact = std::make_shared<sstable::KeyDictOptions>(*options);
+    exact->dict = std::move(dict);
+    return exact;
 }
 
 } // namespace
@@ -138,11 +221,21 @@ Status PersistentIndexSstable::init(std::unique_ptr<RandomAccessFile> rf, const 
 
 Status PersistentIndexSstable::build_sstable(const phmap::btree_map<std::string, IndexValueWithVer, std::less<>>& map,
                                              WritableFile* wf, uint64_t* filesz,
-                                             PersistentIndexSstableRangePB* range_pb) {
+                                             PersistentIndexSstableRangePB* range_pb,
+                                             const sstable::KeyLayout& key_layout) {
     std::unique_ptr<sstable::FilterPolicy> filter_policy;
     filter_policy.reset(const_cast<sstable::FilterPolicy*>(sstable::NewBloomFilterPolicy(10)));
     sstable::Options options;
     options.filter_policy = filter_policy.get();
+    ASSIGN_OR_RETURN(options.key_dict_options,
+                     exact_key_dict_options(key_layout, [&](sstable::KeyDictCollector* collector) {
+                         for (const auto& entry : map) {
+                             if (collector->exhausted()) {
+                                 break;
+                             }
+                             collector->add(Slice(entry.first));
+                         }
+                     }));
     sstable::TableBuilder builder(options, wf);
     for (const auto& [k, v] : map) {
         IndexValuesWithVerPB index_value_pb;
@@ -168,11 +261,18 @@ Status PersistentIndexSstable::build_sstable(const phmap::btree_map<std::string,
 
 Status PersistentIndexSstable::build_tombstone_sstable(const Slice* sorted_keys, size_t n, int64_t version,
                                                        WritableFile* wf, uint64_t* filesz,
-                                                       PersistentIndexSstableRangePB* range_pb) {
+                                                       PersistentIndexSstableRangePB* range_pb,
+                                                       const sstable::KeyLayout& key_layout) {
     std::unique_ptr<sstable::FilterPolicy> filter_policy;
     filter_policy.reset(const_cast<sstable::FilterPolicy*>(sstable::NewBloomFilterPolicy(10)));
     sstable::Options options;
     options.filter_policy = filter_policy.get();
+    ASSIGN_OR_RETURN(options.key_dict_options,
+                     exact_key_dict_options(key_layout, [&](sstable::KeyDictCollector* collector) {
+                         for (size_t i = 0; i < n && !collector->exhausted(); ++i) {
+                             collector->add(sorted_keys[i]);
+                         }
+                     }));
     sstable::TableBuilder builder(options, wf);
     // The tombstone value is identical for every key (|version| + the NullIndexValue split), so serialize
     // it once and reuse the same bytes for every Add. Over a large delete this avoids a per-key protobuf
@@ -210,11 +310,13 @@ Status PersistentIndexSstable::build_tombstone_sstable(const Slice* sorted_keys,
 }
 
 Status PersistentIndexSstable::multi_get(const Slice* keys, const KeyIndexSet& key_indexes, int64_t version,
-                                         IndexValue* values, KeyIndexSet* found_key_indexes) const {
+                                         IndexValue* values, KeyIndexSet* found_key_indexes,
+                                         sstable::KeyEncodeCache* key_encode_cache) const {
     std::vector<std::string> index_value_with_vers(key_indexes.size());
     sstable::ReadIOStat stat;
     sstable::ReadOptions options;
     options.stat = &stat;
+    options.key_encode_cache = key_encode_cache;
     // Catch corrupted data blocks as Corruption (instead of silently returning wrong
     // index values) so the drop-cache-and-retry below can heal a bad local cache.
     options.verify_checksums = config::lake_pk_index_sst_verify_checksum;
@@ -339,6 +441,10 @@ Status PersistentIndexSstable::multi_get(const Slice* keys, const KeyIndexSet& k
     return Status::OK();
 }
 
+std::shared_ptr<const sstable::KeyDict> PersistentIndexSstable::key_dict() const {
+    return (_sst != nullptr) ? _sst->key_dict() : nullptr;
+}
+
 size_t PersistentIndexSstable::index_block_memory_usage() const {
     return (_sst != nullptr) ? _sst->index_block_memory_usage() : 0;
 }
@@ -414,11 +520,14 @@ StatusOr<std::unique_ptr<RandomAccessFile>> PersistentIndexSstable::open_sstable
 }
 
 PersistentIndexSstableStreamBuilder::PersistentIndexSstableStreamBuilder(std::unique_ptr<WritableFile> wf,
-                                                                         std::string encryption_meta)
+                                                                         std::string encryption_meta,
+                                                                         const sstable::KeyLayout& key_layout)
         : _wf(std::move(wf)), _encryption_meta(std::move(encryption_meta)) {
     _filter_policy.reset(const_cast<sstable::FilterPolicy*>(sstable::NewBloomFilterPolicy(10)));
     sstable::Options options;
     options.filter_policy = _filter_policy.get();
+    // The keys stream in, so the dictionary is chosen from the leading ones.
+    options.key_dict_options = pk_index_key_dict_options(key_layout);
     _table_builder = std::make_unique<sstable::TableBuilder>(options, _wf.get());
 }
 

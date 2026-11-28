@@ -36,8 +36,9 @@ void Footer::EncodeTo(std::string* dst) const {
     metaindex_handle_.EncodeTo(dst);
     index_handle_.EncodeTo(dst);
     dst->resize(2 * BlockHandle::kMaxEncodedLength); // Padding
-    PutFixed32(dst, static_cast<uint32_t>(kTableMagicNumber & 0xffffffffu));
-    PutFixed32(dst, static_cast<uint32_t>(kTableMagicNumber >> 32));
+    const uint64_t magic = has_key_dict_ ? kKeyDictTableMagicNumber : kTableMagicNumber;
+    PutFixed32(dst, static_cast<uint32_t>(magic & 0xffffffffu));
+    PutFixed32(dst, static_cast<uint32_t>(magic >> 32));
     assert(dst->size() == original_size + kEncodedLength);
     (void)original_size; // Disable unused variable warning.
 }
@@ -47,9 +48,10 @@ Status Footer::DecodeFrom(Slice* input) {
     const uint32_t magic_lo = DecodeFixed32(magic_ptr);
     const uint32_t magic_hi = DecodeFixed32(magic_ptr + 4);
     const uint64_t magic = ((static_cast<uint64_t>(magic_hi) << 32) | (static_cast<uint64_t>(magic_lo)));
-    if (magic != kTableMagicNumber) {
+    if (magic != kTableMagicNumber && magic != kKeyDictTableMagicNumber) {
         return Status::Corruption("not an sstable (bad magic number)");
     }
+    has_key_dict_ = magic == kKeyDictTableMagicNumber;
 
     Status result = metaindex_handle_.DecodeFrom(input);
     if (result.ok()) {

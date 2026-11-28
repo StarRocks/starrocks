@@ -18,6 +18,7 @@
 
 #include "column/chunk.h"
 #include "column/serde/column_array_serde.h"
+#include "common/config_primary_key_fwd.h"
 #include "common/config_rowset_fwd.h"
 #include "fs/bundle_file.h"
 #include "fs/fs_util.h"
@@ -86,7 +87,12 @@ Status PkTabletSSTWriter::reset_sst_writer(const std::shared_ptr<LocationProvide
         ASSIGN_OR_RETURN(
                 sst_wf, fs::new_writable_file(wopts, _tablet_mgr->sst_location(_tablet_id, gen_sst_filename(_txn_id))));
     }
-    _pk_sst_builder = std::make_unique<PersistentIndexSstableStreamBuilder>(std::move(sst_wf), encryption_meta);
+    sstable::KeyLayout key_layout;
+    if (config::lake_enable_pk_index_sst_dict_encoding) {
+        key_layout = pk_index_key_layout(_tablet_schema_ptr);
+    }
+    _pk_sst_builder =
+            std::make_unique<PersistentIndexSstableStreamBuilder>(std::move(sst_wf), encryption_meta, key_layout);
     return Status::OK();
 }
 

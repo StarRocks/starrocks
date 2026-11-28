@@ -221,6 +221,7 @@ Status KeyValueMerger::create_table_builder() {
     std::unique_ptr<sstable::FilterPolicy> filter_policy;
     filter_policy.reset(const_cast<sstable::FilterPolicy*>(sstable::NewBloomFilterPolicy(10)));
     options.filter_policy = filter_policy.get();
+    options.key_dict_options = _key_dict_options;
     std::unique_ptr<sstable::TableBuilder> table_builder = std::make_unique<sstable::TableBuilder>(options, wf.get());
     _output_builders.emplace_back(TableBuilderWrapper{filename, encryption_meta, std::move(wf),
                                                       std::move(filter_policy), std::move(table_builder)});

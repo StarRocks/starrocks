@@ -107,6 +107,7 @@ void LakePersistentIndex::_reset_index_state() {
     _publish_sst_flush_bytes = 0;
     _publish_version = 0;
     _key_size = 0;
+    _key_layout.reset();
 }
 
 StatusOr<std::vector<PersistentIndexSstableUniquePtr>> LakePersistentIndex::_open_sstables_parallel(
@@ -335,6 +336,7 @@ Status LakePersistentIndex::sync_flush_all_memtables(int64_t wait_timeout_us) {
         RETURN_IF_ERROR(merge_sstable_into_fileset(sstable));
         const uint64_t next_max_rss_rowid = _memtable->max_rss_rowid();
         _memtable = std::make_shared<PersistentIndexMemtable>(_tablet_mgr, _tablet_id, next_max_rss_rowid);
+        _memtable->set_key_layout(_key_layout);
     }
     // Reset rebuild file/row count, avoid useless flush.
     _need_rebuild_file_cnt = 0;
@@ -406,6 +408,7 @@ Status LakePersistentIndex::flush_memtable(bool force) {
         }
         const uint64_t next_max_rss_rowid = _memtable->max_rss_rowid();
         _memtable = std::make_shared<PersistentIndexMemtable>(_tablet_mgr, _tablet_id, next_max_rss_rowid);
+        _memtable->set_key_layout(_key_layout);
         // Reset rebuild file/row count, avoid useless flush.
         _need_rebuild_file_cnt = 0;
         _need_rebuild_row_cnt = 0;
@@ -418,9 +421,12 @@ Status LakePersistentIndex::get_from_sstables(size_t n, const Slice* keys, Index
     if (key_indexes->empty() || _sstable_filesets.empty()) {
         return Status::OK();
     }
+    // A key is looked up in one sstable of each fileset that may hold it; those sstables usually have the same key
+    // dictionary, so encode the key once per dictionary for all of them.
+    sstable::KeyEncodeCache key_encode_cache(n);
     for (auto iter = _sstable_filesets.rbegin(); iter != _sstable_filesets.rend(); ++iter) {
         KeyIndexSet found_key_indexes;
-        RETURN_IF_ERROR((*iter)->multi_get(keys, *key_indexes, version, values, &found_key_indexes));
+        RETURN_IF_ERROR((*iter)->multi_get(keys, *key_indexes, version, values, &found_key_indexes, &key_encode_cache));
         set_difference(key_indexes, found_key_indexes);
         if (key_indexes->empty()) {
             break;
@@ -1662,6 +1668,9 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
 
     // Init PersistentIndex
     _key_size = PrimaryKeyEncoder::get_encoded_fixed_size(pkey_schema, pk_encoding_type);
+    // Before the rebuild below, which may already flush the memtable.
+    _key_layout = std::make_shared<const sstable::KeyLayout>(pk_index_key_layout(pkey_schema));
+    _memtable->set_key_layout(_key_layout);
 
     const auto& sstables = metadata->sstable_meta().sstables();
     // Rebuild persistent index from `rebuild_rss_rowid_point`
