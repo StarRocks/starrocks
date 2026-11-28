@@ -327,7 +327,6 @@ public:
         }
         raw::make_room(&column->get_offset(), offset_bytes_size / sizeof(typename BinaryColumnBase<T>::Offset));
 
-
         if (EncodeContext::enable_encode_integer(encode_level) && offset_bytes_size >= ENCODE_SIZE_LIMIT) {
             constexpr bool is_i32 = sizeof(T) == 4;
             ASSIGN_OR_RETURN(buff, decode_integers<is_i32>(buff, end, column->get_offset().data(), offset_bytes_size));
