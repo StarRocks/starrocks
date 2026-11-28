@@ -300,6 +300,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：非推奨で、効果はありません。`refresh_mode` プロパティを指定せずに作成したマテリアライズドビューは、この値にかかわらず `PCT` を使用し、`PCT` と表示されます。増分マテリアライズドビューを作成するには、プロパティで `refresh_mode` を指定してください。有効な値は引き続き `pct` と `incremental`（大文字と小文字を区別しません）で、既存の設定は引き続き受け付けられます。
 - 導入時期：v4.1
 
+### `dictionary_version_retry_wait_ms`
+
+- デフォルト：2000
+- タイプ：Long
+- 単位：Milliseconds
+- 変更可能：Yes
+- 説明：`enable_dictionary_version_retry` が `true` に設定されている場合に、クエリのプラン時に使用した辞書バージョンを BE または CN が保持しなくなったためにクエリが失敗したとき、クエリを再プランする前に辞書のリフレッシュ完了を待機する最大時間。`0` はクエリが待機しないことを意味します。待機後も FE が古い辞書バージョンでプランする場合、クエリはリトライされずに失敗します。kill されたクエリは即座に待機を終了します。
+- 導入時期：-
+
 ### `dynamic_partition_check_interval_seconds`
 
 - デフォルト：600
@@ -379,6 +388,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 単位：-
 - 変更可能：Yes
 - 説明：DECIMAL V3 データ型をサポートするかどうか。
+- 導入時期：-
+
+### `enable_dictionary_version_retry`
+
+- デフォルト：false
+- タイプ：Boolean
+- 単位：-
+- 変更可能：Yes
+- 説明：クエリのプラン時に使用した辞書バージョンを BE または CN が保持しなくなったためにクエリが失敗した場合（エラーメッセージ `can not found dictionary by verison`）、クエリを再プランしてリトライするかどうか。この状況は、クエリのプラン後に辞書のリフレッシュによってノードが新しいバージョンに切り替わった場合に発生します。この項目が `false` に設定されている場合、そのようなクエリは即座に失敗します。リトライ回数は `max_query_retry_time` によって、各リトライ前の待機時間は `dictionary_version_retry_wait_ms` によって制限されます。
 - 導入時期：-
 
 ### `enable_experimental_mv`

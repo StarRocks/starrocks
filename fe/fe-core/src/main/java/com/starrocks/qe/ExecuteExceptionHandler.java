@@ -16,6 +16,7 @@ package com.starrocks.qe;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableSet;
+import com.starrocks.catalog.Dictionary;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.InternalErrorCode;
@@ -63,12 +64,21 @@ import java.util.List;
 import java.util.Optional;
 import java.util.OptionalLong;
 import java.util.Set;
+import java.util.function.BooleanSupplier;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class ExecuteExceptionHandler {
 
     private static final Logger LOG = LogManager.getLogger(ExecuteExceptionHandler.class);
 
     private static final Set<String> SCHEMA_NOT_MATCH_ERROR = ImmutableSet.of("invalid field name");
+
+    // A CN switched to a newer dictionary version after the FE planned the query. A new plan uses the new version.
+    // "verison" is the BE spelling; keep "version" in case the BE fixes it. The version and id are optional,
+    // so a change in the rest of the BE text still retries, only without the wait.
+    private static final Pattern DICTIONARY_VERSION_NOT_FOUND_ERROR =
+            Pattern.compile("can not found dictionary by ver(?:ison|sion)(?:: (\\d+),.*dictionary id: (\\d+))?");
 
     public static void handle(Exception e, RetryContext context) throws Exception {
         if (e instanceof RemoteFileNotFoundException) {
@@ -217,6 +227,16 @@ public class ExecuteExceptionHandler {
                 || statusCode == TStatusCode.THRIFT_RPC_ERROR
                 || statusCode == TStatusCode.GLOBAL_DICT_NOT_MATCH
                 || statusCode == TStatusCode.LAKE_META_VERSION_NOT_FOUND;
+    }
+
+    // The BE reports a dictionary version miss as a plain INTERNAL_ERROR, so only its text tells it apart.
+    // Without this, a fragment that was only cancelled can hide the miss and the query fails without a retry.
+    public static boolean isRetryableStatus(TStatusCode statusCode, String errorMsg) {
+        if (isRetryableStatus(statusCode)) {
+            return true;
+        }
+        return Config.enable_dictionary_version_retry && errorMsg != null
+                && DICTIONARY_VERSION_NOT_FOUND_ERROR.matcher(errorMsg).find();
     }
 
     // If modifications are made to the partition files of a Hive table by user,
@@ -421,6 +441,11 @@ public class ExecuteExceptionHandler {
                     return;
                 }
             }
+            Matcher dictionaryVersionNotFound = DICTIONARY_VERSION_NOT_FOUND_ERROR.matcher(msg);
+            if (Config.enable_dictionary_version_retry && dictionaryVersionNotFound.find()) {
+                handleDictionaryVersionNotFound(e, context, dictionaryVersionNotFound);
+                return;
+            }
             // if it is cancelled due to backend not alive, rebuild the plan and retry again
             if (e.getInternalErrorCode().equals(InternalErrorCode.CANCEL_NODE_NOT_ALIVE_ERR)) {
                 rebuildExecPlan(e, context);
@@ -428,6 +453,76 @@ public class ExecuteExceptionHandler {
             }
         }
         throw e;
+    }
+
+    // The FE moves the planned version only after the last CN switched, and a follower FE learns it later
+    // from the edit log. Plan again at once and the new plan can carry the same old version.
+    private static void handleDictionaryVersionNotFound(StarRocksException e, RetryContext context, Matcher matcher)
+            throws Exception {
+        // Rows already went to the client, so the query cannot run again. Do not make it wait first.
+        if (context.connectContext.getMysqlChannel().isSend()) {
+            throw e;
+        }
+        if (matcher.group(1) != null) {
+            long plannedVersion = Long.parseLong(matcher.group(1));
+            long dictionaryId = Long.parseLong(matcher.group(2));
+            boolean versionMoved;
+            try {
+                // If the lookup times out, the FE does not know the state, so it plans again without a wait.
+                Dictionary dictionary = GlobalStateMgr.getCurrentState().getDictionaryMgr()
+                        .tryGetDictionaryById(dictionaryId, DICTIONARY_LOOKUP_TIMEOUT_MS);
+                versionMoved = waitForNewDictionaryVersion(dictionary, plannedVersion,
+                        GlobalStateMgr.getCurrentState().isLeader(), Config.dictionary_version_retry_wait_ms,
+                        context.connectContext::isStatementCancelled);
+            } catch (InterruptedException ie) {
+                Thread.currentThread().interrupt();
+                throw e;
+            }
+            // A new plan would carry the same version and fail the same way, for example
+            // when a restarted CN has no copy of the dictionary at all.
+            if (!versionMoved) {
+                throw e;
+            }
+        }
+        // KILL only sets a flag and cancels the failed coordinator, so a kill during the wait shows up only here.
+        if (context.connectContext.isStatementCancelled()) {
+            throw e;
+        }
+        rebuildExecPlan(e, context);
+    }
+
+    @VisibleForTesting
+    static final long DICTIONARY_LOOKUP_TIMEOUT_MS = 100;
+
+    // A follower replays the refresh a bit after the leader, so for a short time it can see the old version
+    // as idle. It waits that short time for the replay, and the full timeout only while the refresh commits.
+    @VisibleForTesting
+    static final long DICTIONARY_REPLAY_GRACE_MS = 500;
+
+    // Returns true if a new plan can use another version: the version moved, or the FE does not know
+    // the dictionary, so the new plan finds out.
+    // A CN switches to the new version only during COMMITTING. While the data still loads, the error means
+    // that the CN has no copy at all, so a wait does not help.
+    @VisibleForTesting
+    static boolean waitForNewDictionaryVersion(Dictionary dictionary, long plannedVersion, boolean isLeader,
+                                               long timeoutMs, BooleanSupplier isCancelled)
+            throws InterruptedException {
+        if (dictionary == null) {
+            return true;
+        }
+        long start = System.currentTimeMillis();
+        long deadline = start + timeoutMs;
+        long idleDeadline = isLeader ? start : start + Math.min(timeoutMs, DICTIONARY_REPLAY_GRACE_MS);
+        while (true) {
+            long now = System.currentTimeMillis();
+            boolean committing = dictionary.isCommittingFromVersion(plannedVersion);
+            if (!dictionary.plansWithVersion(plannedVersion) || isCancelled.getAsBoolean()
+                    || now >= deadline || (!committing && now >= idleDeadline)) {
+                break;
+            }
+            Thread.sleep(20);
+        }
+        return !dictionary.plansWithVersion(plannedVersion);
     }
 
     public static class RetryContext {

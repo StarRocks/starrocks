@@ -309,6 +309,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: Deprecated and has no effect. A materialized view created without the `refresh_mode` property uses `PCT` and reports `PCT`, whatever this value is. To create an incremental materialized view, specify `refresh_mode` in its properties. Valid values are still `pct` and `incremental` (case-insensitive), so an existing setting is still accepted.
 - Introduced in: v4.1
 
+### `dictionary_version_retry_wait_ms`
+
+- Default: 2000
+- Type: Long
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: When `enable_dictionary_version_retry` is set to `true`, the maximum time to wait for a dictionary refresh to finish before planning a query again after it failed because a BE or CN no longer has the dictionary version that the query was planned with. `0` means that the query does not wait. If the FE still plans with the old dictionary version after the wait, the query fails without a retry. A killed query stops waiting immediately.
+- Introduced in: -
+
 ### `dynamic_partition_check_interval_seconds`
 
 - Default: 600
@@ -388,6 +397,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Unit: -
 - Is mutable: Yes
 - Description: Whether to support the DECIMAL V3 data type.
+- Introduced in: -
+
+### `enable_dictionary_version_retry`
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to plan a query again and retry it when it fails because a BE or CN no longer has the dictionary version that the query was planned with (error message `can not found dictionary by verison`). This happens when a dictionary refresh switches a node to a new version after the query is planned. When this item is set to `false`, such a query fails immediately. The number of retries is limited by `max_query_retry_time`, and the wait before each retry by `dictionary_version_retry_wait_ms`.
 - Introduced in: -
 
 ### `enable_experimental_mv`

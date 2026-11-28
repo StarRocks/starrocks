@@ -18,6 +18,7 @@ import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.Status;
 import com.starrocks.common.jmockit.Deencapsulation;
@@ -621,6 +622,28 @@ public class CoordinatorTest extends PlanTestBase {
 
         Status updated = Deencapsulation.getField(coordinator, "queryStatus");
         Assertions.assertEquals(TStatusCode.LAKE_META_VERSION_NOT_FOUND, updated.getErrorCode());
+    }
+
+    @Test
+    public void testDictionaryVersionNotFoundReplacesRecordedCancelledStatus() {
+        // The BE reports the miss as INTERNAL_ERROR, so only its text can make it win over the CANCELLED.
+        boolean oldEnabled = Config.enable_dictionary_version_retry;
+        Config.enable_dictionary_version_retry = true;
+        try {
+            Status queryStatus = Deencapsulation.getField(coordinator, "queryStatus");
+            queryStatus.setStatus(Status.CANCELLED);
+            queryStatus.setErrorMsg("Cancelled");
+
+            Deencapsulation.invoke(coordinator, "updateStatus",
+                    new Status(TStatusCode.INTERNAL_ERROR, "open dictionary expression failed can not found "
+                            + "dictionary by verison: 98100, dictionary maybe dropped or updated, dictionary id: 5"),
+                    new TUniqueId(1, 1));
+
+            Status updated = Deencapsulation.getField(coordinator, "queryStatus");
+            Assertions.assertEquals(TStatusCode.INTERNAL_ERROR, updated.getErrorCode());
+        } finally {
+            Config.enable_dictionary_version_retry = oldEnabled;
+        }
     }
 
     @Test

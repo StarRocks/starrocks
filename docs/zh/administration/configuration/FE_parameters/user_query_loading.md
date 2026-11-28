@@ -309,6 +309,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 已废弃，不再生效。未指定 `refresh_mode` 属性创建的物化视图，无论该参数取何值，都使用并显示为 `PCT`。要创建增量物化视图，请在属性中指定 `refresh_mode`。有效取值仍为 `pct` 和 `incremental`（不区分大小写），已有的设置仍会被接受。
 - 引入版本: v4.1
 
+### `dictionary_version_retry_wait_ms`
+
+- 默认值: 2000
+- 类型: Long
+- 单位: 毫秒
+- 是否可变: Yes
+- 描述: 当 `enable_dictionary_version_retry` 设置为 `true` 时，如果查询因 BE 或 CN 上已不存在规划该查询时使用的字典版本而失败，该查询在重新规划之前等待字典刷新完成的最长时间。`0` 表示不等待。如果等待结束后 FE 仍使用旧的字典版本进行规划，则查询直接失败，不再重试。被 Kill 的查询会立即停止等待。
+- 引入版本: -
+
 ### `dynamic_partition_check_interval_seconds`
 
 - 默认值: 600
@@ -388,6 +397,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 单位: -
 - 是否可变: Yes
 - 描述: 是否支持 DECIMAL V3 数据类型。
+- 引入版本: -
+
+### `enable_dictionary_version_retry`
+
+- 默认值: false
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 当查询因 BE 或 CN 上已不存在规划该查询时使用的字典版本而失败时（错误信息 `can not found dictionary by verison`），是否重新规划并重试该查询。字典刷新在查询规划之后将节点切换到新版本时会出现这种情况。当此项设置为 `false` 时，此类查询会立即失败。重试次数受 `max_query_retry_time` 限制，每次重试前的等待时间受 `dictionary_version_retry_wait_ms` 限制。
 - 引入版本: -
 
 ### `enable_experimental_mv`
