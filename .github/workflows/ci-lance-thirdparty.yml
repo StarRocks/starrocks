@@ -1,0 +1,52 @@
+name: Lance thirdparty packaging tests
+on:
+  pull_request:
+    paths:
+      - 'thirdparty/install-lance.py'
+      - 'thirdparty/test_install_lance.py'
+      - 'thirdparty/tests/lance/**'
+      - 'thirdparty/build-lance.sh'
+      - 'thirdparty/build-thirdparty.sh'
+      - 'thirdparty/package-manifest.sh'
+      - 'thirdparty/vars*.sh'
+      - '.github/workflows/ci-lance-thirdparty.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  packaging:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Validate the prebuilt installer
+        run: |
+          bash -n thirdparty/build-lance.sh thirdparty/build-thirdparty.sh thirdparty/vars.sh
+          python3 -m unittest discover -s thirdparty -p 'test_install_lance.py'
+  native-consumer:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-22.04, ubuntu-24.04, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v6
+      - name: Download and verify the prebuilt package
+        run: |
+          export TP_DIR="$PWD/thirdparty"
+          STARROCKS_THIRDPARTY_ARCHIVES=LANCE ./thirdparty/download-thirdparty.sh
+          source thirdparty/vars.sh
+          echo "$LANCE_SHA256  $TP_SOURCE_DIR/$LANCE_NAME" | sha256sum --check --status
+          python3 thirdparty/install-lance.py --source "$TP_SOURCE_DIR/$LANCE_SOURCE" --prefix "$RUNNER_TEMP/lance"
+      - name: Link and read snapshots through the C ABI without Rust
+        run: |
+          lance_cmake="$(command -v cmake)"
+          lance_ctest="$(command -v ctest)"
+          export PATH=/usr/bin:/bin
+          if command -v cargo || command -v rustc; then
+            echo "Rust must not be available to the prebuilt consumer"
+            exit 1
+          fi
+          "$lance_cmake" -S thirdparty/tests/lance -B "$RUNNER_TEMP/lance-consumer" \
+            -DCMAKE_BUILD_TYPE=Debug -DStarRocksLance_ROOT="$RUNNER_TEMP/lance"
+          "$lance_cmake" --build "$RUNNER_TEMP/lance-consumer" -j2
+          "$lance_ctest" --test-dir "$RUNNER_TEMP/lance-consumer" --output-on-failure

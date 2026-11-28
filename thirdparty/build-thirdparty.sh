@@ -100,6 +100,9 @@ Usage: $0 [options...] [packages...]
 
     # Clean and build only specific packages
     $0 --clean boost thrift
+
+    # Install the optional, prebuilt Lance shared library
+    $0 -j2 lance
   "
     exit 1
 }
@@ -2038,6 +2041,18 @@ build_benchgen() {
         -DBENCHGEN_ARROW_PREFIX="${TP_INSTALL_DIR}" -S . -B build
     ${CMAKE_CMD} --build build -j "${PARALLEL}"
     ${CMAKE_CMD} --install build
+}
+
+# Downloaded and built independently, like tenann. No Rust toolchain is needed here.
+build_lance() {
+    if [[ "${LANCE_SUPPORTED:-0}" != "1" ]]; then
+        echo "Prebuilt Lance requires Linux with glibc >= 2.34; build its standalone repository for other platforms."
+        return 1
+    fi
+    check_if_source_exist "${LANCE_SOURCE}"
+    echo "${LANCE_SHA256}  ${TP_SOURCE_DIR}/${LANCE_NAME}" | sha256sum --check --status
+    python3 "${TP_DIR}/install-lance.py" --source "${TP_SOURCE_DIR}/${LANCE_SOURCE}" \
+        --prefix "${TP_INSTALL_DIR}/lance"
 }
 
 # paimon-cpp

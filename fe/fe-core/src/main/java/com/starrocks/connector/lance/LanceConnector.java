@@ -23,17 +23,18 @@ import java.util.Map;
 public class LanceConnector implements Connector {
     private final String catalogName;
     private final Map<String, String> properties;
-    private final LanceMetadata metadata;
 
     public LanceConnector(ConnectorContext context) {
         this.catalogName = context.getCatalogName();
-        this.properties = context.getProperties();
-        this.metadata = new LanceMetadata(catalogName, properties);
+        this.properties = Map.copyOf(context.getProperties());
+        // Validate configuration before publishing the connector.
+        new LanceMetadata(catalogName, properties);
     }
 
     @Override
     public ConnectorMetadata getMetadata() {
-        return metadata;
+        // MetadataMgr retains this instance for one query and releases it afterwards.
+        return new LanceMetadata(catalogName, properties);
     }
 
     @Override
