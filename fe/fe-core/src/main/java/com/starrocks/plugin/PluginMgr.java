@@ -34,6 +34,7 @@
 
 package com.starrocks.plugin;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -86,16 +87,7 @@ public class PluginMgr implements Writable {
 
     // create the plugin dir if missing
     public void init() throws PluginException {
-        File file = new File(Config.plugin_dir);
-        if (file.exists() && !file.isDirectory()) {
-            throw new PluginException("FE plugin dir " + Config.plugin_dir + " is not a directory");
-        }
-
-        if (!file.exists()) {
-            if (!file.mkdir()) {
-                throw new PluginException("failed to create FE plugin dir " + Config.plugin_dir);
-            }
-        }
+        createPluginDir(new File(Config.plugin_dir));
 
         initBuiltinPlugins();
     }
@@ -115,6 +107,21 @@ public class PluginMgr implements Writable {
     private boolean removeDynamicPluginName(String name) {
         synchronized (dynamicPluginNames) {
             return dynamicPluginNames.remove(name);
+        }
+    }
+
+    /**
+     * Create {@code dir} unless it is a directory already. Another process sharing it -- FE unit tests run in
+     * parallel, each starting a frontend -- can create it between a check that it is missing and {@code mkdir}, which
+     * then fails: it is created either way, so only a failure that leaves no directory is one.
+     */
+    @VisibleForTesting
+    static void createPluginDir(File dir) throws PluginException {
+        if (dir.exists() && !dir.isDirectory()) {
+            throw new PluginException("FE plugin dir " + dir.getPath() + " is not a directory");
+        }
+        if (!dir.mkdir() && !dir.isDirectory()) {
+            throw new PluginException("failed to create FE plugin dir " + dir.getPath());
         }
     }
 
